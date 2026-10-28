@@ -33,6 +33,7 @@ public static class Life
         w.Heading[c] = Rng.U(seed, step, (uint)c, Rs.Place) * 2f * MathF.PI;
         w.Speed[c] = 0;
         w.Energy[c] = energy; w.Gut[c] = 0; w.GutEnergy[c] = 0; w.GutWaste[c] = 0; w.GutSeedy[c] = 0;
+        w.Grown[c] = 0;
         w.Thirst[c] = 0; w.Fatigue[c] = 0; w.Age[c] = 0; w.Pain[c] = 0; w.Cooldown[c] = 0; w.Timer[c] = 0; w.LastFear[c] = 0;
         w.Sex[c] = (byte)(Rng.U(seed, step, (uint)c, Rs.Sex) < 0.5f ? 0 : 1);
         w.Serial[c] = w.NextSerial++;
@@ -128,8 +129,8 @@ public static class Life
         else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
         Place(w, c, species, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
         w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
-        if (adult) w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9));
-        else w.Age[c] = w.PMature[c] * 0.8f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9);
+        if (adult) { w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9)); w.Grown[c] = 1f; }
+        else { w.Age[c] = w.PMature[c] * 0.8f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9); w.Grown[c] = w.Age[c] / w.PMature[c]; }
         return c;
     }
 
@@ -177,7 +178,7 @@ public static class Life
                 int nk = ++w.KinN[si];
                 if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Place + 300u) * nk < 1f) { w.KinX[si] = w.X[i]; w.KinY[si] = w.Y[i]; }
             }
-            if (st == St.Juvenile && w.Age[i] >= w.PMature[i])
+            if (st == St.Juvenile && w.Grown[i] >= 1f)              // mature on reaching adult size
             {
                 w.StageOf[i] = St.Adult;
                 int m = w.MotherOf(i);
@@ -243,7 +244,7 @@ public static class Life
     static void Care(World w, int i, int s)
     {
         int m = w.MotherOf(i);
-        if (m < 0 || w.PCare[m] <= 0 || w.Age[i] >= K.WEAN * w.PMature[i]) return;
+        if (m < 0 || w.PCare[m] <= 0 || w.Grown[i] >= K.WEAN) return;
         float dx = World.Delta1(w.X[m] - w.X[i]), dy = World.Delta1(w.Y[m] - w.Y[i]), reach = w.PReach[m] + w.PReach[i];
         if (dx * dx + dy * dy > reach * reach) return;
         uint mark = (uint)w.Step + 1u;           // 0 = never refreshed

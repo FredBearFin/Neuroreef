@@ -56,6 +56,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLY_COST | 1.6 | - | movement cost factor for flyers | HT |
 | DRINK_RATE | 0.25 | /step | drinking: thirst removed per step | HT |
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
+| GROW_RESERVE | 0.5 | xEmax | a juvenile grows only from energy above this share of its reserve | ECO: growth is fuelled by surplus after maintenance; hungry young grow slowly (Revision D) |
 
 ## 3. Food
 
@@ -181,7 +182,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | CARE_RATE | 1.5 | xbasal | milk or chick-feeding energy a mother can give per step, as a multiple of her basal cost (shared by all her young) | ECO: peak lactation milk energy is about 1-2x maternal basal metabolic rate (Hanwell & Peaker 1977) |
 | CARE_EFF | 0.7 | - | efficiency of turning maternal energy into milk or food for the young | ECO: milk synthesis efficiency 0.6-0.8 |
-| WEAN | 0.4 | - | care ends (weaning) at this share of the time to maturity | ECO: weaning at roughly a third to a half of the time to maturity in mammals |
+| WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
 ## 11. Disease

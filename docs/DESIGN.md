@@ -585,13 +585,13 @@ SMALL. Growth costs energy (§9.1).
 | vmax | c_V·M^0.17·k_speed (swim and fly have their own factors) |
 | turn rate | c_τ·M^−0.2 |
 | lifespan | c_L·M^0.25·k_life |
-| maturity | c_A·M^0.25·k_mat |
+| maturity | c_A·M^0.25·k_mat: the fastest time to adult size, with food unlimited |
 | sight R | min(32, c_R·M^0.2·k_sight) |
 | reach | 1 + 0.4·M^(1/3) |
 | movement cost | c_M·M·speed² |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·k_thirst per step (0 for aquatic stages and sessile mats) |
-| growth | a juvenile pays C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF per step until maturity |
+| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
 | reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
 
 ### 9.2 Movement and realm
@@ -890,6 +890,15 @@ tests/Neuroreef.Tests/
 ```
 
 ## 15. The laws and how they were set (NR-321)
+
+**Revision D: food-limited growth (a correction).** The growth law of Revision B charged a juvenile the
+energy of its tissue at a fixed rate, the rate that reaches adult mass at PMature. That rate is about
+four times what a newborn can digest (a newborn Drifter: growth 0.009 E/step against at most 0.002 E/step
+digested), so almost no juvenile could reach maturity under any behaviour: the law was infeasible, not
+merely harsh. The full Revision B prehistory showed it (juvenile deaths the largest class in every
+species). Now a juvenile grows only from energy above GROW_RESERVE of its reserve, at most at that
+fastest rate, and matures on reaching adult size (`Grown` = 1), not at a fixed age. A well-fed youngster
+matures at PMature; a hungry one later; milk (§7.8) speeds it. Energy is still conserved.
 
 **Revision C** added new mechanisms: reflexes, parental care, disease, weather years, water-limited
 plant growth and wind seed rain (§7.7, §7.8, §9.6, §10.2, §10.7). Their constants were set once from

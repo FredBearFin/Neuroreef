@@ -122,10 +122,16 @@ public static class Resolve
         float moveCost = K.C_MOVE * mass * spd * spd * (body.Loco == Loco.Fly ? K.FLY_COST : 1f);
         bool sick = w.Infect[i] > 0;
         float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST : 1f);
-        // growth: a juvenile builds tissue from energy (no free mass, DESIGN §9.1)
+        // growth: a juvenile builds tissue from its spare energy (no free mass, DESIGN §9.1). It grows at most at
+        // the rate that would reach adult size at PMature, and only from energy above GROW_RESERVE of its reserve:
+        // a well-fed youngster grows fast, a hungry one slowly, a starving one not at all
         float grow = 0;
-        if (w.StageOf[i] == St.Juvenile && w.Age[i] < w.PMature[i])
-            grow = K.C_CARC * w.PM[i] * (1f - sp.Birth) / w.PMature[i] * K.RHO_MEAT / K.GROWTH_EFF;
+        if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
+        {
+            float tissue = K.C_CARC * w.PM[i] * (1f - sp.Birth) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
+            grow = Math.Clamp(w.Energy[i] - K.GROW_RESERVE * emax, 0f, tissue / w.PMature[i]);
+            w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
+        }
         w.Energy[i] -= basal + moveCost + grow;
         T.SpendBasal[s] += basal; T.SpendMove[s] += moveCost; T.SpendGrowth[s] += grow;
         float fat0 = w.Fatigue[i];

@@ -242,7 +242,7 @@ public class EcologyTests
     {
         var w = new World(256, 15); Terrain.Build(w);
         int a = Make(w, 1, 0), b = Make(w, 1, 1);       // two Browsers, one kept juvenile
-        w.StageOf[b] = St.Juvenile; w.Age[b] = 10;
+        w.StageOf[b] = St.Juvenile; w.Age[b] = 10; w.Grown[b] = 0;
         w.Energy[a] = w.Energy[b] = 10f; w.Gut[a] = w.Gut[b] = 0;
         Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
@@ -250,6 +250,24 @@ public class EcologyTests
         float growth = K.C_CARC * w.PM[b] * (1f - Roster.All[1].Birth) / w.PMature[b] * K.RHO_MEAT / K.GROWTH_EFF;
         Assert.True(costJuv > growth * 0.99f, $"juvenile paid {costJuv}, growth alone costs {growth}");
         Assert.True(costAdult < costJuv);
+    }
+
+    [Fact] // NR-322: growth is limited by spare energy: a hungry juvenile does not grow, a fed one grows and matures at adult size
+    public void GrowthIsLimitedBySpareEnergy()
+    {
+        var w = new World(256, 16); Terrain.Build(w);
+        int a = Make(w, 0, 0), b = Make(w, 0, 1);       // two juvenile Drifters
+        w.StageOf[a] = w.StageOf[b] = St.Juvenile; w.Grown[a] = w.Grown[b] = 0.2f;
+        w.Energy[a] = 0.3f * w.EmaxOf(a);                // below GROW_RESERVE: maintenance only
+        w.Energy[b] = w.EmaxOf(b);                       // plenty spare
+        Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        Assert.Equal(0.2f, w.Grown[a]);
+        Assert.True(w.Grown[b] > 0.2f);
+        w.Grown[b] = 1f; w.T.Births[0] = 0;
+        Life.Run(w, new int[w.NS]);
+        Assert.Equal(St.Adult, w.StageOf[b]);
+        Assert.Equal(St.Juvenile, w.StageOf[a]);
     }
 
     [Fact] // NR-502: follow-cam moves to the same lineage or species when the followed animal dies

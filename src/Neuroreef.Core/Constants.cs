@@ -68,6 +68,7 @@ public static class K
     [K("Allometry", "movement cost factor for flyers", "-", "HT")] public const float FLY_COST = 1.6f;
     [K("Allometry", "drinking: thirst removed per step", "/step", "HT")] public const float DRINK_RATE = 0.25f;
     [K("Allometry", "efficiency of turning energy into new tissue (growth, offspring)", "-", "ECO: net growth efficiency 0.6-0.8")] public const float GROWTH_EFF = 0.75f;
+    [K("Allometry", "a juvenile grows only from energy above this share of its reserve", "xEmax", "ECO: growth is fuelled by surplus after maintenance; hungry young grow slowly (Revision D)")] public const float GROW_RESERVE = 0.5f;
 
     // ---------------------------------------------------------------- 3. food (energy density)
     [K("Food", "energy density of grass", "E/M", "V1")] public const float RHO_GRASS = 3.2f;
@@ -165,7 +166,7 @@ public static class K
     // ---------------------------------------------------------------- 6b. parental care (DESIGN §7.8)
     [K("Care", "milk or chick-feeding energy a mother can give per step, as a multiple of her basal cost (shared by all her young)", "xbasal", "ECO: peak lactation milk energy is about 1-2x maternal basal metabolic rate (Hanwell & Peaker 1977)")] public const float CARE_RATE = 1.5f;
     [K("Care", "efficiency of turning maternal energy into milk or food for the young", "-", "ECO: milk synthesis efficiency 0.6-0.8")] public const float CARE_EFF = 0.7f;
-    [K("Care", "care ends (weaning) at this share of the time to maturity", "-", "ECO: weaning at roughly a third to a half of the time to maturity in mammals")] public const float WEAN = 0.4f;
+    [K("Care", "care ends (weaning) when the young has built this share of its adult tissue", "-", "ECO: mammals wean at roughly a third to a half of adult mass")] public const float WEAN = 0.4f;
     [K("Care", "a mother keeps at least this share of her energy reserve for herself", "xEmax", "ECO: females in poor condition reduce or stop provisioning")] public const float CARE_RESERVE = 0.4f;
 
     // ---------------------------------------------------------------- 6c. disease (DESIGN §9.6)

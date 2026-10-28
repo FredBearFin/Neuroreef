@@ -63,7 +63,7 @@ public class EcosystemTests
         Assert.Equal(0f, w.Sp[16].Care);          // Minnows: fish give no care
         int m = Animal(w, 0, true, 2), j = Animal(w, 0, false, 3);
         w.MotherSlot[j] = m; w.MotherSerial[j] = w.Serial[m];
-        w.X[j] = w.X[m]; w.Y[j] = w.Y[m]; w.Age[j] = 0;
+        w.X[j] = w.X[m]; w.Y[j] = w.Y[m]; w.Age[j] = 0; w.Grown[j] = 0;
         w.Energy[m] = 0.9f * w.EmaxOf(m); w.Energy[j] = 0.2f * w.EmaxOf(j);
         float em = w.Energy[m], ej = w.Energy[j];
         Life.Run(w, new int[w.NS]);

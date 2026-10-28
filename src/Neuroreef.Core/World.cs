@@ -17,6 +17,7 @@ public sealed class World
     public readonly float[] X, Y, Heading, Speed;
     // ---- agents: physiology
     public readonly float[] Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer;
+    public readonly float[] Grown;         // share of its growable tissue a juvenile has built (0 at birth, 1 = adult size; DESIGN §9.1)
     public readonly float[] Reward, RewardMean, PendingR, LastFear;
     // ---- agents: identity
     public readonly byte[] Spc, StageOf, Sex, Flags;
@@ -98,6 +99,7 @@ public sealed class World
         int c = capacity;
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];
         Energy = new float[c]; Gut = new float[c]; GutEnergy = new float[c]; GutWaste = new float[c]; GutSeedy = new float[c];
+        Grown = new float[c];
         Thirst = new float[c]; Fatigue = new float[c]; Age = new float[c]; Pain = new float[c]; Cooldown = new float[c]; Timer = new float[c];
         Reward = new float[c]; RewardMean = new float[c]; PendingR = new float[c]; LastFear = new float[c];
         Spc = new byte[c]; StageOf = new byte[c]; Sex = new byte[c]; Flags = new byte[c];
@@ -159,14 +161,14 @@ public sealed class World
     public bool Juvenile(int i) => StageOf[i] == St.Juvenile;
     public Stage StageBody(int i) => Sp[Spc[i]].StageOf(StageOf[i] == St.Juvenile);
 
-    /// <summary>Current body mass: juveniles grow from the species' birth mass to their adult mass.</summary>
+    /// <summary>Current body mass: juveniles grow from the species' birth mass to their adult mass as they build tissue.</summary>
     public float MassOf(int i)
     {
         byte st = StageOf[i];
         if (st == St.Adult) return PM[i];
         float b = Sp[Spc[i]].Birth;
         if (st <= St.Embryo) return PM[i] * b;
-        return PM[i] * (b + (1f - b) * MathF.Min(1f, Age[i] / PMature[i]));
+        return PM[i] * (b + (1f - b) * MathF.Min(1f, Grown[i]));
     }
 
     /// <summary>Apparent size of one organism (super-individuals look like their members).</summary>
