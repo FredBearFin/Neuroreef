@@ -1,6 +1,6 @@
 # NEUROREEF 2 — REQUIREMENTS SPECIFICATION
 
-Document NR-RQ-001, Revision A (draft for review)
+Document NR-RQ-001, Revision B
 
 Each requirement has a number, a statement and a verification method:
 **T** = automated test, **A** = analysis of headless runs, **D** = demonstration in the console,
@@ -31,12 +31,16 @@ Each requirement has a number, a statement and a verification method:
 | NR-201 | All animals of all species shall use the same perception routine and produce the same feature vector (DESIGN §5.1). | I |
 | NR-202 | No species-pair relation (prey, threat, kin) shall be coded. Animals shall perceive others only through observable attributes: species identity (same or other), relative size, carnivory, motion, age, fatigue. | I |
 | NR-203 | All animals shall share one library of base behaviours (primitives, DESIGN §5.2). No species shall have a primitive that another lacks. | I |
-| NR-204 | Each animal's behaviour shall be determined by its own decision matrix, which maps features and motivations to primitive gains (DESIGN §5.3). | I |
-| NR-205 | The decision matrix shall be heritable, mutated at birth and recombined in sexual reproduction. | T |
-| NR-206 | Compound behaviours (grazing, vigilance, herding, fleeing, stalking, pack hunting, give-up, scavenging, following mother) shall not exist as code. They shall arise only as combinations of primitives. | I |
-| NR-207 | Each founder composition shall produce its intended behaviour in a scripted scene (DESIGN §6): a herd forms; vigilance is triggered by an approaching predator; a pack catches a lone grazer; a scavenger follows hunters; a calf follows its mother. | T |
-| NR-208 | A motivation layer shall carry state between steps, so that a behaviour can persist after its trigger is gone. | T |
-| NR-209 | For any selected animal, the console shall show its features, motivations, primitive gains and actions every step. | D |
+| NR-204 | Each animal's behaviour shall be determined by its own brain (identical architecture for every species), which maps features and hidden state to primitive gains (DESIGN §7). | I |
+| NR-205 | The brain genome shall be heritable, mutated at birth and recombined in sexual reproduction. | T |
+| NR-206 | Compound behaviours (grazing, vigilance, herding, fleeing, stalking, pack hunting, give-up, scavenging, following mother) shall not exist as code. They may arise only as combinations of primitives chosen by the brain. | I |
+| NR-207 | Each primitive shall produce its documented steering vector or effect in a scripted scene (DESIGN §5). | T |
+| NR-208 | A recurrent hidden layer shall carry state between steps, so that a behaviour can persist after its trigger is gone. | T |
+| NR-209 | For any selected animal, the console shall show its features, hidden state, primitive gains, actions and reward every step. | D |
+| NR-210 | No behaviour shall be hand-set. Founder brains shall be drawn from the RNG only; a test shall verify that founder genomes are a function of (seed, slot) alone and contain no species-specific constants. | T |
+| NR-211 | Brains shall learn during life by a reward-modulated rule; the reward shall be the same function of drive relief and pain for every species (DESIGN §7.2). Learned changes shall not be inherited. A test shall show the probability of a rewarded action rising in a two-choice scene. | T |
+| NR-212 | Evolved genomes shall be savable to and loadable from a gene-bank file. A genesis mode shall start from random brains. | T |
+| NR-213 | The console shall measure and display which combinations of primitives each species uses (behaviour fingerprints). | D |
 
 ## 3. Ecology (NR-3xx)
 
@@ -52,10 +56,15 @@ Each requirement has a number, a statement and a verification method:
 | NR-308 | Grazing shall remove grass. Browsing shall remove shrub leaves and kill saplings, so herbivores can hold back succession. | T |
 | NR-309 | A travelling wet/dry season shall modulate moisture. Fire shall ignite in dry fuel, spread and reset vegetation, so the landscape stays a shifting mosaic. | A |
 | NR-310 | Carcasses, dung and burned vegetation shall return nutrient to the soil. | T |
-| NR-311 | Reproduction shall be sexual. It shall need a ready mate nearby, then gestation, then a litter whose size is a body-plan gene. | T |
+| NR-311 | Each species shall reproduce by its own mode: sexual, hermaphrodite, fission, facultative parthenogenesis, cyclic parthenogenesis or spores (DESIGN §8), with live birth or eggs, and litter size from the body plan. | T |
 | NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
-| NR-313 | Strays (immigrants after extinction) shall be off by default, configurable, and always counted separately. | I |
-| NR-314 | Acceptance: over seeds 1–5 and 200,000 steps, with strays off, all six species shall be alive in ≥ 90% of telemetry samples. Predator–prey oscillations shall be visible, and no single vegetation layer shall exceed 80% of land cover for more than 25% of the run. | A |
+| NR-313 | Immigrants (genesis immigration, and optional strays after genesis) shall be counted separately from births. After the genesis period, strays shall be off by default. | I |
+| NR-314 | Acceptance: starting from the shipped gene bank, over seeds 1–3 and 200,000 steps with strays off, all 20 species shall be alive in ≥ 90% of telemetry samples. Predator–prey oscillations shall be visible, and no single vegetation layer shall exceed 80% of land cover for more than 25% of the run. Results, including failures, shall be reported. | A |
+| NR-315 | The roster shall close the energy cycle: every pool has a consumer, every species has a food pool in its realm, every dead pool returns to nutrient. The program shall check this at start-up and refuse to run if it fails. | T |
+| NR-316 | Every species shall have a reproduction mode whose preconditions it can meet in its realm. | T |
+| NR-317 | Mutualisms (pollination raising fruit and seed set; seed dispersal by dung) shall be physical rules, not behaviours. | I |
+| NR-318 | The world shall contain land and freshwater realms (lakes and rivers), linked by shore access, life-stage transitions and nutrient run-off. | I |
+| NR-319 | Numerous small organisms shall be represented as super-individuals with their own brain, food and reproduction. | I |
 
 ## 4. Telemetry and analytics (NR-4xx)
 
@@ -90,7 +99,7 @@ Each requirement has a number, a statement and a verification method:
 
 | No. | Requirement | Ver. |
 |---|---|---|
-| NR-701 | The simulation should sustain ≥ 60 steps/s with 20,000 animals on a 6-core desktop CPU. | A |
+| NR-701 | The simulation should sustain ≥ 30 steps/s with 20,000 agents on a 6-core desktop CPU. | A |
 | NR-702 | The console should render ≥ 50 frames/s at 1080p on a mid-range discrete GPU with 20,000 animals. | D |
 
 ## 8. Verification matrix
@@ -100,8 +109,8 @@ Filled in as tests and analyses are completed. Status: — not started, P pass, 
 | No. | Method | Evidence | Status |
 |---|---|---|---|
 | NR-101…NR-109 | T/I | `tests/Engineering*` | — |
-| NR-201…NR-209 | T/I/D | `tests/Behaviour*`, scripted scenes | — |
-| NR-301…NR-314 | T/A | `tests/Ecology*`, headless report | — |
+| NR-201…NR-213 | T/I/D | `tests/Brain*`, `tests/Primitive*` | — |
+| NR-301…NR-319 | T/A | `tests/Ecology*`, headless report | — |
 | NR-401…NR-404 | T/I | `tests/Telemetry*` | — |
 | NR-501…NR-506 | D/T | console screenshots | — |
 | NR-601…NR-604 | D/I | CI artifact | — |

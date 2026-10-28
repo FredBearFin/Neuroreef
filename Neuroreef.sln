@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C57D90A2-7F27-478E-8562-85819C185BCF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neuroreef.Core", "src\Neuroreef.Core\Neuroreef.Core.csproj", "{A815A52E-668E-4129-98E1-42D4F1F778DF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neuroreef.Server", "src\Neuroreef.Server\Neuroreef.Server.csproj", "{8695BDFF-1300-4461-930C-682B822B24A1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{39A37BB6-C943-471A-9DEC-8DA8F8C46F02}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neuroreef.Tests", "tests\Neuroreef.Tests\Neuroreef.Tests.csproj", "{FF5BCD35-E693-4D48-B211-6BE2EB95DD92}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A815A52E-668E-4129-98E1-42D4F1F778DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A815A52E-668E-4129-98E1-42D4F1F778DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A815A52E-668E-4129-98E1-42D4F1F778DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A815A52E-668E-4129-98E1-42D4F1F778DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8695BDFF-1300-4461-930C-682B822B24A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8695BDFF-1300-4461-930C-682B822B24A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8695BDFF-1300-4461-930C-682B822B24A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8695BDFF-1300-4461-930C-682B822B24A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FF5BCD35-E693-4D48-B211-6BE2EB95DD92}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FF5BCD35-E693-4D48-B211-6BE2EB95DD92}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FF5BCD35-E693-4D48-B211-6BE2EB95DD92}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FF5BCD35-E693-4D48-B211-6BE2EB95DD92}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A815A52E-668E-4129-98E1-42D4F1F778DF} = {C57D90A2-7F27-478E-8562-85819C185BCF}
+		{8695BDFF-1300-4461-930C-682B822B24A1} = {C57D90A2-7F27-478E-8562-85819C185BCF}
+		{FF5BCD35-E693-4D48-B211-6BE2EB95DD92} = {39A37BB6-C943-471A-9DEC-8DA8F8C46F02}
+	EndGlobalSection
+EndGlobal

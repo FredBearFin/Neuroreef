@@ -1,651 +1,649 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision A (draft for review). It implements NR-RQ-001 (`REQUIREMENTS.md`).
+Document NR-DD-001, Revision B. It implements NR-RQ-001 Revision B (`REQUIREMENTS.md`).
+
+**Changes from Revision A**
+- The food web is now derived from the energy cycle: 20 species across land and freshwater.
+- Reproduction differs by species.
+- There are **no designed behaviours**: brains start random, learn during life and evolve across
+  generations.
+- Small life is modelled as super-individuals.
 
 ---
 
-## 1. Purpose and the central idea
+## 1. The idea in one page
 
-Neuroreef is an artificial-life ecosystem. In version 1 every species ran the same 14→8→3 network,
-and "prey", "threat" and "kin" were fixed per species pair. A grazer and a hunter differed only in
-hand-set weights. Version 2 changes the model:
+Neuroreef is an ecosystem in which **only the rules of physics and physiology are designed**.
+Behaviour is not designed.
 
-1. **One set of senses.** Every animal perceives the world through the same feature vector. It sees
-   other animals only by what can be observed about them: same species or not, bigger or smaller,
-   meat-eater or not, approaching or not, young or not, tired or not.
-2. **One behaviour library.** Every animal has the same primitive behaviours: seek, flee, climb a
-   gradient, cohere, align, intercept, circle, hold, scan, sprint, eat, strike, drink, mate, rest,
-   mark.
-3. **Species are compositions.** A species is defined by its body plan and by its decision matrix,
-   which weights the primitives from the features. "Grazing", "vigilance", "pack hunting" and
-   "scavenging" are not written anywhere in the code. They are particular weightings of the same
-   primitives, and evolution can re-weight them.
-4. **Ecology is explicit.** Body size scales metabolism (Kleiber's law). A gut limits intake (handling
-   time). Water is required. Strike success depends on size and armour. Vegetation goes through
-   succession and burns.
+1. **Energy cycle.** Sunlight, water and nutrient feed producers (vegetation fields). Producers feed
+   herbivores. Herbivores feed predators. Everything that dies, sheds or excretes becomes a dead
+   pool. Detritivores, fungi and bacteria return the dead pools to soil and water as nutrient, which
+   feeds the producers again. The species roster (§6) was chosen by asking, for every pool in this
+   cycle, "who eats this?". It was checked by asking, for every species, "what does it eat, and how
+   does it reproduce?". The program repeats that check at start-up (§6.4).
+2. **Bodies, not behaviours.** A species is a *body plan*:
+   - mass, realm, locomotion and diet
+   - armour, strike and senses
+   - reproduction mode and life stages
 
-The simulation core is C# with no dependencies. It is written in a fixed-memory, fixed-step,
-deterministic style. A server streams it to a browser console for 3D viewing and analytics.
+   Nothing in a species definition says what it should *do*.
+3. **One set of senses, one set of actions.** Every animal has the same 30 senses (§4) and the same
+   28 primitive actions (§5). Every animal has the same brain architecture (§7).
+4. **Brains start random.** In a fresh *genesis* run every brain is random. Animals then learn during
+   life from a universal reward (relief of hunger, thirst and fatigue, and the success of mating
+   and birth, minus pain), and evolution selects the brains that learn and act well. Grazing herds,
+   vigilance, hunting, scavenging and following the mother may or may not emerge. The console
+   measures which compositions of primitives each species actually uses (§10.3). It does not claim
+   them.
+5. **Gene bank.** A long genesis run is saved as a gene bank. The shipped program starts from a bank
+   that we evolved, and `--genesis` starts from random brains.
 
 ## 2. System overview
 
 ```
 +---------------------------- Neuroreef.exe ----------------------------+
-|                                                                        |
-|  SIM THREAD                      SERVER (Kestrel)                      |
-|  +--------------------+  write   +------------------+   WebSocket     |
-|  | Neuroreef.Core     |--------->| Snapshot triple  |---------------> browser console
-|  |  World (all state) |  latest  | buffer + sender  |   binary frames |  (three.js 3D,
-|  |  Step phases 1..6  |          +------------------+   (ICD.md)      |   dashboards)
-|  |  Telemetry rings   |<---------  commands (JSON)  <-----------------|
-|  +--------------------+                                               |
-|  worker pool (fixed N threads) for the parallel phases                |
+|  SIM THREAD                         SERVER (Kestrel, port 5800)        |
+|  Simulation.Step()  -- phases 1..7  Snapshot triple buffer ---------> WebSocket -> browser
+|  World: all state, preallocated     Explain engine, commands  <------ (three.js 3D, dashboards)
+|  Worker pool (fixed N threads) for the parallel phases                 |
 +------------------------------------------------------------------------+
 ```
 
-Headless mode runs the same core with no server and writes reports.
+Headless mode runs the same core with no server and writes reports, CSV files and gene banks.
 
-## 3. Memory map
+## 3. World and memory map
 
-All arrays are allocated once in `World` construction. The sizes are:
-- C = capacity (default 32,768 animal slots).
-- WORLD = side of the toroidal world in units (default 1,024).
-- FW = WORLD / 4, the field grid side (default 256).
-- GW = WORLD / 16, the spatial-hash grid side (default 64).
-- F = 30, the number of decision inputs (26 features + 4 motivations).
-- O = 32, the number of decision outputs (28 primitive gains + 4 motivations).
+The world is a torus of WORLD = 1024 units. The field grid has cells of 4 units (FW = 256, 65,536
+cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = 32,768 agent slots. Eggs and
+embryos occupy slots too.
 
-| Block | Type | Elements | Default size |
+| Block | Type | Per slot or cell | Total (default) |
 |---|---|---|---|
-| Animal kinematics: X, Y, Heading, Speed | float | 4·C | 512 KB |
-| Animal physiology: Energy, Gut, GutEnergy, Thirst, Fatigue, Age, Attacked, Cooldown, Gestation | float | 9·C | 1.1 MB |
-| Animal identity: Species (byte), Sex (byte), Alive (byte), Flags (byte), Gen (ushort), Serial, Mother, Father (uint) | mixed | C | 160 KB |
-| Motivations | float | 4·C | 512 KB |
-| Body-plan genes | float | 16·C | 2 MB |
-| Decision matrix | sbyte | (O·F)·C = 960·C | 30 MB |
-| Founder matrices and body plans | sbyte / float | 6 species | 6 KB |
-| Intents (heading, speed, target slot, action bits, primitive gains) | float / int | (4 + 28)·C | 4 MB |
-| Spatial hash: CellStart, CellCount, Sorted | int | 2·GW² + C | 160 KB |
-| Free-slot stack; breed requests; resolve order | int | 3·C | 384 KB |
-| Vegetation fields: Grass, Shrub, Sapling, Tree, Fruit, Fuel; double-buffered | float | 12·FW² | 3 MB |
-| Soil and water: Nutrient, Moisture, BaseMoisture, Water, Elevation | float | 5·FW² | 1.3 MB |
-| Animal fields: Carrion, Scent, Fire, KillFlash, BirthFlash | float | 5·FW² | 1.3 MB |
-| Telemetry counters | long | about 600 | 5 KB |
-| Telemetry rings (S = 4,096 samples) | float | about 400·S | 6.5 MB |
-| Snapshot buffers (×3) | byte | 12·C + headers | 1.2 MB |
+| Kinematics X, Y, Heading, Speed, Vx, Vy | float | 6 | 0.8 MB |
+| Physiology Energy, Gut, GutEnergy, Thirst, Fatigue, Age, Pain, Cooldown, Timer, Reward, RewardMean | float | 11 | 1.4 MB |
+| Identity Species, Stage, Sex, Flags (byte), Gen (ushort), Serial, Mother, Children (int) | mixed | — | 0.6 MB |
+| Hidden state | float | 16 | 2.1 MB |
+| Genome (W1, W2, plasticity genes), int8 | sbyte | 2,032 | 66.6 MB |
+| Learned deltas on W2 | float | 1,288 | 168.8 MB |
+| Eligibility traces on W2 | Half | 1,288 | 84.4 MB |
+| Intents and last gains/actions | float | 34 | 4.5 MB |
+| Spatial hash, free stack, order | int | — | 0.6 MB |
+| Fields: 13 food pools, nutrient, moisture, fuel, fire, scent, pollination (×2 where double-buffered) | float | 26 | 6.8 MB |
+| Static terrain: elevation, depth, water mask, distance-to-water, distance-to-land | float/byte | 5 | 1.1 MB |
+| Elite archive (20 species × 32 genomes) | sbyte | — | 1.3 MB |
+| Telemetry rings (4,096 samples × ~1,200 floats) | float | — | 19.7 MB |
+| Snapshots (×3) | byte | 12 | 1.2 MB |
 
-The total default is about 52 MB.
+The total is about 360 MB at the default capacity, and it scales linearly with `--capacity`.
 
-## 4. Step contract
+## 4. Senses: the shared feature vector (30 entries)
 
-One step equals one tick. Each phase lists what it reads and writes. "∥" marks a phase that runs in
-parallel over a fixed partition of slot ranges or field rows. A parallel phase writes only into the
-elements it owns, so its result does not depend on scheduling (NR-105).
+These are identical for every animal (NR-201). Other animals are seen only through observable
+attributes (NR-202), within the sight range R and field of view Φ. SCAN widens Φ to 360° and R by
+30% on the next step. "Closeness" of an animal at distance d is 1 − d/R. "Density" is
+tanh(Σ closeness). The neighbourhood examined is capped at 96 animals per step, taken in
+spatial-hash order.
 
-| # | Phase | ∥ | Reads | Writes |
-|---|---|---|---|---|
-| 1 | BUILD | no | X, Y, Alive | CellStart, CellCount, Sorted (counting sort: deterministic) |
-| 2 | DECIDE | ∥ slots | everything | Intents and Motivations of its own slot only |
-| 3 | RESOLVE | no | Intents | kinematics, physiology, fields, Alive; counters |
-| 4 | SPAWN | no | breed requests, free stack | new slots; counters |
-| 5 | VEGETATION | ∥ rows | old field buffer | new field buffer (buffers swap afterwards) |
-| 6 | TELEMETRY | no | everything | counters, rings (every K = 32 steps) |
+**Self and drives (0–9)**
 
-**DECIDE** computes perception (§5.1), runs the decision matrix (§5.3) and turns gains into intents.
-It does not change any shared state.
-
-**RESOLVE** visits the living animals in an order that is a seeded permutation of the slots, different
-every step: `order[k] = (k·A + B_step) mod C` with A odd and coprime with C. For each animal it applies:
-1. Move.
-2. Drink.
-3. Eat or strike.
-4. Pay costs.
-5. Digest.
-6. Age.
-7. Die.
-8. Mate (request).
-
-Contested resources (the grass in a cell, a prey animal) go to whoever comes first in this order. That
-is fair on average and fully deterministic.
-
-## 5. Decision architecture
-
-### 5.1 Features (identical for every animal; NR-201, NR-202)
-
-Animals are perceived within the sight range R and the field of view Φ (body-plan genes; Scan widens
-Φ to 360° and R by 30%). "Closeness" of an animal at distance d is `1 − d/R`. "Density" is the sum of
-closeness over a class, passed through tanh.
-
-**Bias and drives**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 0 | BIAS | constant 1 | 1 |
-| 1 | HUNGER | 1 − Energy/Emax | 0..1 |
-| 2 | THIRST | Thirst (death at 1) | 0..1 |
-| 3 | FATIGUE | sprint debt / fatigue limit | 0..1 |
-| 4 | READY | 1 if mature, not gestating, Energy > 0.6·Emax, cooldown over | 0/1 |
-| 5 | AGE | Age / lifespan | 0..1 |
-| 6 | JUVENILE | 1 if Age < maturity | 0/1 |
-| 7 | FULL | Gut / gut capacity | 0..1 |
-
-**Conspecifics**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 8 | KIN_DENSITY | density of conspecifics | 0..1 |
-| 9 | KIN_CLOSE | closeness of nearest conspecific (crowding) | 0..1 |
-| 10 | MOTHER_FAR | 1 − closeness of mother; 0 if no living mother or adult | 0..1 |
-| 11 | MATE_CLOSE | closeness of nearest ready conspecific of the other sex | 0..1 |
-
-**Larger animals of other species**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 12 | BIG_CLOSE | closeness of nearest larger heterospecific | 0..1 |
-| 13 | BIG_DENSITY | density of larger heterospecifics | 0..1 |
-| 14 | BIG_APPROACH | closing speed of nearest larger, divided by own vmax | −1..1 |
-| 15 | BIG_CARNIVORE | carnivory trait of nearest larger | 0..1 |
-
-**Smaller animals of other species**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 16 | SMALL_CLOSE | closeness of nearest smaller heterospecific | 0..1 |
-| 17 | SMALL_DENSITY | density of smaller heterospecifics (prey confusion) | 0..1 |
-| 18 | SMALL_WEAK | vulnerability of nearest smaller: juvenile, fatigued, low armour | 0..1 |
-
-**Meat-eaters of any size**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 19 | CARN_CLOSE | closeness of nearest meat-eating heterospecific | 0..1 |
-
-**Resources at the animal's cell**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 20 | GRASS_HERE | grass biomass in own cell | 0..1 |
-| 21 | BROWSE_HERE | shrub + sapling leaf biomass | 0..1 |
-| 22 | FRUIT_HERE | fruit | 0..1 |
-| 23 | CARRION_HERE | carrion, tanh | 0..1 |
-| 24 | WATER_CLOSE | closeness of nearest water cell, within 3·R | 0..1 |
-
-**Danger memory**
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 25 | FEAR | max(scent here, Attacked memory) | 0..1 |
-
-**Motivation inputs** (the motivation state from the previous step)
-
-| i | Name | Meaning | Range |
-|---|---|---|---|
-| 26…29 | MOT0…MOT3 | motivation state from the previous step | −1..1 |
-
-"Larger" and "smaller" compare actual masses, with a ±15% dead band in which another animal is
-neither. "Meat-eater" is the visible carnivory trait (the body plan's meat efficiency), so it is an
-attribute of the other animal, not a relation table.
-
-### 5.2 Behaviour library (identical for every animal; NR-203)
-
-A primitive is an *operator* applied to a *target*. Steering primitives return a unit vector (zero if
-their target is absent). Speed and action primitives return nothing; their gain is used directly.
-
-**Steering primitives**
-
-| p | Primitive | Vector |
+| i | Name | Meaning |
 |---|---|---|
-| 0 | SEEK_SMALL | toward nearest smaller heterospecific |
-| 1 | SEEK_BIG | toward nearest larger heterospecific |
-| 2 | SEEK_CARN | toward nearest meat-eater, but tangential once inside R/2 (shadowing) |
-| 3 | FLEE_BIG | away from nearest larger heterospecific |
+| 0 | BIAS | 1 |
+| 1 | HUNGER | 1 − Energy/Emax |
+| 2 | THIRST | Thirst (0..1, death at 1) |
+| 3 | FATIGUE | 0..1 |
+| 4 | READY | 1 if able to reproduce now (§8) |
+| 5 | AGE | Age/lifespan |
+| 6 | JUVENILE | 1 before maturity |
+| 7 | FULL | Gut/Gcap |
+| 8 | PAIN | recent damage received, decays |
+| 9 | CARRYING | 1 while gestating embryos |
+
+**Others (10–21)**
+
+| i | Name | Meaning |
+|---|---|---|
+| 10 | KIN_DENSITY | conspecifics |
+| 11 | KIN_CLOSE | nearest conspecific |
+| 12 | MOTHER_FAR | 1 − closeness of mother; 0 if none or adult |
+| 13 | MATE_CLOSE | nearest READY conspecific that is a valid partner |
+| 14 | BIG_CLOSE | nearest heterospecific more than 15% heavier |
+| 15 | BIG_DENSITY | density of those |
+| 16 | BIG_APPROACH | closing speed of nearest big / own vmax, −1..1 |
+| 17 | BIG_CARN | carnivory trait of the nearest big (visible attribute) |
+| 18 | SMALL_CLOSE | nearest heterospecific or egg more than 15% lighter |
+| 19 | SMALL_DENSITY | density of those |
+| 20 | SMALL_WEAK | vulnerability of nearest small: egg, juvenile, fatigued, low armour |
+| 21 | CARN_CLOSE | nearest heterospecific meat-eater of any size |
+
+**Environment (22–29)**
+
+| i | Name | Meaning |
+|---|---|---|
+| 22 | FOOD_HERE | value of the best digestible food in own cell: max over pools of ρ·eff·amount, normalised |
+| 23 | FOOD_GRAD | strength of the gradient of digestible food value |
+| 24 | IN_WATER | 1 if standing or swimming in water |
+| 25 | WATER_CLOSE | closeness of the nearest water (distance map) |
+| 26 | LAND_CLOSE | closeness of the nearest land |
+| 27 | FEAR | scent of meat-eaters here, plus fire nearby |
+| 28 | CROWD | total animal density, any species |
+| 29 | SEASON | sin of the season phase at own position (−1 dry … +1 wet) |
+
+Smelling digestible food (features 22–23, primitive CLIMB_FOOD) is physiology. A body's senses are
+tuned to what its gut can digest, the way taste is. It says nothing about when to eat, or whether
+eating beats fleeing; that is the brain's job.
+
+## 5. Actions: the shared primitive library (28 entries)
+
+Identical for every animal (NR-203).
+
+**Steering primitives** each return a unit vector, or zero if their target is absent:
+
+| p | Name | Vector |
+|---|---|---|
+| 0 | SEEK_SMALL | toward nearest small |
+| 1 | SEEK_BIG | toward nearest big |
+| 2 | SHADOW_CARN | toward nearest meat-eater beyond R/2, tangential inside R/2 |
+| 3 | FLEE_BIG | away from nearest big |
 | 4 | FLEE_CARN | away from nearest meat-eater |
-| 5 | INTERCEPT_SMALL | toward the predicted position of nearest smaller (lead = d / own speed) |
-| 6 | CIRCLE_SMALL | perpendicular to the target bearing, on the side away from nearest kin (flanking) |
-| 7 | COHERE | toward the centroid of visible kin |
-| 8 | SEPARATE | away from kin closer than 2 units, weighted by inverse distance |
-| 9 | ALIGN | mean heading of visible kin |
+| 5 | INTERCEPT_SMALL | toward predicted position of nearest small |
+| 6 | CIRCLE_SMALL | perpendicular to its bearing, on the side away from kin |
+| 7 | COHERE | toward kin centroid |
+| 8 | SEPARATE | away from kin closer than 2 units |
+| 9 | ALIGN | mean kin heading |
 | 10 | FOLLOW_MOTHER | toward mother |
-| 11 | SEEK_MATE | toward nearest ready mate |
-| 12 | CLIMB_GRASS | gradient of grass (central difference over 2 cells) |
-| 13 | CLIMB_BROWSE | gradient of browse |
-| 14 | CLIMB_FRUIT | gradient of fruit |
-| 15 | CLIMB_CARRION | gradient of carrion, sampled at 3 cells so the scent carries |
-| 16 | SEEK_WATER | toward nearest water cell |
-| 17 | AVOID_FEAR | down the gradient of scent |
-| 18 | WANDER | heading + slowly changing hashed noise (correlated random walk) |
+| 11 | SEEK_MATE | toward nearest valid partner |
+| 12 | CLIMB_FOOD | up the gradient of digestible food value |
+| 13 | SEEK_WATER | down the distance-to-water map |
+| 14 | SEEK_LAND | down the distance-to-land map |
+| 15 | AVOID_FEAR | down the scent gradient |
+| 16 | WANDER | correlated random walk (hashed noise) |
 
 **Speed and attention primitives**
 
-| p | Primitive | Effect |
+| p | Name | Effect |
 |---|---|---|
-| 19 | HOLD | reduces speed |
-| 20 | SCAN | stops the animal; widens the field of view to 360° and range ×1.3 next step; forbids EAT |
-| 21 | SPRINT | raises speed toward vmax; builds fatigue |
+| 17 | HOLD | slows the animal |
+| 18 | SCAN | stops the animal; Φ = 360°, R ×1.3 next step; forbids EAT this step |
+| 19 | SPRINT | toward vmax; builds fatigue |
 
-**Action primitives** (each fires if gain > 0.5 and its precondition holds)
+**Discrete actions** have a precondition. If the precondition fails, the action has no effect.
 
-| p | Primitive | Precondition | Effect |
-|---|---|---|---|
-| 22 | EAT | food here; gut not full; not scanning | bite from the field with the best digestible value |
-| 23 | STRIKE | target within reach; not juvenile | attack nearest smaller (or larger, if no smaller), §7.4 |
-| 24 | DRINK | water within reach | Thirst → 0 over a few steps |
-| 25 | MATE | READY, mate within reach and also READY | conception (§7.6) |
-| 26 | REST | — | speed 0; fatigue recovers 3× faster; basal cost × 0.85 |
-| 27 | MARK | — | deposit own scent (meat-eaters always deposit a little anyway) |
+| p | Name | Precondition |
+|---|---|---|
+| 20 | EAT | digestible food here; gut not full; not scanning |
+| 21 | STRIKE | a heterospecific within reach (smaller preferred); not an egg or embryo |
+| 22 | DRINK | land-stage animal; water within reach |
+| 23 | MATE | READY; valid partner READY within reach; mode allows sex now (§8) |
+| 24 | REST | — |
+| 25 | MARK | — (deposits scent) |
+| 26 | LAY | READY; mode allows asexual reproduction now (fission, budding, spores, parthenogenesis; §8) |
+| 27 | CACHE | gut holds seeds; stores them into the cell as a cache (seed pool) |
 
-**Motivation outputs** (p = 28…31) feed back as features 26…29.
-
-### 5.3 Decision matrix (NR-204, NR-208)
-
-Each animal owns the matrix W, of size O × F = 32 × 30 entries, stored as signed bytes. A weight w
-stands for w/16, so the range is ±7.9.
-
-```
-x      = [features f(0..25), motivations m(0..3)]          (30 inputs)
-z_p    = Σ_i W[p,i] · x_i / 16                             (32 outputs)
-m'_k   = tanh(z_{28+k})                                    motivation update
-g_p    = σ(z_p) = 1 / (1 + e^{-z_p})       for p < 28      primitive gain, 0..1
-```
-
-The feature BIAS = 1 acts as the bias column. A gain of 0.5 is neutral. Founders set the bias rows to
-about −3 (gain ≈ 0.05), so a primitive is quiet until a feature turns it on.
-
-**Intent from gains**
-- **Steering:** `s = Σ_{p≤18} g_p · v_p`. The desired heading is atan2(s). The new heading turns
-  toward it by at most the turn rate. If |s| < 0.05, the heading is kept.
+**From gains to motion**
+- **Heading:** the steering sum s = Σ g_p·v_p (p ≤ 16) sets the desired heading. The turn is limited
+  by the turn rate.
 - **Speed:**
-  `speed = vmax · clamp(0.45 + 0.55·g_SPRINT − 0.45·g_HOLD, 0, 1) · (1 − g_SCAN) · (1 − rest) · (1 − 0.5·FATIGUE)`.
-  The action REST sets rest = 1.
-- **Actions:** each action primitive fires if its gain is > 0.5 and its precondition holds.
-  EAT and SCAN are exclusive: the larger gain wins.
+  `vmax·clamp(0.45 + 0.55·g_SPRINT − 0.45·g_HOLD, 0, 1)·(1 − g_SCAN)·(1 − 0.5·FATIGUE)`.
+  Speed is 0 when resting or for sessile bodies.
+- **Firing:** a discrete action fires **stochastically, with probability equal to its gain**. That
+  randomness is the exploration that learning needs (§7.2).
 
-One evaluation is 960 multiply-adds plus 32 transcendental functions per animal per step.
+## 6. The energy cycle and the roster
 
-### 5.4 Inheritance (NR-205)
+### 6.1 Pools
 
-- **Crossover:** uniform per output row. The child takes each row (one primitive's whole
-  weighting) from mother or father with probability ½. Keeping rows whole keeps a primitive's wiring
-  intact, analogous to genetic linkage.
-- **Mutation:** each byte, with probability μ = 0.03, moves by round(N(0,1)·2). With probability
-  μ·0.05 it instead jumps by round(N(0,1)·16). The result is clamped to ±127. (N(0,1) is approximated,
-  as in v1, by the sum of three uniforms.)
-- **Body plan:** each heritable gene is multiplied by exp(0.02·N(0,1)) and clamped to ±30% of the
-  species founder value. Diet efficiencies are clamped to 0..1, so a species cannot leave its niche by
-  drift alone in a short run, but a long run can.
+| Pool | Kind | Produced by | Lost by |
+|---|---|---|---|
+| GRASS | producer, land | growth (light, moisture, nutrient), spread | grazing, fire, shading, senescence → LITTER |
+| BROWSE | producer, land | shrub and tree leaf growth | browsing, fire, senescence → LITTER |
+| FRUIT | producer, land | trees in the wet season, × pollination | eating, rot → LITTER |
+| SEED | producer, land | grass and trees, × pollination; caches | eating, germination into grass/saplings, rot |
+| NECTAR | producer, land | flowering grass/shrubs in the wet season | eating (pollinates the cell) |
+| ROOT | producer, land | grass and shrub biomass below ground | rooting, fire (partial) |
+| ALGAE | producer, shallow water | growth (light, water nutrient) | grazing, death → DETRITUS |
+| PHYTO | producer, open water | growth (water nutrient, season) | grazing, death → DETRITUS |
+| CARRION | dead | death of animals; uneaten kills | scavenging, rot → NUTRIENT |
+| DUNG | dead | undigested food of every animal | detritivores, rot → NUTRIENT |
+| LITTER | dead | plant senescence | detritivores, fungi, rot, fire |
+| WOOD | dead | tree death, fire | fungi, slow rot |
+| DETRITUS | dead, water | algae/plankton death, carcasses in water, run-off | detritivore larvae, rot → NUTRIENT |
+| MEAT | animal bodies | every animal | predation |
+| BLOOD | animal bodies | every large animal | parasitism (drain without killing) |
 
-## 6. Founder compositions
+Decomposition by bacteria is a field process. Every dead pool rots at its own rate into NUTRIENT
+(soil or water), and nutrient diffuses across the shore as run-off. NUTRIENT feeds every producer,
+which closes the cycle.
 
-These are the hand-set starting matrices. Each line is `PRIMITIVE ← weight·FEATURE + …` in weight
-units of 1/16 (so +48 = +3.0). Entries not listed are 0, apart from small founder noise
-(±2, uniform). Every primitive row also has its bias: −48 unless stated.
+### 6.2 Roster
 
-The tables below *are* the design of each species' behaviour. Each is a combination of the same
-primitives (NR-206).
+The roster is 20 species. **S** marks a super-individual: one agent stands for many organisms (a
+swarm, a plankton patch, a fungal mat), and its mass is the aggregate.
 
-### 6.1 Shared core (all species start with these rows)
+| # | Species | Niche | Realm (stage) | Food | Reproduction |
+|---|---|---|---|---|---|
+| 0 | Drifters | small grazer | land | GRASS | sexual, live birth |
+| 1 | Browsers | large browser | land | BROWSE, FRUIT | sexual, live birth, 1 calf |
+| 2 | Tuskers | rooting omnivore | land | ROOT, FRUIT, MEAT (small), CARRION | sexual, live birth |
+| 3 | Gliders | frugivore, seed disperser | land, flies | FRUIT, SEED | sexual, eggs; dung plants saplings |
+| 4 | Burrowers | granivore, cacher | land | SEED | sexual, live birth, large litters |
+| 5 | Hummers (S) | pollinator swarm | land, flies | NECTAR | asexual colony fission |
+| 6 | Chewers (S) | leaf-insect swarm | land, flies | GRASS, BROWSE | facultative: parthenogenesis when food is rich, sexual when poor |
+| 7 | Delvers (S) | detritivore (worms/beetles) | land | DUNG, LITTER | hermaphrodite |
+| 8 | Rotmats (S) | fungal mat, sessile | land | WOOD, LITTER, CARRION | spores |
+| 9 | Gleaners | vertebrate scavenger | land | CARRION | sexual, live birth, litters of 6 |
+| 10 | Snappers | insectivore | land, flies | MEAT (insect swarms, eggs) | sexual, eggs |
+| 11 | Prowlers | solitary mesopredator | land | MEAT | sexual, live birth |
+| 12 | Stalkers | pack hunter | land | MEAT | sexual, live birth |
+| 13 | Leviathans | apex predator | land + shallows | MEAT, CARRION | sexual, live birth, 1 young |
+| 14 | Bloodflies (S) | parasite | larva: water; adult: flies | larva: DETRITUS; adult: BLOOD, NECTAR | sexual, eggs in water |
+| 15 | Siltmites (S) | zooplankton | water | PHYTO | cyclic parthenogenesis: asexual in the wet season, sexual resting eggs in the dry |
+| 16 | Minnows | grazing fish | water | ALGAE, MEAT (Siltmites, eggs) | sexual spawning, many eggs |
+| 17 | Pikes | predatory fish | water | MEAT | sexual spawning |
+| 18 | Croakers | amphibian | tadpole: water; adult: land + shallows | tadpole: ALGAE; adult: MEAT (insects) | sexual, eggs in water, metamorphosis |
+| 19 | Herons | wading bird | land + shallows, flies | MEAT (fish, tadpoles, larvae) | sexual, eggs |
 
-```
-SEPARATE      ← +96·KIN_CLOSE                        personal space
-WANDER        ← bias −8                              light background exploration
-SEEK_WATER    ← +112·THIRST                          drink when thirsty
-DRINK         ← +128·THIRST  (bias −24)
-REST          ← +96·FATIGUE  −64·FEAR                rest when tired unless afraid
-SEEK_MATE     ← +80·READY  +40·MATE_CLOSE  −48·HUNGER
-MATE          ← +112·READY                           (bias −40)
-FOLLOW_MOTHER ← +96·MOTHER_FAR  +48·JUVENILE
-MOT1 (alarm)  ← +48·FEAR +40·BIG_APPROACH +56·MOT1   persistence: alarm lingers
-```
+**Who eats whom is not a table.** "MEAT" means the species can digest meat. What it can catch follows
+from its realm, size, strike and the prey's armour (§9.4). The killer × victim matrix in the
+analytics shows what actually happens (NR-305).
 
-### 6.2 Drifters (small grazer): "a grazing, vigilant herd"
+**Links between land and water**
+- Herons, Leviathans and adult Croakers enter shallows.
+- Croakers and Bloodflies change realm at metamorphosis.
+- Carcasses in water and nutrient run-off feed DETRITUS and water NUTRIENT.
 
-```
-CLIMB_GRASS  ← +80·HUNGER  −48·FULL
-EAT          ← +96·HUNGER  +48·GRASS_HERE  −64·MOT1
-COHERE       ← bias +8, +40·MOT1                    herd; tighter when alarmed
-ALIGN        ← +48·KIN_DENSITY
-SCAN         ← +48·BIG_CLOSE +32·FEAR −40·HUNGER
-FLEE_CARN    ← +96·CARN_CLOSE +48·MOT1
-FLEE_BIG     ← +56·BIG_APPROACH
-SPRINT       ← +64·MOT1 +48·BIG_APPROACH
-AVOID_FEAR   ← +48·FEAR
-```
+**Mutualisms are rules** (NR-317)
+- When a Hummer eats nectar, the cell's POLLINATION level rises. Pollination multiplies FRUIT and SEED
+  production.
+- Dung of fruit and seed eaters seeds SAPLINGs in proportion to the seed share of their gut.
 
-**Vigilance** is SCAN + COHERE when a big animal is near and hunger is moderate. **Escape** is
-FLEE + SPRINT driven by the alarm motivation, which persists after the predator leaves sight.
+### 6.3 Body plans
 
-### 6.3 Browsers (large browser): "armoured giants with calves"
+Constants are in `CONSTANTS.md` §7. Each body plan holds:
+- adult mass, realm per stage, locomotion (walk, swim, fly, sessile)
+- the diet efficiency vector per stage (15 pools)
+- armour, strike power, the parasite flag, the super-individual flag
+- sight factor, field of view, speed factor, thirst factor
+- reproduction mode, litter size, gestation/incubation, cooldown, egg medium (land/water)
+- metamorphosis age (if two-stage)
+- initial count
 
-```
-CLIMB_BROWSE ← +72·HUNGER  −48·FULL
-CLIMB_FRUIT  ← +48·HUNGER
-EAT          ← +80·HUNGER +48·BROWSE_HERE +32·FRUIT_HERE
-COHERE       ← +40·KIN_DENSITY +32·MOT1
-STRIKE       ← +80·CARN_CLOSE +40·MOT1  −64·JUVENILE    adults defend against predators
-SEEK_CARN    ← +48·CARN_CLOSE −80·JUVENILE              adults mob predators
-FLEE_CARN    ← +64·JUVENILE +48·CARN_CLOSE              calves run
-FOLLOW_MOTHER← (core) +96·MOTHER_FAR, plus +64·MOT1      calves run to mother when alarmed
-```
+### 6.4 Energy-cycle closure check (NR-315, NR-316)
 
-**Adult defence** is SEEK_CARN + STRIKE. Armour (§7.4) makes it work. **Calf protection** is
-FOLLOW_MOTHER under alarm. Browsing on saplings holds back forest (§8).
+At start-up, and in a test, the program checks four things:
+1. **Every pool has a consumer:** at least one species, at some stage, has efficiency > 0 for it.
+   MEAT must be digestible by some species able to reach each realm. Dead pools additionally have
+   rot.
+2. **Every species can eat:** each stage has at least one pool with efficiency > 0 that exists in
+   that stage's realm.
+3. **Every species can reproduce:** each species has a reproduction mode. Egg-laying species have
+   an egg medium they can reach.
+4. **Every producer's nutrient is returned:** every pool's loss path ends in NUTRIENT, so no energy or
+   nutrient is stranded.
 
-Some lines combine two features in one gate (for example "adult and carnivore close"). The matrix is
-linear before the sigmoid, so such a gate is written as two weights (a positive one on the trigger, a
-negative one on JUVENILE) that only together pass the threshold. That is the realised form shown.
+The program refuses to start if the check fails, and prints the offending entries.
 
-### 6.4 Foragers (small omnivore): "opportunist"
+## 7. Brains
 
-```
-CLIMB_FRUIT   ← +64·HUNGER
-CLIMB_CARRION ← +40·HUNGER
-EAT           ← +96·HUNGER +40·FRUIT_HERE +40·CARRION_HERE
-SEEK_SMALL    ← +40·HUNGER +40·SMALL_WEAK                 takes the weak or young
-STRIKE        ← +64·SMALL_WEAK +40·HUNGER
-FLEE_CARN     ← +96·CARN_CLOSE +32·MOT1
-FLEE_BIG      ← +48·BIG_CLOSE
-SPRINT        ← +56·MOT1
-COHERE        ← +24·MOT1
-```
+### 7.1 Architecture
 
-### 6.5 Stalkers (mesopredator): "pack hunters"
-
-```
-MOT0 (hunt)     ← +56·HUNGER +40·SMALL_CLOSE +48·MOT0 −64·FULL −48·FATIGUE   (bias −40)
-COHERE          ← bias 0, −32·MOT0                        stay as a pack while not hunting
-ALIGN           ← +40·KIN_DENSITY
-SEEK_SMALL      ← +64·MOT0
-CIRCLE_SMALL    ← +40·MOT0 +40·KIN_DENSITY −48·SMALL_CLOSE*   flank when packmates present
-INTERCEPT_SMALL ← +72·MOT0 +56·SMALL_CLOSE
-SPRINT          ← +64·SMALL_CLOSE +32·MOT0 −72·FATIGUE    sprint only near the end of a chase
-STRIKE          ← +96·SMALL_CLOSE +48·MOT0 +32·SMALL_WEAK
-EAT             ← +96·CARRION_HERE +48·HUNGER             eat the kill
-HOLD            ← +40·FULL                                lie up on a full gut
-FLEE_BIG        ← +56·BIG_CARNIVORE +40·BIG_CLOSE
-MARK            ← +24·MOT0
-```
-
-`*` The CIRCLE row's negative weight on SMALL_CLOSE turns flanking into interception as the gap
-closes. **Give-up** is not coded. FATIGUE suppresses SPRINT and the hunt motivation, so a chase that
-does not close before fatigue builds ends by itself, which is the marginal-value outcome.
-
-### 6.6 Leviathans (apex predator): "solitary ambusher"
+The architecture is identical for every species (NR-204):
 
 ```
-MOT0 (hunt)     ← +48·HUNGER +40·SMALL_CLOSE +40·MOT0 −64·FULL −40·FATIGUE   (bias −40)
-SEPARATE        ← (core) +96·KIN_CLOSE, plus +40·KIN_DENSITY   solitary
-HOLD            ← +56·MOT0 −72·SMALL_CLOSE                 wait in ambush ...
-SEEK_SMALL      ← +40·MOT0 +48·SMALL_CLOSE                  ... then lunge
-SPRINT          ← +80·SMALL_CLOSE −64·FATIGUE
-STRIKE          ← +96·SMALL_CLOSE +48·MOT0 +40·SMALL_WEAK
-SEEK_WATER      ← (core), plus +32·MOT0                     hunt at waterholes
-EAT             ← +96·CARRION_HERE +40·HUNGER
-REST            ← (core), plus +56·FULL
+input  u = [features f (30), hidden h(t−1) (16)]                      46 values
+hidden h(t) = tanh(W1 · u)                         W1: 16 × 46          (genome, fixed in life)
+output z    = (W2 + Δ) · [h(t) (16), f (30)]       W2: 28 × 46          (genome + learned Δ)
+gain   g_p  = σ(z_p)
 ```
 
-**Ambush** is HOLD while hunting, released into SEEK + SPRINT when prey comes close. Waiting near water
-is a weighting of the shared SEEK_WATER primitive by the hunt motivation.
+- The output layer sees the hidden state and also the raw features. These skip connections let a
+  simple sense-to-action link be learned directly.
+- The recurrent hidden layer gives memory and lasting states, such as alarm (NR-208).
+- Genome weights are int8 with a scale of 1/16 (±7.9).
+- There are 736 + 1,288 = 2,024 weights, plus 8 bytes of plasticity genes: the learning rate η, the
+  trace decay λ, the exploration noise σ, and the delta decay κ.
 
-### 6.7 Gleaners (scavenger): "follow the hunters"
+### 7.2 Lifetime learning: reward-modulated plasticity (NR-211)
+
+Learning uses node perturbation (Williams 1992; Fiete and Seung 2006), a three-factor rule:
 
 ```
-CLIMB_CARRION ← +96·HUNGER
-SEEK_CARN     ← +56·HUNGER −40·CARRION_HERE           shadow predators at a distance
-EAT           ← +112·CARRION_HERE +48·HUNGER
-FLEE_CARN     ← +64·MOT1 +48·CARN_CLOSE −40·HUNGER     brave when hungry
-FLEE_BIG      ← +40·BIG_APPROACH
-COHERE        ← +32·KIN_DENSITY
-SPRINT        ← +48·MOT1
+Steering and speed gains:   ĝ_p = clamp(g_p + σ·n_p, 0, 1),  n_p ~ N(0,1) (hashed)
+Discrete actions:           fired_p ~ Bernoulli(g_p)
+Perturbation:               δ_p = ĝ_p − g_p        (or fired_p − g_p)
+Trace:                      e_pj ← λ·e_pj + δ_p · y_j      y = [h, f]
+Reward advantage:           A = r − r̄,   r̄ ← r̄ + 0.01·(r − r̄)
+Update:                     Δ_pj ← (1 − κ)·Δ_pj + η·A·e_pj,   |W2 + Δ| ≤ 7.9
 ```
 
-Gleaners have litters of 6 and high juvenile mortality, an r-strategy.
+The reward r is **the same rule for every animal** (it is drive reduction, not behaviour):
+```
+r = 4·intake/Emax + 2·(thirst relieved) + 0.5·(fatigue relieved)
+    + 1·(mated) + 2·(offspring born) − 4·(damage received)/Emax − 0.5·Δ(FEAR)⁺
+```
 
-### 6.8 Founder verification scenes (NR-207)
+Learning changes only Δ, and it never changes the genome. Δ starts at zero at birth. What an animal
+learns is not inherited, but evolution selects η, λ, σ and κ, and the starting weights that make
+learning work.
 
-These are automated tests that build a small world by hand.
+### 7.3 Inheritance (NR-205)
 
-| Scene | Set-up | Pass condition |
+- **Sexual:** row-wise uniform crossover of W1 rows and W2 rows from the two parents.
+- **Asexual:** a copy of the single parent.
+- **Mutation** (both cases): each byte changes with probability μ = 0.02 by round(2·N), or, with
+  probability μ·0.05, by round(16·N). The plasticity genes mutate by the same rule.
+- **Body:** the body plan does not mutate. Species identity is fixed (decided with the user).
+
+### 7.4 Genesis (NR-210, NR-212)
+
+**Founders** are random. Every founder weight is round(U(−1,1)·12)/16, drawn from the run's hash.
+The plasticity genes are drawn uniformly from their ranges. There is no hand wiring, and a test
+asserts that founder genomes depend only on the RNG.
+
+**Genesis immigration.** During the first G steps (default 300,000), any species below its floor
+receives immigrants on suitable cells (its realm):
+- 50% are new random brains.
+- 50% are mutated copies from the species' **elite archive**: 32 genomes, each scored by lifetime
+  offspring, then by age. A genome enters the archive when its owner dies, if it beats the weakest.
+
+The floor ramps linearly from `floor0` to 0 over G steps. Immigrants are counted as strays. After G
+steps there is no immigration unless `--strays` is given.
+
+**Gene bank.** The file holds, per species, the elite archive and up to 256 living genomes. Format
+(little-endian):
+1. Header: magic `NRBK`, version u16, species count u16, genome length u16, capacity u32, step u64,
+   seed u32.
+2. Then for each species: count u16, followed by count × (score f32, genome bytes).
+
+A run started with `--load-bank` seeds each species from its bank genomes (mutated) instead of
+random ones, and runs no genesis immigration.
+
+## 8. Reproduction modes (NR-311, NR-316)
+
+**READY** means all of these hold:
+- mature
+- Energy > 0.6·Emax
+- the cooldown is over
+- not carrying embryos
+
+**Valid partner:**
+- for a sexual species, a READY conspecific of the other sex
+- for a hermaphrodite, any READY conspecific
+
+**Offspring at conception.** Offspring are created when they are conceived. Each takes a free slot,
+in one of two stages:
+- **EMBRYO:** live birth. It moves with its mother, cannot be seen or eaten, and dies if she dies.
+- **EGG:** laid at once in the parent's cell. If the egg medium is water, the parent must be in or
+  beside water. An egg is immobile, has no brain and can be eaten.
+
+**Costs.** The parent pays f_birth·Emax_child of energy per offspring at conception. If she cannot
+pay, the litter is smaller.
+
+**Hatching.** After the gestation or incubation timer ends, the offspring hatches as a JUVENILE.
+
+| Mode | Action | Rule |
 |---|---|---|
-| Herd | 30 Drifters scattered, full grass | mean nearest-kin distance halves within 300 steps |
-| Vigilance | 10 grazing Drifters, one Stalker walking toward them | SCAN or FLEE gain > 0.5 in ≥ 80% before contact |
-| Pack | 3 Stalkers, 1 Drifter in open | kill within 400 steps in ≥ 70% of 20 seeds |
-| Give-up | 1 Stalker, 1 Drifter with a 2× head start | chase abandoned (SPRINT < 0.3) before 600 steps |
-| Scavenger | 1 Stalker hunting, 2 Gleaners | Gleaners stay within 2R of the Stalker and reach the carcass |
-| Calf | Browser mother + calf, a Leviathan approaches | calf distance to mother stays < 6 |
-| Thirst | any species, water 40 units away | drinks before Thirst = 1 |
+| SEXUAL | MATE | partner of other sex; the female conceives a litter; each child is a crossover of both parents |
+| HERMAPHRODITE | MATE | any partner; *both* conceive (each a litter of ⌈n/2⌉) |
+| FISSION | LAY | splits into two: the child takes 45% of energy and a mutated copy of the genome; it appears adjacent as a juvenile |
+| FACULTATIVE | LAY / MATE | LAY (parthenogenetic, asexual litter) only when FOOD_HERE > 0.5, otherwise MATE |
+| CYCLIC | LAY / MATE | LAY only when SEASON > 0 (wet). In the dry season, MATE gives *resting eggs* that hatch only when SEASON turns positive (or after a maximum timer) |
+| SPORES | LAY | the mat emits a spore (EGG stage, incubation) into the best of 4 hashed cells within 3 cells, by dead matter |
 
-## 7. Animal ecology
+**Two-stage species** (Bloodflies, Croakers) switch realm, locomotion and diet at metamorphosis age.
+Juveniles of every species have mass M·(0.3 + 0.7·min(1, Age/A_m)), so calves are small, and a big
+predator sees them as SMALL.
 
-### 7.1 Allometry (NR-301)
+## 9. Physiology and physical rules
 
-Every rate derives from mass M. The species factor k (where present) lets a species be faster or
-slower than the allometric norm.
+### 9.1 Allometry (NR-301)
 
 | Quantity | Rule |
 |---|---|
-| Basal cost per step | B = c_B · M^0.75 |
-| Energy reserve max | Emax = c_E · M |
-| Gut capacity | Gcap = c_G · M |
-| Digestion rate | D = c_D · M^0.75 |
-| Max speed | vmax = c_V · M^0.17 · k_speed |
-| Turn rate | τ = c_τ · M^−0.2 |
-| Lifespan | L = c_L · M^0.25 · k_life |
-| Maturity age | A_m = c_A · M^0.25 · k_mat |
-| Sight range | R = c_R · M^0.2 · k_sight |
-| Reach (strike, eat, mate) | r = 1.0 + 0.4 · M^0.33 |
-| Thirst rate | θ = c_θ (per step; independent of mass) |
-| Movement cost | c_M · M · speed² |
-| Sprint fatigue | Fatigue += c_F · g_SPRINT · speed/vmax; recovery c_R0 per step (×3 when resting) |
+| basal cost per step | c_B·M^0.75 (×0.85 resting) |
+| reserve Emax | c_E·M |
+| gut capacity | c_G·M |
+| digestion per step | c_D·M^0.75 |
+| vmax | c_V·M^0.17·k_speed (swim and fly have their own factors) |
+| turn rate | c_τ·M^−0.2 |
+| lifespan | c_L·M^0.25·k_life |
+| maturity | c_A·M^0.25·k_mat |
+| sight R | min(32, c_R·M^0.2·k_sight) |
+| reach | 1 + 0.4·M^(1/3) |
+| movement cost | c_M·M·speed² |
+| fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
+| thirst | +c_θ·k_thirst per step (0 for aquatic stages and sessile mats) |
 
-### 7.2 Gut and digestion (NR-302)
+### 9.2 Movement and realm
 
-Food types k ∈ {grass, browse, fruit, meat, carrion} have energy densities ρ_k. EAT takes a bite
-b = min(c_bite·M^0.75, food here, Gcap − Gut) of the food type with the highest ρ_k·eff_k present. It
-adds b to Gut and b·ρ_k·eff_k to GutEnergy.
+- The heading turns toward the desired heading by at most the turn rate.
+- A move into a cell outside the stage's realm is refused. The animal stays where it is and turns by
+  ±90° (hashed).
+- Realms:
+  - land walkers: land cells only
+  - swimmers: water cells only
+  - waders: land, or water with depth < shallow
+  - flyers: anywhere, but cannot rest, eat or lay over deep water
+- Sessile mats have speed 0. They grow only by spores.
 
-Each step, d = min(Gut, D) is digested. Energy += GutEnergy·d/Gut, and the undigested share
-(1 − eff_k) of the bite returns as dung, which becomes soil nutrient in the current cell.
+### 9.3 Gut, digestion and intake (NR-302)
 
-A full gut stops EAT. The gut empties only at D. Intake rate therefore saturates at high food density,
-giving a Holling type II response from handling time alone. The telemetry samples intake against local
-food density to show it (NR-402).
+- **Choosing the food:** EAT takes the pool with the highest ρ_k·eff_k·amount in the cell.
+- **The bite:** b = min(c_bite·M^0.75, amount, Gcap − Gut).
+- **Into the gut:** Gut += b, and GutEnergy += b·ρ_k·eff_k. The undigested part, b·(1 − eff_k),
+  becomes DUNG.
+- **Digestion:** each step, d = min(Gut, c_D·M^0.75) is digested, moving the proportional share of
+  GutEnergy into Energy.
 
-### 7.3 Water (NR-303)
+A full gut blocks EAT, so the intake rate saturates (Holling type II) from handling time alone.
 
-Thirst increases by θ per step. DRINK within reach of a water cell lowers it by 0.25 per step. Thirst ≥
-1 is death (cause: thirst). Water cells are permanent lakes (elevation below sea level) plus seasonal
-pools (low basins whose moisture is above 0.8).
+### 9.4 Strikes, kills and parasitism (NR-304)
 
-### 7.4 Strike outcome (NR-304)
+**Target:** the nearest heterospecific within reach. Smaller and eggs come first; larger only if
+there is no smaller (mobbing and defence).
 
-When attacker a strikes target v within reach:
-
+**Success probability:**
 ```
 power   = strike_a · M_a
-defence = armour_v · M_v · (JUVENILE_v ? 0.25 : 1)
-p       = p0 · power/(power + defence) · (1 + 0.8·FATIGUE_v) · (1 − 0.5·SCAN_v)
-          / (1 + c_conf · KIN_DENSITY_v)
+defence = armour_v · M_v · (juvenile_v ? 0.25 : 1)       eggs: defence 0
+p = p0 · power/(power + defence) · (1 + 0.8·FATIGUE_v) · (1 − 0.5·SCAN_v) / (1 + c_conf·KIN_DENSITY_v)
 ```
 
-- **Cost:** the attacker pays c_strike·M_a whether the strike succeeds or not.
-- **Success:** the target dies (cause: killed-by-species-of-a). Its body becomes carrion, with
-  carrion mass = c_carc·M_v + its energy/ρ_meat. The attacker's gut is filled from that carrion at
-  once, as meat (up to Gcap). The rest stays for scavengers.
-- **Failure:** the target's Attacked memory is set to 1. If defence > power, the attacker also loses
-  c_retal·(defence − power) energy, so armour plus defence can hurt a predator.
+**Cost:** the attacker always pays c_strike·M_a.
 
-### 7.5 Costs and death
+**Outcomes:**
 
-- **Energy cost per step:** B·(REST ? 0.85 : 1) + c_M·M·speed² + strike and mating costs.
-- **Death causes:**
-  - Energy ≤ 0: starvation.
-  - Thirst ≥ 1: thirst.
-  - Old age: Age > L, with probability 0.002 per step, rising with Age/L.
-  - Standing in a burning cell: probability 0.3 per step.
+| Case | Result |
+|---|---|
+| Normal success | The victim dies (cause: killed-by-attacker-species). The attacker eats immediately as MEAT, up to its gut space, with efficiency eff_meat. The rest of the body becomes CARRION in the cell. |
+| Super-individual victim | It loses a chunk, min(attacker gut space, 30% of its energy), but it dies only if its energy falls below 5% of Emax. |
+| Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy), and the host takes it as damage. The host dies only if its energy reaches 0 (cause: parasitism). |
+| Failure | The victim's PAIN rises (it was attacked). If defence > power, the attacker loses c_retal·(defence − power) energy. |
 
-### 7.6 Reproduction (NR-311)
+### 9.5 Death
 
-- **Sexes:** two. Sex is assigned at birth from the hash.
-- **Mating:** when MATE fires and a READY mate of the other sex is within reach, the female conceives.
-  The male's matrix and body plan are copied into a per-female "sperm" slot, which is in the
-  preallocated breed-request table.
-- **Costs:** both pay c_mate·M. The female enters gestation (body-plan gene) and is not READY until
-  her cooldown ends.
-- **Birth:** at the end of gestation, the female gives birth to a litter of n (body-plan gene, ≥ 1)
-  if free slots exist. Each newborn gets the energy fraction f_birth·Emax_child, paid by the mother.
-  If she cannot pay, the litter is smaller.
-- **Newborns:** each is placed within 2 units of the mother, with Mother = mother's serial, and a
-  genome from §5.4.
+| Cause | Condition |
+|---|---|
+| starvation | Energy ≤ 0 |
+| thirst | Thirst ≥ 1 |
+| killed by species X | a successful strike (§9.4) |
+| parasitism | drained to Energy 0 |
+| old age | Age > lifespan, with probability 0.002·(Age/lifespan)² per step |
+| fire | standing in a burning cell, probability 0.3 per step |
+| drowning / stranding | none; realm rules forbid it |
 
-Strays (NR-313), if enabled, appear when a species has fewer than `strayFloor` members. They are
-mutated copies of the founder, placed on random land.
+On death, the body becomes CARRION in land cells or DETRITUS in water cells: mass c_carc·M plus
+Energy/ρ_meat. Eggs and embryos of a dead mother die.
 
-## 8. Vegetation and soil (NR-307 … NR-310)
+## 10. Vegetation, soil and water fields
 
-Each 4×4-unit cell holds:
-- grass G, shrub S, sapling P and tree T, each as cover 0..1 with G + S + T ≤ 1
-- fruit F
-- fuel U
-- nutrient N
-- moisture W
-- burning flag/intensity B
+### 10.1 Terrain and water
 
-### 8.1 Moisture and season
+**Terrain**
+- **Elevation:** periodic fBm noise, the v1 method.
+- **Lakes:** cells below the sea level (12% of cells).
+- **Rivers:** D8 flow accumulation over the elevation; cells whose accumulated catchment is above
+  a threshold become river.
+- **Depth:** lake depth is (sea − elevation). River depth is shallow.
+- **Distance maps:** distance-to-water and distance-to-land come from two chamfer passes on the
+  torus.
+- **Moisture:** base moisture is high near water and in valleys.
 
+**Season.** Each cell's moisture follows the base moisture modulated by a travelling sine wave:
 ```
-season(x,y,t) = sin(2π·t/T_season − 2π·y/FW)       (travelling wave, as in v1)
-W = clamp(W_base(x,y) · (1 + a_s·season), 0, 1)
+SEASON = sin(2π·t/T − 2π·y/FW)
+W = clamp(W_base·(1 + a_s·SEASON), 0, 1)
 ```
 
-W_base comes from terrain: high near water and in valleys, low on ridges.
-
-### 8.2 Growth (per step)
+### 10.2 Producer dynamics (per land cell, per step)
 
 ```
-light_G = 1 − 0.85·T − 0.35·S
-light_S = 1 − 0.70·T
-grow    = W · N/(N + K_N)
+grow  = W · N/(N + K_N)
+lightG = 1 − 0.85·T − 0.35·S
+lightS = 1 − 0.70·T
+free   = 1 − G − S − T
 
-G += r_G·grow·light_G·(G + s_G + σ·(Ḡ_nb − G))·(1 − G − S − T)
-S += r_S·grow·light_S·(S + s_S·G)·(1 − G − S − T)              shrubs invade grass
-P += r_P·grow·(T̄_nb + T)·(0.2 + S)·(1 − P − T) − m_P·P         seeds from trees; nurse shrubs
-T += m_P·P·(1 − T) + r_T·grow·T·(1 − T) − d_T·T                 saplings mature, trees grow
-S −= c_shade·T·S;   G −= c_shadeG·T·G                           canopy shades out the layers below
-F += r_F·T·max(season, 0) − d_F·F                               fruit in the wet season
-U += c_U·(G + S)·(1 − W) − d_U·U·W                              fuel accumulates when dry
-N += weathering + carrion rot + dung + ash − c_N·(growth of G, S, T)
+G += r_G·grow·lightG·(G + s_G·Seed + σ_G·(Ḡ − G))·free
+S += r_S·grow·lightS·(S + s_S·G)·free
+P += r_P·grow·(T̄ + T)·(0.2 + S)·(1 − P − T) − m_P·P + saplings planted by dung
+T += m_P·P·(1 − T) + r_T·grow·T·(1 − T) − d_T·T          (tree death → WOOD)
+G −= shG·T·G,   S −= shS·T·S                              (canopy shading)
+BROWSE = leaf share of shrub and tree cover, regrows at r_B toward (S + 0.6·T)
+FRUIT  += r_F·T·max(SEASON, 0)·(1 + POLL) − d_F·FRUIT                 (rot → LITTER)
+SEED   += r_Sd·(G + 0.5·T)·max(−SEASON, 0)·(1 + POLL) − d_Sd·SEED     (end of the wet season)
+NECTAR += r_Nc·(0.5·G + S)·max(SEASON, 0) − d_Nc·NECTAR
+ROOT   += r_R·(G + S)·(1 − ROOT) − rooting
+LITTER += c_lit·(G + S + T)                                (senescence)
+FUEL   = dry share of G + S + LITTER: (G + S + LITTER)·(1 − W)
+N      −= c_use·(growth of G, S, T)
+POLL   decays at d_P per step
 ```
 
-Here x̄_nb is the mean of the four neighbours. The fields double-buffer, and each row is computed
+Here x̄ is the mean of the four neighbours. The grids double-buffer, and rows are computed
 independently (NR-105).
 
-### 8.3 Herbivory (NR-308)
+**Herbivory (NR-308)**
+- Grazing removes GRASS.
+- Browsing removes BROWSE and kills saplings: P −= 0.5·b.
+- Rooting removes ROOT and some GRASS: G −= 0.3·b.
 
-- **Grazing:** an EAT on grass removes G directly.
-- **Browsing:** an EAT on browse takes from S first. A browse bite also kills saplings: P −= 0.5·b.
-  Heavy browsing therefore stops forest recruitment, the "browser holds back forest" effect.
-- **Fruit:** an EAT on fruit takes F.
+### 10.3 Water producers
 
-### 8.4 Fire (NR-309)
+```
+ALGAE += r_A·Nw/(Nw + K_N)·(depth < shallow)·(1 − ALGAE) − m_A·ALGAE    (death → DETRITUS)
+PHYTO += r_Ph·Nw/(Nw + K_N)·(1 + 0.5·SEASON)·(1 − PHYTO) − m_Ph·PHYTO
+```
 
-- **Ignition:** per cell, the probability is λ_fire·U·(1 − W)².
-- **Spread:** a burning cell ignites a neighbour with probability c_spread·U_nb·(1 − W_nb).
-- **Burning:** G = S = P = 0, T ×= 0.6, U = 0, N += c_ash·(burned biomass). B decays over 6 steps.
-- **Animals:** an animal in a cell with B > 0 can die (cause: fire). Fire also appears in the FEAR
-  feature as scent.
+### 10.4 Decomposition and run-off (NR-310)
 
-### 8.5 Carrion and scent
+Each dead pool X rots at rate c_rot,X. Of the rotted amount, the fraction c_nutGain becomes NUTRIENT.
+The rates are:
 
-- **Carrion:** rots at c_rot per step. Of the rot, the fraction c_nutGain becomes N.
-- **Scent:** each meat-eater deposits c_scent·carnivory per step into its cell (MARK adds ×4). Scent
-  diffuses 10% to neighbours and decays at d_scent.
+| Pool | Rot rate |
+|---|---|
+| carrion | fast |
+| dung | medium |
+| litter | slow |
+| wood | very slow |
+| detritus | medium |
 
-## 9. Terrain
+NUTRIENT diffuses 5% to the four neighbours each step across the shore, which is the run-off into
+water. Weathering adds c_w·fertility.
 
-Periodic fBm value noise produces the elevation and moisture base maps. This is the v1 method,
-`makeTerrain`, generalised. Elevation is normalised so that the sea share is about 12%: lakes, not
-an ocean, so that the land is connected. The lowest 3% of land basins are seasonal pools. Fertility
-seeds the initial N, and the initial vegetation is a mosaic: grass everywhere, shrubs and trees where
-W_base is high.
+### 10.5 Fire (NR-309)
 
-## 10. Telemetry, explanation and probe
+- **Ignition:** λ·FUEL·(1 − W)² per cell per step.
+- **Spread:** to each neighbour with probability c_spread·FUEL_nb·(1 − W_nb).
+- **A burning cell:** G, S, P, BROWSE, LITTER, NECTAR and SEED drop to 0. T is multiplied by 0.6, and
+  the lost T becomes WOOD. ROOT is multiplied by 0.7. N += c_ash × the burned biomass.
+- **Duration:** fire lasts 6 steps.
 
-**Counters** (NR-401) are 64-bit integers or doubles, incremented in RESOLVE and SPAWN, which are
-serial, so they need no atomics.
+### 10.6 Scent
 
-**Samples** (NR-402) are taken every K = 32 steps into rings of S = 4,096. Each sample holds:
-- per species: count, juveniles, births, deaths by cause, energy in per diet item, energy out per
-  category, hunts attempted/succeeded, mean generation, mean |W − W_founder|, and the gain share of
-  each of the 28 primitives
-- global: vegetation covers, water, burning cells, carrion, scent
-- a sub-sample of up to 64 (local food density, intake) pairs per herbivore species, for the
-  functional response
+Meat-eaters deposit c_scent·eff_meat into their cell each step, and MARK multiplies this by 4. Scent
+decays at d_scent and diffuses at 10%.
 
-**Explanation engine** (NR-403). It runs on the server thread, not the simulation thread. It compares
-windows of the rings using fixed rules, for example:
-> "Drifters fell 31% in 2,000 steps: 64% of deaths were Stalker kills; Stalker pack size rose from
-> 3.1 to 4.4; grass is at 22% of land."
+## 11. Step contract (NR-108)
 
-Each rule is listed in `Explain.cs` with the counters it reads.
+"∥" means the phase is parallel, over fixed slot ranges or field rows. Each worker writes only what
+it owns.
 
-**Probe.** For the selected serial, DECIDE also copies x (30), z (32), the gains and the action bits
-into a probe record. The server sends it in the PROBE frame (`ICD.md`).
+| # | Phase | ∥ | Reads | Writes |
+|---|---|---|---|---|
+| 1 | BUILD | — | X, Y, alive | spatial hash (counting sort) |
+| 2 | DECIDE | ∥ | world | own slot: learning update (from last reward), hidden state, gains, intents, probe |
+| 3 | RESOLVE | — | intents | kinematics, physiology, fields, deaths, conceptions, reward; counters. Visiting order is a seeded permutation that changes each step. |
+| 4 | LIFECYCLE | — | timers | hatching, metamorphosis, immigration |
+| 5 | FIELDS | ∥ | old buffers | new buffers (swap) |
+| 6 | FIRE | — | fuel, moisture | fire state (serial: spread is directional) |
+| 7 | TELEMETRY | — | everything | counters; ring sample every 32 steps |
 
-## 11. Server and console
+## 12. Telemetry and transparency
 
-The server has three parts:
-- **Snapshot triple buffer.** After each step, if the server asked for a frame, the simulation thread
-  writes the AGENTS snapshot into the free buffer and publishes it with one interlocked exchange. The
-  sender always takes the newest buffer. A slow client simply skips frames (NR-506).
-- **Rate scheduler.** It runs a target number of steps/s (default 30; 1×, 2×, 4×, max). Pause and
-  single-step are supported.
-- **Commands.** JSON over the same WebSocket: select, follow, speed, pause, step, set the rate or
-  viewport.
+### 12.1 Counters (NR-401)
 
-The console is three.js plus uPlot, embedded:
-- **3D world:**
-  - terrain mesh and water
-  - vegetation: instanced grass tufts, shrubs and trees, with density from the fields at 2 Hz
-  - fire and smoke particles
-  - carcasses and per-species low-poly models
-  - interpolation between AGENTS frames
-- **Cameras:** overview, follow-cam (on the animal's death it moves to its youngest living offspring,
-  else the nearest kin) and ride-along (first person at eye height, the field-of-view cone, perceived
-  animals outlined by class).
-- **Ride-along HUD:** drives as bars, the live primitive-gain bars ("what it is doing"), the top three
-  contributing features of the strongest primitive ("why"), and the matrix heatmap of this animal.
-- **Dashboards:** as listed in NR-504.
+Kept per species:
+- births, conceptions
+- deaths per cause
+- the killer × victim matrix (20 × 20)
+- energy intake per pool (15)
+- energy spent: basal, movement, strike, reproduction
+- strikes and successes
+- matings, LAY events, immigrants
 
-## 12. Code organisation
+### 12.2 Samples (NR-402)
+
+Taken every 32 steps. Per species:
+- count, juveniles, eggs/embryos, mean generation
+- mean energy, mean reward, mean |Δ| (how much has been learned)
+- the gain share of each of the 28 primitives
+
+Global:
+- total amount in each pool
+- burning cells, nutrient (land and water)
+
+### 12.3 Behaviour fingerprints (NR-213)
+
+For each species, the console clusters the live animals' gain vectors (k-means, k = 4, on the server
+thread). It names each cluster by its top three primitives, for example "CLIMB_FOOD + EAT + COHERE".
+It plots the share of each cluster over time. That is how *emergent* behaviours are shown: measured,
+not asserted.
+
+### 12.4 Explanations (NR-403)
+
+These are sentence rules over counter windows. Each sentence lists the counters it used.
+
+### 12.5 Probe
+
+For the selected animal the probe records:
+- inputs, hidden state, z, gains and fired actions
+- reward and reward mean
+- top contributing inputs to the strongest primitive
+- |Δ| per output row (what it has learned)
+- mother, children, generation
+
+## 13. Server and console
+
+These are unchanged from Revision A, except that there are 20 species and the dashboards add the
+following:
+- an **energy-cycle diagram**: a live Sankey of pools → species → dead pools → nutrient
+- a **trophic stack**: biomass by trophic level
+- **behaviour fingerprints** per species
+- **learning curves**: mean reward and |Δ|
+- **realm views**: land and water
+- **gene-bank status**
+
+Cameras: overview, follow-cam (lineage), ride-along.
+
+## 14. Code organisation
 
 ```
 src/Neuroreef.Core/
-  Constants.cs     all tuning values (NR-106)
-  Rng.cs           PCG hash; Uniform/Normal(seed, step, slot, stream)
-  World.cs         every array (§3); construction = the only allocation
-  Terrain.cs       fBm, lakes, pools, initial vegetation
-  Genome.cs        founder matrices (§6), crossover, mutation (§5.4)
-  Perception.cs    features (§5.1) using the spatial hash
-  Behaviours.cs    primitive vectors (§5.2)
-  Decide.cs        matrix evaluation, intents (§5.3)
-  Resolve.cs       movement, eating, strikes, costs, death, mating (§7)
-  Spawn.cs         births, strays
-  Vegetation.cs    §8
-  Telemetry.cs     counters, rings
-  Probe.cs, Snapshot.cs, Explain.cs
-  Simulation.cs    owns World and the worker pool; Step() runs phases 1–6
-src/Neuroreef.Server/   Program.cs, SimHost.cs, Wire.cs (ICD encoders), wwwroot/
-tests/Neuroreef.Tests/  Engineering, Behaviour (scenes), Ecology, Telemetry, Wire
+  Constants.cs  Species.cs (body plans + closure check)  Rng.cs  World.cs
+  Terrain.cs  Fields.cs  Fire.cs  Perception.cs  Brain.cs  Decide.cs
+  Resolve.cs  Lifecycle.cs  Telemetry.cs  GeneBank.cs  Probe.cs  Snapshot.cs  Simulation.cs
+src/Neuroreef.Server/  Program.cs  SimHost.cs  Wire.cs  Explain.cs  Fingerprint.cs  wwwroot/
+src/Neuroreef.Headless (part of the Server exe: --headless)
+tests/Neuroreef.Tests/
 ```
-
-## 13. Open questions for review
-
-1. **Six species.** The redesigned web adds Foragers, an omnivore that also takes the young of others.
-   Any other niche you want, such as an insect swarm, a bird or an aquatic species?
-2. **Sexual reproduction.** I added two sexes and mate-finding, because it gives crossover and lets
-   the MATE primitive matter. This was not on your list; it can be dropped back to asexual.
-3. **World scale.** The default is 1,024 units and up to 32,768 animals, with ~15–20k expected
-   alive. Larger is possible at a lower step rate.
-4. **Founder compositions (§6).** These are my hand-designed starting points. Review whether each
-   species' composition matches how you picture it.

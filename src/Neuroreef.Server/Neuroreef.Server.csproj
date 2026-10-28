@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Neuroreef</AssemblyName>
+    <RootNamespace>Neuroreef.Server</RootNamespace>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Neuroreef.Core\Neuroreef.Core.csproj" />
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Include="wwwroot\**" LogicalName="www/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\bank\default.nrbank" LogicalName="bank/default.nrbank" Condition="Exists('..\..\bank\default.nrbank')" />
+  </ItemGroup>
+</Project>

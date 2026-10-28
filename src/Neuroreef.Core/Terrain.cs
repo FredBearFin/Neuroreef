@@ -1,0 +1,166 @@
+// Terrain, water and the initial vegetation (DESIGN §10.1). Runs once, at initialisation.
+// Allocation is allowed here (it is part of construction, NR-101).
+
+using System;
+
+namespace Neuroreef;
+
+public static class Terrain
+{
+    // Periodic value noise and fBm: the v1 method (makeTerrain), on a torus.
+    sealed class Noise
+    {
+        readonly float[] _v; readonly int _l;
+        public Noise(int l, ref Rng.Seq r) { _l = l; _v = new float[l * l]; for (int i = 0; i < _v.Length; i++) _v[i] = r.Next(); }
+        public float At(float x, float y)
+        {
+            float fx = x * _l, fy = y * _l;
+            int x0 = (int)MathF.Floor(fx), y0 = (int)MathF.Floor(fy);
+            float tx = fx - x0, ty = fy - y0;
+            tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+            int xa = World.WrapI(x0, _l), xb = (xa + 1) % _l, ya = World.WrapI(y0, _l), yb = (ya + 1) % _l;
+            float a = _v[ya * _l + xa], b = _v[ya * _l + xb], c = _v[yb * _l + xa], d = _v[yb * _l + xb];
+            return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+        }
+    }
+
+    static Func<float, float, float> Fbm(ref Rng.Seq r, int baseL, int oct)
+    {
+        var ns = new Noise[oct];
+        for (int o = 0; o < oct; o++) ns[o] = new Noise(baseL << o, ref r);
+        return (x, y) =>
+        {
+            float s = 0, a = 1, n = 0;
+            for (int o = 0; o < oct; o++) { s += ns[o].At(x, y) * a; n += a; a *= 0.52f; }
+            return s / n;
+        };
+    }
+
+    public static void Build(World w)
+    {
+        int FW = K.FW, n = FW * FW;
+        var r = new Rng.Seq(w.Seed * 7919u + 13u);
+        var elevN = Fbm(ref r, 3, 6);
+        var moistN = Fbm(ref r, 4, 4);
+        var vegN = Fbm(ref r, 6, 3);
+
+        float mn = 1, mx = 0;
+        for (int y = 0; y < FW; y++)
+            for (int x = 0; x < FW; x++)
+            {
+                float e = elevN(x / (float)FW, y / (float)FW);
+                w.Elev[y * FW + x] = e; mn = MathF.Min(mn, e); mx = MathF.Max(mx, e);
+            }
+        for (int i = 0; i < n; i++) w.Elev[i] = (w.Elev[i] - mn) / (mx - mn);
+
+        // Lake level: the LAKE_SHARE quantile of elevation.
+        var sorted = (float[])w.Elev.Clone();
+        Array.Sort(sorted);
+        w.SeaLevel = sorted[(int)(K.LAKE_SHARE * n)];
+
+        // Rivers: D8 flow accumulation, processed from the highest cell down.
+        var idx = new int[n];
+        for (int i = 0; i < n; i++) idx[i] = i;
+        var keys = (float[])w.Elev.Clone();
+        Array.Sort(keys, idx);
+        var acc = new float[n];
+        for (int k = n - 1; k >= 0; k--)
+        {
+            int i = idx[k]; acc[i] += 1;
+            int x = i % FW, y = i / FW, best = -1; float be = w.Elev[i];
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    int j = World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
+                    if (w.Elev[j] < be) { be = w.Elev[j]; best = j; }
+                }
+            if (best >= 0) acc[best] += acc[i];
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            float e = w.Elev[i];
+            if (e < w.SeaLevel) w.Depth[i] = w.SeaLevel - e;
+            else if (acc[i] > K.RIVER_ACC) w.Depth[i] = K.SHALLOW * 0.5f;
+            else w.Depth[i] = 0;
+            w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] < K.SHALLOW ? Realm.Shallow : Realm.Deep);
+        }
+
+        Distance(w.Cell, (byte)Realm.Water, w.DistWater);
+        Distance(w.Cell, (byte)Realm.Land, w.DistLand);
+
+        // Moisture base and fertility.
+        for (int y = 0; y < FW; y++)
+            for (int x = 0; x < FW; x++)
+            {
+                int i = y * FW + x;
+                float m = moistN(x / (float)FW, y / (float)FW);
+                float wet = MathK.Exp(-w.DistWater[i] / 10f);
+                float valley = 1f - MathF.Min(1f, MathF.Max(0f, (w.Elev[i] - w.SeaLevel) / (1f - w.SeaLevel)));
+                w.MoistBase[i] = Math.Clamp(0.15f + 0.45f * wet + 0.25f * valley + 0.35f * (m - 0.5f) * 2f, 0.05f, 1f);
+                w.Fert[i] = Math.Clamp(0.3f + 0.7f * (m - 0.25f) * 1.6f, 0.1f, 1f);
+                w.Moisture[i] = w.MoistBase[i];
+            }
+
+        // Initial vegetation: a mosaic of grassland, shrubland and woodland, and plankton in the water.
+        var P = w.Pool;
+        for (int y = 0; y < FW; y++)
+            for (int x = 0; x < FW; x++)
+            {
+                int i = y * FW + x;
+                float wb = w.MoistBase[i], v = vegN(x / (float)FW, y / (float)FW);
+                w.Nutrient[i] = 0.35f + 0.3f * w.Fert[i];
+                if (w.Cell[i] != (byte)Realm.Land)
+                {
+                    P[(int)Pool.Phyto][i] = 0.3f;
+                    if (w.Cell[i] == (byte)Realm.Shallow) P[(int)Pool.Algae][i] = 0.4f;
+                    P[(int)Pool.Detritus][i] = 0.1f;
+                    continue;
+                }
+                float tree = Math.Clamp((wb - 0.45f) * 1.6f + (v - 0.5f) * 1.2f, 0f, 0.7f);
+                float shrub = Math.Clamp(0.25f + (v - 0.5f) * 0.8f, 0f, 0.4f) * (1f - tree);
+                float grass = Math.Clamp(0.9f * wb * w.Fert[i] + 0.2f, 0f, 1f - tree - shrub);
+                w.Tree[i] = tree; w.Shrub[i] = shrub; P[(int)Pool.Grass][i] = grass;
+                w.Sapling[i] = 0.05f * tree;
+                P[(int)Pool.Browse][i] = shrub + K.B_TREE * tree;
+                P[(int)Pool.Fruit][i] = 0.15f * tree;
+                P[(int)Pool.Seed][i] = 0.10f * grass + 0.05f * tree;
+                P[(int)Pool.Nectar][i] = 0.05f * (grass + shrub);
+                P[(int)Pool.Root][i] = 0.4f * (grass + shrub);
+                P[(int)Pool.Litter][i] = 0.15f;
+                P[(int)Pool.Wood][i] = 0.3f * tree;
+            }
+    }
+
+    /// <summary>Multi-source BFS distance (in cells, 8-connected chamfer) on the torus to the nearest cell with any bit of mask.</summary>
+    static void Distance(byte[] cell, byte mask, float[] dist)
+    {
+        int FW = K.FW, n = FW * FW;
+        var q = new int[n]; int h = 0, t = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if ((cell[i] & mask) != 0) { dist[i] = 0; q[t++] = i; }
+            else dist[i] = float.MaxValue;
+        }
+        // Two passes of relaxation over the BFS order approximate Euclidean distance well enough.
+        while (h < t)
+        {
+            int i = q[h++]; int x = i % FW, y = i / FW;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    int j = World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
+                    float nd = dist[i] + ((dx != 0 && dy != 0) ? 1.4142f : 1f);
+                    if (nd < dist[j])
+                    {
+                        bool first = dist[j] == float.MaxValue;
+                        dist[j] = nd;
+                        if (first) q[t++] = j;
+                    }
+                }
+        }
+        for (int i = 0; i < n; i++) if (dist[i] == float.MaxValue) dist[i] = 999f;
+    }
+}
