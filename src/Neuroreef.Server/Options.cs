@@ -21,7 +21,8 @@ public sealed class Options
 
   Neuroreef.exe [options]
 
-  (no options)          start the simulation from the shipped gene bank and open the console in the browser
+  (no options)          start the simulation (from the shipped gene bank if this build has one, otherwise a genesis
+                        run from random brains) and open the console in the browser
   --genesis             start from random brains (no gene bank), with genesis immigration
   --seed N              world and run seed (default 1)
   --capacity N          agent slots (default 32768)

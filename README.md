@@ -25,7 +25,7 @@ generations.
 
 | Option | Effect |
 |---|---|
-| `--genesis` | start from random brains instead of the shipped gene bank |
+| `--genesis` | start from random brains (also the default while no evolved gene bank is shipped) |
 | `--seed 7` | a different world and run |
 | `--save-bank my.nrbank` / `--load-bank my.nrbank` | keep evolved genomes between runs |
 | `--headless --steps 200000 --csv run.csv` | a long run without the console, with a report at the end |
