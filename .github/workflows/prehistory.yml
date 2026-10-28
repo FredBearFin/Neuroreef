@@ -1,0 +1,92 @@
+name: prehistory
+
+# Runs the full prehistory (DESIGN §7.6) on a GitHub runner and builds a Windows exe that ships the
+# evolved brains, so the world starts from them without a prehistory on the PC.
+# Start it from the Actions tab (Run workflow), or push a commit whose message contains [evolve].
+
+on:
+  workflow_dispatch:
+    inputs:
+      steps:
+        description: prehistory length in steps (1 step = 1,000 symbolic years)
+        default: '500000'
+      branches:
+        description: number of branches
+        default: '3'
+      hours:
+        description: stop and save after this many hours even if not finished (max 5.6)
+        default: '5.5'
+  push:
+    branches: ['**']
+
+jobs:
+  evolve:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[evolve]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      STEPS: ${{ github.event.inputs.steps || '500000' }}
+      BRANCHES: ${{ github.event.inputs.branches || '3' }}
+      HOURS: ${{ github.event.inputs.hours || '5.5' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build
+        run: dotnet publish src/Neuroreef.Server -c Release -r linux-x64 --self-contained -o evo
+      - name: Prehistory
+        run: |
+          nproc
+          mins=$(python3 -c "print(int(float('$HOURS')*60))")
+          # SIGINT makes the run stop at the next barrier and save what it has
+          timeout -s INT -k 15m ${mins}m ./evo/Neuroreef --evolve --steps "$STEPS" --branches "$BRANCHES" || echo "stopped by the time limit (exit $?)"
+          ls -la evo/*.nrbank evo/evolve-report.* || true
+      - name: Report
+        run: cat evo/evolve-report.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prehistory-result
+          path: |
+            evo/evolved.nrbank
+            evo/evolve-report.txt
+            evo/evolve-report.csv
+          if-no-files-found: warn
+
+  package:
+    needs: evolve
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: prehistory-result
+          path: result
+      - name: Ship the evolved brains in the exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bank | Out-Null
+          Copy-Item result/evolved.nrbank bank/default.nrbank
+      - name: Publish single-file Windows executable
+        run: dotnet publish src/Neuroreef.Server -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o dist
+      - name: Smoke test (the shipped brains load)
+        run: dist\Neuroreef.exe --headless --steps 300 --report 100
+      - name: Add run instructions and the report
+        shell: pwsh
+        run: |
+          Copy-Item RUN.txt dist/RUN.txt
+          Copy-Item Evolve.bat dist/Evolve.bat
+          Copy-Item result/evolve-report.txt dist/evolve-report.txt
+          Copy-Item result/evolved.nrbank dist/evolved-shipped.nrbank
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Neuroreef-win-x64-evolved
+          path: |
+            dist/Neuroreef.exe
+            dist/RUN.txt
+            dist/Evolve.bat
+            dist/evolve-report.txt
+            dist/evolved-shipped.nrbank
