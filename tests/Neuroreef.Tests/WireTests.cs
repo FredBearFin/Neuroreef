@@ -18,12 +18,12 @@ public class WireTests
         Assert.Equal(0x02, b[0]);
         Assert.Equal((uint)sim.W.Step, BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(4)));
         int n = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(8));
-        Assert.Equal(12 + 12 * n, len);
+        Assert.Equal(12 + Snapshot.REC * n, len);
         var w = sim.W;
         int checkedN = 0;
         for (int k = 0; k < n; k++)
         {
-            var r = b.AsSpan(12 + 12 * k);
+            var r = b.AsSpan(12 + Snapshot.REC * k);
             uint serial = BinaryPrimitives.ReadUInt32LittleEndian(r.Slice(8));
             int i = sim.FindSerial(serial);
             Assert.True(i >= 0);

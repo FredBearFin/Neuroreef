@@ -214,6 +214,7 @@ public static class Host
                 {
                     var stand = new int[Roster.Count]; var count = new int[Roster.Count]; var births = new float[Roster.Count];
                     var gen = new float[Roster.Count];
+                    var traits = new float[Roster.Count * Neuroreef.Telemetry.NTRAITS];
                     var last = new float[b.W.T.Len];
                     bool has = b.W.T.SampleCount > 0 && b.W.T.Sample(b.W.T.SampleCount - 1, last);
                     for (int s = 0; s < Roster.Count; s++)
@@ -221,8 +222,13 @@ public static class Host
                         stand[s] = (int)Prehistory.StandingOf(b, s, out count[s], out births[s]);
                         float g = has ? last[b.W.T.SpeciesOffset(s, Neuroreef.Telemetry.S_GEN)] : 0;
                         gen[s] = float.IsFinite(g) ? g : 0;    // no animals: the mean is undefined
+                        for (int k = 0; k < Neuroreef.Telemetry.NTRAITS; k++)
+                        {
+                            float tv = has ? last[b.W.T.SpeciesOffset(s, Neuroreef.Telemetry.S_TRAITS + k)] : 0;
+                            traits[s * Neuroreef.Telemetry.NTRAITS + k] = float.IsFinite(tv) ? MathF.Round(tv, 3) : 0;
+                        }
                     }
-                    branches.Add(new { step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, generation = gen });
+                    branches.Add(new { step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, generation = gen, traits });
                 }
                 _preJson = JsonSerializer.Serialize(new
                 {

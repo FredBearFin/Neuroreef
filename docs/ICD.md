@@ -39,7 +39,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | Offset | Type | Field |
 |---|---|---|
 | 8 | u32 | count n |
-| 12 | 12 B × n | records (every living agent except embryos) |
+| 12 | 16 B × n | records (every living agent except embryos); header byte 1 = format version 2 |
 
 Each record:
 
@@ -52,6 +52,10 @@ Each record:
 | 6 | u8 | bits 0–1 stage (0 egg, 1 juvenile, 2 adult); bit 2 carrying; bit 3 scanning; bit 4 resting; bits 5–7 energy/Emax × 7 |
 | 7 | u8 | actions fired this step: bit 0 EAT, 1 STRIKE, 2 DRINK, 3 MATE, 4 REST, 5 MARK, 6 LAY, 7 CACHE |
 | 8 | u32 | serial (unique for the run) |
+| 12 | i8 | body gene: mass (−127..127; multiplier ×/÷ BODY_RANGE_MASS at the ends) |
+| 13 | i8 | body gene: speed |
+| 14 | i8 | body gene: armour |
+| 15 | i8 | diet drift: (adult meat efficiency − the species' founder value) × 254 |
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 

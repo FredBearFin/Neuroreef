@@ -32,7 +32,10 @@ public sealed class Telemetry
     public const int S_COUNT = 0, S_JUV = 1, S_EGGS = 2, S_GEN = 3, S_ENERGY = 4, S_REWARD = 5, S_LEARNED = 6, S_BIRTHS = 7,
         S_CONC = 8, S_DEATHS = 9, S_INTAKE = S_DEATHS + Cause.N, S_SPEND = S_INTAKE + Pools.N, S_STRIKES = S_SPEND + 2, S_KILLS = S_STRIKES + 1,
         S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
-        S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_GAINS = S_ARCH + 1, S_END = S_GAINS + P.N;
+        S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_TRAITS = S_ARCH + 1, S_GAINS = S_TRAITS + NTRAITS, S_END = S_GAINS + P.N;
+    /// <summary>Evolving traits recorded per species (mean over living animals): body multipliers (1 = founder) and diet.</summary>
+    public const int NTRAITS = 8, T_MASS = 0, T_SPEED = 1, T_SIGHT = 2, T_ARMOUR = 3, T_STRIKE = 4, T_LITTER = 5, T_CARE = 6, T_MEAT = 7;
+    public static readonly string[] TraitNames = { "mass", "speed", "sight", "armour", "strike", "litter", "care", "meat-eating" };
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
@@ -70,6 +73,7 @@ public sealed class Telemetry
             names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "strikes", n + "kills", n + "matings", n + "immigrants",
                 n + "deaths.unborn", n + "deaths.juvenile", n + "deaths.young-adult", n + "deaths.old-adult", n + "age-at-death",
                 n + "infected", n + "infections", n + "care.given", n + "evo.kit-genes", n + "evo.best-score" });
+            foreach (var t in TraitNames) names.Add(n + "trait." + t);
             foreach (var p in P.Names) names.Add(n + "gain." + p);
         }
         OffKill = names.Count;
@@ -142,6 +146,15 @@ public sealed class Telemetry
             int kb = i * G.LEN + G.REFLEX; float ks = 0;
             foreach (var (c, p) in Reflex.Kit) ks += w.Genome[kb + p * G.NC + c];
             a[o + S_KIT] += ks / Reflex.Kit.Length;
+            var gn = w.Genome;
+            a[o + S_TRAITS + T_MASS] += Body.Factor(gn[kb - G.REFLEX + G.B_MASS], K.BODY_RANGE_MASS);
+            a[o + S_TRAITS + T_SPEED] += Body.Factor(gn[kb - G.REFLEX + G.B_SPEED], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_SIGHT] += Body.Factor(gn[kb - G.REFLEX + G.B_SIGHT], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_ARMOUR] += Body.Factor(gn[kb - G.REFLEX + G.B_ARMOUR], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_STRIKE] += Body.Factor(gn[kb - G.REFLEX + G.B_STRIKE], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_LITTER] += Body.Factor(gn[kb - G.REFLEX + G.B_LITTER], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_CARE] += Body.Factor(gn[kb - G.REFLEX + G.B_CARE], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_MEAT] += w.PDietA[i * Pools.N + (int)Pool.Meat];
             a[o + S_GEN] += w.Gen[i];
             a[o + S_ENERGY] += w.Energy[i] / w.EmaxOf(i);
             a[o + S_REWARD] += w.RewardMean[i];
@@ -160,6 +173,7 @@ public sealed class Telemetry
             int o = OffSpecies + s * PerSpecies;
             float n = MathF.Max(1, _cnt[s]);
             a[o + S_GEN] /= n; a[o + S_ENERGY] /= n; a[o + S_REWARD] /= n; a[o + S_LEARNED] /= n; a[o + S_KIT] /= n;
+            for (int k = 0; k < NTRAITS; k++) a[o + S_TRAITS + k] /= n;
             float best = 0;
             for (int k = 0; k < w.ArchiveCount[s]; k++) best = MathF.Max(best, w.ArchiveScore[s * K.ARCHIVE + k]);
             a[o + S_ARCH] = best;

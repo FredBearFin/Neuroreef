@@ -21,7 +21,7 @@ export class Panels {
     const T = meta.telemetry;
     this.idx = (s, f) => T.offSpecies + s * T.perSpecies + f;
     this._tabs();
-    this._buildInspect(); this._buildPop(); this._buildEnergy(); this._buildWeb(); this._buildBehaviour(); this._buildPlants(); this._buildSpecies();
+    this._buildInspect(); this._buildPop(); this._buildEnergy(); this._buildWeb(); this._buildBehaviour(); this._buildPlants(); this._buildSpecies(); this._buildEvolution();
     addEventListener('resize', () => this._resizeCharts());
   }
 
@@ -62,6 +62,7 @@ export class Panels {
       case 'behaviour': this._renderBehaviour(); break;
       case 'plants': this._renderPlants(); break;
       case 'species': this._renderSpecies(); break;
+      case 'evolution': this._renderEvolution(); break;
     }
   }
 
@@ -396,6 +397,40 @@ export class Panels {
   }
 
   // ------------------------------------------------------------------ species dossier
+
+  // ------------------------------------------------------------------ evolution: what the genes are doing (observed only)
+
+  _buildEvolution() {
+    const M = this.meta;
+    $('tab-evolution').innerHTML = `
+      <p class="note">What evolution is doing, measured from the living animals' genes. Nothing here steers it:
+        a trait rises only if animals carrying more of it leave more offspring. 1 = the founders' value.</p>
+      <h3>Traits of <select id="evo-sp"></select></h3><div id="evo-traits"></div>
+      <h3>One trait across species: <select id="evo-trait"></select></h3><div id="evo-across"></div>
+      <h3>Starter-kit instinct strength (founders ~80)</h3><div id="evo-kit"></div>
+      <h3>Generations reached</h3><div id="evo-gen"></div>`;
+    const s = $('evo-sp'), t = $('evo-trait');
+    for (const sp of M.species) s.append(el('option', { value: sp.id, textContent: sp.name }));
+    M.traitNames.forEach((n, i) => t.append(el('option', { value: i, textContent: n })));
+    this.sel.evoSp = 0; this.sel.evoTrait = 0;
+    s.onchange = () => { this.sel.evoSp = +s.value; this._renderEvolution(); };
+    t.onchange = () => { this.sel.evoTrait = +t.value; if (this.charts.evoAcross) { this.charts.evoAcross.destroy(); delete this.charts.evoAcross; } this._renderEvolution(); };
+  }
+
+  _renderEvolution() {
+    const M = this.meta, R = this.rows, T = M.telemetry, sp = this.sel.evoSp;
+    const xs = R.map((r) => r[0]);
+    const val = (s, f) => R.map((r) => r[this.idx(s, T.fields.count)] > 0 ? r[this.idx(s, f)] : null);   // no animals: no value
+    const TC = ['#7bd46b', '#4fd1c5', '#5ab0ff', '#a77bff', '#ff5d73', '#e6c35a', '#ff8fd0', '#ff8a2a'];
+    if (!this.charts.evoTraits) this._chart('evoTraits', $('evo-traits'), M.traitNames.map((n, i) => ({ label: n, color: TC[i] })), { height: 200 });
+    this.charts.evoTraits.setData([xs, ...M.traitNames.map((_, i) => val(sp, T.fields.traits + i))]);
+    if (!this.charts.evoAcross) this._chart('evoAcross', $('evo-across'), M.species.map((s) => ({ label: s.name, color: s.color })), { height: 180, legend: false });
+    this.charts.evoAcross.setData([xs, ...M.species.map((s) => val(s.id, T.fields.traits + this.sel.evoTrait))]);
+    if (!this.charts.evoKit) this._chart('evoKit', $('evo-kit'), M.species.map((s) => ({ label: s.name, color: s.color })), { height: 150, legend: false });
+    this.charts.evoKit.setData([xs, ...M.species.map((s) => val(s.id, T.fields.kit))]);
+    if (!this.charts.evoGen) this._chart('evoGen', $('evo-gen'), M.species.map((s) => ({ label: s.name, color: s.color })), { height: 150, legend: false });
+    this.charts.evoGen.setData([xs, ...M.species.map((s) => val(s.id, T.fields.gen))]);
+  }
 
   _buildSpecies() {
     $('tab-species').innerHTML = `<select id="sp-pick"></select><div id="dossier"></div>`;

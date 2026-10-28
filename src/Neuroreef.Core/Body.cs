@@ -20,6 +20,9 @@ public static class Body
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     static float Mul(sbyte b, float range) => MathK.Exp(b * (1f / 127f) * MathK.Log(range));
 
+    /// <summary>The multiplier a body gene gives (1 = the founder body plan).</summary>
+    public static float Factor(sbyte b, float range) => Mul(b, range);
+
     public static void Express(World w, int i)
     {
         var sp = w.Sp[w.Spc[i]];

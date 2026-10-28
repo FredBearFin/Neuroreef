@@ -82,7 +82,9 @@ export class PrehistoryTab {
     const box = $('pre-branches'), sp = this.meta.species;
     box.innerHTML = p.branches.map((b, i) => {
       const self = b.standing.filter((s) => s === 3).length, gone = b.standing.filter((s) => s === 0).length;
-      const chips = b.standing.map((st, s) => `<span class="sc" title="${sp[s].name}: ${STAND[st]} · ${b.count[s].toLocaleString()} alive · ${Math.round(b.births[s])} births in the last ~1,000 steps · generation ${b.generation[s].toFixed(1)}" style="background:${STAND_C[st]}"></span>`).join('');
+      const NT = this.meta.traitNames.length;
+      const tr = (s) => b.count[s] > 0 ? ' · evolved: ' + this.meta.traitNames.slice(0, 4).map((n, k) => `${n} ×${b.traits[s * NT + k].toFixed(2)}`).join(', ') : '';
+      const chips = b.standing.map((st, s) => `<span class="sc" title="${sp[s].name}: ${STAND[st]} · ${b.count[s].toLocaleString()} alive · ${Math.round(b.births[s])} births in the last ~1,000 steps · generation ${b.generation[s].toFixed(1)}${tr(s)}" style="background:${STAND_C[st]}"></span>`).join('');
       return `<div class="branch${i === p.view ? ' on' : ''}" data-b="${i}">
         <div class="bh"><i style="background:${BRANCH_C[i % BRANCH_C.length]}"></i><b>Branch ${String.fromCharCode(65 + i)}</b>
           <span>${b.alive.toLocaleString()} alive · <b style="color:${STAND_C[3]}">${self}</b> self-sustaining · ${gone} gone${b.full ? ' · <b style="color:var(--warn)">full</b>' : ''}</span></div>

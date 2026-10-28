@@ -15,11 +15,12 @@ public sealed class Snapshot
     int _readyLen, _readLen;
     int _fresh;                 // 1 when _ready holds a frame the reader has not taken
     public volatile bool Requested;
+    public const int REC = 16;  // bytes per agent record (ICD §1, AGENTS)
 
     public Snapshot(World w)
     {
         _w = w;
-        int size = 12 + 12 * w.Cap;
+        int size = 12 + REC * w.Cap;
         _write = new byte[size]; _ready = new byte[size]; _read = new byte[size];
     }
 
@@ -53,7 +54,7 @@ public sealed class Snapshot
     int Encode(byte[] b)
     {
         var w = _w;
-        b[0] = 0x02; b[1] = 1; b[2] = 0; b[3] = 0;
+        b[0] = 0x02; b[1] = 2; b[2] = 0; b[3] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(4), (uint)w.Step);
         int n = 0, o = 12;
         float sx = 65536f / K.WORLD;
@@ -77,7 +78,15 @@ public sealed class Snapshot
             span[6] = (byte)(stagebits | ((int)(Math.Clamp(w.Energy[i] / MathF.Max(w.EmaxOf(i), 1e-3f), 0f, 1f) * 7f) << 5));
             span[7] = (byte)acts;
             BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(8), w.Serial[i]);
-            o += 12; n++;
+            // the animal's own body genes, so the console can draw evolution (ICD: record bytes 12-15)
+            int g = i * G.LEN;
+            span[12] = (byte)w.Genome[g + G.B_MASS];
+            span[13] = (byte)w.Genome[g + G.B_SPEED];
+            span[14] = (byte)w.Genome[g + G.B_ARMOUR];
+            var sp = w.Sp[w.Spc[i]];
+            float meat = w.PDietA[i * Pools.N + (int)Pool.Meat] - sp.Adult.Diet[(int)Pool.Meat];   // diet drift toward (+) or away from (-) meat
+            span[15] = (byte)(sbyte)Math.Clamp((int)MathF.Round(meat * 254f), -127, 127);
+            o += REC; n++;
         }
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(8), (uint)n);
         return o;

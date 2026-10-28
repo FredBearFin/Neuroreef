@@ -1,5 +1,6 @@
 // The link to the simulation (docs/ICD.md). Decodes frames into plain objects and hands them to listeners.
 
+export const REC = 16;   // bytes per AGENTS record
 export const T_WORLD = 1, T_AGENTS = 2, T_FIELDS = 3, T_TELEMETRY = 4, T_HISTORY = 5, T_PROBE = 6;
 
 export class Link {
@@ -34,7 +35,7 @@ export class Link {
       }
       case T_AGENTS: {
         const n = dv.getUint32(8, true);
-        this.emit('agents', { step, n, bytes: new Uint8Array(buf, 12, n * 12), dv: new DataView(buf, 12, n * 12) });
+        this.emit('agents', { step, n, bytes: new Uint8Array(buf, 12, n * REC), dv: new DataView(buf, 12, n * REC) });
         break;
       }
       case T_FIELDS: {
@@ -67,7 +68,7 @@ export class Link {
 
 /** Decode one AGENTS record (12 bytes) at index k. */
 export function agentAt(a, k, world, out) {
-  const o = k * 12, dv = a.dv, b = a.bytes;
+  const o = k * REC, dv = a.dv, b = a.bytes;
   out.x = dv.getUint16(o, true) * world / 65536;
   out.y = dv.getUint16(o + 2, true) * world / 65536;
   out.h = b[o + 4] * (Math.PI * 2 / 256);
@@ -79,6 +80,8 @@ export function agentAt(a, k, world, out) {
   out.energy = (st >> 5) / 7;
   out.acts = b[o + 7];
   out.serial = dv.getUint32(o + 8, true);
+  // the animal's own body genes (-1..1): mass, speed, armour; diet drift toward meat
+  out.gMass = dv.getInt8(o + 12) / 127; out.gSpeed = dv.getInt8(o + 13) / 127; out.gArmour = dv.getInt8(o + 14) / 127; out.gDiet = dv.getInt8(o + 15) / 127;
   return out;
 }
 

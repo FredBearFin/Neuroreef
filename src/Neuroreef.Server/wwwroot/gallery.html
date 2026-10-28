@@ -13,7 +13,7 @@
 </style>
 </head>
 <body>
-<div id="info">Neuroreef models · left: near (animated), right: far · ?shape=N one species · ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time</div>
+<div id="info">Neuroreef models · left: near (animated), right: far · ?shape=N one species · ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time · ?variants=1: low genes / founder / high genes (speed, armour, diet, mass)</div>
 <canvas id="c"></canvas>
 <script type="module">
 // A model gallery for checking the species models without running the world: every species near
@@ -27,6 +27,8 @@ const q = new URLSearchParams(location.search);
 const only = q.has('shape') ? +q.get('shape') : -1, gait = q.has('gait') ? +q.get('gait') : 0.6;
 const act = { eat: 1, strike: 2 }[q.get('act')] || 0, rest = q.get('act') === 'rest' ? 1 : 0;
 const frozen = q.has('t') ? +q.get('t') : null;
+const variants = q.has('variants');           // three versions per species: low genes, founder, high genes
+const genes = (q.get('genes') || '0,0,0').split(',').map(Number);   // speed, armour, diet drift (-1..1)
 const meta = await (await fetch('api/meta')).json();
 
 const canvas = document.getElementById('c');
@@ -43,12 +45,22 @@ const cols = only >= 0 ? 1 : 5, cell = 5, labels = [], mats = [];
 list.forEach((sp, i) => {
   const b = buildSpecies(sp);
   const cx = (i % cols) * cell * 2 - (cols - 1) * cell, cz = Math.floor(i / cols) * cell - (Math.ceil(list.length / cols) - 1) * cell / 2;
-  const geo = withAnim(b.nearGeo, 1);
-  geo.attributes.aAnim.array.set([gait, 0.3, act, rest]);
-  const near = new THREE.InstancedMesh(geo, b.nearMat, 1); near.setMatrixAt(0, new THREE.Matrix4().makeTranslation(cx - 1.4, sp.loco === 'Swim' ? 0.4 : 0, cz));
-  const far = new THREE.InstancedMesh(b.farGeo, b.farMat, 1); far.setMatrixAt(0, new THREE.Matrix4().makeTranslation(cx + 1.6, sp.loco === 'Swim' ? 0.4 : 0, cz));
-  near.frustumCulled = far.frustumCulled = false;
-  scene.add(near, far); mats.push(b.nearMat);
+  const y0 = sp.loco === 'Swim' ? 0.4 : 0;
+  const set = variants ? [[-1, -1, -1, -1, -2.6], [0, 0, 0, 0, 0], [1, 1, 1, 1, 2.6]] : [[...genes, 0, -1.4]];
+  for (const [gs, ga, gd, gm, dx] of set) {
+    const geo = withAnim(b.nearGeo, 1);
+    geo.attributes.aAnim.array.set([gait, 0.3, act, rest]);
+    geo.attributes.aBody.array.set([gs, ga, gd, 0]);
+    const near = new THREE.InstancedMesh(geo, b.nearMat, 1);
+    const sc = Math.cbrt(Math.pow(2, gm || 0));
+    near.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(cx + dx, y0, cz), new THREE.Quaternion(), new THREE.Vector3(sc, sc, sc)));
+    near.frustumCulled = false; scene.add(near);
+  }
+  if (!variants) {
+    const far = new THREE.InstancedMesh(b.farGeo, b.farMat, 1); far.setMatrixAt(0, new THREE.Matrix4().makeTranslation(cx + 1.6, y0, cz));
+    far.frustumCulled = false; scene.add(far);
+  }
+  mats.push(b.nearMat);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(cell * 2 - 0.3, cell - 0.3), new THREE.MeshLambertMaterial({ color: sp.loco === 'Swim' ? 0x1d4a66 : 0x3b4a2a }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(cx, -0.01, cz); scene.add(ground);
   const l = document.createElement('div'); l.className = 'lab'; l.textContent = `${sp.name} · ${Math.round(b.triangles)} tris`; document.body.append(l);

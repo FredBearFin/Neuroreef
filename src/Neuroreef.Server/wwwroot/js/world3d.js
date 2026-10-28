@@ -256,7 +256,8 @@ export class World3D {
     const mesh = new THREE.InstancedMesh(geo, which === 'near' ? S.b.nearMat : S.b.farMat, cap);
     mesh.count = 0; mesh.frustumCulled = false;
     this.scene.add(mesh);
-    S[which] = { mesh, cap, anim: which === 'near' ? geo.attributes.aAnim : null };
+    if (which === 'far') mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    S[which] = { mesh, cap, anim: which === 'near' ? geo.attributes.aAnim : null, body: which === 'near' ? geo.attributes.aBody : null };
   }
 
   _grow(k, need) {
@@ -275,6 +276,7 @@ export class World3D {
       if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h }; this.agents.set(o.serial, e); }
       else { e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h; }
       e.sp = o.sp; e.stage = o.stage; e.acts = o.acts; e.scan = o.scan; e.rest = o.rest; e.energy = o.energy; e.gen = gen; e.carry = o.carrying;
+      e.gMass = o.gMass; e.gSpeed = o.gSpeed; e.gArmour = o.gArmour; e.gDiet = o.gDiet;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;
@@ -409,7 +411,7 @@ export class World3D {
     const camX = this.camera.position.x, camZ = this.camera.position.z, near2 = NEAR_DIST * NEAR_DIST;
     for (const S of this.spMeshes) S.b.nearMat.userData.uniforms.uTime.value = now / 1000;
     let ne = 0;
-    const eggCol = new THREE.Color();
+    const eggCol = new THREE.Color(), tint = new THREE.Color();
     const t = now / 1000;
     for (const [serial, e] of this.agents) {
       if (this.hidden.has(e.sp)) continue;
@@ -422,7 +424,8 @@ export class World3D {
         this.eggs.setColorAt(ne, eggCol.set(this.meta.species[e.sp].color).lerp(new THREE.Color(1, 1, 1), 0.6));
         ne++; continue;
       }
-      const sc = S.size * (e.stage === 1 ? 0.55 : 1);
+      // the mass gene scales the body (x/÷ 2 in mass at the gene's ends, so x/÷ 1.26 in length)
+      const sc = S.size * (e.stage === 1 ? 0.55 : 1) * Math.cbrt(Math.pow(2, e.gMass || 0));
       let gy = this._height(e, x, y);
       if (S.fly && !(e.rest)) gy += 3.5 + Math.sin(t * 3 + serial) * 0.6;
       p.set(x, gy, y);
@@ -441,12 +444,22 @@ export class World3D {
         e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
         const A = S.near.anim.array;
         A[k * 4] = e.gait; A[k * 4 + 1] = (serial % 997) / 997; A[k * 4 + 2] = e.acts; A[k * 4 + 3] = e.rest ? 1 : 0;
-      } else S.far.mesh.setMatrixAt(counts[e.sp]++, m);
+        const B = S.near.body.array;
+        B[k * 4] = e.gSpeed || 0; B[k * 4 + 1] = e.gArmour || 0; B[k * 4 + 2] = e.gDiet || 0;
+      } else {
+        const k = counts[e.sp]++;
+        S.far.mesh.setMatrixAt(k, m);
+        // far: armour darkens, diet tints (as the near shader does)
+        const d = e.gDiet || 0, a = 1 - 0.28 * Math.max(-0.5, Math.min(1, e.gArmour || 0));
+        tint.setRGB(a * (d > 0 ? 1 + 0.25 * d : 1 + 0.2 * d), a * (d > 0 ? 1 - 0.22 * d : 1 - 0.2 * d), a * (d > 0 ? 1 - 0.26 * d : 1 + 0.2 * d));
+        S.far.mesh.setColorAt(k, tint);
+      }
     }
     for (let i = 0; i < this.spMeshes.length; i++) {
       const S = this.spMeshes[i];
       S.far.mesh.count = counts[i]; S.far.mesh.instanceMatrix.needsUpdate = true;
-      S.near.mesh.count = nearN[i]; S.near.mesh.instanceMatrix.needsUpdate = true; S.near.anim.needsUpdate = true;
+      S.near.mesh.count = nearN[i]; S.near.mesh.instanceMatrix.needsUpdate = true; S.near.anim.needsUpdate = true; S.near.body.needsUpdate = true;
+      if (S.far.mesh.instanceColor) S.far.mesh.instanceColor.needsUpdate = true;
     }
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
 

@@ -17,7 +17,11 @@ export function buildSpecies(sp) {
   const model = MODELS[sp.shape];
   const parts = model ? model(K, sp) : [K.part(farGeometry(sp.shape))];
   const nearGeo = K.build(parts, sp.color);
-  const motion = motionFor(sp, MOTION[sp.shape]);
+  // hip height: the highest leg pivot (0 for legless models); the shader lifts the body as legs lengthen
+  let hip = 0;
+  const pa = nearGeo.attributes.aPart.array, pv = nearGeo.attributes.aPivot.array;
+  for (let k = 0; k < pa.length; k++) if (pa[k] >= 2 && pa[k] <= 5) hip = Math.max(hip, pv[k * 3 + 1]);
+  const motion = motionFor(sp, { hip, ...MOTION[sp.shape] });
   const glassy = sp.shape === 15;
   const nearMat = creatureMaterial(sp, motion, { transparent: glassy, opacity: glassy ? 0.75 : 1 });
   const farGeo = farGeometry(sp.shape);
