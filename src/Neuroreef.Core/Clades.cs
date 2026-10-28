@@ -11,7 +11,7 @@ namespace Neuroreef;
 public static class Clades
 {
     const int SAMPLE = 512;
-    const int D = G.NBODY;
+    const int D = G.NBODY - G.NMHC;     // recognition genes excluded: their polymorphism is not speciation
 
     /// <summary>Per-world scratch for speciation (allocated once, with the world).</summary>
     public sealed class Scratch
@@ -131,6 +131,9 @@ public static class Clades
     {
         for (int k = 0; k < body.Length; k++)
             body[k] = (sbyte)Math.Clamp((int)MathF.Round(body[k] + Rng.N(seed, 0, key, Rs.Founder + 9000u + (uint)k) * K.FOUNDER_BODY_SD), -127, 127);
+        // recognition genes are hyper-polymorphic within populations (MHC): each founder draws its own
+        for (int k = 0; k < G.NMHC; k++)
+            body[G.B_MHC - G.BODY + k] = (sbyte)(Rng.U(seed, 0, key, Rs.Founder + 9500u + (uint)k) * 254f - 127f);
     }
 
     // ------------------------------------------------------------------ bookkeeping and speciation (serial, after LIFECYCLE)

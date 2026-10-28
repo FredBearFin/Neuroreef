@@ -54,7 +54,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| C_SIRE | 0.02 | E/M | extra cost to a hermaphrodite of fathering young (male function) | ECO: sex allocation: male function costs female output (Charnov 1982) |
+| C_SIRE | 0.2 | - | cost to a hermaphrodite of siring, as a share of its own litter's cost (male function) | ECO: male function takes 10-30% of a simultaneous hermaphrodite's reproductive resources (Charnov 1982) |
 
 ## 4. Disease
 
@@ -79,7 +79,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | REST_BASAL | 0.85 | - | basal multiplier while resting | HT |
 | SWIM_SPEED | 0.85 | - | speed factor for swimmers | HT |
 | FLY_SPEED | 1.4 | - | speed factor for flyers | HT |
-| FLY_COST | 1.6 | - | movement cost factor for flyers | HT |
+| FLY_COST | 0.5 | - | movement cost factor for flyers (per distance, against running) | ECO: flying costs less per distance than running at equal mass (Schmidt-Nielsen 1972); wing upkeep is in basal cost |
 | DRINK_RATE | 0.25 | /step | drinking: thirst removed per step | HT |
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
 | GROW_RESERVE | 0.5 | xEmax | a juvenile grows only from energy above this share of its reserve | ECO: growth is fuelled by surplus after maintenance; hungry young grow slowly (Revision D) |

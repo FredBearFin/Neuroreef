@@ -221,11 +221,12 @@ public static class Life
             float v0 = u < pContact ? w.IVirNear[i] : 1f;           // a strain caught from a neighbour, or a new one from the reservoir
             w.Infect[i] = K.DIS_STEPS;
             w.Virulence[i] = Math.Clamp(v0 * MathK.Exp(K.VIR_MUT * Rng.N(seed, step, (uint)i, Rs.Disease + 2)), 0.05f, 10f);
-            // the strain's key: the contact's, mutated; a new strain from the reservoir has a random key
+            // the strain's key: the contact's (or, from the reservoir, the host's own type), mutated
             for (int k = 0; k < G.NMHC; k++)
             {
-                float key = u < pContact && fromContact ? w.Strain[src * G.NMHC + k] + Rng.N(seed, step, (uint)i, Rs.Disease + 100u + (uint)k) * K.MHC_MUT
-                                                        : Rng.U(seed, step, (uint)i, Rs.Disease + 100u + (uint)k) * 254f - 127f;
+                // from the reservoir: the strain that just succeeded on this host, so it fits its type
+                float key = (u < pContact && fromContact ? w.Strain[src * G.NMHC + k] : w.Genome[i * G.LEN + G.B_MHC + k])
+                            + Rng.N(seed, step, (uint)i, Rs.Disease + 100u + (uint)k) * K.MHC_MUT;
                 w.Strain[i * G.NMHC + k] = (sbyte)Math.Clamp((int)MathF.Round(key), -127, 127);
             }
             w.T.Infections[s]++;

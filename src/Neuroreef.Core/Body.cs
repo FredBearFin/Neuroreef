@@ -79,7 +79,7 @@ public static class Body
         float vLand = v * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         bool flies = wings * K.WING_LIFT >= MathK.Cbrt(m);
-        if (!flies) vLand *= 1f + K.GLIDE * wings * wings * K.WING_LIFT / MathK.Cbrt(m);   // wings that cannot lift still help (partial flight)
+        if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
         float vAir = flies ? v * K.FLY_SPEED * MathF.Min(1f, wings * K.WING_LIFT / MathK.Cbrt(m) - 0.5f) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;

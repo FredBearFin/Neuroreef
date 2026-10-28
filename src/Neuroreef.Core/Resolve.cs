@@ -270,14 +270,15 @@ public static class Resolve
         // with one hermaphrodite, the separate-sexed partner keeps its role; a hermaphrodite meeting a male is the mother
         int mother = herm ? i : hi ? (w.Sex[j] == 0 ? j : i) : hj ? (w.Sex[i] == 0 ? i : j) : w.Sex[i] == 0 ? i : j;
         int father = mother == i ? j : i;
-        if (w.PHerm[father] != 0) w.Energy[father] -= K.C_SIRE * w.PM[father];   // male function costs a hermaphrodite
         // the father has only a short refractory period; a mother's breeding cooldown starts when she conceives (Conceive)
         w.Cooldown[father] = K.REFRACT * w.PCool[father];
+        // male function costs a hermaphrodite a share of its own litter's cost (both, when two hermaphrodites mate)
+        if (w.PHerm[father] != 0) w.Energy[father] -= K.C_SIRE * LitterCost(w, father);
+        if (herm) w.Energy[mother] -= K.C_SIRE * LitterCost(w, mother);
         float d = Body.Distance(w, i, j) / K.D_COMPAT;
         if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Compat) >= MathK.Exp(-d * d * d * d)) return rew;   // incompatible: no young
         if (herm)
         {
-            w.Energy[i] -= K.C_SIRE * w.PM[i];                     // both sire as well
             rew += Conceive(w, i, j, w.PLitter[i]);
             w.PendingR[j] += Conceive(w, j, i, w.PLitter[j]);
             return rew;
@@ -328,6 +329,9 @@ public static class Resolve
         }
         return K.R_BIRTH * made;
     }
+
+    static float LitterCost(World w, int m)
+        => w.PLitter[m] * (K.F_BIRTH * K.C_EMAX * w.PM[m] * w.PBirth[m] + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
 
     /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
     public static float TissueCost(float birthShare, float adultMass) => K.C_CARC * adultMass * birthShare * K.RHO_MEAT / K.GROWTH_EFF;

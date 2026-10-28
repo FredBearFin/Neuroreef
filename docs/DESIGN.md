@@ -3,6 +3,20 @@
 Document NR-DD-001, Revision H. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Changes in Revision I: the ecology review's second list** (reviewed)
+- Cost of transport ∝ M^0.7·speed (Taylor et al. 1982); flight costs FLY_COST = 0.5 of running per
+  distance (Schmidt-Nielsen 1972).
+- Wings too small to fly still speed a runner by GLIDE·wings (wing-assisted running, Dial 2003).
+- Hermaphrodites mate with either sex. Siring costs a hermaphrodite C_SIRE of its own litter's cost
+  (Charnov 1982).
+- Speciation needs a gap of SPLIT_GAP pooled SDs along the axis between the two centres, and centres at
+  least SPLIT_MIN_D apart.
+- Matching-alleles parasites (§9.6): every organism has NMHC = 4 recognition genes, drawn independently
+  per founder (hyper-polymorphic, like MHC). A strain carries a key and infects a host with probability
+  × exp(−rms(key − host)²/MHC_W²). A key is copied from the infecting contact and mutates by MHC_MUT; a
+  strain from the reservoir starts from its first host's own type. Recognition genes count neither for
+  fertility nor for speciation. Rare host types escape, which can favour sex (Hamilton 1980).
+
 **Changes in Revision H: rules an ecology review found biased** (each was pushing toward asexual
 cloners and egg-eating, or made hunting unreachable)
 - Genetic distance is root-mean-square per gene, for fertility (D_COMPAT) and kin (KIN_LOOK): normal

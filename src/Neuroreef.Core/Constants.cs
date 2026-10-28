@@ -61,7 +61,7 @@ public static class K
     [K("Allometry", "movement cost (x C_SPEED x M^EXP_MOVE x speed)", "E/(M^0.7*v*C_SPEED)", "V1")] public const float C_MOVE = 0.0020f;
     [K("Allometry", "mass exponent of the cost of transport", "-", "ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982)")] public const float EXP_MOVE = 0.7f;
     [K("Allometry", "speed gained on land per unit of wing that cannot yet lift the body (wing-assisted running, gliding)", "-", "ECO: proto-wings aid running up slopes and gliding before powered flight (Dial 2003)")] public const float GLIDE = 0.3f;
-    [K("Reproduction", "extra cost to a hermaphrodite of fathering young (male function)", "E/M", "ECO: sex allocation: male function costs female output (Charnov 1982)")] public const float C_SIRE = 0.02f;
+    [K("Reproduction", "cost to a hermaphrodite of siring, as a share of its own litter's cost (male function)", "-", "ECO: male function takes 10-30% of a simultaneous hermaphrodite's reproductive resources (Charnov 1982)")] public const float C_SIRE = 0.2f;
     [K("Disease", "match width: a strain infects a host whose recognition genes are within this RMS distance (/127) of its key", "-", "ECO: matching-alleles host-parasite genetics (Hamilton 1980; Lively 2010): rare host genotypes escape, which can favour sex")] public const float MHC_W = 0.35f;
     [K("Disease", "mutation of a strain's key per transmission (SD)", "int8", "ECO: pathogens evolve far faster than their hosts")] public const float MHC_MUT = 6f;
     [K("Clades", "two clusters are separate species when, along the axis between their centres, the gap is this many pooled SDs", "-", "ECO: genotypic clusters with few intermediates (Mallet 1995)")] public const float SPLIT_GAP = 3f;
@@ -71,7 +71,7 @@ public static class K
     [K("Allometry", "basal multiplier while resting", "-", "HT")] public const float REST_BASAL = 0.85f;
     [K("Allometry", "speed factor for swimmers", "-", "HT")] public const float SWIM_SPEED = 0.85f;
     [K("Allometry", "speed factor for flyers", "-", "HT")] public const float FLY_SPEED = 1.40f;
-    [K("Allometry", "movement cost factor for flyers", "-", "HT")] public const float FLY_COST = 1.6f;
+    [K("Allometry", "movement cost factor for flyers (per distance, against running)", "-", "ECO: flying costs less per distance than running at equal mass (Schmidt-Nielsen 1972); wing upkeep is in basal cost")] public const float FLY_COST = 0.5f;
     [K("Allometry", "drinking: thirst removed per step", "/step", "HT")] public const float DRINK_RATE = 0.25f;
     [K("Allometry", "efficiency of turning energy into new tissue (growth, offspring)", "-", "ECO: net growth efficiency 0.6-0.8")] public const float GROWTH_EFF = 0.75f;
     [K("Allometry", "a juvenile grows only from energy above this share of its reserve", "xEmax", "ECO: growth is fuelled by surplus after maintenance; hungry young grow slowly (Revision D)")] public const float GROW_RESERVE = 0.5f;
