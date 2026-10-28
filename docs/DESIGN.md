@@ -473,25 +473,42 @@ each species' gene bank is taken from the branch where it stands best (then by n
 bank is saved as `evolved.nrbank` beside the exe, so the next start skips the prehistory, and the live
 world is created from it. From that moment there are births and deaths only.
 
-### 7.7 Reflexes (Revision C, NR-327)
+### 7.7 Reflexes and the starter kit (Revision C, D; NR-327)
 
-Real newborns arrive with innate responses that learning cannot erase. Every animal has the same eight
-reflex inputs, each a need met by an opportunity, or an alarm:
+Real newborns arrive with innate responses that learning cannot erase. Every animal has the same nine
+reflex inputs, each a need, a need met by an opportunity, or a danger:
 1. hungry × food here
-2. thirsty × water near
-3. tired × safe
-4. ready × mate near
-5. hungry × weak prey near
-6. alarm (fear or pain)
-7. large carnivore near
-8. young × far from mother
+2. hungry
+3. thirsty
+4. thirsty × at water
+5. tired × safe
+6. large carnivore near
+7. young × far from mother
+8. ready × mate near
+9. hungry × weak prey near
 
-Reflex genes R (int8, 28 × 8, appended to the genome) link each input to each primitive:
-`z_p += RSCALE · Σ_c R[p, c]·c`. The plastic output layer is linear in its inputs, so it cannot easily
-express "eat when hungry *and* food is here"; one reflex gene can. The inputs are the same for every
-species. Which primitive each need drives, and how strongly, is evolved: founders get small random
-reflex links by the same rule as the output layer, and nothing is wired in. Reflex rows are inherited
-whole from one parent and mutate like every gene. Learning never changes them.
+Reflex genes R (int8, 28 × 9, appended to the genome) link each input to each primitive:
+`z_p += RSCALE · Σ_c R[p, c]·c`. Learning never changes them. Rows are inherited whole from one parent
+and mutate like every gene.
+
+**Starter kit (Revision D).** The full 500,000-step prehistory of Revision B (3 branches) ended with
+every species extinct within 100,000 steps of the last colonist. The life tables showed animals dying of
+thirst and starvation beside water and food: evolution from random wiring never found the basic
+survival skills in a few hundred generations, which real animals inherit from hundreds of millions of
+years of evolution. So founders now carry an innate starter kit, the same for every species: eight
+reflex genes set to KIT_W (+ the usual small random spread):
+- hungry × food here → EAT
+- hungry → CLIMB_FOOD
+- thirsty → SEEK_WATER
+- thirsty × at water → DRINK
+- tired × safe → REST
+- large carnivore near → FLEE_CARN and FLEE_BIG
+- young × far from mother → FOLLOW_MOTHER
+
+At full need a kit reflex gives about 88% (5 against the calm bias of −3). This is the one designed
+behaviour in the model, chosen by the user on 2026-10-28. Everything above it stays emergent: what to
+eat, herding, hunting, mating, timing. The kit genes are ordinary genes, so evolution can strengthen,
+weaken or lose them. All other reflex links start small and random.
 
 ### 7.8 Parental care (Revision C, NR-328)
 
@@ -509,8 +526,8 @@ She pays the energy given divided by CARE_EFF, counted as reproductive spending,
 conserved. The young taste it as food (reward), so following the mother can be learned and evolved;
 FOLLOW_MOTHER and MOTHER_FAR already exist.
 
-**Genome (Revision C).** After the Revision B layout (1,705 bytes) come B_CARE (1 byte) and the reflex
-genes (224 bytes): G.LEN = 1,930. A Revision B gene bank still loads, with these genes at 0 (species
+**Genome (Revision D).** After the Revision B layout (1,705 bytes) come B_CARE (1 byte) and the reflex
+genes (252 bytes): G.LEN = 1,958. A Revision B gene bank still loads, with these genes at 0 (species
 care level, no reflexes).
 
 ## 8. Reproduction modes (NR-311, NR-316)

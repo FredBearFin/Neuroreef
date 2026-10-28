@@ -125,6 +125,7 @@ public static class K
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
     [K("Brain", "reflex input weight scale (int8 / 16, as the output layer)", "-", "-")] public const float RSCALE = 1f / 16f;
+    [K("Brain", "founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88%", "int8", "designed: the innate starter kit (DESIGN §7.7, Revision D)")] public const int KIT_W = 80;
     [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 64;
     [K("Brain", "share of colonists bred from the archive once it holds 4 genomes (the rest are random brains)", "-", "HT")] public const float ARCHIVE_SHARE = 0.9f;
     [K("Brain", "tournament size when choosing a colonist parent from the archive", "genomes", "HT")] public const int TOURNAMENT = 3;

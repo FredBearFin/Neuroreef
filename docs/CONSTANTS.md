@@ -122,6 +122,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
 | RSCALE | 0.0625 | - | reflex input weight scale (int8 / 16, as the output layer) | - |
+| KIT_W | 80 | int8 | founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88% | designed: the innate starter kit (DESIGN §7.7, Revision D) |
 | ARCHIVE | 64 | genomes | elite archive size per species | HT |
 | ARCHIVE_SHARE | 0.9 | - | share of colonists bred from the archive once it holds 4 genomes (the rest are random brains) | HT |
 | TOURNAMENT | 3 | genomes | tournament size when choosing a colonist parent from the archive | HT |

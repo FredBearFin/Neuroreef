@@ -32,9 +32,10 @@ public static class Brain
         for (int k = G.ETA; k < G.BODY; k++)
             g[k] = (sbyte)(int)(Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 255f - 128f);
         for (int k = G.BODY; k < G.REFLEX; k++) g[k] = 0;  // founder body and care = the species body plan
-        // reflexes: small random links, by the same rule as the output layer (no reflex is wired in)
+        // reflexes: small random links by the same rule as the output layer, plus the innate starter kit
         for (int k = G.REFLEX; k < G.LEN; k++)
             g[k] = (sbyte)MathF.Round((Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f) * K.FOUNDER_W2);
+        foreach (var (c, p) in Reflex.Kit) g[G.REFLEX + p * G.NC + c] = (sbyte)Math.Clamp(K.KIT_W + g[G.REFLEX + p * G.NC + c], -127, 127);
     }
 
     /// <summary>Mutation (DESIGN §7.3): v1's mutateWord rule on every byte.</summary>

@@ -61,10 +61,10 @@ public static class G
     // parental care (DESIGN §7.8): log-scale multiplier on the species' care level
     public const int B_CARE = LEN_B;
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
-    public const int NC = 8;                     // reflex inputs (Reflex.Inputs)
+    public const int NC = 9;                     // reflex inputs (Reflex.Inputs)
     public const int REFLEX = B_CARE + 1;
-    public const int REFLEXN = P.N * NC;         // 224
-    public const int LEN = REFLEX + REFLEXN;     // 1930 bytes
+    public const int REFLEXN = P.N * NC;         // 252
+    public const int LEN = REFLEX + REFLEXN;     // 1958 bytes
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
     public static float Gene(sbyte b, float lo, float hi) => lo + (hi - lo) * ((b + 128) / 255f);

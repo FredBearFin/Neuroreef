@@ -73,7 +73,7 @@ Each requirement has a number, a statement and a verification method:
 | NR-324 | Every MIGRATE_EVERY steps the best archive genomes of each species shall be copied to the next branch. | T |
 | NR-325 | The evolution settings (EvoSettings) shall be changeable while the prehistory runs and shall reach every branch at the next barrier; they shall not change any law of the world. | T |
 | NR-326 | When the prehistory ends, each species' brains shall come from the branch where it stood best; the bank shall be saved, and the live world created from it shall have no colonists. | T |
-| NR-327 | Every animal shall have inherited reflex genes linking the same eight need-and-opportunity inputs to its primitives; learning shall not change them, and no reflex shall be wired in (DESIGN §7.7). | T |
+| NR-327 | Every animal shall have inherited reflex genes linking the same nine need, opportunity and danger inputs to its primitives; learning shall not change them. Founders shall carry the same innate starter kit (eat, seek food, seek water, drink, rest, flee, follow mother) as mutable genes; no other behaviour shall be designed (DESIGN §7.7). | T |
 | NR-328 | Mammal and bird mothers shall feed their young in contact before weaning, from their own reserve at an efficiency below 1, without taking it below CARE_RESERVE (DESIGN §7.8). | T |
 | NR-329 | Each species shall have a contact-transmitted disease with an infectious period, a metabolic cost, a death rate and immunity after recovery; deaths shall be recorded as "disease" (DESIGN §9.6). | T |
 | NR-330 | Each year shall have its own rainfall anomaly, persistent between years and shared by the branches of a prehistory (DESIGN §10.7). | T |

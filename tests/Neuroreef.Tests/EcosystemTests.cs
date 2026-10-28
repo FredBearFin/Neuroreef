@@ -38,6 +38,22 @@ public class EcosystemTests
         Assert.True(G.REFLEX >= G.W2 + G.W2N);
     }
 
+    [Fact] // NR-327: every founder carries the starter kit, and it drives the right action at full need
+    public void FoundersCarryTheStarterKit()
+    {
+        using var sim = new Simulation(16384, 64, 1, empty: true);
+        var w = sim.W;
+        int c = Animal(w, 0, true, 6);           // a random founder (Found draws a random genome)
+        foreach (var (ci, p) in Reflex.Kit)
+            Assert.True(w.Genome[c * G.LEN + G.REFLEX + p * G.NC + ci] >= K.KIT_W - K.FOUNDER_W2, $"kit {Reflex.Names[ci]} -> {P.Names[p]}");
+        Span<float> f = stackalloc float[F.N], y = stackalloc float[G.NIN], z = stackalloc float[P.N], g = stackalloc float[P.N];
+        f[F.BIAS] = 1; f[F.THIRST] = 1; f[F.WATER_CLOSE] = 1;
+        Brain.Forward(w, c, f, y, z, g);
+        Assert.True(g[P.DRINK] > 0.7f, $"DRINK {g[P.DRINK]}");
+        Assert.True(g[P.SEEK_WATER] > 0.7f, $"SEEK_WATER {g[P.SEEK_WATER]}");
+        Assert.True(g[P.MATE] < 0.3f, "mating is not in the kit");
+    }
+
     [Fact] // NR-328: a mammal mother in contact feeds her young; the energy she loses is what they gain / CARE_EFF
     public void MothersFeedTheirYoungAndEnergyIsConserved()
     {
