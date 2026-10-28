@@ -45,7 +45,7 @@ export function cone(a, b, r, seg = 6) { return limb(a, b, r, 0.0001, seg); }
 
 /**
  * A smooth body along the x axis through stations [x, y, halfHeight, halfWidth]; the ends close to a
- * point. Use for torsos, fish, necks with heads. seg = vertices around each ring.
+ * point. Stations may run either way along x. Use for torsos, fish, necks with heads. seg = vertices around each ring.
  */
 export function spine(stations, seg = 10) {
   const pos = [], idx = [];
@@ -66,6 +66,14 @@ export function spine(stations, seg = 10) {
     idx.push(tip0, k, (k + 1) % seg);
     idx.push(tip1, (n - 1) * seg + (k + 1) % seg, (n - 1) * seg + k);
   }
+  // faces must point outward whichever way the stations run: a negative signed volume means inside out
+  let vol = 0;
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+    vol += pos[a] * (pos[b + 1] * pos[c + 2] - pos[b + 2] * pos[c + 1]) - pos[a + 1] * (pos[b] * pos[c + 2] - pos[b + 2] * pos[c])
+         + pos[a + 2] * (pos[b] * pos[c + 1] - pos[b + 1] * pos[c]);
+  }
+  if (vol < 0) for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx); return g;
@@ -91,10 +99,10 @@ export function legs4(fx, bx, z, h, r0 = 0.06, r1 = 0.04, knee = 0.08) {
           leg(bx, z, P.LEG_BL), shin(bx, z, P.LEG_BL), leg(bx, -z, P.LEG_BR), shin(bx, -z, P.LEG_BR)];
 }
 
-/** A pair of eyes at (x, y, ±z). */
-export function eyes(x, y, z, r = 0.05) {
-  return [part(ellipsoid(r, r, r, x, y, z, 6), { p: P.HEAD, pivot: [x, y, 0], role: R.EYE }),
-          part(ellipsoid(r, r, r, x, y, -z, 6), { p: P.HEAD, pivot: [x, y, 0], role: R.EYE })];
+/** A pair of eyes at (x, y, ±z) that move with the head: pass the head's pivot (the neck). */
+export function eyes(x, y, z, r = 0.05, pivot = [x, y, 0]) {
+  return [part(ellipsoid(r, r, r, x, y, z, 6), { p: P.HEAD, pivot, role: R.EYE }),
+          part(ellipsoid(r, r, r, x, y, -z, 6), { p: P.HEAD, pivot, role: R.EYE })];
 }
 
 /** A swarm cloud: n members of radius size scattered within radius r (height r·flat), each jittering on its own. */
