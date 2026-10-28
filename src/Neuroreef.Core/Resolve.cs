@@ -26,9 +26,8 @@ public static class Resolve
 
     static void One(World w, int i)
     {
-        var sp = w.Sp[w.Spc[i]];
-        var body = w.StageBody(i);
         var T = w.T;
+        var loco = w.LocoOf(i); var realm = w.RealmOf(i); float kThirst = w.PKThirst[i];
         int s = w.Spc[i];
         uint seed = w.Seed, step = (uint)w.Step;
         float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
@@ -42,7 +41,7 @@ public static class Resolve
         float h = w.IHeading[i], spd = w.ISpeed[i];
         float nx = World.Wrap(w.X[i] + MathK.Cos(h) * spd), ny = World.Wrap(w.Y[i] + MathK.Sin(h) * spd);
         int nc = World.FIdx(nx, ny);
-        if (spd > 0 && !w.CellAllows(nc, body.Realm))
+        if (spd > 0 && !w.CellAllows(nc, realm))
         {
             spd = 0;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
@@ -55,7 +54,7 @@ public static class Resolve
         if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < K.FIRE_KILL) { Die(w, i, Cause.Fire, -1); return; }
 
         // ---- 2. drink
-        if ((acts & BIT_DRINK) != 0 && body.KThirst > 0 && w.DistWater[cell] <= 1.5f)
+        if ((acts & BIT_DRINK) != 0 && kThirst > 0 && w.DistWater[cell] <= 1.5f)
         {
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
@@ -63,7 +62,7 @@ public static class Resolve
 
         // ---- 3. eat (DESIGN §9.3)
         float gutCap = w.PGut[i] * mf;
-        if ((acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && body.Loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
+        if ((acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
         {
             int best = -1; float bv = 0;
             for (int p = 0; p < Pools.NFIELD; p++)
@@ -119,7 +118,7 @@ public static class Resolve
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
-        float moveCost = K.C_MOVE * mass * spd * spd * (body.Loco == Loco.Fly ? K.FLY_COST : 1f);
+        float moveCost = K.C_MOVE * mass * spd * spd * (loco == Loco.Fly ? K.FLY_COST : 1f);
         bool sick = w.Infect[i] > 0;
         float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST : 1f);
         // growth: a juvenile builds tissue from its spare energy (no free mass, DESIGN §9.1). It grows at most at
@@ -128,7 +127,7 @@ public static class Resolve
         float grow = 0;
         if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
         {
-            float tissue = K.C_CARC * w.PM[i] * (1f - sp.Birth) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
+            float tissue = K.C_CARC * w.PM[i] * (1f - w.PBirth[i]) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
             grow = Math.Clamp(w.Energy[i] - K.GROW_RESERVE * emax, 0f, tissue / w.PMature[i]);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
         }
@@ -155,7 +154,7 @@ public static class Resolve
         }
         if (w.Energy[i] > emax) w.Energy[i] = emax;
 
-        w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * body.KThirst);
+        w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * kThirst);
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
         w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
@@ -188,13 +187,12 @@ public static class Resolve
 
     static float Strike(World w, int a, int v, float gutCap, float emax)
     {
-        var sa = w.Sp[w.Spc[a]]; var sv = w.Sp[w.Spc[v]];
         var dietA = w.DietOf(a);
         uint seed = w.Seed, step = (uint)w.Step;
         float ma = w.MassOf(a);
         float power = w.PStrike[a] * ma;
         bool egg = w.StageOf[v] == St.Egg;
-        float defence = egg ? 0f : w.PArmour[v] * w.ApparentMass(v) * (sv.Swarm ? 20f : 1f) * (w.StageOf[v] == St.Juvenile ? K.JUV_DEFENCE : 1f);
+        float defence = egg ? 0f : w.PArmour[v] * w.ApparentMass(v) * (w.StageOf[v] == St.Juvenile ? K.JUV_DEFENCE : 1f);
         float p = egg ? 0.9f
             : K.P0_STRIKE * power / (power + defence + 1e-6f) * (1f + 0.8f * w.Fatigue[v]) * (1f - 0.5f * w.IScanning[v])
               / (1f + K.C_CONF * w.IKinDensity[v]);
@@ -216,7 +214,7 @@ public static class Resolve
         w.T.Kills[w.Spc[a]]++;
         float ev = MathF.Max(0f, w.Energy[v]);
         float space = MathF.Max(0f, gutCap - w.Gut[a]);
-        if (sa.Parasite)
+        if (w.PParasite[a] != 0)
         {
             float drain = MathF.Min(K.C_DRAIN * MathK.Pow(w.PM[a], K.EXP_BASAL), ev);
             w.Energy[v] -= drain;
@@ -225,18 +223,6 @@ public static class Resolve
             float m = MathF.Min(space, drain / K.RHO_BLOOD);
             if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax);
             if (w.Energy[v] <= 0) { w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
-            return rew;
-        }
-        if (sv.Swarm && !egg)
-        {
-            float chunkE = MathF.Min(K.SWARM_CHUNK * ev, space * K.RHO_MEAT);
-            w.Energy[v] -= chunkE;
-            w.Pain[v] = MathF.Min(1f, w.Pain[v] + 0.3f);
-            w.PendingR[v] -= K.R_PAIN * chunkE / MathF.Max(w.EmaxOf(v), 1e-3f);
-            float m = chunkE / K.RHO_MEAT;
-            if (m > 0 && dietA[(int)Pool.Meat] > 0) rew += Ingest(w, a, (int)Pool.Meat, m, dietA[(int)Pool.Meat], emax);
-            else if (m > 0) w.Pool[water ? (int)Pool.Detritus : (int)Pool.Carrion][cell] += m;
-            if (w.Energy[v] < 0.05f * w.EmaxOf(v)) { w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Killed, w.Spc[a]); }
             return rew;
         }
         // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
@@ -250,123 +236,44 @@ public static class Resolve
         return rew;
     }
 
-    static bool ModeAllowsSex(World w, int i, Species sp)
-    {
-        return sp.Mode switch
-        {
-            Repro.Sexual or Repro.Hermaphrodite => true,
-            Repro.Facultative => w.IFoodHere[i] <= K.FACULT_FOOD,
-            Repro.Cyclic => w.SeasonAt(w.Y[i]) <= 0f,
-            _ => false,
-        };
-    }
-
-    static bool ModeAllowsAsex(World w, int i, Species sp)
-    {
-        return sp.Mode switch
-        {
-            Repro.Fission or Repro.Spores => true,
-            Repro.Facultative => w.IFoodHere[i] > K.FACULT_FOOD,
-            Repro.Cyclic => w.SeasonAt(w.Y[i]) > 0f,
-            _ => false,
-        };
-    }
-
-    static bool EggSiteOk(World w, Species sp, int cell)
-    {
-        if (sp.Medium == Medium.WaterEgg) return w.DistWater[cell] <= 1.5f;
-        if (sp.Medium == Medium.LandEgg) return (w.Cell[cell] & (byte)Realm.Land) != 0;
-        return true;
-    }
-
+    /// <summary>Sexual reproduction (DESIGN §8): two ready organisms of the same clade and opposite sex.</summary>
     static float Mate(World w, int i, int j, int cell)
     {
-        var sp = w.Sp[w.Spc[i]];
-        if (!Decide.Ready(w, i) || w.StageOf[j] == St.Dead || !Decide.ValidPartner(w, i, j) || !ModeAllowsSex(w, i, sp)) return 0;
-        if (!EggSiteOk(w, sp, cell)) return 0;
+        if (!Decide.Ready(w, i) || w.StageOf[j] == St.Dead || !Decide.ValidPartner(w, i, j)) return 0;
         float dx = World.Delta1(w.X[j] - w.X[i]), dy = World.Delta1(w.Y[j] - w.Y[i]);
         float rr = w.PReach[i] * 2f + 0.5f;
         if (dx * dx + dy * dy > rr * rr) return 0;
         w.Energy[i] -= K.C_MATE * w.PM[i]; w.Energy[j] -= K.C_MATE * w.PM[j];
-        w.Cooldown[i] = sp.Cooldown; w.Cooldown[j] = sp.Cooldown;
+        w.Cooldown[i] = w.PCool[i]; w.Cooldown[j] = w.PCool[j];
         w.PendingR[j] += K.R_MATE;
         w.T.Matings[w.Spc[i]]++;
         float rew = K.R_MATE;
-        bool resting = sp.Mode == Repro.Cyclic;   // sexual reproduction of cyclic species gives resting eggs
-        if (sp.Mode == Repro.Hermaphrodite)
-        {
-            int half = (w.PLitter[i] + 1) / 2;
-            rew += Conceive(w, i, j, half, cell, resting);
-            w.PendingR[j] += Conceive(w, j, i, half, World.FIdx(w.X[j], w.Y[j]), resting);
-        }
-        else
-        {
-            int mother = w.Sex[i] == 0 ? i : j, father = mother == i ? j : i;
-            float rb = Conceive(w, mother, father, w.PLitter[mother], World.FIdx(w.X[mother], w.Y[mother]), resting);
-            if (mother == i) rew += rb; else w.PendingR[j] += rb;
-        }
+        int mother = w.Sex[i] == 0 ? i : j, father = mother == i ? j : i;
+        float rb = Conceive(w, mother, father, w.PLitter[mother]);
+        if (mother == i) rew += rb; else w.PendingR[j] += rb;
         return rew;
     }
 
+    /// <summary>Asexual reproduction (LAY): an asexual organism makes a litter of mutated copies of itself on its own.</summary>
     static float Lay(World w, int i, int cell)
     {
-        var sp = w.Sp[w.Spc[i]];
-        if (!ModeAllowsAsex(w, i, sp)) return 0;
+        if (w.PSexual[i] != 0) return 0;
         w.T.Lays[w.Spc[i]]++;
-        if (sp.Mode == Repro.Fission)
-        {
-            int c = Life.NewSlot(w);
-            if (c < 0) return 0;
-            float e = w.Energy[i] * K.FISSION_SHARE, tissue = TissueCost(sp, w.PM[i]);
-            if (e < tissue * 1.2f) { Life.FreeSlot(w, c); return 0; }
-            w.Energy[i] -= e;
-            e -= tissue;
-            Life.CopyGenome(w, i, c, true);
-            Life.Place(w, c, w.Spc[i], St.Juvenile, w.X[i] + 1f, w.Y[i], e, i);
-            w.T.Births[w.Spc[i]]++;
-            w.Cooldown[i] = sp.Cooldown;
-            return K.R_BIRTH;
-        }
-        if (sp.Mode == Repro.Spores)
-        {
-            // the spore lands in the best of 4 hashed cells within SPORE_RADIUS by dead matter
-            int bestC = cell; float bestV = -1;
-            for (int k = 0; k < 4; k++)
-            {
-                int dx = (int)(Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Spore + (uint)k * 2) * (2 * K.SPORE_RADIUS + 1)) - K.SPORE_RADIUS;
-                int dy = (int)(Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Spore + (uint)k * 2 + 1) * (2 * K.SPORE_RADIUS + 1)) - K.SPORE_RADIUS;
-                int c2 = World.WrapI(cell / K.FW + dy, K.FW) * K.FW + World.WrapI(cell % K.FW + dx, K.FW);
-                if ((w.Cell[c2] & (byte)Realm.Land) == 0) continue;
-                float v = w.Pool[(int)Pool.Wood][c2] + w.Pool[(int)Pool.Litter][c2] + w.Pool[(int)Pool.Carrion][c2];
-                if (v > bestV) { bestV = v; bestC = c2; }
-            }
-            int c = Life.NewSlot(w);
-            if (c < 0) return 0;
-            float e = K.F_BIRTH * K.C_EMAX * w.PM[i] * sp.Birth, tissue = TissueCost(sp, w.PM[i]);
-            if (w.Energy[i] < (e + tissue) * 1.5f) { Life.FreeSlot(w, c); return 0; }
-            w.Energy[i] -= e + tissue;
-            Life.CopyGenome(w, i, c, true);
-            float px = (bestC % K.FW + 0.5f) * K.FCELL, py = (bestC / K.FW + 0.5f) * K.FCELL;
-            Life.Place(w, c, w.Spc[i], St.Egg, px, py, e, i);
-            w.Timer[c] = sp.Gestation;
-            w.Cooldown[i] = sp.Cooldown;
-            return K.R_BIRTH;
-        }
-        // parthenogenesis (facultative, cyclic): asexual litter of clones (mutated)
-        return Conceive(w, i, -1, w.PLitter[i], cell, false);
+        return Conceive(w, i, -1, w.PLitter[i]);
     }
 
-    /// <summary>Create a litter at conception (DESIGN §8). father = -1 for asexual clones.</summary>
-    static float Conceive(World w, int mother, int father, int n, int cell, bool resting)
+    /// <summary>
+    /// Create a litter at conception (DESIGN §8). father = -1 for asexual copies. Each young costs its starting energy and,
+    /// for an egg, its whole tissue (yolk) at once; an embryo's tissue is paid by the mother during gestation. How many
+    /// young, how big, and eggs or live birth all come from the mother's genes; her energy limits the litter.
+    /// </summary>
+    static float Conceive(World w, int mother, int father, int n)
     {
-        var sp = w.Sp[w.Spc[mother]];
-        // the brood energy of the founder litter is shared among the actual litter (quantity vs quality)
-        float childE = MathF.Max(0.1f, K.F_BIRTH * sp.Litter / MathF.Max(1, w.PLitter[mother])) * K.C_EMAX * w.PM[mother] * sp.Birth;
-        // eggs carry their whole tissue (yolk) when laid; an embryo's tissue is paid by the mother during gestation
-        bool liveBirth = sp.Medium == Medium.Live || (father < 0 && sp.Mode is Repro.Facultative or Repro.Cyclic);
-        float tissue = liveBirth ? 0f : TissueCost(sp, w.PM[mother]);
+        float birth = w.PBirth[mother];
+        float childE = K.F_BIRTH * K.C_EMAX * w.PM[mother] * birth;
+        bool live = w.PLive[mother] != 0;
+        float tissue = live ? 0f : TissueCost(birth, w.PM[mother]);
         int made = 0;
-        bool live = liveBirth;
         for (int k = 0; k < n; k++)
         {
             if (w.Energy[mother] < childE + tissue + 0.15f * w.EmaxOf(mother)) break;
@@ -377,21 +284,20 @@ public static class Resolve
             if (father >= 0) Life.CrossGenome(w, mother, father, c);
             else Life.CopyGenome(w, mother, c, true);
             Life.Place(w, c, w.Spc[mother], live ? St.Embryo : St.Egg, w.X[mother], w.Y[mother], childE, mother);
-            w.Timer[c] = resting ? K.RESTING_MAX : sp.Gestation;
-            if (resting) w.Flags[c] |= Flag.Resting;
+            w.Timer[c] = w.PGest[mother];
             made++;
         }
         if (made > 0)
         {
             if (live) w.Flags[mother] |= Flag.Carrying;
-            w.Cooldown[mother] = sp.Cooldown;
+            w.Cooldown[mother] = w.PCool[mother];
             w.T.Conceptions[w.Spc[mother]] += made;
         }
         return K.R_BIRTH * made;
     }
 
-    /// <summary>Energy needed to build a newborn's tissue (the species' birth share of the adult mass).</summary>
-    public static float TissueCost(Species sp, float adultMass) => K.C_CARC * adultMass * sp.Birth * K.RHO_MEAT / K.GROWTH_EFF;
+    /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
+    public static float TissueCost(float birthShare, float adultMass) => K.C_CARC * adultMass * birthShare * K.RHO_MEAT / K.GROWTH_EFF;
 
     /// <summary>Death with a body left behind (carrion on land, detritus in water).</summary>
     public static void Die(World w, int i, int cause, int killer)

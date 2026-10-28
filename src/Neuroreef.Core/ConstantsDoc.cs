@@ -38,34 +38,8 @@ public static class ConstantsDoc
         }
 
         gi++;
-        sb.Append($"\n## {gi}. Species body plans\n\nDerived values follow the allometry rules of DESIGN §9.1. S = super-individual.\n\n");
-        var R = Roster.All;
-        sb.Append("| # | Species | Niche | Mass | Unit mass | Locomotion | Armour | Strike | Mode | Eggs | Litter | Gestation | Cooldown | Initial |\n");
-        sb.Append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
-        foreach (var s in R)
-            sb.Append($"| {s.Id} | {s.Name}{(s.Swarm ? " (S)" : "")} | {s.Niche} | {s.Mass.ToString(ci)} | {s.UnitMass.ToString(ci)} | " +
-                      $"{(s.TwoStage ? s.Juv.Loco + " → " : "")}{s.Adult.Loco} | {s.Armour.ToString(ci)} | {s.Strike.ToString(ci)} | {s.Mode} | {s.Medium} | {s.Litter} | {s.Gestation} | {s.Cooldown} | {s.InitCount} |\n");
-
-        sb.Append("\n### Diet efficiencies (adult stage; juvenile stage in brackets where it differs)\n\n| Species |");
-        foreach (var p in Pools.Names) sb.Append($" {p} |");
-        sb.Append("\n|---|"); foreach (var _ in Pools.Names) sb.Append("---|"); sb.Append('\n');
-        foreach (var s in R)
-        {
-            sb.Append($"| {s.Name} |");
-            for (int p = 0; p < Pools.N; p++)
-            {
-                float a = s.Adult.Diet[p], j = s.Juv.Diet[p];
-                string cell = a > 0 ? a.ToString("0.##", ci) : "";
-                if (s.TwoStage && j > 0) cell += $" ({j.ToString("0.##", ci)})";
-                sb.Append($" {cell} |");
-            }
-            sb.Append('\n');
-        }
-
-        sb.Append("\n### Derived values\n\n| Species | Basal E/step | Emax | Gut | Vmax | Lifespan | Maturity | Sight | FoV ° |\n|---|---|---|---|---|---|---|---|---|\n");
-        foreach (var s in R)
-            sb.Append($"| {s.Name} | {s.Basal.ToString("0.00000", ci)} | {s.Emax.ToString("0.##", ci)} | {s.GutCap.ToString("0.###", ci)} | " +
-                      $"{s.Vmax(s.Adult.Loco).ToString("0.##", ci)} | {s.Life.ToString("0", ci)} | {s.Mature.ToString("0", ci)} | {s.Sight.ToString("0.#", ci)} | {s.Fov.ToString(ci)} |\n");
+        sb.Append($"\n## {gi}. Organisms\n\nThere are no designed species (Revision F). Life starts from {K.ANCESTORS_LAND} land and {K.ANCESTORS_WATER} water ancestors with random bodies " +
+                  "(Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).\n");
         return sb.ToString();
     }
 }

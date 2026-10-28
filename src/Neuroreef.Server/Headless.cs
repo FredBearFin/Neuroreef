@@ -86,51 +86,56 @@ public static class Headless
         var report = new StringBuilder();
         report.AppendLine($"NEUROREEF 2 PREHISTORY REPORT: {pre.Step:N0} steps, {pre.B.Length} branches (separate births-only worlds), seed {o.Seed}");
         report.AppendLine("Standing over the last ~1,000 steps: SELF = births keep up with deaths; BREEDING = births, but fewer than deaths; DYING = alive, no births; GONE = extinct.");
-        var choice = pre.BestBranchPerSpecies();
-        report.AppendLine();
-        report.Append("SPECIES     ");
-        for (int b = 0; b < pre.B.Length; b++) report.Append($"  BRANCH {b,-12}");
-        report.AppendLine("  BRAINS TAKEN FROM");
-        for (int s = 0; s < Roster.Count; s++)
+        int bestB = pre.BestBranch();
+        for (int b = 0; b < pre.B.Length; b++)
         {
-            report.Append($"{Roster.All[s].Name,-12}");
-            for (int b = 0; b < pre.B.Length; b++)
+            var bw = pre.B[b].W;
+            report.AppendLine();
+            report.AppendLine($"BRANCH {b}{(b == bestB ? "  (the world begins from this branch)" : "")}: {bw.AliveCount:N0} organisms, {bw.T.Splits} speciation events");
+            report.AppendLine("CLADE        STANDING        ALIVE  FROM            ANCESTOR  BORN AT    NOW");
+            var desc = Wire.Clades(bw);
+            for (int s = 0; s < K.CLADES; s++)
             {
+                var c = bw.Sp[s];
+                if (!c.Used) continue;
                 var st = Prehistory.StandingOf(pre.B[b], s, out int alive, out _);
-                report.Append($"  {st.ToString().ToUpperInvariant().Replace("SELFSUSTAINING", "SELF"),-8} {alive,6}");
+                string from = c.Parent >= 0 ? "split from " + bw.Sp[c.Parent].Name : "ancestor";
+                string now = (string)desc[s].GetType().GetProperty("niche")!.GetValue(desc[s])!;
+                report.AppendLine($"{c.Name,-12} {st.ToString().ToUpperInvariant().Replace("SELFSUSTAINING", "SELF"),-14} {alive,6}  {from,-15} {c.Ancestor,8}  {c.Born,8:N0}  {now}");
             }
-            report.AppendLine($"  branch {choice[s]}");
         }
         report.AppendLine();
-        report.AppendLine("IS IT EVOLVING? Per species, in the branch its brains come from: mean starter-kit gene (founders ~80), generation reached,");
-        report.AppendLine("and best lifetime score (3 per offspring raised to maturity + 1 per offspring + age), first sample vs last sample with animals.");
-        report.AppendLine("SPECIES       KIT GENE  first -> last    GENERATION      BEST SCORE  first -> last");
-        for (int s = 0; s < Roster.Count; s++)
+        report.AppendLine($"WHAT EVOLVED in branch {bestB}: per clade, first sample with organisms -> last (mass, legs, fins, wings, armour, strike, meat-eating, starter-kit gene)");
         {
-            var T = pre.B[choice[s]].W.T; var row = new float[T.Len];
-            float k0 = 0, k1 = 0, g1 = 0, a0 = 0, a1 = 0; bool seen = false;
-            for (int k = 0; k < T.SampleCount; k++)
+            var T = pre.B[bestB].W.T; var row = new float[T.Len];
+            int[] tr = { Telemetry.T_MASS, Telemetry.T_LEGS, Telemetry.T_FINS, Telemetry.T_WINGS, Telemetry.T_ARMOUR, Telemetry.T_STRIKE, Telemetry.T_MEAT };
+            for (int s = 0; s < K.CLADES; s++)
             {
-                T.Sample(k, row);
-                if (row[T.SpeciesOffset(s, Telemetry.S_COUNT)] <= 0) continue;
-                if (!seen) { k0 = row[T.SpeciesOffset(s, Telemetry.S_KIT)]; a0 = row[T.SpeciesOffset(s, Telemetry.S_ARCH)]; seen = true; }
-                k1 = row[T.SpeciesOffset(s, Telemetry.S_KIT)]; g1 = row[T.SpeciesOffset(s, Telemetry.S_GEN)]; a1 = row[T.SpeciesOffset(s, Telemetry.S_ARCH)];
+                if (!pre.B[bestB].W.Sp[s].Used) continue;
+                float[] f0 = new float[tr.Length + 1], f1 = new float[tr.Length + 1]; bool seen = false;
+                for (int k = 0; k < T.SampleCount; k++)
+                {
+                    T.Sample(k, row);
+                    if (row[T.SpeciesOffset(s, Telemetry.S_COUNT)] <= 0) continue;
+                    for (int q = 0; q < tr.Length; q++) f1[q] = row[T.SpeciesOffset(s, Telemetry.S_TRAITS + tr[q])];
+                    f1[tr.Length] = row[T.SpeciesOffset(s, Telemetry.S_KIT)];
+                    if (!seen) { Array.Copy(f1, f0, f0.Length); seen = true; }
+                }
+                if (!seen) continue;
+                report.AppendLine($"{pre.B[bestB].W.Sp[s].Name,-12} " + string.Join("  ", Enumerable.Range(0, f0.Length).Select(q => $"{f0[q]:0.##}->{f1[q]:0.##}")));
             }
-            report.AppendLine($"{Roster.All[s].Name,-12} {k0,8:F1} -> {k1,6:F1}    {g1,10:F1}    {a0,10:F1} -> {a1,6:F1}");
         }
         for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.AppendLine($"=== BRANCH {b} ==="); report.Append(Summary(pre.B[b])); }
         Console.Write(report.ToString());
         if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, report.ToString()); Console.WriteLine("report written: " + o.ReportTxt); }
         if (o.SaveBank != null) { pre.SaveBank(o.SaveBank); Console.WriteLine("evolved brains saved: " + o.SaveBank); }
-        if (o.Csv != null) { WriteCsv(pre.B[choice[0]].W, o.Csv); Console.WriteLine("telemetry written: " + o.Csv); }
+        if (o.Csv != null) { WriteCsv(pre.B[bestB].W, o.Csv); Console.WriteLine("telemetry written: " + o.Csv); }
         return 0;
     }
 
     static void Header(World w)
     {
-        var sb = new StringBuilder("   STEP  ST/S  ALIVE ");
-        foreach (var s in w.Sp) sb.Append(s.Name.Substring(0, 5).ToUpperInvariant().PadLeft(6));
-        Console.WriteLine(sb.ToString());
+        Console.WriteLine("   STEP  ST/S  ALIVE  CLADES  SPLITS  LARGEST CLADES (organisms)");
     }
 
     static int _reports;
@@ -140,7 +145,10 @@ public static class Headless
         var w = sim.W;
         var sb = new StringBuilder();
         sb.Append(w.Step.ToString().PadLeft(7)).Append(sps.ToString("F0").PadLeft(6)).Append(w.AliveCount.ToString().PadLeft(7)).Append(' ');
-        for (int s = 0; s < w.NS; s++) sb.Append(sim.ActiveCount[s].ToString().PadLeft(6));
+        int alive = 0; for (int s = 0; s < w.NS; s++) if (w.Sp[s].Alive) alive++;
+        sb.Append(alive.ToString().PadLeft(7)).Append(w.T.Splits.ToString().PadLeft(8)).Append("  ");
+        var top = Enumerable.Range(0, w.NS).Where(s => sim.ActiveCount[s] > 0).OrderByDescending(s => sim.ActiveCount[s]).Take(6);
+        sb.Append(string.Join("  ", top.Select(s => $"{w.Sp[s].Name}:{sim.ActiveCount[s]}")));
         Console.WriteLine(sb.ToString());
         if (Environment.GetEnvironmentVariable("NR_PROFILE") == "1")
         {
@@ -166,9 +174,10 @@ public static class Headless
         var o = new StringBuilder();
         o.AppendLine();
         o.AppendLine($"OBSERVATION REPORT at step {w.Step:N0} (seed {w.Seed}). Counts are totals for the whole run.");
-        o.AppendLine("SPECIES       ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease  TOP FOOD (energy)");
+        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease  TOP FOOD (energy)");
         for (int s = 0; s < w.NS; s++)
         {
+            if (!w.Sp[s].Used) continue;
             var sb = new StringBuilder();
             sb.Append(w.Sp[s].Name.PadRight(12)).Append(sim.ActiveCount[s].ToString().PadLeft(7)).Append(T.Created[s].ToString().PadLeft(9))
               .Append(T.Immigrants[s].ToString().PadLeft(8)).Append(T.Conceptions[s].ToString().PadLeft(9)).Append(T.Matings[s].ToString().PadLeft(9))
@@ -181,12 +190,13 @@ public static class Headless
         }
         o.AppendLine();
         o.AppendLine("LIFE TABLE: where each species' life cycle breaks (deaths by age class, whole run)");
-        o.AppendLine("SPECIES      UNBORN  JUVENILE  YOUNG ADULT  OLDER ADULT   MEAN AGE AT DEATH  MATURITY AGE");
+        o.AppendLine("CLADE        UNBORN  JUVENILE  YOUNG ADULT  OLDER ADULT   MEAN AGE AT DEATH    BORN AT STEP");
         for (int s = 0; s < w.NS; s++)
         {
+            if (!w.Sp[s].Used) continue;
             long a0 = T.DeathsByAge[s * 4], a1 = T.DeathsByAge[s * 4 + 1], a2 = T.DeathsByAge[s * 4 + 2], a3 = T.DeathsByAge[s * 4 + 3];
             double mean = (a1 + a2 + a3) > 0 ? T.AgeAtDeath[s] / (a1 + a2 + a3) : 0;
-            o.AppendLine($"{w.Sp[s].Name,-12}{a0,7}{a1,10}{a2,13}{a3,13}{mean,20:F0}{w.Sp[s].Mature,14:F0}");
+            o.AppendLine($"{w.Sp[s].Name,-12}{a0,7}{a1,10}{a2,13}{a3,13}{mean,20:F0}{w.Sp[s].Born,16:N0}");
         }
         o.AppendLine();
         o.AppendLine($"slot shortages (births or immigrants refused because the world was full): {T.SlotShortage}");

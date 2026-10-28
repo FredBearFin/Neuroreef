@@ -19,12 +19,10 @@ public sealed class Simulation : IDisposable
     readonly Action<int, int> _decideJob, _fieldsJob;
     public readonly int[] ActiveCount;
 
-    /// <param name="prehistory">true only for an evolve run: colonists may then appear (DESIGN §7.4). A live world never spawns.</param>
+    /// <param name="prehistory">true for a prehistory branch (a label: every world is births and deaths only after its founders).</param>
     public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0)
     {
         W = new World(capacity, seed, terrainSeed);
-        var fails = Roster.ClosureCheck(W.Sp);
-        if (fails.Count > 0) throw new InvalidOperationException("energy-cycle closure check failed:\n  " + string.Join("\n  ", fails));
         Terrain.Build(W);
         _active = new int[W.NS];
         ActiveCount = _active;
@@ -36,27 +34,79 @@ public sealed class Simulation : IDisposable
         while (Gcd(a, capacity) != 1) a += 2;
         _orderA = a;
 
-        // founders: random brains, or genomes from a gene bank (NR-210, NR-212)
-        uint key = 1;
-        for (int s = 0; s < W.NS; s++)
+        // founders (DESIGN §7.9): the random ancestors, or the clades of a gene bank (NR-210, NR-212)
+        if (!empty)
         {
-            var sp = W.Sp[s];
-            var src = bank?.Genomes[s];
-            float gx = 0, gy = 0;
-            for (int k = 0; k < (empty ? 0 : sp.InitCount); k++, key++)
-            {
-                // founders live in groups (herds, colonies, schools) of GROUP_SIZE around a shared site
-                if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(W, sp.Adult.Realm, key + 0x50000u, out gx, out gy)) break;
-                bool adult = Rng.U(seed, 0, key, Rs.Founder) < 0.7f;
-                ReadOnlySpan<sbyte> g = (src != null && src.Count > 0) ? (ReadOnlySpan<sbyte>)src[(int)(Rng.U(seed, 0, key, Rs.Bank) * src.Count)] : ReadOnlySpan<sbyte>.Empty;
-                Life.Found(W, s, g, adult, key, gx, gy);
-            }
+            if (bank != null) FoundFromBank(bank, seed);
+            else FoundAncestors(seed);
         }
         Life.Run(W, _active);   // clears newborn flags, counts
 
         _decideJob = (lo, hi) => { for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe); };
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
         _pool = new Workers(Math.Max(1, threads));
+    }
+
+    /// <summary>ANCESTORS_LAND + ANCESTORS_WATER random ancestors, each its own clade, ANCESTOR_COUNT organisms in groups.</summary>
+    void FoundAncestors(uint seed)
+    {
+        var w = W;
+        var tmpl = new sbyte[G.LEN];
+        uint key = 1;
+        for (int a = 0; a < K.ANCESTORS_LAND + K.ANCESTORS_WATER; a++)
+        {
+            bool land = a < K.ANCESTORS_LAND;
+            int clade = Clades.NewClade(w, -1, a);
+            var realm = land ? Realm.Land : Realm.Water;
+            float gx = 0, gy = 0;
+            for (int k = 0; k < K.ANCESTOR_COUNT; k++, key++)
+            {
+                if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
+                // each founder: its own random brain, the ancestor's body (Found's mutation makes them vary)
+                Brain.RandomGenome(tmpl, seed, 0, key);
+                Clades.AncestorBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, a, land);
+                Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
+            }
+        }
+    }
+
+    /// <summary>The clades of a gene bank, each founded with as many organisms as it had (up to ANCESTOR_COUNT x 2), in groups.</summary>
+    void FoundFromBank(GeneBank.Data bank, uint seed)
+    {
+        var w = W;
+        uint key = 1;
+        foreach (var c in bank.Clades)
+        {
+            var s = w.Sp[c.Slot];
+            s.Clear();
+            s.Id = c.Slot; s.Used = true; s.Alive = true; s.Name = c.Name; s.R = c.R; s.G = c.G; s.B = c.B;
+            s.Parent = c.Parent; s.Ancestor = c.Ancestor; s.Generation = c.Generation; s.Born = 0;
+            s.Serial = w.CladeScratch.NextSerial++;
+            var src = bank.Genomes[c.Slot];
+            if (src.Count == 0) continue;
+            int n = Math.Min(c.Count, K.ANCESTOR_COUNT * 2);
+            float gx = 0, gy = 0;
+            for (int k = 0; k < n; k++, key++)
+            {
+                var g = src[(int)(Rng.U(seed, 0, key, Rs.Bank) * src.Count)];
+                if (k % K.GROUP_SIZE == 0)
+                {
+                    // the group's site follows the realm its genes give
+                    var realm = RealmOfGenome(g);
+                    if (!Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
+                }
+                Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
+            }
+        }
+        w.CladeScratch.Version++;
+    }
+
+    static Realm RealmOfGenome(sbyte[] g)
+    {
+        float legs = Body.Organ(g[G.B_LEGS]), fins = Body.Organ(g[G.B_FINS]), wings = Body.Organ(g[G.B_WINGS]);
+        if (wings >= K.WING_MIN) return Realm.Land;
+        if (legs >= K.LIMB_MIN) return Realm.Land;
+        return fins >= K.LIMB_MIN || fins > legs ? Realm.Water : Realm.Land;
     }
 
     static int Gcd(int a, int b) { while (b != 0) (a, b) = (b, a % b); return a; }
@@ -80,6 +130,7 @@ public sealed class Simulation : IDisposable
         Resolve.Run(w, _orderA, orderB);
         Lap(2);
         Life.Run(w, _active);
+        Clades.Update(w);
         Lap(3);
         Weather.Update(w);
         _pool.Run(_fieldsJob, K.FW);

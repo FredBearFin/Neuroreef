@@ -1,36 +1,64 @@
-// Ecology and brain requirements: energy-cycle closure, reproduction modes, founders, learning,
-// gene bank (NR-205, NR-210 ... NR-212, NR-303, NR-311, NR-315, NR-316).
+// Ecology and brain requirements: bodies from genes, reproduction genes, founders and ancestors, learning,
+// gene bank (NR-205, NR-210 ... NR-212, NR-303, NR-311, NR-315, NR-316, NR-320).
 
 using System;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace Neuroreef.Tests;
 
 public class EcologyTests
 {
-    [Fact] // NR-315, NR-316
-    public void RosterClosesTheEnergyCycle()
+    [Fact] // NR-315, NR-316: life starts from 6 land and 4 water ancestors, each its own clade, all eating primary producers
+    public void AncestorsAreRandomPlantEatersOfTheirRealm()
     {
-        var fails = Roster.ClosureCheck(Roster.All);
-        Assert.True(fails.Count == 0, string.Join("\n", fails));
+        using var sim = new Simulation(16384, 7, 1);
+        var w = sim.W;
+        int used = 0; for (int s = 0; s < K.CLADES; s++) if (w.Sp[s].Used) used++;
+        Assert.Equal(K.ANCESTORS_LAND + K.ANCESTORS_WATER, used);
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            int s = w.Spc[i];
+            bool land = s < K.ANCESTORS_LAND;
+            Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
+            float plants = 0; for (int p = 0; p <= (int)Pool.Phyto; p++) plants += w.PDiet[i * Pools.N + p];
+            Assert.True(plants > 0.85f * K.DIET_BUDGET, $"clade {s} plant share {plants}");
+            Assert.True(w.PStrike[i] < 0.35f * K.STRIKE_MAX);
+        }
+        // the ancestors differ from each other: their bodies are random, not designed
+        var masses = new float[used];
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) masses[w.Spc[i]] = w.PM[i];
+        Assert.True(masses.Distinct().Count() >= used - 1);
     }
 
-    [Fact] // NR-315: the check really detects an open cycle
-    public void ClosureCheckDetectsAnUneatenPool()
+    [Fact] // NR-320: legs, fins and wings decide locomotion and realm; organs cost energy; wings cost more on a heavy body
+    public void LocomotionAndRealmComeFromOrgans()
     {
-        var copy = (Species[])Roster.All.Clone();
-        var hummers = copy[5];
-        var saved = hummers.Adult.Diet[(int)Pool.Nectar];
-        var gl = copy[3].Adult.Diet[(int)Pool.Nectar];
-        var bf = copy[14].Adult.Diet[(int)Pool.Nectar];
-        try
+        var w = new World(16, 1);
+        Loco L(sbyte legs, sbyte fins, sbyte wings, sbyte mass = 0)
         {
-            hummers.Adult.Diet[(int)Pool.Nectar] = 0; copy[3].Adult.Diet[(int)Pool.Nectar] = 0; copy[14].Adult.Diet[(int)Pool.Nectar] = 0;
-            var fails = Roster.ClosureCheck(copy);
-            Assert.Contains(fails, f => f.Contains("nectar"));
+            w.Genome[G.B_LEGS] = legs; w.Genome[G.B_FINS] = fins; w.Genome[G.B_WINGS] = wings; w.Genome[G.B_MASS] = mass;
+            Body.Express(w, 0); return w.LocoOf(0);
         }
-        finally { hummers.Adult.Diet[(int)Pool.Nectar] = saved; copy[3].Adult.Diet[(int)Pool.Nectar] = gl; copy[14].Adult.Diet[(int)Pool.Nectar] = bf; }
+        Assert.Equal(Loco.Walk, L(100, -127, -127));
+        Assert.Equal(Realm.Land, w.RealmOf(0));
+        Assert.Equal(1f, w.PKThirst[0]);
+        Assert.Equal(Loco.Swim, L(-127, 100, -127));
+        Assert.Equal(Realm.Water, w.RealmOf(0));
+        Assert.Equal(0f, w.PKThirst[0]);
+        Assert.Equal(Loco.Wade, L(100, 100, -127));
+        Assert.Equal(Loco.Fly, L(-127, -127, 127));
+        Assert.Equal(Loco.Sessile, L(-127, -127, -127));
+        Assert.Equal(0f, w.PVmax[0]);
+        // costs: an organism with all organs pays more than one without; wings cost more on a heavier body
+        L(-127, -127, -127); float bare = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
+        L(127, 127, -127); float limbs = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
+        Assert.True(limbs > bare);
+        L(-127, -127, 127, -100); float wingSmall = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
+        L(-127, -127, 127, 100); float wingBig = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
+        Assert.True(wingBig > wingSmall);
     }
 
     [Fact] // NR-210: founder brains come from the RNG only; founder bodies are the species body plan
@@ -42,7 +70,7 @@ public class EcologyTests
         Brain.RandomGenome(c, 9, 0, 1235);
         Assert.Equal(a, b);
         Assert.NotEqual(a, c);
-        for (int k = G.BODY; k < G.REFLEX; k++) Assert.Equal(0, a[k]);     // body and care genes: the species plan
+        for (int k = G.BODY; k < G.REFLEX; k++) Assert.Equal(0, a[k]);     // body genes are set by the ancestor (Clades.AncestorBody)
         int nonzero = 0;
         for (int k = 0; k < G.ETA; k++) if (a[k] != 0) nonzero++;
         Assert.True(nonzero > G.ETA / 2);
@@ -108,29 +136,38 @@ public class EcologyTests
         GeneBank.Save(sim.W, ms);
         ms.Position = 0;
         var bank = GeneBank.Load(ms);
-        Assert.Equal(Roster.Count, bank.Genomes.Length);
+        Assert.Equal(K.CLADES, bank.Genomes.Length);
+        Assert.True(bank.Clades.Count >= 5);
         Assert.True(bank.Total > 100);
         using var sim2 = new Simulation(8192, 3, 2, bank);
         Assert.False(sim2.W.Prehistory);
         Assert.True(sim2.W.AliveCount > 1000);
     }
 
-    // ---- reproduction modes (NR-311): a scripted scene, intents set by hand, then RESOLVE and LIFECYCLE
+    // ---- reproduction from genes (NR-311): a scripted scene, intents set by hand, then RESOLVE and LIFECYCLE
 
-    static (World w, int a, int b) Pair(int species, bool female0)
+    static (World w, int a, int b) Pair(bool sexual, bool live, int cladeB = 0)
     {
         var w = new World(256, 11);
         Terrain.Build(w);
-        int a = Make(w, species, 0), b = Make(w, species, 1);
-        w.Sex[a] = (byte)(female0 ? 0 : 1); w.Sex[b] = (byte)(female0 ? 1 : 0);
+        int a = Make(w, 0, 0, sexual, live), b = Make(w, cladeB, 1, sexual, live);
+        w.Genome[b * G.LEN + G.B_MASS] = w.Genome[a * G.LEN + G.B_MASS];
+        w.Sex[a] = 0; w.Sex[b] = 1;
         w.X[b] = w.X[a] + 0.5f; w.Y[b] = w.Y[a];
         return (w, a, b);
     }
 
-    static int Make(World w, int species, uint key)
+    static int Make(World w, int clade, uint key, bool sexual = true, bool live = true)
     {
-        int c = Life.Found(w, species, ReadOnlySpan<sbyte>.Empty, true, key + 1);
+        w.Sp[clade].Used = true; w.Sp[clade].Alive = true;
+        int c = Life.Found(w, clade, ReadOnlySpan<sbyte>.Empty, true, key + 1);
         Assert.True(c >= 0);
+        int g = c * G.LEN;
+        w.Genome[g + G.B_SEX] = (sbyte)(sexual ? 60 : -60);
+        w.Genome[g + G.B_LIVE] = (sbyte)(live ? 60 : -60);
+        w.Genome[g + G.B_LEGS] = 100; w.Genome[g + G.B_FINS] = -127; w.Genome[g + G.B_WINGS] = -127;   // a walker
+        w.Genome[g + G.B_LITTER] = 40;
+        Body.Express(w, c);
         w.Flags[c] = 0;
         w.Energy[c] = w.EmaxOf(c);
         w.Age[c] = w.PMature[c] * 2;
@@ -150,53 +187,54 @@ public class EcologyTests
     [Fact]
     public void SexualLiveBirthProducesEmbryosThenJuveniles()
     {
-        var (w, a, b) = Pair(0, true);   // Drifters
+        var (w, a, b) = Pair(true, true);
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         int embryos = Count(w, St.Embryo);
-        Assert.Equal(Roster.All[0].Litter, embryos);
-        var counts = new int[Roster.Count];
-        for (int t = 0; t < Roster.All[0].Gestation + 2; t++) { w.Energy[a] = w.EmaxOf(a); Life.Run(w, counts); }
+        Assert.True(embryos >= 1 && embryos <= w.PLitter[a], $"embryos {embryos}, litter {w.PLitter[a]}");
+        var counts = new int[w.NS];
+        for (int t = 0; t < w.PGest[a] + 2; t++) { w.Energy[a] = w.EmaxOf(a); Life.Run(w, counts); }
         Assert.Equal(0, Count(w, St.Embryo));
         Assert.Equal(embryos, Count(w, St.Juvenile));
     }
 
     [Fact]
-    public void FissionSplitsTheColony()
+    public void EggLayersLayEggs()
     {
-        var w = new World(256, 12); Terrain.Build(w);
-        int a = Make(w, 5, 0);           // Hummers
-        float e0 = w.Energy[a];
-        Act(w, a, P.LAY);
-        Resolve.Run(w, 1, 0);
-        Assert.Equal(1, Count(w, St.Juvenile));
-        Assert.True(w.Energy[a] < e0 * 0.6f);
-    }
-
-    [Fact]
-    public void SporesLandAsEggs()
-    {
-        var w = new World(256, 13); Terrain.Build(w);
-        int a = Make(w, 8, 0);           // Rotmats
-        Act(w, a, P.LAY);
-        Resolve.Run(w, 1, 0);
-        Assert.Equal(1, Count(w, St.Egg));
-    }
-
-    [Fact]
-    public void HermaphroditesBothConceive()
-    {
-        var (w, a, b) = Pair(7, true);   // Delvers
-        w.Sex[b] = w.Sex[a];             // same sex is fine for hermaphrodites
+        var (w, a, b) = Pair(true, false);
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
-        Assert.True(w.Children[a] > 0 && w.Children[b] > 0);
+        Assert.True(Count(w, St.Egg) >= 1);
+        Assert.Equal(0, Count(w, St.Embryo));
     }
 
     [Fact]
-    public void SameSexSexualSpeciesCannotMate()
+    public void AsexualOrganismsReproduceAloneAndDoNotMate()
     {
-        var (w, a, b) = Pair(0, true);
+        var (w, a, b) = Pair(false, false);
+        Act(w, a, P.MATE, b); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        Assert.Equal(0, Count(w, St.Egg));                 // asexual: mating does nothing
+        Act(w, a, P.LAY);
+        Resolve.Run(w, 1, 0);
+        Assert.True(Count(w, St.Egg) >= 1);
+        Assert.True(w.T.Lays[0] >= 1);
+    }
+
+    [Fact] // NR-334: organisms of different clades cannot interbreed
+    public void DifferentCladesCannotMate()
+    {
+        var (w, a, b) = Pair(true, true, cladeB: 1);
+        Act(w, a, P.MATE, b); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        Assert.Equal(0, Count(w, St.Embryo));
+        Assert.False(Decide.ValidPartner(w, a, b));
+    }
+
+    [Fact]
+    public void SameSexCannotMate()
+    {
+        var (w, a, b) = Pair(true, true);
         w.Sex[b] = w.Sex[a];
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
@@ -217,23 +255,25 @@ public class EcologyTests
         Assert.Equal(1, w.T.Deaths[0 * Cause.N + Cause.Thirst]);
     }
 
-    [Fact] // NR-320: diet genes trade off within the founder's digestive budget; costly traits raise basal cost
+    [Fact] // NR-320: diet genes share a fixed digestive budget; costly traits raise basal cost
     public void BodyGenesTradeOff()
     {
         var w = new World(16, 1);
         int i = 0;
-        w.Spc[i] = 0; w.StageOf[i] = St.Adult;      // Drifters
+        w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_WINGS] = -127;   // a land walker (legs only)
         Body.Express(w, i);
-        float basal0 = w.PBasal[i], v0 = w.PVmaxA[i], grass0 = w.PDietA[(int)Pool.Grass];
-        float budget = 0; for (int p = 0; p < Pools.N; p++) budget += Roster.All[0].Adult.Diet[p];
-        w.Genome[G.B_DIET + (int)Pool.Grass] = 127;   // specialise on grass
-        w.Genome[G.B_SPEED] = 127;                    // faster
+        float basal0 = w.PBasal[i], v0 = w.PVmax[i], grass0 = w.PDiet[(int)Pool.Grass], seed0 = w.PDiet[(int)Pool.Seed];
+        float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += w.PDiet[p];
+        Assert.InRange(sum0, K.DIET_BUDGET - 0.02f, K.DIET_BUDGET + 0.02f);
+        Assert.Equal(0f, w.PDiet[(int)Pool.Algae]);        // a walker cannot graze algae
+        w.Genome[G.B_DIET + (int)Pool.Grass] = 127;        // specialise on grass
+        w.Genome[G.B_SPEED] = 127;                         // faster
         Body.Express(w, i);
-        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += w.PDietA[p];
-        Assert.InRange(sum, budget - 0.02f, budget + 0.02f);
-        Assert.True(w.PDietA[(int)Pool.Grass] > grass0);
-        Assert.True(w.PDietA[(int)Pool.Seed] < Roster.All[0].Adult.Diet[(int)Pool.Seed]);
-        Assert.True(w.PVmaxA[i] > v0 * 1.4f);
+        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += w.PDiet[p];
+        Assert.InRange(sum, K.DIET_BUDGET - 0.06f, K.DIET_BUDGET + 0.02f);
+        Assert.True(w.PDiet[(int)Pool.Grass] > grass0);
+        Assert.True(w.PDiet[(int)Pool.Seed] < seed0);
+        Assert.True(w.PVmax[i] > v0 * 1.4f);
         Assert.True(w.PBasal[i] > basal0 * 1.15f);
     }
 
@@ -241,13 +281,14 @@ public class EcologyTests
     public void GrowthCostsEnergy()
     {
         var w = new World(256, 15); Terrain.Build(w);
-        int a = Make(w, 1, 0), b = Make(w, 1, 1);       // two Browsers, one kept juvenile
+        int a = Make(w, 0, 0), b = Make(w, 0, 1);       // two organisms, one kept juvenile
+        w.Genome[b * G.LEN + G.B_MASS] = w.Genome[a * G.LEN + G.B_MASS]; Body.Express(w, b);
         w.StageOf[b] = St.Juvenile; w.Age[b] = 10; w.Grown[b] = 0;
         w.Energy[a] = w.Energy[b] = 10f; w.Gut[a] = w.Gut[b] = 0;
         Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         float costAdult = 10f - w.Energy[a], costJuv = 10f - w.Energy[b];
-        float growth = K.C_CARC * w.PM[b] * (1f - Roster.All[1].Birth) / w.PMature[b] * K.RHO_MEAT / K.GROWTH_EFF;
+        float growth = K.C_CARC * w.PM[b] * (1f - w.PBirth[b]) / w.PMature[b] * K.RHO_MEAT / K.GROWTH_EFF;
         Assert.True(costJuv > growth * 0.99f, $"juvenile paid {costJuv}, growth alone costs {growth}");
         Assert.True(costAdult < costJuv);
     }
@@ -256,7 +297,7 @@ public class EcologyTests
     public void GrowthIsLimitedBySpareEnergy()
     {
         var w = new World(256, 16); Terrain.Build(w);
-        int a = Make(w, 0, 0), b = Make(w, 0, 1);       // two juvenile Drifters
+        int a = Make(w, 0, 0), b = Make(w, 0, 1);       // two juveniles
         w.StageOf[a] = w.StageOf[b] = St.Juvenile; w.Grown[a] = w.Grown[b] = 0.2f;
         w.Energy[a] = 0.3f * w.EmaxOf(a);                // below GROW_RESERVE: maintenance only
         w.Energy[b] = w.EmaxOf(b);                       // plenty spare
@@ -299,7 +340,7 @@ public class EcologyTests
         {
             Brain.RandomGenome(w.GenomeOf(i), 2, 0, (uint)i);
             for (int p = 0; p < P.N; p++) Assert.InRange(w.Genome[i * G.LEN + G.W2 + p * G.NIN + G.NH + F.BIAS], K.FOUNDER_BIAS - K.FOUNDER_BIAS_NOISE, K.FOUNDER_BIAS + K.FOUNDER_BIAS_NOISE);
-            w.Spc[i] = (byte)(i % Roster.Count); w.StageOf[i] = St.Adult;
+            w.Spc[i] = (byte)(i % K.CLADES); w.StageOf[i] = St.Adult;
             Body.Express(w, i); Brain.InitLife(w, i);
             f[F.BIAS] = 1; for (int k = 1; k < F.N; k++) f[k] = rs.Next();
             Brain.Forward(w, i, f, y, z, g);

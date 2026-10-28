@@ -109,11 +109,10 @@ public static class Wire
             for (int k = 0; k < G.NIN; k++) d += MathF.Abs(w.W2f[wb + p * G.NIN + k] - w.Genome[gb + G.W2 + p * G.NIN + k] * K.WSCALE);
             f[PR_LEARN + p] = d / G.NIN;
         }
-        var sp = w.Sp[w.Spc[i]];
         float[] sc = { w.Reward[i], w.RewardMean[i], w.Energy[i], w.EmaxOf(i), w.Thirst[i], w.Fatigue[i], w.Gut[i] / MathF.Max(1e-6f, w.PGut[i] * w.MassOf(i) / w.PM[i]),
                        w.Age[i], w.PLife[i], w.PMature[i], w.X[i], w.Y[i], w.Heading[i], w.Speed[i], w.Gen[i], w.Children[i], w.Spc[i], w.StageOf[i], w.Sex[i], w.Pain[i] };
         sc.CopyTo(f.Slice(PR_SCAL));
-        float[] ph = { w.PM[i], w.PVmaxA[i], w.PSight[i], w.PArmour[i], w.PStrike[i], w.PLitter[i], w.PBasal[i] };
+        float[] ph = { w.PM[i], w.PVmax[i], w.PSight[i], w.PArmour[i], w.PStrike[i], w.PLitter[i], w.PBasal[i] };
         ph.CopyTo(f.Slice(PR_PHEN));
         w.DietOf(i).CopyTo(f.Slice(PR_DIET));
         for (int k = 0; k < G.W1N; k++) f[PR_W1 + k] = w.Genome[gb + k] * K.WSCALE;
@@ -162,14 +161,7 @@ public static class Wire
     public static string Meta(SimHost h)
     {
         var w = h.W;
-        var species = w.Sp.Select(s => new
-        {
-            id = s.Id, name = s.Name, niche = s.Niche, color = $"#{s.R:x2}{s.G:x2}{s.B:x2}", shape = s.Shape, mass = s.Mass, unitMass = s.UnitMass,
-            swarm = s.Swarm, parasite = s.Parasite, loco = s.Adult.Loco.ToString(), juvLoco = s.Juv.Loco.ToString(), twoStage = s.TwoStage,
-            mode = s.Mode.ToString(), medium = s.Medium.ToString(), litter = s.Litter, gestation = s.Gestation, birth = s.Birth,
-            armour = s.Armour, strike = s.Strike, fov = s.Fov, sight = s.Sight, life = s.Life, mature = s.Mature, init = s.InitCount,
-            diet = s.Adult.Diet, juvDiet = s.Juv.Diet, trophic = Trophic(s),
-        });
+        var species = Clades(w);
         var o = new
         {
             type = "meta", version = 1, world = K.WORLD, fw = K.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
@@ -189,13 +181,54 @@ public static class Wire
     }
 
     /// <summary>Trophic level estimate from the diet (for grouping only; not used by the simulation).</summary>
-    static int Trophic(Species s)
+    /// <summary>
+    /// The clade table with a live description of each clade, computed from its living members (DESIGN §7.9). Names and
+    /// roles are not designed: 'niche' and 'trophic' only describe what the members' genes currently make them.
+    /// </summary>
+    public static object[] Clades(World w)
     {
-        var d = s.Adult.Diet;
+        int ns = K.CLADES;
+        var n = new int[ns]; var mass = new double[ns]; var sight = new double[ns]; var fov = new double[ns]; var birth = new double[ns];
+        var sexual = new double[ns]; var live = new double[ns]; var diet = new double[ns * Pools.N]; var loco = new int[ns * 5];
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            int s = w.Spc[i]; n[s]++;
+            mass[s] += w.PM[i]; sight[s] += w.PSight[i]; fov[s] += 2 * MathF.Acos(Math.Clamp(w.PFovCos[i], -1f, 1f)) * 180 / MathF.PI;
+            birth[s] += w.PBirth[i]; sexual[s] += w.PSexual[i]; live[s] += w.PLive[i]; loco[s * 5 + w.PLoco[i]]++;
+            for (int p = 0; p < Pools.N; p++) diet[s * Pools.N + p] += w.PDiet[i * Pools.N + p];
+        }
+        var list = new object[ns];
+        for (int s = 0; s < ns; s++)
+        {
+            var c = w.Sp[s]; double k = Math.Max(1, n[s]);
+            var d = new float[Pools.N]; for (int p = 0; p < Pools.N; p++) d[p] = (float)(diet[s * Pools.N + p] / k);
+            int best = 0; for (int l = 1; l < 5; l++) if (loco[s * 5 + l] > loco[s * 5 + best]) best = l;
+            string lc = ((Loco)best).ToString();
+            float m = (float)(mass[s] / k);
+            int tro = Trophic(d, m);
+            string niche = n[s] == 0 ? (c.Used ? "extinct" : "") :
+                $"{LocoWord((Loco)best)} {new[] { "decomposer", "plant-eater", "omnivore", "meat-eater", "large meat-eater" }[tro]}";
+            list[s] = new
+            {
+                id = s, name = c.Name, color = $"#{c.R:x2}{c.G:x2}{c.B:x2}", used = c.Used, alive = c.Alive, parent = c.Parent, ancestor = c.Ancestor,
+                generation = c.Generation, born = c.Born, extinct = c.Extinct, serial = c.Serial, count = n[s],
+                niche, trophic = tro, mass = m, unitMass = m, swarm = false, parasite = false, loco = lc, juvLoco = lc, twoStage = false,
+                sight = (float)(sight[s] / k), fov = (float)(fov[s] / k), birth = (float)(birth[s] / k), sexual = (float)(sexual[s] / k), live = (float)(live[s] / k),
+                diet = d, juvDiet = d, shape = 0,
+            };
+        }
+        return list;
+    }
+
+    static string LocoWord(Loco l) => l switch { Loco.Walk => "walking", Loco.Wade => "wading", Loco.Swim => "swimming", Loco.Fly => "flying", _ => "settled" };
+
+    static int Trophic(float[] d, float mass)
+    {
         float meat = d[(int)Pool.Meat] + d[(int)Pool.Blood], dead = d[(int)Pool.Carrion] + d[(int)Pool.Dung] + d[(int)Pool.Litter] + d[(int)Pool.Wood] + d[(int)Pool.Detritus];
         float plant = 0; for (int p = 0; p <= (int)Pool.Phyto; p++) plant += d[p];
         if (dead > meat && dead > plant) return 0;      // decomposers and scavengers
-        if (meat > plant) return s.Mass >= 10 ? 4 : 3;  // predators (apex >= 10)
-        return meat > 0 ? 2 : 1;                         // omnivores, herbivores
+        if (meat > plant) return mass >= 10 ? 4 : 3;    // meat-eaters (large >= 10)
+        return meat > 0.15f ? 2 : 1;                     // omnivores, plant-eaters
     }
 }

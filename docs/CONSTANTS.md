@@ -88,7 +88,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_RETAL | 0.06 | E | retaliation per unit of excess defence | HT |
 | C_CARC | 0.5 | M/M | edible tissue (carcass) per unit body mass; also the tissue built in growth | ECO: about half of live mass is edible tissue |
 | JUV_DEFENCE | 0.25 | - | defence multiplier for juveniles | HT |
-| SWARM_CHUNK | 0.3 | - | share of a swarm's energy one strike removes (max) | HT |
 | C_DRAIN | 0.05 | E | parasite drain per strike at M=1 | HT |
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |
@@ -118,7 +117,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.000510725 | - | mutation probability per genome byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 0.000508906 | - | mutation probability per genome byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
@@ -148,29 +147,52 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| BODY_RANGE_MASS | 2 | - | range of the mass multiplier (x/÷) | HT |
-| BODY_RANGE_TRAIT | 1.6 | - | range of the speed, sight, armour, strike and litter multipliers (x/÷) | HT |
-| BODY_RANGE_DIET | 3 | - | range of a diet efficiency multiplier (x/÷), before the budget is renormalised | HT |
-| DIET_NOVEL | 0.15 | - | efficiency a pool the founder cannot digest can gain at the gene's maximum | HT |
+| BODY_RANGE_TRAIT | 1.6 | - | range of the speed and sight multipliers (x/÷) | HT |
 | COST_SPEED | 0.4 | - | basal cost per unit of extra speed | HT |
 | COST_SIGHT | 0.15 | - | basal cost per unit of extra sight | HT |
-| COST_ARMOUR | 0.2 | - | basal cost per unit of extra armour | HT |
-| COST_STRIKE | 0.2 | - | basal cost per unit of extra strike | HT |
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
+| MASS_LO | 0.05 | M | smallest body mass a mass gene can give | ECO: a small invertebrate-sized organism |
+| MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
+| LIMB_MIN | 0.3 | - | organ size (0..1) from which legs or fins work for walking or swimming | - |
+| WING_MIN | 0.5 | - | wing size (0..1) from which an organism can fly | - |
+| COST_LIMB | 0.15 | xbasal | basal cost per unit of leg or fin size | ECO: locomotor muscle is maintained at a cost |
+| COST_WING | 0.5 | xbasal | basal cost per unit of wing size, times mass^(1/3) | ECO: flight power rises faster than mass, so flight favours the small |
+| COST_ARMOUR_ABS | 0.12 | xbasal | basal cost per unit of armour | ECO: heavy armour is costly to carry and grow |
+| COST_STRIKE_ABS | 0.15 | xbasal | basal cost per unit of weaponry | ECO: jaws, teeth and claws are costly tissue |
+| ARMOUR_MAX | 3 | - | largest armour a gene can give | - |
+| STRIKE_MAX | 2 | - | largest weaponry (strike) a gene can give | - |
+| DIET_BUDGET | 1 | - | sum of digestive efficiencies an organism can have (a generalist spreads it, a specialist concentrates it) | ECO: digestive specialisation trades off breadth against efficiency |
+| LITTER_MAX | 12 | young | largest litter a gene can give | - |
+| BIRTH_LO | 0.01 | - | smallest newborn mass as a share of adult mass | ECO: fish and insect eggs |
+| BIRTH_HI | 0.3 | - | largest newborn mass as a share of adult mass | ECO: precocial mammals |
+| FOV_LO | 120 | degrees | narrowest field of view a gene can give | ECO: forward-facing predators |
+| FOV_HI | 360 | degrees | widest field of view a gene can give | ECO: prey with lateral eyes |
+| C_GEST | 150 | steps | gestation (or incubation) at M=1, scaling with M^0.25 | ECO: gestation scales about as M^0.25 |
+| C_COOL | 150 | steps | breeding cooldown at M=1, scaling with M^0.25 | ECO: as gestation |
 
-## 9. Reproduction
+## 9. Clades
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| CLADES | 32 | clades | clade slots (lineages that can exist at once) | -: limited by the console frame (5 bits) |
+| ANCESTORS_LAND | 6 | ancestors | ancestors that start on land | user choice |
+| ANCESTORS_WATER | 4 | ancestors | ancestors that start in water | user choice |
+| ANCESTOR_COUNT | 600 | organisms | founding organisms per ancestor | HT |
+| SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
+| MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
+| SPLIT_SEP | 1.5 | - | two gene clusters are separate species when their centres are this many times their spread apart | ECO: genotypic-cluster species (Mallet 1995): two clusters with few intermediates |
+| SPLIT_MIN_D | 0.25 | - | and at least this far apart (body genes / 127, Euclidean) | - |
+| CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
+
+## 10. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | READY_ENERGY | 0.6 | xEmax | energy needed to be READY | HT |
 | F_BIRTH | 0.4 | xEmax child | newborn energy (paid by parent at conception) | V1 |
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
-| FISSION_SHARE | 0.45 | - | fission: share of energy the child takes | HT |
-| FACULT_FOOD | 0.5 | - | facultative: FOOD_HERE above which reproduction is asexual | HT |
-| RESTING_MAX | 6000 | steps | cyclic: max dormancy of resting eggs | HT |
-| SPORE_RADIUS | 3 | cells | spores: search radius | HT |
 
-## 10. Care
+## 11. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -179,7 +201,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 11. Disease
+## 12. Disease
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -191,7 +213,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
 | DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
 
-## 12. Weather
+## 13. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -199,7 +221,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 13. Vegetation
+## 14. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -250,7 +272,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 14. Fire
+## 15. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -265,79 +287,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 15. Species body plans
+## 16. Organisms
 
-Derived values follow the allometry rules of DESIGN §9.1. S = super-individual.
-
-| # | Species | Niche | Mass | Unit mass | Locomotion | Armour | Strike | Mode | Eggs | Litter | Gestation | Cooldown | Initial |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | Drifters | small grazer | 1 | 1 | Walk | 0.3 | 0 | Sexual | Live | 2 | 150 | 150 | 2500 |
-| 1 | Browsers | large browser | 18 | 18 | Walk | 1.6 | 0.6 | Sexual | Live | 1 | 600 | 600 | 250 |
-| 2 | Tuskers | rooting omnivore | 6 | 6 | Walk | 1 | 0.7 | Sexual | Live | 4 | 300 | 300 | 300 |
-| 3 | Gliders | frugivore, seed disperser | 0.6 | 0.6 | Fly | 0.2 | 0 | Sexual | LandEgg | 3 | 200 | 200 | 600 |
-| 4 | Burrowers | granivore, cacher | 0.4 | 0.4 | Walk | 0.2 | 0 | Sexual | Live | 6 | 120 | 120 | 1200 |
-| 5 | Hummers (S) | pollinator swarm | 0.8 | 0.01 | Fly | 0.5 | 0 | Fission | Live | 1 | 0 | 200 | 600 |
-| 6 | Chewers (S) | leaf-insect swarm | 1 | 0.01 | Fly | 0.5 | 0 | Facultative | Live | 2 | 60 | 100 | 1200 |
-| 7 | Delvers (S) | detritivore (worms, beetles) | 1.2 | 0.01 | Walk | 0.5 | 0 | Hermaphrodite | LandEgg | 2 | 150 | 150 | 1200 |
-| 8 | Rotmats (S) | fungal mat (sessile) | 1 | 0.05 | Sessile | 2 | 0 | Spores | LandEgg | 1 | 300 | 300 | 500 |
-| 9 | Gleaners | vertebrate scavenger | 2 | 2 | Walk | 0.4 | 0.3 | Sexual | Live | 6 | 200 | 250 | 300 |
-| 10 | Snappers | insectivore | 0.35 | 0.35 | Fly | 0.2 | 0.8 | Sexual | LandEgg | 4 | 150 | 200 | 500 |
-| 11 | Prowlers | solitary mesopredator | 3 | 3 | Walk | 0.5 | 1 | Sexual | Live | 3 | 250 | 300 | 200 |
-| 12 | Stalkers | pack hunter | 4 | 4 | Walk | 0.5 | 1 | Sexual | Live | 3 | 300 | 400 | 200 |
-| 13 | Leviathans | apex predator | 25 | 25 | Wade | 1 | 1.3 | Sexual | Live | 1 | 900 | 1000 | 40 |
-| 14 | Bloodflies (S) | parasite swarm (aquatic larvae) | 0.5 | 0.005 | Swim → Fly | 0.3 | 0.6 | Sexual | WaterEgg | 6 | 100 | 150 | 600 |
-| 15 | Siltmites (S) | zooplankton | 1.5 | 0.002 | Swim | 0.2 | 0 | Cyclic | WaterEgg | 2 | 40 | 60 | 1500 |
-| 16 | Minnows | grazing fish | 0.4 | 0.4 | Swim | 0.3 | 0.4 | Sexual | WaterEgg | 8 | 100 | 150 | 1200 |
-| 17 | Pikes | predatory fish | 3 | 3 | Swim | 0.6 | 1 | Sexual | WaterEgg | 4 | 200 | 300 | 150 |
-| 18 | Croakers | amphibian (tadpole to frog) | 0.6 | 0.6 | Swim → Wade | 0.3 | 0.6 | Sexual | WaterEgg | 6 | 120 | 200 | 500 |
-| 19 | Herons | wading bird | 2.5 | 2.5 | Fly | 0.4 | 1 | Sexual | LandEgg | 3 | 250 | 300 | 100 |
-
-### Diet efficiencies (adult stage; juvenile stage in brackets where it differs)
-
-| Species | grass | browse | fruit | seed | nectar | root | algae | phyto | carrion | dung | litter | wood | detritus | meat | blood |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Drifters | 0.6 | 0.15 |  | 0.2 |  |  |  |  |  |  |  |  |  |  |  |
-| Browsers | 0.2 | 0.6 | 0.45 |  |  |  |  |  |  |  |  |  |  |  |  |
-| Tuskers |  |  | 0.5 | 0.3 |  | 0.6 |  |  | 0.4 |  |  |  |  | 0.45 |  |
-| Gliders |  |  | 0.7 | 0.4 | 0.3 |  |  |  |  |  |  |  |  |  |  |
-| Burrowers | 0.1 |  |  | 0.7 |  | 0.3 |  |  |  |  |  |  |  |  |  |
-| Hummers |  |  |  |  | 0.8 |  |  |  |  |  |  |  |  |  |  |
-| Chewers | 0.5 | 0.5 |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| Delvers |  |  |  |  |  |  |  |  |  | 0.6 | 0.5 |  |  |  |  |
-| Rotmats |  |  |  |  |  |  |  |  | 0.4 |  | 0.5 | 0.5 |  |  |  |
-| Gleaners |  |  |  |  |  |  |  |  | 0.8 |  |  |  |  | 0.3 |  |
-| Snappers |  |  | 0.15 |  |  |  |  |  |  |  |  |  |  | 0.75 |  |
-| Prowlers |  |  |  |  |  |  |  |  | 0.2 |  |  |  |  | 0.8 |  |
-| Stalkers |  |  |  |  |  |  |  |  | 0.3 |  |  |  |  | 0.85 |  |
-| Leviathans |  |  |  |  |  |  |  |  | 0.4 |  |  |  |  | 0.85 |  |
-| Bloodflies |  |  |  |  | 0.5 |  |  |  (0.3) |  |  |  |  |  (0.6) |  | 0.7 |
-| Siltmites |  |  |  |  |  |  |  | 0.7 |  |  |  |  | 0.2 |  |  |
-| Minnows |  |  |  |  |  |  | 0.6 |  |  |  |  |  | 0.2 | 0.5 |  |
-| Pikes |  |  |  |  |  |  |  |  |  |  |  |  |  | 0.85 |  |
-| Croakers |  |  |  |  |  |  |  (0.6) |  |  |  |  |  |  (0.2) | 0.7 |  |
-| Herons |  |  |  |  |  |  |  |  |  |  |  |  |  | 0.8 |  |
-
-### Derived values
-
-| Species | Basal E/step | Emax | Gut | Vmax | Lifespan | Maturity | Sight | FoV ° |
-|---|---|---|---|---|---|---|---|---|
-| Drifters | 0.00200 | 2 | 0.3 | 1.2 | 3200 | 250 | 16 | 300 |
-| Browsers | 0.01748 | 36 | 5.4 | 1.18 | 6591 | 515 | 28.5 | 280 |
-| Tuskers | 0.00767 | 12 | 1.8 | 1.3 | 5008 | 391 | 22.9 | 240 |
-| Gliders | 0.00136 | 1.2 | 0.18 | 1.54 | 2816 | 220 | 17.3 | 300 |
-| Burrowers | 0.00101 | 0.8 | 0.12 | 1.03 | 2545 | 199 | 13.3 | 320 |
-| Hummers | 0.00169 | 1.6 | 0.24 | 1.62 | 1816 | 236 | 13.3 | 360 |
-| Chewers | 0.00200 | 2 | 0.3 | 0.84 | 1600 | 250 | 13.3 | 360 |
-| Delvers | 0.00229 | 2.4 | 0.36 | 0.43 | 2344 | 262 | 13.3 | 360 |
-| Rotmats | 0.00200 | 2 | 0.3 | 0 | 4800 | 250 | 18.4 | 360 |
-| Gleaners | 0.00336 | 4 | 0.6 | 1.35 | 3805 | 297 | 25.7 | 260 |
-| Snappers | 0.00091 | 0.7 | 0.105 | 1.41 | 2461 | 192 | 13 | 220 |
-| Prowlers | 0.00456 | 6 | 0.9 | 1.52 | 4211 | 329 | 23.9 | 180 |
-| Stalkers | 0.00566 | 8 | 1.2 | 1.67 | 4525 | 460 | 25.3 | 170 |
-| Leviathans | 0.02236 | 50 | 7.5 | 1.35 | 7155 | 727 | 30.5 | 150 |
-| Bloodflies | 0.00119 | 1 | 0.15 | 1.49 | 1615 | 210 | 12.6 | 360 |
-| Siltmites | 0.00271 | 3 | 0.45 | 0.44 | 1417 | 277 | 12.6 | 360 |
-| Minnows | 0.00101 | 0.8 | 0.12 | 0.87 | 2545 | 199 | 13.3 | 300 |
-| Pikes | 0.00456 | 6 | 0.9 | 1.41 | 4211 | 329 | 19.9 | 200 |
-| Croakers | 0.00136 | 1.2 | 0.18 | 1.1 | 2816 | 220 | 14.4 | 280 |
-| Herons | 0.00398 | 5 | 0.75 | 1.96 | 4024 | 314 | 21.1 | 200 |
+There are no designed species (Revision F). Life starts from 6 land and 4 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

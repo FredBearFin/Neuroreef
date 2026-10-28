@@ -50,8 +50,6 @@ public static class Decide
     {
         byte stg = w.StageOf[i];
         if (stg < St.Juvenile) return;
-        var sp = w.Sp[w.Spc[i]];
-        var body = w.StageBody(i);
         var diet = w.DietOf(i);
         uint seed = w.Seed, step = (uint)w.Step;
         var rs = new Rng.Seq(Rng.Hash(seed, step, (uint)i, Rs.Explore));
@@ -65,7 +63,7 @@ public static class Decide
         bool scanning = w.IScanning[i] != 0;
         float R = w.PSight[i] * (scanning ? 1.3f : 1f);
         float R2 = R * R;
-        float fovCos = scanning ? -2f : sp.FovCos;
+        float fovCos = scanning ? -2f : w.PFovCos[i];
         float vmax = w.Vmax(i);
         int cell = World.FIdx(x, y);
         bool ready = Ready(w, i);
@@ -261,13 +259,13 @@ public static class Decide
         }
         bool rest = (acts & (1u << (P.REST - P.FIRST_ACTION))) != 0;
         float spd = vmax * Math.Clamp(0.45f + 0.55f * g[P.SPRINT] - 0.45f * g[P.HOLD], 0f, 1f) * (1f - g[P.SCAN]) * (1f - 0.5f * w.Fatigue[i]);
-        if (rest || body.Loco == Loco.Sessile) spd = 0f;
+        if (rest || w.LocoOf(i) == Loco.Sessile) spd = 0f;
 
         // ---- intents
         w.IHeading[i] = newH;
         w.ISpeed[i] = spd;
         w.IActs[i] = acts;
-        w.ITarget[i] = sp.Parasite ? (strikeBig.J >= 0 ? strikeBig.J : -1) : (strike.J >= 0 ? strike.J : strikeBig.J);
+        w.ITarget[i] = w.PParasite[i] != 0 ? (strikeBig.J >= 0 ? strikeBig.J : -1) : (strike.J >= 0 ? strike.J : strikeBig.J);
         w.IMate[i] = (mate.J >= 0 && mate.D <= reach + 1f) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
@@ -288,12 +286,11 @@ public static class Decide
         return w.Energy[i] > K.READY_ENERGY * w.EmaxOf(i);
     }
 
+    /// <summary>A mate must be ready, of the same clade (reproductive isolation), sexual like this organism, and of the other sex.</summary>
     public static bool ValidPartner(World w, int i, int j)
     {
+        if (w.Spc[i] != w.Spc[j] || w.PSexual[i] == 0 || w.PSexual[j] == 0) return false;
         if (!Ready(w, j)) return false;
-        var mode = w.Sp[w.Spc[i]].Mode;
-        if (mode == Repro.Hermaphrodite) return true;
-        if (mode == Repro.Fission || mode == Repro.Spores) return false;
         return w.Sex[i] != w.Sex[j];
     }
 
@@ -311,5 +308,5 @@ public static class Decide
 /// <summary>Per-slot flag bits.</summary>
 public static class Flag
 {
-    public const byte Carrying = 1, Newborn = 2, Resting = 4, Immigrant = 8;
+    public const byte Carrying = 1, Newborn = 2, Immigrant = 8;
 }

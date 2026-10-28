@@ -15,6 +15,7 @@ public sealed class Telemetry
     public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants, Infections;
     public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, RewardSum, CareGiven;
     public long SlotShortage;
+    public long Splits;                     // speciation events (DESIGN §7.9)
     public long FireCells;
     public readonly long[] DeathsByAge;     // species * 4: before birth, juvenile, young adult (< 2x maturity), older adult
     public readonly double[] AgeAtDeath;    // sum of age at death of hatched animals
@@ -34,8 +35,10 @@ public sealed class Telemetry
         S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
         S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_TRAITS = S_ARCH + 1, S_GAINS = S_TRAITS + NTRAITS, S_END = S_GAINS + P.N;
     /// <summary>Evolving traits recorded per species (mean over living animals): body multipliers (1 = founder) and diet.</summary>
-    public const int NTRAITS = 8, T_MASS = 0, T_SPEED = 1, T_SIGHT = 2, T_ARMOUR = 3, T_STRIKE = 4, T_LITTER = 5, T_CARE = 6, T_MEAT = 7;
-    public static readonly string[] TraitNames = { "mass", "speed", "sight", "armour", "strike", "litter", "care", "meat-eating" };
+    public const int NTRAITS = 13, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
+        T_LITTER = 8, T_CARE = 9, T_MEAT = 10, T_SEXUAL = 11, T_LIVE = 12;
+    public static readonly string[] TraitNames = { "mass", "legs", "fins", "wings", "speed", "sight", "armour", "strike", "litter", "care",
+        "meat-eating", "sexual share", "live-birth share" };
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
@@ -66,7 +69,7 @@ public sealed class Telemetry
         PerSpecies = S_END;
         foreach (var sp in w.Sp)
         {
-            string n = sp.Name + ".";
+            string n = "clade" + sp.Id.ToString("00") + ".";
             names.AddRange(new[] { n + "count", n + "juveniles", n + "eggs", n + "generation", n + "energy", n + "reward", n + "learned", n + "births", n + "conceptions" });
             foreach (var c in Cause.Names) names.Add(n + "death." + c);
             foreach (var p in Pools.Names) names.Add(n + "intake." + p);
@@ -77,7 +80,7 @@ public sealed class Telemetry
             foreach (var p in P.Names) names.Add(n + "gain." + p);
         }
         OffKill = names.Count;
-        foreach (var a in w.Sp) foreach (var b in w.Sp) names.Add("kill." + a.Name + "." + b.Name);
+        foreach (var a in w.Sp) foreach (var b in w.Sp) names.Add("kill.clade" + a.Id.ToString("00") + ".clade" + b.Id.ToString("00"));
         Names = names.ToArray();
         Len = Names.Length;
         Ring = new float[K.RING * Len];
@@ -146,15 +149,20 @@ public sealed class Telemetry
             int kb = i * G.LEN + G.REFLEX; float ks = 0;
             foreach (var (c, p) in Reflex.Kit) ks += w.Genome[kb + p * G.NC + c];
             a[o + S_KIT] += ks / Reflex.Kit.Length;
-            var gn = w.Genome;
-            a[o + S_TRAITS + T_MASS] += Body.Factor(gn[kb - G.REFLEX + G.B_MASS], K.BODY_RANGE_MASS);
-            a[o + S_TRAITS + T_SPEED] += Body.Factor(gn[kb - G.REFLEX + G.B_SPEED], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_SIGHT] += Body.Factor(gn[kb - G.REFLEX + G.B_SIGHT], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_ARMOUR] += Body.Factor(gn[kb - G.REFLEX + G.B_ARMOUR], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_STRIKE] += Body.Factor(gn[kb - G.REFLEX + G.B_STRIKE], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_LITTER] += Body.Factor(gn[kb - G.REFLEX + G.B_LITTER], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_CARE] += Body.Factor(gn[kb - G.REFLEX + G.B_CARE], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_MEAT] += w.PDietA[i * Pools.N + (int)Pool.Meat];
+            int bg = i * G.LEN;
+            a[o + S_TRAITS + T_MASS] += w.PM[i];
+            a[o + S_TRAITS + T_LEGS] += w.PLegs[i];
+            a[o + S_TRAITS + T_FINS] += w.PFins[i];
+            a[o + S_TRAITS + T_WINGS] += w.PWings[i];
+            a[o + S_TRAITS + T_SPEED] += Body.Factor(w.Genome[bg + G.B_SPEED], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_SIGHT] += Body.Factor(w.Genome[bg + G.B_SIGHT], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_ARMOUR] += w.PArmour[i];
+            a[o + S_TRAITS + T_STRIKE] += w.PStrike[i];
+            a[o + S_TRAITS + T_LITTER] += w.PLitter[i];
+            a[o + S_TRAITS + T_CARE] += w.PCare[i];
+            a[o + S_TRAITS + T_MEAT] += w.PDiet[i * Pools.N + (int)Pool.Meat];
+            a[o + S_TRAITS + T_SEXUAL] += w.PSexual[i];
+            a[o + S_TRAITS + T_LIVE] += w.PLive[i];
             a[o + S_GEN] += w.Gen[i];
             a[o + S_ENERGY] += w.Energy[i] / w.EmaxOf(i);
             a[o + S_REWARD] += w.RewardMean[i];

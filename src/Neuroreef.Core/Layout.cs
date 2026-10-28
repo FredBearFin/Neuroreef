@@ -1,6 +1,8 @@
 // Fixed layouts of the senses (DESIGN §4), the primitive library (DESIGN §5) and the genome (DESIGN §7).
 // Identical for every species (NR-201, NR-203, NR-204).
 
+using System;
+
 namespace Neuroreef;
 
 /// <summary>Feature indices: the 30 senses every animal has.</summary>
@@ -42,8 +44,8 @@ public static class P
     };
 }
 
-/// <summary>Genome layout (DESIGN §7.1): W1 (hidden), W2 (output over [hidden, features]), plasticity genes, body genes,
-/// then (Revision C) the parental-care gene and the reflex genes.</summary>
+/// <summary>Genome layout (DESIGN §7.1): W1 (hidden), W2 (output over [hidden, features]), plasticity genes, the body
+/// genes that build the whole organism (DESIGN §6.3, Revision F), then the reflex genes.</summary>
 public static class G
 {
     public const int NH = 12;                    // recurrent hidden units
@@ -52,22 +54,30 @@ public static class G
     public const int W2N = P.N * NIN;            // 1176 (plastic)
     public const int W1 = 0, W2 = W1N;
     public const int ETA = W1N + W2N, LAMBDA = ETA + 1, SIGMA = ETA + 2, KAPPA = ETA + 3;
-    // body genes (DESIGN §7.5): log-scale multipliers on the species' founder body plan, 0 = founder value
+    // body genes (DESIGN §6.3): absolute values on fixed ranges; nothing is relative to a designed species
     public const int BODY = ETA + 4;
     public const int B_MASS = BODY, B_SPEED = BODY + 1, B_SIGHT = BODY + 2, B_ARMOUR = BODY + 3, B_STRIKE = BODY + 4, B_LITTER = BODY + 5,
-        B_DIET = BODY + 6;                       // 15 bytes, one per pool
-    public const int NBODY = 6 + Pools.N;        // 21
-    public const int LEN_B = BODY + NBODY;       // 1705 bytes: the genome of Revision B gene banks
-    // parental care (DESIGN §7.8): log-scale multiplier on the species' care level
-    public const int B_CARE = LEN_B;
+        B_DIET = BODY + 6,                       // 15 bytes, one per pool: shares of the digestive budget
+        B_CARE = B_DIET + Pools.N,               // parental care
+        B_LEGS = B_CARE + 1, B_FINS = B_CARE + 2, B_WINGS = B_CARE + 3,   // locomotion organs
+        B_FOV = B_CARE + 4,                      // field of view (wide and short against narrow and long)
+        B_SEX = B_CARE + 5,                      // >= 0 sexual, < 0 asexual
+        B_LIVE = B_CARE + 6,                     // >= 0 live birth (gestation), < 0 eggs
+        B_BIRTH = B_CARE + 7;                    // newborn mass as a share of adult mass
+    public const int NBODY = B_BIRTH + 1 - BODY; // 29
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
     public const int NC = 9;                     // reflex inputs (Reflex.Inputs)
-    public const int REFLEX = B_CARE + 1;
+    public const int REFLEX = BODY + NBODY;
     public const int REFLEXN = P.N * NC;         // 252
-    public const int LEN = REFLEX + REFLEXN;     // 1958 bytes
+    public const int LEN = REFLEX + REFLEXN;     // 1965 bytes
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
     public static float Gene(sbyte b, float lo, float hi) => lo + (hi - lo) * ((b + 128) / 255f);
+    /// <summary>A gene on a logarithmic range (mass, newborn share).</summary>
+    public static float GeneLog(sbyte b, float lo, float hi) => lo * MathF.Pow(hi / lo, (b + 128) / 255f);
+    /// <summary>The gene byte that gives value v on a linear range (used to build ancestors).</summary>
+    public static sbyte ToGene(float v, float lo, float hi) => (sbyte)Math.Clamp((int)MathF.Round((v - lo) / (hi - lo) * 255f - 128f), -127, 127);
+    public static sbyte ToGeneLog(float v, float lo, float hi) => (sbyte)Math.Clamp((int)MathF.Round(MathF.Log(v / lo) / MathF.Log(hi / lo) * 255f - 128f), -127, 127);
 }
 
 /// <summary>Agent life stages within a slot.</summary>

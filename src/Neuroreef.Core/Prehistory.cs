@@ -131,27 +131,25 @@ public sealed class Prehistory : IDisposable
         return Standing.Dying;
     }
 
-    /// <summary>For each species, the branch where it stands best (then by number alive).</summary>
-    public int[] BestBranchPerSpecies()
+    /// <summary>
+    /// The branch the world begins from: the one with the most self-sustaining clades, then the most organisms. Clades
+    /// differ between branches (each grew from its own random ancestors), so a branch is taken whole.
+    /// </summary>
+    public int BestBranch()
     {
-        int ns = Roster.Count;
-        var choice = new int[ns];
-        for (int s = 0; s < ns; s++)
+        int best = 0; long bestKey = long.MinValue;
+        for (int b = 0; b < B.Length; b++)
         {
-            int best = 0; long bestKey = long.MinValue;
-            for (int b = 0; b < B.Length; b++)
-            {
-                var st = StandingOf(B[b], s, out int alive, out _);
-                long key = (long)st * 10_000_000 + Math.Min(alive, 9_999_999);
-                if (key > bestKey) { bestKey = key; best = b; }
-            }
-            choice[s] = best;
+            int self = 0;
+            for (int s = 0; s < K.CLADES; s++) if (B[b].W.Sp[s].Alive && StandingOf(B[b], s, out _, out _) == Standing.SelfSustaining) self++;
+            long key = (long)self * 10_000_000 + Math.Min(B[b].W.AliveCount, 9_999_999);
+            if (key > bestKey) { bestKey = key; best = b; }
         }
-        return choice;
+        return best;
     }
 
-    /// <summary>The gene bank of the prehistory: each species from the branch where it did best.</summary>
-    public void SaveBank(Stream s) => GeneBank.SaveMerged(B, BestBranchPerSpecies(), s);
+    /// <summary>The gene bank of the prehistory: the living clades of the best branch.</summary>
+    public void SaveBank(Stream s) => GeneBank.Save(B[BestBranch()].W, s);
     public void SaveBank(string path) { using var f = File.Create(path); SaveBank(f); }
 
     public GeneBank.Data Bank()

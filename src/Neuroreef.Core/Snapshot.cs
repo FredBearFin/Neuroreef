@@ -15,7 +15,7 @@ public sealed class Snapshot
     int _readyLen, _readLen;
     int _fresh;                 // 1 when _ready holds a frame the reader has not taken
     public volatile bool Requested;
-    public const int REC = 16;  // bytes per agent record (ICD §1, AGENTS)
+    public const int REC = 20;  // bytes per agent record (ICD §1, AGENTS)
 
     public Snapshot(World w)
     {
@@ -54,7 +54,7 @@ public sealed class Snapshot
     int Encode(byte[] b)
     {
         var w = _w;
-        b[0] = 0x02; b[1] = 2; b[2] = 0; b[3] = 0;
+        b[0] = 0x02; b[1] = 3; b[2] = 0; b[3] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(4), (uint)w.Step);
         int n = 0, o = 12;
         float sx = 65536f / K.WORLD;
@@ -78,14 +78,16 @@ public sealed class Snapshot
             span[6] = (byte)(stagebits | ((int)(Math.Clamp(w.Energy[i] / MathF.Max(w.EmaxOf(i), 1e-3f), 0f, 1f) * 7f) << 5));
             span[7] = (byte)acts;
             BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(8), w.Serial[i]);
-            // the animal's own body genes, so the console can draw evolution (ICD: record bytes 12-15)
+            // the organism's own body genes, from which the console draws its body (ICD: record bytes 12-19)
             int g = i * G.LEN;
             span[12] = (byte)w.Genome[g + G.B_MASS];
-            span[13] = (byte)w.Genome[g + G.B_SPEED];
-            span[14] = (byte)w.Genome[g + G.B_ARMOUR];
-            var sp = w.Sp[w.Spc[i]];
-            float meat = w.PDietA[i * Pools.N + (int)Pool.Meat] - sp.Adult.Diet[(int)Pool.Meat];   // diet drift toward (+) or away from (-) meat
-            span[15] = (byte)(sbyte)Math.Clamp((int)MathF.Round(meat * 254f), -127, 127);
+            span[13] = (byte)w.Genome[g + G.B_LEGS];
+            span[14] = (byte)w.Genome[g + G.B_FINS];
+            span[15] = (byte)w.Genome[g + G.B_WINGS];
+            span[16] = (byte)w.Genome[g + G.B_SIGHT];
+            span[17] = (byte)w.Genome[g + G.B_ARMOUR];
+            span[18] = (byte)w.Genome[g + G.B_STRIKE];
+            span[19] = (byte)(sbyte)Math.Clamp((int)MathF.Round(w.PDiet[i * Pools.N + (int)Pool.Meat] * 254f - 127f), -127, 127);   // meat-eating
             o += REC; n++;
         }
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(8), (uint)n);

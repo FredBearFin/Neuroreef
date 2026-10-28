@@ -47,16 +47,13 @@ public class PrehistoryTests
             Assert.Equal(20f, b.W.Evo.MutBig);
             foreach (var m in b.W.T.Immigrants) Assert.Equal(0, m);
         }
-        // NR-326: the bank takes each species from one branch; the world seeded from it never spawns
-        var choice = pre.BestBranchPerSpecies();
-        Assert.All(choice, c => Assert.InRange(c, 0, 1));
+        // NR-326: the bank holds the living clades of the best branch; the world seeded from it never spawns
+        int best = pre.BestBranch();
+        Assert.InRange(best, 0, 1);
         var bank = pre.Bank();
-        Assert.Equal(Roster.Count, bank.Genomes.Length);
-        for (int s = 0; s < Roster.Count; s++)
-        {
-            var src = pre.B[choice[s]];
-            if (src.ActiveCount[s] > 0) Assert.NotEmpty(bank.Genomes[s]);
-        }
+        Assert.Equal(K.CLADES, bank.Genomes.Length);
+        Assert.NotEmpty(bank.Clades);
+        foreach (var c in bank.Clades) Assert.NotEmpty(bank.Genomes[c.Slot]);
         using var live = new Simulation(16384, 72, 1, bank, prehistory: false, terrainSeed: 72);
         Assert.False(live.W.Prehistory);
         for (int k = 0; k < 300; k++) live.Step();

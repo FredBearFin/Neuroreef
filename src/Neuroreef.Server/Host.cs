@@ -114,7 +114,7 @@ public static class Host
                 for (int b = 0; b < pre.B.Length; b++)
                 {
                     int self = 0;
-                    for (int sp = 0; sp < Roster.Count; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
+                    for (int sp = 0; sp < K.CLADES; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
                     parts.Add($"{(char)('A' + b)}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
                 }
                 Console.WriteLine($"prehistory {pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {pre.Step:N0})  {pre.Rate,4:F0} steps/s  " + string.Join("  |  ", parts));
@@ -163,7 +163,7 @@ public static class Host
 
         // the step at which each species was first seen with no living member (no adults, juveniles, eggs or embryos)
         readonly long[] _extinctAt;
-        readonly int[] _alive = new int[Roster.Count];
+        readonly int[] _alive = new int[K.CLADES];
         int _phaseSeen = -1;
         /// <summary>Called under the lock: when the viewed simulation changed (phase or branch), forget per-simulation caches.</summary>
         void CheckPhase()
@@ -179,10 +179,26 @@ public static class Host
             {
                 CheckPhase();
                 var w = H.W;
-                Array.Clear(_alive);
-                for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) _alive[w.Spc[i]]++;
-                for (int s = 0; s < w.NS; s++) if (_alive[s] == 0 && _extinctAt[s] < 0 && w.Step > 0) _extinctAt[s] = (long)w.Step;
-                return (long[])_extinctAt.Clone();
+                var r = new long[K.CLADES];
+                for (int s = 0; s < K.CLADES; s++) r[s] = w.Sp[s].Used && !w.Sp[s].Alive ? w.Sp[s].Extinct : -1;
+                return r;
+            }
+        }
+
+        string? _cladesJson; int _cladesVer = -1; DateTime _cladesT;
+        /// <summary>The clade table of the simulation on view: resent when it changes, and every 5 s for the live counts.</summary>
+        public (string json, int ver) CladesJson()
+        {
+            lock (_lock)
+            {
+                var w = H.W;
+                int ver = w.CladeScratch.Version * 7919 + H.PhaseVersion;
+                if (_cladesJson == null || ver != _cladesVer || (DateTime.UtcNow - _cladesT).TotalSeconds > 5)
+                {
+                    _cladesJson = JsonSerializer.Serialize(new { type = "clades", step = w.Step, splits = w.T.Splits, list = Wire.Clades(w) });
+                    _cladesVer = ver; _cladesT = DateTime.UtcNow;
+                }
+                return (_cladesJson, _cladesVer * 1000 + (int)(_cladesT.Ticks / 50_000_000 % 1000));
             }
         }
 
@@ -212,12 +228,12 @@ public static class Host
                 var branches = new List<object>();
                 foreach (var b in pre.B)
                 {
-                    var stand = new int[Roster.Count]; var count = new int[Roster.Count]; var births = new float[Roster.Count];
-                    var gen = new float[Roster.Count];
-                    var traits = new float[Roster.Count * Neuroreef.Telemetry.NTRAITS];
+                    var stand = new int[K.CLADES]; var count = new int[K.CLADES]; var births = new float[K.CLADES];
+                    var gen = new float[K.CLADES];
+                    var traits = new float[K.CLADES * Neuroreef.Telemetry.NTRAITS];
                     var last = new float[b.W.T.Len];
                     bool has = b.W.T.SampleCount > 0 && b.W.T.Sample(b.W.T.SampleCount - 1, last);
-                    for (int s = 0; s < Roster.Count; s++)
+                    for (int s = 0; s < K.CLADES; s++)
                     {
                         stand[s] = (int)Prehistory.StandingOf(b, s, out count[s], out births[s]);
                         float g = has ? last[b.W.T.SpeciesOffset(s, Neuroreef.Telemetry.S_GEN)] : 0;
@@ -228,7 +244,7 @@ public static class Host
                             traits[s * Neuroreef.Telemetry.NTRAITS + k] = float.IsFinite(tv) ? MathF.Round(tv, 3) : 0;
                         }
                     }
-                    branches.Add(new { step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, generation = gen, traits });
+                    branches.Add(new { clades = Wire.Clades(b.W), splits = b.W.T.Splits, step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, generation = gen, traits });
                 }
                 _preJson = JsonSerializer.Serialize(new
                 {
@@ -297,7 +313,7 @@ public static class Host
         {
             var h = _s.H;
             long agentsVer = -1, fieldsVer = -1, probeVer = -1; int teleHead = -1, phaseSeen = h.PhaseVersion;
-            double nextPre = 0;
+            double nextPre = 0; int cladesSent = int.MinValue;
             var sw = Stopwatch.StartNew();
             double nextAgents = 0, nextFields = 0, nextTele = 0, nextAnalysis = 0, nextStatus = 0, nextProbe = 0;
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
@@ -305,6 +321,10 @@ public static class Host
                 double t = sw.Elapsed.TotalMilliseconds;
                 if (phaseSeen != h.PhaseVersion) { phaseSeen = h.PhaseVersion; _history = true; teleHead = -1; }   // a new simulation is on view
                 if (_history) { _history = false; await Bin(Wire.EncodeHistory(h.W, 400), ct); }
+                {
+                    var (cj, cv) = _s.CladesJson();
+                    if (cv != cladesSent) { cladesSent = cv; await Txt(cj, ct); }
+                }
                 if (t >= nextPre)
                 {
                     nextPre = t + 1000;

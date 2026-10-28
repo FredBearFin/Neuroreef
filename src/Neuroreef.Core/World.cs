@@ -9,8 +9,8 @@ public sealed class World
 {
     public readonly int Cap;
     public readonly uint Seed;
-    public readonly Species[] Sp = Roster.All;
-    public readonly int NS = Roster.Count;
+    public readonly Species[] Sp = new Species[K.CLADES];   // clade slots (DESIGN §7.9)
+    public readonly int NS = K.CLADES;
     public ulong Step;
 
     // ---- agents: kinematics
@@ -26,10 +26,12 @@ public sealed class World
     public readonly int[] MotherSlot, Children, LastChildSlot, Matured;
     public readonly uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
-    public readonly float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmaxA, PVmaxJ, PArmour, PStrike, PUnit;
+    public readonly float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
     public readonly byte[] PLitter;
-    public readonly float[] PDietA, PDietJ;   // Cap * Pools.N
+    public readonly float[] PDiet;            // Cap * Pools.N digestive efficiencies
     public readonly float[] PCare;            // parental care level (0 = none; DESIGN §7.8)
+    public readonly float[] PBirth, PKThirst, PFovCos, PGest, PCool, PLegs, PFins, PWings;
+    public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite;
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
     public readonly float[] CareLeft;         // care a mother can still give this step
     public readonly uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
@@ -80,6 +82,7 @@ public sealed class World
     public readonly float[] ArchiveScore;  // NS * ARCHIVE
     public readonly int[] ArchiveCount;
     public readonly sbyte[] Scratch;       // per-thread genome scratch: G.LEN * 2
+    public readonly Clades.Scratch CladeScratch = new();   // clade table version, serials, speciation buffers
     /// <summary>
     /// True in a prehistory branch. A label only: every world, prehistory or live, is births and deaths only
     /// after its founders; no animal ever appears except by birth (NR-313).
@@ -104,9 +107,13 @@ public sealed class World
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
         MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
         PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PBite = new float[c]; PLife = new float[c];
-        PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PTurn = new float[c]; PVmaxA = new float[c]; PVmaxJ = new float[c];
-        PArmour = new float[c]; PStrike = new float[c]; PUnit = new float[c]; PLitter = new byte[c];
-        PDietA = new float[c * Pools.N]; PDietJ = new float[c * Pools.N]; PCare = new float[c];
+        PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PTurn = new float[c]; PVmax = new float[c];
+        PArmour = new float[c]; PStrike = new float[c]; PLitter = new byte[c];
+        PDiet = new float[c * Pools.N]; PCare = new float[c];
+        PBirth = new float[c]; PKThirst = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
+        PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
+        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c];
+        for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c];
         Genome = new sbyte[(long)c * G.LEN];
         W2f = new float[(long)c * G.W2N];
@@ -156,30 +163,30 @@ public sealed class World
     public bool IsAlive(int i) => StageOf[i] != St.Dead;
     public bool IsActive(int i) => StageOf[i] >= St.Juvenile;      // has a body that acts
     public bool Juvenile(int i) => StageOf[i] == St.Juvenile;
-    public Stage StageBody(int i) => Sp[Spc[i]].StageOf(StageOf[i] == St.Juvenile);
+    public Loco LocoOf(int i) => (Loco)PLoco[i];
+    public Realm RealmOf(int i) => (Realm)PRealm[i];
 
     /// <summary>Current body mass: juveniles grow from the species' birth mass to their adult mass as they build tissue.</summary>
     public float MassOf(int i)
     {
         byte st = StageOf[i];
         if (st == St.Adult) return PM[i];
-        float b = Sp[Spc[i]].Birth;
+        float b = PBirth[i];
         if (st <= St.Embryo) return PM[i] * b;
         return PM[i] * (b + (1f - b) * MathF.Min(1f, Grown[i]));
     }
 
-    /// <summary>Apparent size of one organism (super-individuals look like their members).</summary>
-    public float ApparentMass(int i) => PUnit[i] > 0 ? PUnit[i] : MassOf(i);
+    /// <summary>Apparent size of one organism.</summary>
+    public float ApparentMass(int i) => MassOf(i);
 
     public float EmaxOf(int i) => K.C_EMAX * MassOf(i);
 
-    /// <summary>Digestive efficiencies of slot i in its current stage.</summary>
-    public Span<float> DietOf(int i)
-        => new Span<float>(StageOf[i] == St.Juvenile && Sp[Spc[i]].TwoStage ? PDietJ : PDietA, i * Pools.N, Pools.N);
+    /// <summary>Digestive efficiencies of slot i.</summary>
+    public Span<float> DietOf(int i) => new Span<float>(PDiet, i * Pools.N, Pools.N);
 
-    public float Carnivory(int i) => (StageOf[i] == St.Juvenile && Sp[Spc[i]].TwoStage ? PDietJ : PDietA)[i * Pools.N + (int)Neuroreef.Pool.Meat];
+    public float Carnivory(int i) => PDiet[i * Pools.N + (int)Neuroreef.Pool.Meat];
 
-    public float Vmax(int i) => (StageOf[i] == St.Juvenile && Sp[Spc[i]].TwoStage ? PVmaxJ[i] : PVmaxA[i]) * MathF.Max(0.3f, MassOf(i) / PM[i]);
+    public float Vmax(int i) => PVmax[i] * MathF.Max(0.3f, MassOf(i) / PM[i]);
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 

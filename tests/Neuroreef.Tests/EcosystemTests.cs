@@ -65,6 +65,21 @@ public class EcosystemTests
         {
             int c = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 9000u + (uint)k, (k / 8) * 37f % K.WORLD, (k / 8) * 91f % K.WORLD);
             if (c < 0) continue;
+            // a fixed ordinary grazer body for every founder (the test is about selection, not about a random body's luck):
+            // mass 1, walking legs, grass and seeds, sexual live birth, two young of 15% adult mass
+            var b = w.GenomeOf(c).Slice(G.BODY, G.NBODY);
+            b.Clear();
+            b[G.B_MASS - G.BODY] = G.ToGeneLog(1f, K.MASS_LO, K.MASS_HI);
+            b[G.B_LEGS - G.BODY] = 70; b[G.B_FINS - G.BODY] = -127; b[G.B_WINGS - G.BODY] = -127;
+            b[G.B_STRIKE - G.BODY] = -127; b[G.B_ARMOUR - G.BODY] = -90;
+            for (int p = 0; p < Pools.N; p++) b[G.B_DIET - G.BODY + p] = -127;
+            b[G.B_DIET - G.BODY + (int)Pool.Grass] = 127; b[G.B_DIET - G.BODY + (int)Pool.Seed] = 60;
+            b[G.B_SEX - G.BODY] = 60; b[G.B_LIVE - G.BODY] = 60;
+            b[G.B_LITTER - G.BODY] = G.ToGene(MathF.Log(2f) / MathF.Log(K.LITTER_MAX) * 2f - 1f, -1f, 1f);
+            b[G.B_BIRTH - G.BODY] = G.ToGeneLog(0.15f, K.BIRTH_LO, K.BIRTH_HI);
+            b[G.B_CARE - G.BODY] = 0;
+            Body.Express(w, c);
+            w.Energy[c] = 0.7f * w.EmaxOf(c);
             if (k % 2 == 1) w.Genome[c * G.LEN + eat] = 0;
         }
         double Share()
@@ -82,14 +97,14 @@ public class EcosystemTests
         Assert.True(s1 > s0 + 0.15, $"the eating allele did not spread: share {s0:F2} -> {s1:F2} after {births} births");
     }
 
-    [Fact] // NR-328: a mammal mother in contact feeds her young; the energy she loses is what they gain / CARE_EFF
+    [Fact] // NR-328: a caring mother in contact feeds her young; the energy she loses is what they gain / CARE_EFF
     public void MothersFeedTheirYoungAndEnergyIsConserved()
     {
         using var sim = new Simulation(16384, 62, 1, empty: true);
         var w = sim.W;
-        Assert.Equal(1f, w.Sp[0].Care);           // Drifters: mammals
-        Assert.Equal(0f, w.Sp[16].Care);          // Minnows: fish give no care
         int m = Animal(w, 0, true, 2), j = Animal(w, 0, false, 3);
+        w.Genome[m * G.LEN + G.B_CARE] = 127; Body.Express(w, m);   // a caring mother (care is a gene, like any other)
+        Assert.True(w.PCare[m] > 0.99f);
         w.MotherSlot[j] = m; w.MotherSerial[j] = w.Serial[m];
         w.X[j] = w.X[m]; w.Y[j] = w.Y[m]; w.Age[j] = 0; w.Grown[j] = 0;
         w.Energy[m] = 0.9f * w.EmaxOf(m); w.Energy[j] = 0.2f * w.EmaxOf(j);
@@ -142,25 +157,72 @@ public class EcosystemTests
         Assert.True(sd > 0.1, $"rainfall hardly varies: sd {sd}");
     }
 
-    [Fact] // NR-212: a gene bank from Revision B (shorter genome) loads; the new genes start at 0
-    public void RevisionBGeneBanksStillLoad()
+    [Fact] // NR-212: gene banks from before open-ended evolution (designed species) are refused with a clear message
+    public void OldGeneBanksAreRefused()
     {
         var ms = new MemoryStream();
         using (var bw = new BinaryWriter(ms, System.Text.Encoding.ASCII, leaveOpen: true))
         {
-            bw.Write("NRBK"u8.ToArray()); bw.Write(GeneBank.Version); bw.Write((ushort)Roster.Count); bw.Write((ushort)G.LEN_B);
+            bw.Write("NRBK"u8.ToArray()); bw.Write((ushort)1); bw.Write((ushort)20); bw.Write((ushort)1705);
             bw.Write((uint)1024); bw.Write(5UL); bw.Write(9u);
-            for (int s = 0; s < Roster.Count; s++)
-            {
-                bw.Write((ushort)1); bw.Write(1f);
-                for (int k = 0; k < G.LEN_B; k++) bw.Write((sbyte)3);
-            }
         }
         ms.Position = 0;
-        var d = GeneBank.Load(ms);
-        var g = d.Genomes[4][0];
-        Assert.Equal(G.LEN, g.Length);
-        Assert.Equal(3, g[G.LEN_B - 1]);
-        for (int k = G.LEN_B; k < G.LEN; k++) Assert.Equal(0, g[k]);
+        var ex = Assert.Throws<InvalidDataException>(() => GeneBank.Load(ms));
+        Assert.Contains("prehistory", ex.Message);
+    }
+
+    // ---- speciation (NR-333): a clade whose body genes have separated into two clusters splits; a single cluster does not
+
+    delegate void BodyEdit(int k, Span<sbyte> body);
+
+    static World CladeWorld(uint seed, BodyEdit body)
+    {
+        var w = new World(4096, seed); Terrain.Build(w);
+        int clade = Clades.NewClade(w, -1, 0);
+        for (int k = 0; k < 240; k++)
+        {
+            int c = Life.Found(w, clade, ReadOnlySpan<sbyte>.Empty, true, 100u + (uint)k);
+            Assert.True(c >= 0);
+            body(k, w.GenomeOf(c).Slice(G.BODY, G.NBODY));
+            Body.Express(w, c);
+        }
+        return w;
+    }
+
+    [Fact]
+    public void DivergedCladeSplitsIntoTwoSpecies()
+    {
+        var w = CladeWorld(81, (k, b) =>
+        {
+            // two forms: small swift seed-eaters and large armoured browsers (plus a little individual noise)
+            bool form = k % 2 == 0;
+            b[G.B_MASS - G.BODY] = (sbyte)(form ? -90 + k % 7 : 90 - k % 5);
+            b[G.B_ARMOUR - G.BODY] = (sbyte)(form ? -100 : 100);
+            b[G.B_SPEED - G.BODY] = (sbyte)(form ? 80 : -80);
+        });
+        w.Step = K.SPEC_EVERY;
+        Clades.Update(w);
+        Assert.Equal(1, w.T.Splits);
+        int a = 0, b2 = 0;
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) { if (w.Spc[i] == 0) a++; else b2++; }
+        Assert.Equal(120, a); Assert.Equal(120, b2);
+        // the two are now reproductively isolated
+        int x = -1, y = -1;
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) { if (w.Spc[i] == 0 && x < 0) x = i; if (w.Spc[i] != 0 && y < 0) y = i; }
+        Assert.NotEqual(w.Spc[x], w.Spc[y]);
+        Assert.Equal(0, w.Sp[w.Spc[y]].Parent);
+    }
+
+    [Fact]
+    public void OneClusterDoesNotSplit()
+    {
+        var w = CladeWorld(82, (k, b) =>
+        {
+            b[G.B_MASS - G.BODY] = (sbyte)(k % 11 - 5);    // one population with ordinary variation
+            b[G.B_SPEED - G.BODY] = (sbyte)(k % 7 - 3);
+        });
+        w.Step = K.SPEC_EVERY;
+        Clades.Update(w);
+        Assert.Equal(0, w.T.Splits);
     }
 }

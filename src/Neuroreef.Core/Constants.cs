@@ -94,7 +94,6 @@ public static class K
     [K("Hunting", "retaliation per unit of excess defence", "E", "HT")] public const float C_RETAL = 0.06f;
     [K("Hunting", "edible tissue (carcass) per unit body mass; also the tissue built in growth", "M/M", "ECO: about half of live mass is edible tissue")] public const float C_CARC = 0.5f;
     [K("Hunting", "defence multiplier for juveniles", "-", "HT")] public const float JUV_DEFENCE = 0.25f;
-    [K("Hunting", "share of a swarm's energy one strike removes (max)", "-", "HT")] public const float SWARM_CHUNK = 0.30f;
     [K("Hunting", "parasite drain per strike at M=1", "E", "HT")] public const float C_DRAIN = 0.05f;
     [K("Hunting", "pain added by a failed strike received", "-", "HT")] public const float PAIN_HIT = 0.6f;
     [K("Hunting", "pain decay per step", "/step", "HT")] public const float PAIN_DECAY = 0.03f;
@@ -138,24 +137,46 @@ public static class K
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;
 
     // ---------------------------------------------------------------- 5b. evolvable bodies (DESIGN §7.5)
-    [K("Body", "range of the mass multiplier (x/÷)", "-", "HT")] public const float BODY_RANGE_MASS = 2.0f;
-    [K("Body", "range of the speed, sight, armour, strike and litter multipliers (x/÷)", "-", "HT")] public const float BODY_RANGE_TRAIT = 1.6f;
-    [K("Body", "range of a diet efficiency multiplier (x/÷), before the budget is renormalised", "-", "HT")] public const float BODY_RANGE_DIET = 3.0f;
-    [K("Body", "efficiency a pool the founder cannot digest can gain at the gene's maximum", "-", "HT")] public const float DIET_NOVEL = 0.15f;
+    [K("Body", "range of the speed and sight multipliers (x/÷)", "-", "HT")] public const float BODY_RANGE_TRAIT = 1.6f;
     [K("Body", "basal cost per unit of extra speed", "-", "HT")] public const float COST_SPEED = 0.4f;
     [K("Body", "basal cost per unit of extra sight", "-", "HT")] public const float COST_SIGHT = 0.15f;
-    [K("Body", "basal cost per unit of extra armour", "-", "HT")] public const float COST_ARMOUR = 0.2f;
-    [K("Body", "basal cost per unit of extra strike", "-", "HT")] public const float COST_STRIKE = 0.2f;
     [K("Body", "speed loss per unit of extra armour", "-", "HT")] public const float ARMOUR_DRAG = 0.2f;
+
+    // ---------------------------------------------------------------- 5c. bodies from genes (DESIGN §6.3, Revision F)
+    [K("Body", "smallest body mass a mass gene can give", "M", "ECO: a small invertebrate-sized organism")] public const float MASS_LO = 0.05f;
+    [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units)")] public const float MASS_HI = 40f;
+    [K("Body", "organ size (0..1) from which legs or fins work for walking or swimming", "-", "-")] public const float LIMB_MIN = 0.3f;
+    [K("Body", "wing size (0..1) from which an organism can fly", "-", "-")] public const float WING_MIN = 0.5f;
+    [K("Body", "basal cost per unit of leg or fin size", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;
+    [K("Body", "basal cost per unit of wing size, times mass^(1/3)", "xbasal", "ECO: flight power rises faster than mass, so flight favours the small")] public const float COST_WING = 0.5f;
+    [K("Body", "basal cost per unit of armour", "xbasal", "ECO: heavy armour is costly to carry and grow")] public const float COST_ARMOUR_ABS = 0.12f;
+    [K("Body", "basal cost per unit of weaponry", "xbasal", "ECO: jaws, teeth and claws are costly tissue")] public const float COST_STRIKE_ABS = 0.15f;
+    [K("Body", "largest armour a gene can give", "-", "-")] public const float ARMOUR_MAX = 3f;
+    [K("Body", "largest weaponry (strike) a gene can give", "-", "-")] public const float STRIKE_MAX = 2f;
+    [K("Body", "sum of digestive efficiencies an organism can have (a generalist spreads it, a specialist concentrates it)", "-", "ECO: digestive specialisation trades off breadth against efficiency")] public const float DIET_BUDGET = 1.0f;
+    [K("Body", "largest litter a gene can give", "young", "-")] public const int LITTER_MAX = 12;
+    [K("Body", "smallest newborn mass as a share of adult mass", "-", "ECO: fish and insect eggs")] public const float BIRTH_LO = 0.01f;
+    [K("Body", "largest newborn mass as a share of adult mass", "-", "ECO: precocial mammals")] public const float BIRTH_HI = 0.3f;
+    [K("Body", "narrowest field of view a gene can give", "degrees", "ECO: forward-facing predators")] public const float FOV_LO = 120f;
+    [K("Body", "widest field of view a gene can give", "degrees", "ECO: prey with lateral eyes")] public const float FOV_HI = 360f;
+    [K("Body", "gestation (or incubation) at M=1, scaling with M^0.25", "steps", "ECO: gestation scales about as M^0.25")] public const float C_GEST = 150f;
+    [K("Body", "breeding cooldown at M=1, scaling with M^0.25", "steps", "ECO: as gestation")] public const float C_COOL = 150f;
+
+    // ---------------------------------------------------------------- 5d. clades and speciation (DESIGN §7.9)
+    [K("Clades", "clade slots (lineages that can exist at once)", "clades", "-: limited by the console frame (5 bits)")] public const int CLADES = 32;
+    [K("Clades", "ancestors that start on land", "ancestors", "user choice")] public const int ANCESTORS_LAND = 6;
+    [K("Clades", "ancestors that start in water", "ancestors", "user choice")] public const int ANCESTORS_WATER = 4;
+    [K("Clades", "founding organisms per ancestor", "organisms", "HT")] public const int ANCESTOR_COUNT = 600;
+    [K("Clades", "steps between speciation checks", "steps", "-")] public const int SPEC_EVERY = 2000;
+    [K("Clades", "smallest cluster that can become a species", "organisms", "ECO: a viable population")] public const int MIN_SPLIT = 40;
+    [K("Clades", "two gene clusters are separate species when their centres are this many times their spread apart", "-", "ECO: genotypic-cluster species (Mallet 1995): two clusters with few intermediates")] public const float SPLIT_SEP = 1.5f;
+    [K("Clades", "and at least this far apart (body genes / 127, Euclidean)", "-", "-")] public const float SPLIT_MIN_D = 0.25f;
+    [K("Clades", "an extinct clade's slot is reused only after this many steps", "steps", "-")] public const int CLADE_RECYCLE = 20000;
 
     // ---------------------------------------------------------------- 6. reproduction
     [K("Reproduction", "energy needed to be READY", "xEmax", "HT")] public const float READY_ENERGY = 0.60f;
     [K("Reproduction", "newborn energy (paid by parent at conception)", "xEmax child", "V1")] public const float F_BIRTH = 0.40f;
     [K("Reproduction", "mating cost per partner", "E/M", "HT")] public const float C_MATE = 0.02f;
-    [K("Reproduction", "fission: share of energy the child takes", "-", "HT")] public const float FISSION_SHARE = 0.45f;
-    [K("Reproduction", "facultative: FOOD_HERE above which reproduction is asexual", "-", "HT")] public const float FACULT_FOOD = 0.5f;
-    [K("Reproduction", "cyclic: max dormancy of resting eggs", "steps", "HT")] public const int RESTING_MAX = 6000;
-    [K("Reproduction", "spores: search radius", "cells", "HT")] public const int SPORE_RADIUS = 3;
 
     // ---------------------------------------------------------------- 6b. parental care (DESIGN §7.8)
     [K("Care", "milk or chick-feeding energy a mother can give per step, as a multiple of her basal cost (shared by all her young)", "xbasal", "ECO: peak lactation milk energy is about 1-2x maternal basal metabolic rate (Hanwell & Peaker 1977)")] public const float CARE_RATE = 1.5f;

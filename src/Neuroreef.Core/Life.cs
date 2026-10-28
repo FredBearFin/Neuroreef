@@ -25,7 +25,6 @@ public static class Life
     /// <summary>Initialise a newly created slot. The genome must already be in place.</summary>
     public static void Place(World w, int c, int species, byte stage, float x, float y, float energy, int mother)
     {
-        var sp = w.Sp[species];
         uint seed = w.Seed, step = (uint)w.Step;
         w.Spc[c] = (byte)species; w.StageOf[c] = stage;
         w.Flags[c] = Flag.Newborn;
@@ -103,15 +102,23 @@ public static class Life
         x = y = 0; return false;
     }
 
-    /// <summary>Create one animal from a founder source: a random genome, or a genome supplied by the caller.</summary>
-    public static int Found(World w, int species, ReadOnlySpan<sbyte> genome, bool adult, uint key)
-        => Found(w, species, genome, adult, key, float.NaN, 0f);
-
-    /// <summary>Create one animal. With a group centre (gx, gy), it is placed within GROUP_SPREAD of it, as colonists arrive together.</summary>
-    public static int Found(World w, int species, ReadOnlySpan<sbyte> genome, bool adult, uint key, float gx, float gy)
+    /// <summary>
+    /// Create one founder organism of a clade at step 0 (or from a gene bank). With an empty genome, a random brain
+    /// and a random land ancestor's body (tests). With a group centre (gx, gy), it is placed within GROUP_SPREAD of
+    /// it, as populations are clustered. The genome given is mutated, so founders vary.
+    /// </summary>
+    public static int Found(World w, int clade, ReadOnlySpan<sbyte> genome, bool adult, uint key, float gx = float.NaN, float gy = 0f)
     {
-        var sp = w.Sp[species];
-        var body = sp.StageOf(!adult);
+        int c = NewSlot(w);
+        if (c < 0) return -1;
+        if (genome.IsEmpty)
+        {
+            Brain.RandomGenome(w.GenomeOf(c), w.Seed, (uint)w.Step, key);
+            Clades.AncestorBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, clade % (K.ANCESTORS_LAND + K.ANCESTORS_WATER), true);
+        }
+        else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
+        Body.Express(w, c);
+        var realm = w.RealmOf(c);
         float x = 0, y = 0;
         bool ok = false;
         if (!float.IsNaN(gx))
@@ -120,14 +127,10 @@ public static class Life
                 float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 200u + (uint)t * 2) * 2f * MathF.PI;
                 float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * K.GROUP_SPREAD;
                 x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
-                ok = w.CellAllows(World.FIdx(x, y), body.Realm);
+                ok = w.CellAllows(World.FIdx(x, y), realm);
             }
-        if (!ok && !RandomSite(w, body.Realm, key, out x, out y)) return -1;
-        int c = NewSlot(w);
-        if (c < 0) return -1;
-        if (genome.IsEmpty) Brain.RandomGenome(w.GenomeOf(c), w.Seed, (uint)w.Step, key);
-        else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
-        Place(w, c, species, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
+        if (!ok && !RandomSite(w, realm, key, out x, out y)) { FreeSlot(w, c); return -1; }
+        Place(w, c, clade, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
         w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
         if (adult) { w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9)); w.Grown[c] = 1f; }
         else { w.Age[c] = w.PMature[c] * 0.8f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9); w.Grown[c] = w.Age[c] / w.PMature[c]; }
@@ -145,14 +148,13 @@ public static class Life
             byte st = w.StageOf[i];
             if (st == St.Dead) continue;
             w.Flags[i] &= unchecked((byte)~Flag.Newborn);
-            var sp = w.Sp[w.Spc[i]];
             if (st == St.Embryo)
             {
                 int m = w.MotherOf(i);
                 if (m < 0) { Resolve.DieNoBody(w, i, Cause.Orphan, -1); continue; }
                 w.X[i] = w.X[m]; w.Y[i] = w.Y[m];
                 // the mother builds the embryo's tissue during gestation; a starving mother loses it
-                float cost = Resolve.TissueCost(sp, w.PM[m]) / MathF.Max(1, sp.Gestation);
+                float cost = Resolve.TissueCost(w.PBirth[m], w.PM[m]) / MathF.Max(1f, w.PGest[m]);
                 if (w.Energy[m] < cost + 0.1f * w.EmaxOf(m)) { Resolve.DieNoBody(w, i, Cause.Orphan, -1); continue; }
                 w.Energy[m] -= cost;
                 w.T.SpendRepro[w.Spc[m]] += cost;
@@ -164,8 +166,7 @@ public static class Life
                 int cell = World.FIdx(w.X[i], w.Y[i]);
                 if (w.Fire[cell] > 0) { Resolve.Die(w, i, Cause.Fire, -1); continue; }
                 w.Timer[i] -= 1;
-                bool resting = (w.Flags[i] & Flag.Resting) != 0;
-                if (resting ? (w.SeasonAt(w.Y[i]) > 0.2f || w.Timer[i] <= 0) : w.Timer[i] <= 0) Hatch(w, i);
+                if (w.Timer[i] <= 0) Hatch(w, i);
                 continue;
             }
             int si = w.Spc[i];
@@ -177,9 +178,6 @@ public static class Life
                 w.StageOf[i] = St.Adult;
                 int m = w.MotherOf(i);
                 if (m >= 0) w.Matured[m]++;
-                // metamorphosis: if the adult cannot live where the juvenile is, it moves to the nearest allowed side
-                if (sp.TwoStage && !w.CellAllows(World.FIdx(w.X[i], w.Y[i]), sp.Adult.Realm))
-                    if (RandomSite(w, sp.Adult.Realm, (uint)i, out float x, out float y)) { w.X[i] = x; w.Y[i] = y; }
             }
         }
     }
@@ -236,19 +234,17 @@ public static class Life
     static void Hatch(World w, int i)
     {
         w.StageOf[i] = St.Juvenile;
-        w.Flags[i] &= unchecked((byte)~Flag.Resting);
         w.Age[i] = 0; w.Timer[i] = 0;
         w.T.Births[w.Spc[i]]++;
-        var body = w.StageBody(i);
-        // a hatchling that cannot live where it hatched (for example a tadpole on a shore cell) moves to the nearest water/land
+        // a hatchling that cannot live where it hatched (its genes gave it another realm than its mother's) moves to the nearest allowed cell
         int cell = World.FIdx(w.X[i], w.Y[i]);
-        if (!w.CellAllows(cell, body.Realm))
+        if (!w.CellAllows(cell, w.RealmOf(i)))
         {
             for (int t = 0; t < 24; t++)
             {
                 float a = t * 0.785f, d = 2f + t * 0.5f;
                 float x = World.Wrap(w.X[i] + MathK.Cos(a) * d), y = World.Wrap(w.Y[i] + MathK.Sin(a) * d);
-                if (w.CellAllows(World.FIdx(x, y), body.Realm)) { w.X[i] = x; w.Y[i] = y; return; }
+                if (w.CellAllows(World.FIdx(x, y), w.RealmOf(i))) { w.X[i] = x; w.Y[i] = y; return; }
             }
             Resolve.Die(w, i, Cause.Orphan, -1);
         }
