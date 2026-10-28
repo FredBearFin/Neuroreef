@@ -251,4 +251,22 @@ public class EcologyTests
         Assert.True(costJuv > growth * 0.99f, $"juvenile paid {costJuv}, growth alone costs {growth}");
         Assert.True(costAdult < costJuv);
     }
+
+    [Fact] // NR-502: follow-cam moves to the same lineage or species when the followed animal dies
+    public void LineageFollowStaysWithTheSpecies()
+    {
+        using var sim = new Simulation(8192, 31, 1);
+        sim.Step();
+        int i = sim.PickRandom(0, 1);
+        Assert.True(i >= 0);
+        sim.ProbeSerial = sim.W.Serial[i]; sim.ProbeFollow = true;
+        sim.Step();
+        Assert.Equal(i, sim.Probe.Slot);
+        Resolve.Die(sim.W, i, Cause.Starve, -1);
+        for (int k = 0; k < 3; k++) sim.Step();
+        Assert.NotEqual(0u, sim.ProbeSerial);
+        int j = sim.FindSerial(sim.ProbeSerial);
+        Assert.True(j >= 0);
+        Assert.Equal(0, sim.W.Spc[j]);
+    }
 }

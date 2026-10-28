@@ -119,25 +119,35 @@ public sealed class Simulation : IDisposable
         }
     }
 
+    // last known facts about the probed animal, kept while it lives (its slot may be reused after death)
+    int _probeSpecies = -1; float _probeX, _probeY; uint _probeChild;
+
     void UpdateProbe()
     {
         var w = W;
         uint ser = ProbeSerial;
-        if (ser == 0) { Probe.Slot = -1; return; }
+        if (ser == 0) { Probe.Slot = -1; _probeSpecies = -1; return; }
         int slot = Probe.Slot;
-        if (slot >= 0 && w.Serial[slot] == ser && w.StageOf[slot] >= St.Juvenile) return;
-        int found = FindSerial(ser);
-        if (found < 0 && ProbeFollow && slot >= 0)
+        bool alive = slot >= 0 && w.Serial[slot] == ser && w.StageOf[slot] >= St.Juvenile;
+        if (!alive) slot = FindSerial(ser);
+        if (slot >= 0 && w.StageOf[slot] >= St.Juvenile)
+        {
+            Probe.Slot = slot;
+            _probeSpecies = w.Spc[slot]; _probeX = w.X[slot]; _probeY = w.Y[slot]; _probeChild = w.LastChildSerial[slot];
+            return;
+        }
+        // the animal is gone
+        int next = -1;
+        if (ProbeFollow && _probeSpecies >= 0)
         {
             // lineage follow: the youngest living child, else the nearest living conspecific
-            uint child = w.LastChildSerial[slot];
-            int c = child != 0 ? FindSerial(child) : -1;
-            if (c < 0 || w.StageOf[c] < St.Juvenile) c = NearestKin(slot);
-            found = c;
-            ProbeSerial = found >= 0 ? w.Serial[found] : 0;
+            int c = _probeChild != 0 ? FindSerial(_probeChild) : -1;
+            next = (c >= 0 && w.StageOf[c] >= St.Juvenile) ? c : NearestKin(_probeSpecies, _probeX, _probeY);
         }
-        Probe.Slot = found >= 0 && w.StageOf[found] >= St.Juvenile ? found : -1;
-        if (Probe.Slot < 0 && !ProbeFollow) ProbeSerial = 0;
+        Probe.Slot = next;
+        ProbeSerial = next >= 0 ? w.Serial[next] : 0;
+        if (next >= 0) { _probeSpecies = w.Spc[next]; _probeX = w.X[next]; _probeY = w.Y[next]; _probeChild = w.LastChildSerial[next]; }
+        else _probeSpecies = -1;
     }
 
     public int FindSerial(uint ser)
@@ -147,14 +157,14 @@ public sealed class Simulation : IDisposable
         return -1;
     }
 
-    int NearestKin(int slot)
+    int NearestKin(int species, float x, float y)
     {
         var w = W;
-        int s = w.Spc[slot], best = -1; float bd = float.MaxValue;
+        int best = -1; float bd = float.MaxValue;
         for (int i = 0; i < w.Cap; i++)
         {
-            if (w.StageOf[i] < St.Juvenile || w.Spc[i] != s) continue;
-            float dx = World.Delta1(w.X[i] - w.X[slot]), dy = World.Delta1(w.Y[i] - w.Y[slot]);
+            if (w.StageOf[i] < St.Juvenile || w.Spc[i] != species) continue;
+            float dx = World.Delta1(w.X[i] - x), dy = World.Delta1(w.Y[i] - y);
             float d = dx * dx + dy * dy;
             if (d < bd) { bd = d; best = i; }
         }
