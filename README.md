@@ -1,9 +1,11 @@
 # Neuroreef 2
 
-An artificial-life ecosystem built on the energy cycle. It has 20 species on land and in freshwater,
-each with its own learning, evolving brain. Only the laws of physics and physiology are designed.
-Behaviour is not: every animal starts with a random brain, learns during its life, and evolves across
-generations.
+An artificial-life ecosystem built on the energy cycle, with **open-ended evolution**. Only the laws of
+physics, physiology, plants, water and weather are designed. Life is not: it starts from 10 random
+ancestors (6 on land, 4 in water), all simple plant-eaters. Every organism's body (size, legs, fins,
+wings, armour, weapons, senses, diet, how it reproduces) comes from its own genes, and its brain learns
+during life and evolves across generations. New species form on their own when lineages diverge.
+Whatever predators, scavengers, fliers or anything else exist, evolution produced.
 
 - **Simulation:** C# / .NET 8, written in a fixed-memory, fixed-step, deterministic style (the same
   seed gives the same run).
@@ -29,18 +31,18 @@ species stays extinct. Its first animals need brains that can keep them alive, a
 opens on the **Prehistory** tab. Three branches (separate births-only worlds on the same land; nothing is ever added) evolve at full
 speed, 500,000 steps shown as 500 million symbolic years:
 - tap a branch card to watch that branch in 3D;
-- each square on a card is a species: green self-sustaining, yellow breeding, orange dying (no births),
+- each square on a card is a clade (a species that evolved in that branch): green self-sustaining, yellow breeding, orange dying (no births),
   red gone;
 - the sliders change mutation and the length while it runs;
 - **Begin the world now** ends it early.
 
-When it ends, each species takes its brains from the branch where it did best, they are saved as
+When it ends, the world begins from the branch where life did best: its clades are saved as
 `evolved.nrbank`, and the world begins: births and deaths only. The next start skips the prehistory
 (start with `--prehistory` to run a new one). Closing the window during the prehistory saves
 `prehistory-partial.nrbank`.
 
 **Evolve.bat** runs the same prehistory without graphics (a little faster) and also writes
-`evolve-report.txt`: what happened to each species in each branch.
+`evolve-report.txt`: which clades evolved in each branch, what they became, and how they died.
 
 `RUN.txt` in the download lists the options. The most useful ones:
 

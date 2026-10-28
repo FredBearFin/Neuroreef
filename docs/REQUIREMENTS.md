@@ -58,16 +58,18 @@ Each requirement has a number, a statement and a verification method:
 | NR-308 | Grazing shall remove grass. Browsing shall remove shrub leaves and kill saplings, so herbivores can hold back succession. | T |
 | NR-309 | A travelling wet/dry season shall modulate moisture. Fire shall ignite in dry fuel, spread and reset vegetation, so the landscape stays a shifting mosaic. | A |
 | NR-310 | Carcasses, dung and burned vegetation shall return nutrient to the soil. | T |
-| NR-311 | Each species shall reproduce by its own mode: sexual, hermaphrodite, fission, facultative parthenogenesis, cyclic parthenogenesis or spores (DESIGN §8), with live birth or eggs, and litter size from the body plan. | T |
+| NR-311 | Reproduction shall come from each organism's genes: sexual (mating within its clade) or asexual (alone), eggs or live birth, litter size and newborn size (DESIGN §8). | T |
 | NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
 | NR-313 | No animal in any run, prehistory or live, shall appear except by birth from a parent of its species after the founders of step 0; an extinct species stays extinct. The console shall show that the world is births-only and mark extinct species permanently. | T |
 | NR-314 | Outcomes shall be observed, not targeted (NR-321). Every headless run shall end with an observation report per species (alive, created, immigrants, conceptions, matings, strikes, kills, deaths by cause, main food) and the run's telemetry. Extinctions and crashes are valid results and shall be reported as such. | A |
-| NR-315 | The roster shall close the energy cycle: every pool has a consumer, every species has a food pool in its realm, every dead pool returns to nutrient. The program shall check this at start-up and refuse to run if it fails. | T |
-| NR-316 | Every species shall have a reproduction mode whose preconditions it can meet in its realm. | T |
+| NR-315 | Life shall start from ANCESTORS_LAND land and ANCESTORS_WATER water ancestors with random bodies, eating only the primary producers of their realm; no species shall be designed (DESIGN §6.2). | T |
+| NR-316 | Every dead pool shall return to nutrient by decomposition, so the energy cycle closes with or without consumers (DESIGN §6.4). | I |
 | NR-317 | Mutualisms (pollination raising fruit and seed set; seed dispersal by dung) shall be physical rules, not behaviours. | I |
 | NR-318 | The world shall contain land and freshwater realms (lakes and rivers), linked by shore access, life-stage transitions and nutrient run-off. | I |
-| NR-319 | Numerous small organisms shall be represented as super-individuals with their own brain, food and reproduction. | I |
-| NR-320 | Body traits (mass, speed, sight, armour, strike, litter size, diet efficiencies) shall be heritable and mutable, each with an energy or performance cost; diet changes shall trade off within a fixed digestive budget. | T |
+| NR-319 | (Withdrawn in Revision F: super-individuals were a designed representation of small species.) | — |
+| NR-320 | Every organism's body (mass, legs, fins, wings, speed, sight, field of view, armour, weapons, diet, life history) shall be expressed from its own genes on fixed absolute ranges, each with an energy or performance cost; locomotion and realm shall follow from the organs (DESIGN §6.3). | T |
+| NR-333 | A clade whose body genes have separated into two clusters with few intermediates shall split into two clades; a split shall never create an organism (DESIGN §7.9). | T |
+| NR-334 | Sexual organisms shall mate only within their own clade (DESIGN §7.9). | T |
 | NR-321 | The laws of the world shall be set once from physical plausibility and conservation of energy and mass, documented with their origin, and then frozen. No law shall be changed to produce or prevent an ecological outcome. | I |
 | NR-323 | Without evolved brains, the program shall run the prehistory live in the console at full speed, in BRANCHES separate populations on the same land, viewable one branch at a time in 3D, with progress shown in symbolic years. | T |
 | NR-324 | (Withdrawn in Revision E: no genomes pass between prehistory branches.) | — |
@@ -126,7 +128,7 @@ Filled in as tests and analyses are completed. Status: — not started, P pass, 
 | NR-201…NR-213 | T/I/D | `tests/Brain*`, `tests/Primitive*` | — |
 | NR-301…NR-322 | T/A/I | `tests/EcologyTests`, headless report, DESIGN §15 | — |
 | NR-323…NR-326 | T | `tests/PrehistoryTests` | — |
-| NR-327…NR-331 | T/I | `tests/EcosystemTests`, DESIGN §7.7, §7.8, §9.6, §10.2, §10.7 | — |
+| NR-327…NR-334 | T/I | `tests/EcosystemTests`, DESIGN §7.7, §7.8, §9.6, §10.2, §10.7 | — |
 | NR-401…NR-404 | T/I | `tests/Telemetry*` | — |
 | NR-501…NR-506 | D/T | console screenshots | — |
 | NR-601…NR-604 | D/I | CI artifact | — |

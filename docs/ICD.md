@@ -39,7 +39,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | Offset | Type | Field |
 |---|---|---|
 | 8 | u32 | count n |
-| 12 | 16 B × n | records (every living agent except embryos); header byte 1 = format version 2 |
+| 12 | 20 B × n | records (every living organism except embryos); header byte 1 = format version 3 |
 
 Each record:
 
@@ -48,14 +48,18 @@ Each record:
 | 0 | u16 | x · 65536 / WORLD |
 | 2 | u16 | y · 65536 / WORLD |
 | 4 | u8 | heading · 256 / 2π |
-| 5 | u8 | bits 0–4 species id; bit 5 sex |
+| 5 | u8 | bits 0–4 clade slot (0..31); bit 5 sex |
 | 6 | u8 | bits 0–1 stage (0 egg, 1 juvenile, 2 adult); bit 2 carrying; bit 3 scanning; bit 4 resting; bits 5–7 energy/Emax × 7 |
 | 7 | u8 | actions fired this step: bit 0 EAT, 1 STRIKE, 2 DRINK, 3 MATE, 4 REST, 5 MARK, 6 LAY, 7 CACHE |
 | 8 | u32 | serial (unique for the run) |
-| 12 | i8 | body gene: mass (−127..127; multiplier ×/÷ BODY_RANGE_MASS at the ends) |
-| 13 | i8 | body gene: speed |
-| 14 | i8 | body gene: armour |
-| 15 | i8 | diet drift: (adult meat efficiency − the species' founder value) × 254 |
+| 12 | i8 | body gene: mass (value = MASS_LO·(MASS_HI/MASS_LO)^((g+128)/255)) |
+| 13 | i8 | body gene: legs (organ size (g+127)/254) |
+| 14 | i8 | body gene: fins |
+| 15 | i8 | body gene: wings |
+| 16 | i8 | body gene: sight |
+| 17 | i8 | body gene: armour |
+| 18 | i8 | body gene: strike |
+| 19 | i8 | meat-eating efficiency × 254 − 127 |
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 
@@ -115,9 +119,10 @@ Every text frame has a `type`:
 
 | type | When | Content |
 |---|---|---|
-| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, species list with body plans, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count |
+| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count |
 | `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity, bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath` |
-| `prehistory` | every 1 s, during the prehistory | `step`, `rate` (steps/s per branch), `paused`, `finished`, `yearsPerStep`, `view`, `settings` (the EvoSettings fields), `branches`: per branch `step`, `alive`, `full`, and per species `standing` (0 gone, 1 dying, 2 breeding, 3 self-sustaining), `count`, `births` (last ~1,000 steps), `generation` |
+| `clades` | when the clade table changes, and every 5 s | `step`, `splits`, `list`: the clade table of the simulation on view (as in `meta.species`) |
+| `prehistory` | every 1 s, during the prehistory | `step`, `rate` (steps/s per branch), `paused`, `finished`, `yearsPerStep`, `view`, `settings` (the EvoSettings fields), `branches`: per branch `clades` (that branch's clade table), `splits`, `step`, `alive`, `full`, and per species `standing` (0 gone, 1 dying, 2 breeding, 3 self-sustaining), `count`, `births` (last ~1,000 steps), `generation` |
 | `explain` | every 3 s | `items`: sentences generated from the telemetry (§12.4 of DESIGN), each with `text`, `species` (−1 = none) and `kind` |
 | `fingerprints` | every 3 s | per species: sampled count and up to 3 clusters (`label`, `share`, `top`, `centroid`) |
 | `ack` / `error` | on commands | result of a command |

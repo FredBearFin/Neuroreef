@@ -1,7 +1,20 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision C. It implements NR-RQ-001 Revision C (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision F. It implements NR-RQ-001 Revision F (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision F: open-ended evolution** (the user: "you set a small amount of rules and
+circumstances emerge")
+- There are **no designed species**. The 20-species roster is gone. Life starts from 10 random
+  ancestors (6 on land, 4 in water), all eating the primary producers of their realm, because nothing
+  else exists to eat at the start (§6.2).
+- **Bodies come entirely from genes**, on absolute ranges with physical costs (§6.3): size, legs, fins
+  and wings (which decide locomotion and realm), speed, sight and field of view, armour, weapons, diet,
+  and life history (sexual or asexual, eggs or live birth, litter, newborn size, care).
+- **Species form on their own** (§7.9): organisms mate only within their clade, and a clade whose body
+  genes have split into two clusters with few intermediates becomes two clades.
+- The console draws every organism from its own genes (§13). Sections below that describe designed
+  species (roster, body plans, reproduction modes) are replaced by §6.2, §6.3, §7.9 and §8.
 
 **Changes from Revision B** (after review with the user, see §15)
 - The laws of the world were reviewed once for physical consistency and are now frozen. No law is
@@ -27,15 +40,12 @@ Behaviour is not designed.
 1. **Energy cycle.** Sunlight, water and nutrient feed producers (vegetation fields). Producers feed
    herbivores. Herbivores feed predators. Everything that dies, sheds or excretes becomes a dead
    pool. Detritivores, fungi and bacteria return the dead pools to soil and water as nutrient, which
-   feeds the producers again. The species roster (§6) was chosen by asking, for every pool in this
-   cycle, "who eats this?". It was checked by asking, for every species, "what does it eat, and how
-   does it reproduce?". The program repeats that check at start-up (§6.4).
-2. **Bodies, not behaviours.** A species is a *body plan*:
-   - mass, realm, locomotion and diet
-   - armour, strike and senses
-   - reproduction mode and life stages
-
-   Nothing in a species definition says what it should *do*.
+   feeds the producers again. Bacterial decomposition closes the cycle without any animal. Which
+   organisms exist to eat each pool is not designed: it is whatever evolution produces (§6.2).
+2. **Bodies, not behaviours, and the bodies evolve.** Each organism's body is expressed from its own
+   genes (§6.3): mass, organs, locomotion and realm, diet, armour, weapons, senses, life history.
+   Nothing in the genome says what it should *do*, and nothing outside the genome says what it
+   should *be*.
 3. **One set of senses, one set of actions.** Every animal has the same 30 senses (§4) and the same
    28 primitive actions (§5). Every animal has the same brain architecture (§7).
 4. **Brains start random, in a prehistory.** In a *prehistory* run every brain starts random. Animals then learn during
@@ -206,7 +216,7 @@ Identical for every animal (NR-203).
 - **Firing:** a discrete action fires **stochastically, with probability equal to its gain**. That
   randomness is the exploration that learning needs (§7.2).
 
-## 6. The energy cycle and the roster
+## 6. The energy cycle and the organisms
 
 ### 6.1 Pools
 
@@ -232,73 +242,49 @@ Decomposition by bacteria is a field process. Every dead pool rots at its own ra
 (soil or water), and nutrient diffuses across the shore as run-off. NUTRIENT feeds every producer,
 which closes the cycle.
 
-### 6.2 Roster
+### 6.2 Ancestors (Revision F)
 
-The roster is 20 species. **S** marks a super-individual: one agent stands for many organisms (a
-swarm, a plankton patch, a fungal mat), and its mass is the aggregate.
+There is no roster. Each world starts with ANCESTORS_LAND = 6 land and ANCESTORS_WATER = 4 water
+ancestors, each its own clade, with ANCESTOR_COUNT = 600 founders in groups. An ancestor's body is drawn
+at random within the "simple" corner of the gene space (`Clades.AncestorBody`):
+- **Size:** a small body (land: mass 0.3–2; water: 0.1–1).
+- **Locomotion:** organs above the threshold for its realm (land: legs; water: fins); little armour;
+  almost no weapons.
+- **Diet:** random proportions of the primary producers of its realm (land: grass, browse, seed, root,
+  fruit, nectar; water: algae, phytoplankton). Every other pool is near zero, because nothing else
+  exists to eat at the start.
+- **Life history:** sexual or asexual, eggs or live birth, litter, newborn size and care, all random.
 
-| # | Species | Niche | Realm (stage) | Food | Reproduction |
-|---|---|---|---|---|---|
-| 0 | Drifters | small grazer | land | GRASS | sexual, live birth |
-| 1 | Browsers | large browser | land | BROWSE, FRUIT | sexual, live birth, 1 calf |
-| 2 | Tuskers | rooting omnivore | land | ROOT, FRUIT, MEAT (small), CARRION | sexual, live birth |
-| 3 | Gliders | frugivore, seed disperser | land, flies | FRUIT, SEED | sexual, eggs; dung plants saplings |
-| 4 | Burrowers | granivore, cacher | land | SEED | sexual, live birth, large litters |
-| 5 | Hummers (S) | pollinator swarm | land, flies | NECTAR | asexual colony fission |
-| 6 | Chewers (S) | leaf-insect swarm | land, flies | GRASS, BROWSE | facultative: parthenogenesis when food is rich, sexual when poor |
-| 7 | Delvers (S) | detritivore (worms/beetles) | land | DUNG, LITTER | hermaphrodite |
-| 8 | Rotmats (S) | fungal mat, sessile | land | WOOD, LITTER, CARRION | spores |
-| 9 | Gleaners | vertebrate scavenger | land | CARRION | sexual, live birth, litters of 6 |
-| 10 | Snappers | insectivore | land, flies | MEAT (insect swarms, eggs) | sexual, eggs |
-| 11 | Prowlers | solitary mesopredator | land | MEAT | sexual, live birth |
-| 12 | Stalkers | pack hunter | land | MEAT | sexual, live birth |
-| 13 | Leviathans | apex predator | land + shallows | MEAT, CARRION | sexual, live birth, 1 young |
-| 14 | Bloodflies (S) | parasite | larva: water; adult: flies | larva: DETRITUS; adult: BLOOD, NECTAR | sexual, eggs in water |
-| 15 | Siltmites (S) | zooplankton | water | PHYTO | cyclic parthenogenesis: asexual in the wet season, sexual resting eggs in the dry |
-| 16 | Minnows | grazing fish | water | ALGAE, MEAT (Siltmites, eggs) | sexual spawning, many eggs |
-| 17 | Pikes | predatory fish | water | MEAT | sexual spawning |
-| 18 | Croakers | amphibian | tadpole: water; adult: land + shallows | tadpole: ALGAE; adult: MEAT (insects) | sexual, eggs in water, metamorphosis |
-| 19 | Herons | wading bird | land + shallows, flies | MEAT (fish, tadpoles, larvae) | sexual, eggs |
+Each founder has its own random brain plus the starter kit (§7.7), and the ancestor's body slightly
+mutated. Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
 
-**Who eats whom is not a table.** "MEAT" means the species can digest meat. What it can catch follows
-from its realm, size, strike and the prey's armour (§9.4). The killer × victim matrix in the
-analytics shows what actually happens (NR-305).
+### 6.3 Bodies from genes (Revision F, NR-320)
 
-**Links between land and water**
-- Herons, Leviathans and adult Croakers enter shallows.
-- Croakers and Bloodflies change realm at metamorphosis.
-- Carcasses in water and nutrient run-off feed DETRITUS and water NUTRIENT.
+The body genes (G.BODY, 29 bytes) are mapped to absolute ranges (`Body.Express`). Every trait has a
+cost:
 
-**Mutualisms are rules** (NR-317)
-- When a Hummer eats nectar, the cell's POLLINATION level rises. Pollination multiplies FRUIT and SEED
-  production.
-- Dung of fruit and seed eaters seeds SAPLINGs in proportion to the seed share of their gut.
+| Trait | Gene → value | Cost / effect |
+|---|---|---|
+| mass | log range MASS_LO..MASS_HI | all of allometry (§9.1) |
+| legs, fins, wings | organ size 0..1 | locomotion: fly if wings ≥ WING_MIN; walk if legs ≥ LIMB_MIN; swim if fins ≥ LIMB_MIN; wade if both; settled if none. Realm follows. COST_LIMB·(legs + fins) and COST_WING·wings·M^(1/3) basal |
+| speed, sight | ×/÷ BODY_RANGE_TRAIT | COST_SPEED, COST_SIGHT basal |
+| field of view | FOV_LO..FOV_HI | narrow sees further: range × (1.6 − fov/360) |
+| armour | 0..ARMOUR_MAX | defence; COST_ARMOUR_ABS basal; slows (ARMOUR_DRAG) |
+| strike | 0..STRIKE_MAX | needed to kill or drain; COST_STRIKE_ABS basal |
+| diet | 15 shares of DIET_BUDGET | a pool the realm cannot offer is never digested; blood > meat with strike drains (parasite habit) |
+| sex | sign | sexual (two sexes, mates within the clade) or asexual (LAY: mutated copies) |
+| live birth | sign | live (mother carries embryos, pays tissue during gestation) or eggs (yolk paid at laying) |
+| litter | 1..LITTER_MAX | the mother's energy limits how many she makes |
+| newborn share | log BIRTH_LO..BIRTH_HI | big young cost more and grow up sooner |
+| care | 0..1 | §7.8 |
 
-### 6.3 Body plans
+Land organisms feel thirst. Swimmers and settled organisms draw water from their surroundings; waders
+need half. Gestation and breeding cooldown scale as C_GEST·M^0.25 and C_COOL·M^0.25.
 
-Constants are in `CONSTANTS.md` §7. Each body plan holds:
-- adult mass, realm per stage, locomotion (walk, swim, fly, sessile)
-- the diet efficiency vector per stage (15 pools)
-- armour, strike power, the parasite flag, the super-individual flag
-- sight factor, field of view, speed factor, thirst factor
-- reproduction mode, litter size, gestation/incubation, cooldown, egg medium (land/water)
-- metamorphosis age (if two-stage)
-- initial count
+### 6.4 Energy-cycle closure
 
-### 6.4 Energy-cycle closure check (NR-315, NR-316)
-
-At start-up, and in a test, the program checks four things:
-1. **Every pool has a consumer:** at least one species, at some stage, has efficiency > 0 for it.
-   MEAT must be digestible by some species able to reach each realm. Dead pools additionally have
-   rot.
-2. **Every species can eat:** each stage has at least one pool with efficiency > 0 that exists in
-   that stage's realm.
-3. **Every species can reproduce:** each species has a reproduction mode. Egg-laying species have
-   an egg medium they can reach.
-4. **Every producer's nutrient is returned:** every pool's loss path ends in NUTRIENT, so no energy or
-   nutrient is stranded.
-
-The program refuses to start if the check fails, and prints the offending entries.
+Bacterial decomposition (§10.4) returns every dead pool to nutrient, so the cycle closes with or
+without consumers. Which pools get eaten by animals is an outcome, and the report shows it.
 
 ## 7. Brains
 
@@ -361,27 +347,6 @@ learning work.
   (a body-gene step of 2 changes a trait by about 1%).
 - **Species identity** (locomotion, realm, reproduction mode, life stages) is fixed; body traits drift
   within their ranges (§7.5).
-
-### 7.5 Evolvable bodies (NR-320)
-
-The genome ends with 21 body genes, each a signed byte b. A gene is a log-scale multiplier on the
-species' founder value: factor = range^(b/127), so b = 0 is the founder body plan. The phenotype is
-expressed once, when the slot is created (`Body.Express`). Every trait has a cost, so evolution trades
-them off:
-
-| Gene | Range | Effect | Cost |
-|---|---|---|---|
-| mass | ×/÷ 2 | adult mass; all allometry follows (§9.1) | larger basal cost, gut, slower maturity, longer life |
-| speed | ×/÷ 1.6 | top speed | basal × (1 + 0.4·(f − 1)) |
-| sight | ×/÷ 1.6 | sight range (≤ 32) | basal × (1 + 0.15·(f − 1)) |
-| armour | ×/÷ 1.6 | armour | basal × (1 + 0.2·(f − 1)); speed ÷ (1 + 0.2·(f − 1)) |
-| strike | ×/÷ 1.6 | strike power | basal × (1 + 0.2·(f − 1)) |
-| litter | ×/÷ 1.6 | offspring per litter | the founder's brood energy is shared among them |
-| diet × 15 | ×/÷ 3 | efficiency per pool | each stage keeps the founder's total digestive budget: raising one pool lowers the others |
-
-A pool the founder cannot digest can be gained up to 0.15 (before renormalisation) at the gene's
-maximum, if that pool exists in the stage's realm. A lineage can therefore drift into a neighbouring
-niche (a scavenger that hunts, a browser that grazes) without any species being redesigned.
 
 ### 7.4 Prehistory and the live world (NR-210, NR-212, NR-313)
 
@@ -460,9 +425,11 @@ The prehistory report shows both at the first and last sample, with the generati
 - gone: extinct in that branch.
 
 **The start of the world.** At the end (or when "Begin the world" is pressed), the branches stop and
-each species' gene bank is taken from the branch where it stands best (then by numbers alive). The
-bank is saved as `evolved.nrbank` beside the exe, so the next start skips the prehistory, and the live
-world is created from it. From that moment there are births and deaths only.
+the world begins from the best branch as a whole: the one with the most self-sustaining clades, then
+the most organisms (`Prehistory.BestBranch`). Its living clades and up to BANK_LIVING genomes each
+(plus their archives) are saved as `evolved.nrbank` beside the exe, so the next start skips the
+prehistory. The live world is founded from it, each clade in its current proportion, and from then
+on there are births and deaths only.
 
 ### 7.7 Reflexes and the starter kit (Revision C, D; NR-327)
 
@@ -503,9 +470,7 @@ weaken or lose them. All other reflex links start small and random.
 
 ### 7.8 Parental care (Revision C, NR-328)
 
-Mammals (live birth) suckle their young, and birds (eggs on land, flying parents) feed their chicks.
-Fish, amphibians, insects and fungi give no care. This is a species-level rule from the body plan,
-`Care` = 1 or 0, and a heritable care gene scales it (×/÷ BODY_RANGE_TRAIT).
+Care is a gene (0..1) of every organism (Revision F; it was a designed mammal and bird rule before).
 
 A mother in contact with her young (within the sum of their reaches) before weaning (age < WEAN ×
 time to maturity) gives them energy each step:
@@ -521,47 +486,38 @@ FOLLOW_MOTHER and MOTHER_FAR already exist.
 genes (252 bytes): G.LEN = 1,958. A Revision B gene bank still loads, with these genes at 0 (species
 care level, no reflexes).
 
-## 8. Reproduction modes (NR-311, NR-316)
+### 7.9 Clades and speciation (Revision F, NR-333, NR-334)
 
-**READY** means all of these hold:
-- mature
-- Energy > 0.6·Emax
-- the cooldown is over
-- not carrying embryos
+A **clade** is a lineage: one of the ancestors, or a group that split from another clade. It has a
+generated name, a colour (each ancestor a distinct hue; a daughter a shift of its parent's), its
+parent, its ancestor, and its birth and extinction steps (`Clades.cs`, up to K.CLADES = 32 at once,
+since the console frame has 5 bits for it).
+- **Reproductive isolation:** sexual organisms mate only with the other sex of their own clade.
+- **Speciation:** every SPEC_EVERY steps, each clade with at least 2·MIN_SPLIT members is examined.
+  1. Up to 512 members' body genes (/127) are clustered by a deterministic 2-means.
+  2. If the centres are more than SPLIT_SEP × the within-cluster RMS spread apart and at least
+     SPLIT_MIN_D apart, and both sides have at least MIN_SPLIT members, the smaller side becomes a new
+     clade. This is the genotypic-cluster species concept: two clusters with few intermediates.
+  3. Every member of the clade, eggs and embryos included, is assigned to the nearer centre.
 
-**Valid partner:**
-- for a sexual species, a READY conspecific of the other sex
-- for a hermaphrodite, any READY conspecific
+  A split never creates an organism. From then on the two clades cannot interbreed and diverge
+  independently.
+- A slot is recycled only CLADE_RECYCLE steps after its clade went extinct.
+- The prehistory starts each branch from its own random ancestors. The world begins from the best
+  branch as a whole (§7.6); per-species choice across branches no longer applies.
 
-**Offspring at conception.** Offspring are created when they are conceived. Each takes a free slot,
-in one of two stages:
-- **EMBRYO:** live birth. It moves with its mother, cannot be seen or eaten, and dies if she dies.
-- **EGG:** laid at once in the parent's cell. If the egg medium is water, the parent must be in or
-  beside water. An egg is immobile, has no brain and can be eaten.
+## 8. Reproduction (Revision F, NR-311)
 
-**Costs** (energy is conserved: a body is never free):
-- **Reserve:** the parent pays the newborn's starting reserve F_BIRTH·Emax_child at conception.
-- **Tissue:** building the newborn's tissue costs C_CARC·m_birth·ρ_meat / GROWTH_EFF. An egg carries
-  it as yolk, so egg-layers pay it at laying. A live-bearing mother pays it step by step during
-  gestation; a mother whose reserve falls below 10% loses the embryo (cause: lost before birth).
-- **Newborn mass** m_birth is a per-species life-history trait (`Birth`, CONSTANTS §species): 15% of
-  adult mass for a Drifter calf, 1% for a Pike or Croaker egg.
-- If the parent cannot pay, the litter is smaller.
+- **Sexual organisms** reproduce with MATE: two ready organisms of the same clade and opposite sex in
+  reach. The mother conceives a litter of crossovers.
+- **Asexual organisms** reproduce alone with LAY: a litter of mutated copies, at no partner cost. This
+  saves the two-fold cost of sex but loses crossover.
 
-**Hatching.** After the gestation or incubation timer ends, the offspring hatches as a JUVENILE.
-
-| Mode | Action | Rule |
-|---|---|---|
-| SEXUAL | MATE | partner of other sex; the female conceives a litter; each child is a crossover of both parents |
-| HERMAPHRODITE | MATE | any partner; *both* conceive (each a litter of ⌈n/2⌉) |
-| FISSION | LAY | splits into two: the child takes 45% of energy and a mutated copy of the genome; it appears adjacent as a juvenile |
-| FACULTATIVE | LAY / MATE | LAY (parthenogenetic, asexual litter) only when FOOD_HERE > 0.5, otherwise MATE |
-| CYCLIC | LAY / MATE | LAY only when SEASON > 0 (wet). In the dry season, MATE gives *resting eggs* that hatch only when SEASON turns positive (or after a maximum timer) |
-| SPORES | LAY | the mat emits a spore (EGG stage, incubation) into the best of 4 hashed cells within 3 cells, by dead matter |
-
-**Two-stage species** (Bloodflies, Croakers) switch realm, locomotion and diet at metamorphosis age.
-Juveniles grow from M·Birth to M by maturity, so calves are small and a big predator sees them as
-SMALL. Growth costs energy (§9.1).
+For both, each young costs F_BIRTH·Emax-at-birth of energy. An egg also carries its whole tissue at
+laying; an embryo's tissue is paid by the mother over the gestation (her energy must stay above 0.1
+Emax or she loses it). The mother stops when her energy would fall below 0.15 Emax, so litter size is
+limited by condition. Eggs are laid where the mother is (her realm). A hatchling that cannot live there
+because its genes differ moves to the nearest allowed cell, or dies.
 
 ## 9. Physiology and physical rules
 
