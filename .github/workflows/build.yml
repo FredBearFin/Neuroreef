@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test
+        run: dotnet test tests/Neuroreef.Tests -c Release
+
+  publish:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish single-file Windows executable
+        run: dotnet publish src/Neuroreef.Server -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o dist
+      - name: Smoke test (headless, 300 steps)
+        run: dist\Neuroreef.exe --headless --steps 300 --report 100 --capacity 16384
+      - name: Add run instructions
+        shell: pwsh
+        run: Copy-Item RUN.txt dist/RUN.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Neuroreef-win-x64
+          path: |
+            dist/Neuroreef.exe
+            dist/RUN.txt

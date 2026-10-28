@@ -316,6 +316,7 @@ public static class Resolve
             e -= tissue;
             Life.CopyGenome(w, i, c, true);
             Life.Place(w, c, w.Spc[i], St.Juvenile, w.X[i] + 1f, w.Y[i], e, i);
+            w.T.Births[w.Spc[i]]++;
             w.Cooldown[i] = sp.Cooldown;
             return K.R_BIRTH;
         }

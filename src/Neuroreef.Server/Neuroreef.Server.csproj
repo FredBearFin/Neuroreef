@@ -12,6 +12,10 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <DebugType>embedded</DebugType>
+    <ApplicationIcon></ApplicationIcon>
+    <Version>2.0.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Neuroreef.Core\Neuroreef.Core.csproj" />

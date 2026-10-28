@@ -124,8 +124,9 @@ public static class K
     [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 32;
     [K("Brain", "genesis period (immigration floor ramps to 0)", "steps", "HT")] public const int GENESIS = 300000;
     [K("Brain", "genesis floor as share of initial count", "-", "HT")] public const float GENESIS_FLOOR = 0.25f;
-    [K("Brain", "immigrants per species per step (max)", "agents", "HT")] public const int IMMIGRANTS_PER_STEP = 4;
-    [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 224;
+    [K("Brain", "founders and colonists arrive in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
+    [K("Brain", "radius of a founder or colonist group", "units", "HT")] public const float GROUP_SPREAD = 10f;
+    [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;
 
     // ---------------------------------------------------------------- 5b. evolvable bodies (DESIGN §7.5)
     [K("Body", "range of the mass multiplier (x/÷)", "-", "HT")] public const float BODY_RANGE_MASS = 2.0f;
@@ -192,7 +193,7 @@ public static class K
 
     // ---------------------------------------------------------------- 8. fire and scent
     [K("Fire", "ignition rate per unit dry fuel per land cell", "/cell/step", "HT: ~1 ignition per 100 steps in the dry season")] public const float LAMBDA_FIRE = 2e-6f;
-    [K("Fire", "spread probability per unit neighbour fuel", "-", "HT")] public const float C_SPREAD = 0.35f;
+    [K("Fire", "spread probability per unit neighbour fuel", "-", "ECO: gives a fire return interval of ~2 years with no animals (savanna: 1-5 years)")] public const float C_SPREAD = 0.15f;
     [K("Fire", "nutrient from burned biomass", "-", "HT")] public const float C_ASH = 0.5f;
     [K("Fire", "steps a cell burns", "steps", "HT")] public const int FIRE_STEPS = 6;
     [K("Fire", "share of grass and shrub cover that survives fire as rootstock and resprouts", "-", "ECO: savanna grasses and shrubs resprout")] public const float RESPROUT = 0.25f;

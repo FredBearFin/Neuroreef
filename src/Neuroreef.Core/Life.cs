@@ -96,10 +96,24 @@ public static class Life
 
     /// <summary>Create one animal from a founder source: a random genome, or a genome supplied by the caller.</summary>
     public static int Found(World w, int species, ReadOnlySpan<sbyte> genome, bool adult, uint key)
+        => Found(w, species, genome, adult, key, float.NaN, 0f);
+
+    /// <summary>Create one animal. With a group centre (gx, gy), it is placed within GROUP_SPREAD of it, as colonists arrive together.</summary>
+    public static int Found(World w, int species, ReadOnlySpan<sbyte> genome, bool adult, uint key, float gx, float gy)
     {
         var sp = w.Sp[species];
         var body = sp.StageOf(!adult);
-        if (!RandomSite(w, body.Realm, key, out float x, out float y)) return -1;
+        float x = 0, y = 0;
+        bool ok = false;
+        if (!float.IsNaN(gx))
+            for (int t = 0; t < 16 && !ok; t++)
+            {
+                float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 200u + (uint)t * 2) * 2f * MathF.PI;
+                float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * K.GROUP_SPREAD;
+                x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
+                ok = w.CellAllows(World.FIdx(x, y), body.Realm);
+            }
+        if (!ok && !RandomSite(w, body.Realm, key, out x, out y)) return -1;
         int c = NewSlot(w);
         if (c < 0) return -1;
         if (genome.IsEmpty) Brain.RandomGenome(w.GenomeOf(c), w.Seed, (uint)w.Step, key);
@@ -162,7 +176,10 @@ public static class Life
             if (immigrate) floor = w.Sp[s].InitCount * K.GENESIS_FLOOR * (1f - (float)w.Step / w.GenesisSteps);
             else if (w.StraysAfterGenesis) floor = 4;
             else continue;
-            for (int k = 0; k < K.IMMIGRANTS_PER_STEP && activeCount[s] < floor; k++)
+            if (activeCount[s] >= floor) continue;
+            // colonists arrive as one group at one site (a lone colonist would never find a mate)
+            if (!RandomSite(w, w.Sp[s].Adult.Realm, (uint)s + 0x30000u, out float gx, out float gy)) continue;
+            for (int k = 0; k < K.GROUP_SIZE && activeCount[s] < floor; k++)
             {
                 uint key = (uint)(s * 1000 + k) + 0x40000u;
                 int n = w.ArchiveCount[s];
@@ -172,7 +189,7 @@ public static class Life
                     int pick = (int)(Rng.U(w.Seed, (uint)w.Step, key, Rs.Archive) * n);
                     gsrc = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + pick) * G.LEN, G.LEN);
                 }
-                int c = Found(w, s, gsrc, true, key);
+                int c = Found(w, s, gsrc, true, key, gx, gy);
                 if (c < 0) break;
                 w.Flags[c] |= Flag.Immigrant;
                 w.T.Immigrants[s]++;

@@ -185,6 +185,10 @@ public static class Decide
         Span<float> delta = stackalloc float[P.N];
         Brain.Forward(w, i, f, yv, z, g);
 
+        // the brain's intended gains (action probabilities) are what telemetry and the probe report
+        g.CopyTo(new Span<float>(w.Gain, i * P.N, P.N));
+        if (probe.Slot == i) g.CopyTo(probe.Gn);
+
         // exploration: perturb continuous gains, sample discrete actions (DESIGN §7.2)
         float sigma = Brain.Sigma(w, i);
         uint acts = 0;
@@ -268,11 +272,10 @@ public static class Decide
         w.IKinDensity[i] = f[F.KIN_DENSITY];
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
         f.CopyTo(new Span<float>(w.Feat, i * F.N, F.N));
-        g.CopyTo(new Span<float>(w.Gain, i * P.N, P.N));
         if (probe.Slot == i)
         {
             f.CopyTo(probe.X); new ReadOnlySpan<float>(w.Hidden, i * G.NH, G.NH).CopyTo(probe.Hid);
-            z.CopyTo(probe.Z); g.CopyTo(probe.Gn); probe.Acts = acts; probe.Reward = w.Reward[i]; probe.RewardMean = w.RewardMean[i];
+            z.CopyTo(probe.Z); probe.Acts = acts; probe.Reward = w.Reward[i]; probe.RewardMean = w.RewardMean[i];
         }
     }
 

@@ -1,0 +1,18 @@
+NEUROREEF 2 - how to run
+
+1. Double-click Neuroreef.exe.
+   Windows may say "Windows protected your PC" because the program is not signed:
+   click "More info", then "Run anyway".
+2. A console window opens and your browser opens the Neuroreef console at http://localhost:5800
+   Keep the console window open; closing it stops the simulation.
+3. Tablet: the console window prints a line "on your network: http://192.168.x.x:5800".
+   Open that address in the tablet's browser (same Wi-Fi). If Windows asks whether to allow
+   Neuroreef on private networks, click Allow.
+
+Options (run from a command prompt in this folder):
+  Neuroreef.exe --genesis            start from random brains instead of the shipped gene bank
+  Neuroreef.exe --seed 7             a different world and run
+  Neuroreef.exe --save-bank my.nrbank   save evolved genomes every 50,000 steps and on exit
+  Neuroreef.exe --load-bank my.nrbank   continue from saved genomes
+  Neuroreef.exe --headless --steps 200000 --csv run.csv   long run without the console
+  Neuroreef.exe --help               all options

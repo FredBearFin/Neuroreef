@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neuroreef</title>
+<link rel="stylesheet" href="lib/uPlot.min.css">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+</head>
+<body>
+<header id="bar">
+  <div class="brand"><span class="logo"></span>NEUROREEF</div>
+  <div class="stat"><span class="k">step</span><span id="s-step" class="v">–</span></div>
+  <div class="stat"><span class="k">alive</span><span id="s-alive" class="v">–</span></div>
+  <div class="stat"><span class="k">steps/s</span><span id="s-rate" class="v">–</span></div>
+  <div class="stat"><span class="k">season</span><span id="s-season" class="v">–</span></div>
+  <div id="s-genesis" class="badge hidden" title="Genesis: random-brain colonists keep arriving while the population learns to survive. Counted as immigrants.">GENESIS</div>
+  <div id="s-full" class="badge warn hidden" title="All agent slots are in use, so births are refused. This is a memory limit of the program, not an ecological result. Restart with a larger --capacity.">WORLD FULL</div>
+  <div class="grow"></div>
+  <div class="group" id="speed">
+    <button data-cmd="pause" title="Pause">❚❚</button>
+    <button data-cmd="step" title="One step">▸|</button>
+    <button data-rate="15">½×</button>
+    <button data-rate="30" class="on">1×</button>
+    <button data-rate="60">2×</button>
+    <button data-rate="120">4×</button>
+    <button data-rate="0" title="As fast as the computer allows">max</button>
+  </div>
+</header>
+
+<main id="main">
+  <section id="view">
+    <canvas id="gl"></canvas>
+    <div id="cams" class="group floating">
+      <button data-cam="overview" class="on" title="Orbit the whole world">Overview</button>
+      <button data-cam="follow" title="Third-person camera behind the selected animal; follows its lineage when it dies">Follow</button>
+      <button data-cam="ride" title="First person: see what the selected animal sees">Ride-along</button>
+    </div>
+    <div id="experience" class="floating">
+      <select id="exp-species" title="Experience a species: pick a random living member and follow it"></select>
+      <button id="exp-go">Experience</button>
+    </div>
+    <div id="hud" class="hidden">
+      <div class="hud-title"><span id="hud-name"></span><span id="hud-sub"></span></div>
+      <div id="hud-drives"></div>
+      <div class="hud-h">doing</div>
+      <div id="hud-gains"></div>
+      <div class="hud-h">because</div>
+      <div id="hud-why"></div>
+    </div>
+    <div id="legend" class="floating"></div>
+    <div id="hint" class="floating">drag to orbit · scroll or pinch to zoom · tap an animal to inspect it</div>
+  </section>
+
+  <aside id="panel">
+    <nav id="tabs">
+      <button data-tab="inspect" class="on">Inspect</button>
+      <button data-tab="pop">Populations</button>
+      <button data-tab="energy">Energy cycle</button>
+      <button data-tab="web">Food web</button>
+      <button data-tab="behaviour">Behaviour</button>
+      <button data-tab="plants">Plants</button>
+      <button data-tab="species">Species</button>
+    </nav>
+    <div id="tab-inspect" class="tab on"></div>
+    <div id="tab-pop" class="tab"></div>
+    <div id="tab-energy" class="tab"></div>
+    <div id="tab-web" class="tab"></div>
+    <div id="tab-behaviour" class="tab"></div>
+    <div id="tab-plants" class="tab"></div>
+    <div id="tab-species" class="tab"></div>
+  </aside>
+</main>
+
+<footer id="feed" title="Why things are changing: sentences generated from the simulation's counters"></footer>
+<div id="connect" class="overlay"><div>connecting to the simulation…</div></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

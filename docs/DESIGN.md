@@ -1,6 +1,14 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision B. It implements NR-RQ-001 Revision B (`REQUIREMENTS.md`).
+Document NR-DD-001, Revision C. It implements NR-RQ-001 Revision C (`REQUIREMENTS.md`). The values of every
+constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes from Revision B** (after review with the user, see §15)
+- The laws of the world were reviewed once for physical consistency and are now frozen. No law is
+  adjusted to produce an ecological outcome; outcomes are observed and reported.
+- Body traits evolve too, with costs (§7.5).
+- Founders and colonists arrive in groups (§7.4).
+- Growth and offspring cost energy; newborn size is a per-species life-history trait (§8, §9.1).
 
 **Changes from Revision A**
 - The food web is now derived from the energy cycle: 20 species across land and freshwater.
@@ -55,27 +63,32 @@ Headless mode runs the same core with no server and writes reports, CSV files an
 ## 3. World and memory map
 
 The world is a torus of WORLD = 1024 units. The field grid has cells of 4 units (FW = 256, 65,536
-cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = 32,768 agent slots. Eggs and
-embryos occupy slots too.
+cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = 65,536 agent slots by
+default (`--capacity`). Eggs and embryos occupy slots too. When every slot is in use, births and
+immigrants are refused and counted (`SlotShortage`); the console shows **WORLD FULL**, because that
+is a limit of the computer, not an ecological result.
 
 | Block | Type | Per slot or cell | Total (default) |
 |---|---|---|---|
-| Kinematics X, Y, Heading, Speed, Vx, Vy | float | 6 | 0.8 MB |
-| Physiology Energy, Gut, GutEnergy, Thirst, Fatigue, Age, Pain, Cooldown, Timer, Reward, RewardMean | float | 11 | 1.4 MB |
-| Identity Species, Stage, Sex, Flags (byte), Gen (ushort), Serial, Mother, Children (int) | mixed | — | 0.6 MB |
-| Hidden state | float | 16 | 2.1 MB |
-| Genome (W1, W2, plasticity genes), int8 | sbyte | 2,032 | 66.6 MB |
-| Learned deltas on W2 | float | 1,288 | 168.8 MB |
-| Eligibility traces on W2 | Half | 1,288 | 84.4 MB |
-| Intents and last gains/actions | float | 34 | 4.5 MB |
-| Spatial hash, free stack, order | int | — | 0.6 MB |
-| Fields: 13 food pools, nutrient, moisture, fuel, fire, scent, pollination (×2 where double-buffered) | float | 26 | 6.8 MB |
-| Static terrain: elevation, depth, water mask, distance-to-water, distance-to-land | float/byte | 5 | 1.1 MB |
-| Elite archive (20 species × 32 genomes) | sbyte | — | 1.3 MB |
-| Telemetry rings (4,096 samples × ~1,200 floats) | float | — | 19.7 MB |
-| Snapshots (×3) | byte | 12 | 1.2 MB |
+| Kinematics X, Y, Heading, Speed | float | 4 | 1.0 MB |
+| Physiology Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer, Reward, RewardMean, PendingR, LastFear | float | 15 | 3.9 MB |
+| Identity Species, Stage, Sex, Flags (byte), Gen (ushort), Serial, Mother, Children, last child (int) | mixed | — | 1.6 MB |
+| Phenotype (expressed from body genes at birth): 15 floats + litter + 2 × 15 diet efficiencies | float | 46 | 12 MB |
+| Genome (W1, W2, plasticity genes, body genes) | sbyte | 1,705 | 112 MB |
+| Working output weights W2f (genome + learned) | float | 1,176 | 308 MB |
+| Eligibility traces on W2 | float | 1,176 | 308 MB |
+| Learning block history (4 steps of δ, y, A) | float | 284 | 74 MB |
+| Hidden state, last features, last gains | float | 70 | 18 MB |
+| Intents | mixed | — | 2.5 MB |
+| Spatial hash, free stack | int | — | 0.8 MB |
+| Fields: 13 food pools, shrub, tree, sapling, nutrient, scent, moisture, pollination, fire (×2 where double-buffered) | float | 31 | 8.1 MB |
+| Static terrain: elevation, depth, moisture base, fertility, realm, distance-to-water, distance-to-land | float/byte | 7 | 1.6 MB |
+| Elite archive (20 species × 32 genomes) | sbyte | — | 1.1 MB |
+| Telemetry ring (4,096 samples × 1,621 floats) | float | — | 26.6 MB |
+| Snapshots (×3) | byte | 12 | 2.4 MB |
 
-The total is about 360 MB at the default capacity, and it scales linearly with `--capacity`.
+The total is about 0.9 GB at the default capacity and scales linearly with `--capacity`
+(`--capacity 32768` halves it).
 
 ## 4. Senses: the shared feature vector (30 entries)
 
@@ -291,9 +304,9 @@ The program refuses to start if the check fails, and prints the offending entrie
 The architecture is identical for every species (NR-204):
 
 ```
-input  u = [features f (30), hidden h(t−1) (16)]                      46 values
-hidden h(t) = tanh(W1 · u)                         W1: 16 × 46          (genome, fixed in life)
-output z    = (W2 + Δ) · [h(t) (16), f (30)]       W2: 28 × 46          (genome + learned Δ)
+input  u = [features f (30), hidden h(t−1) (12)]                      42 values
+hidden h(t) = tanh(W1 · u)                         W1: 12 × 42          (genome, fixed in life)
+output z    = W2f · [h(t) (12), f (30)]            W2f: 28 × 42         (genome W2 + what was learned)
 gain   g_p  = σ(z_p)
 ```
 
@@ -301,8 +314,10 @@ gain   g_p  = σ(z_p)
   simple sense-to-action link be learned directly.
 - The recurrent hidden layer gives memory and lasting states, such as alarm (NR-208).
 - Genome weights are int8 with a scale of 1/16 (±7.9).
-- There are 736 + 1,288 = 2,024 weights, plus 8 bytes of plasticity genes: the learning rate η, the
-  trace decay λ, the exploration noise σ, and the delta decay κ.
+- There are 504 + 1,176 = 1,680 weights, plus 4 bytes of plasticity genes (the learning rate η, the
+  trace decay λ, the exploration noise σ, the pull back to the genome κ) and 21 body genes (§7.5).
+- `tanh`, `exp` and the trigonometric functions are computed by managed code (`MathK.cs`), so a run
+  gives the same numbers on Windows and Linux, and the vector code avoids AVX-SSE transition costs.
 
 ### 7.2 Lifetime learning: reward-modulated plasticity (NR-211)
 
@@ -314,8 +329,15 @@ Discrete actions:           fired_p ~ Bernoulli(g_p)
 Perturbation:               δ_p = ĝ_p − g_p        (or fired_p − g_p)
 Trace:                      e_pj ← λ·e_pj + δ_p · y_j      y = [h, f]
 Reward advantage:           A = r − r̄,   r̄ ← r̄ + 0.01·(r − r̄)
-Update:                     Δ_pj ← (1 − κ)·Δ_pj + η·A·e_pj,   |W2 + Δ| ≤ 7.9
+Update:                     W2f_pj ← W2f_pj + η·A·e_pj,   |W2f| ≤ 7.9
+Pull back (every 32 steps): W2f ← W2f + 32κ·(W2_genome − W2f)
 ```
+
+**Block update.** Applying the update every step reads and writes about 19 KB per animal, which made
+the simulation memory-bound. The perturbations δ, inputs y and advantages A of 4 steps are stored and
+applied in one pass (the sums are expanded exactly, `Brain.ApplyBlock`). The result equals the
+per-step rule except that the weights used by the forward pass are up to 3 steps old. Blocks are
+staggered by slot.
 
 The reward r is **the same rule for every animal** (it is drive reduction, not behaviour):
 ```
@@ -323,7 +345,7 @@ r = 4·intake/Emax + 2·(thirst relieved) + 0.5·(fatigue relieved)
     + 1·(mated) + 2·(offspring born) − 4·(damage received)/Emax − 0.5·Δ(FEAR)⁺
 ```
 
-Learning changes only Δ, and it never changes the genome. Δ starts at zero at birth. What an animal
+Learning changes only the working weights W2f, never the genome. W2f starts equal to the genome at birth. What an animal
 learns is not inherited, but evolution selects η, λ, σ and κ, and the starting weights that make
 learning work.
 
@@ -332,8 +354,31 @@ learning work.
 - **Sexual:** row-wise uniform crossover of W1 rows and W2 rows from the two parents.
 - **Asexual:** a copy of the single parent.
 - **Mutation** (both cases): each byte changes with probability μ = 0.02 by round(2·N), or, with
-  probability μ·0.05, by round(16·N). The plasticity genes mutate by the same rule.
-- **Body:** the body plan does not mutate. Species identity is fixed (decided with the user).
+  probability μ·0.05, by round(16·N). The plasticity genes and body genes mutate by the same rule
+  (a body-gene step of 2 changes a trait by about 1%).
+- **Species identity** (locomotion, realm, reproduction mode, life stages) is fixed; body traits drift
+  within their ranges (§7.5).
+
+### 7.5 Evolvable bodies (NR-320)
+
+The genome ends with 21 body genes, each a signed byte b. A gene is a log-scale multiplier on the
+species' founder value: factor = range^(b/127), so b = 0 is the founder body plan. The phenotype is
+expressed once, when the slot is created (`Body.Express`). Every trait has a cost, so evolution trades
+them off:
+
+| Gene | Range | Effect | Cost |
+|---|---|---|---|
+| mass | ×/÷ 2 | adult mass; all allometry follows (§9.1) | larger basal cost, gut, slower maturity, longer life |
+| speed | ×/÷ 1.6 | top speed | basal × (1 + 0.4·(f − 1)) |
+| sight | ×/÷ 1.6 | sight range (≤ 32) | basal × (1 + 0.15·(f − 1)) |
+| armour | ×/÷ 1.6 | armour | basal × (1 + 0.2·(f − 1)); speed ÷ (1 + 0.2·(f − 1)) |
+| strike | ×/÷ 1.6 | strike power | basal × (1 + 0.2·(f − 1)) |
+| litter | ×/÷ 1.6 | offspring per litter | the founder's brood energy is shared among them |
+| diet × 15 | ×/÷ 3 | efficiency per pool | each stage keeps the founder's total digestive budget: raising one pool lowers the others |
+
+A pool the founder cannot digest can be gained up to 0.15 (before renormalisation) at the gene's
+maximum, if that pool exists in the stage's realm. A lineage can therefore drift into a neighbouring
+niche (a scavenger that hunts, a browser that grazes) without any species being redesigned.
 
 ### 7.4 Genesis (NR-210, NR-212)
 
@@ -341,16 +386,21 @@ learning work.
 The plasticity genes are drawn uniformly from their ranges. There is no hand wiring, and a test
 asserts that founder genomes depend only on the RNG.
 
+**Groups.** Real populations are clustered, and a lone colonist cannot find a mate (the Allee
+effect; the first genesis runs showed every sexual species stuck at its floor while colonists were
+scattered uniformly). Founders and colonists therefore arrive in groups of GROUP_SIZE = 8 within
+GROUP_SPREAD = 10 units of one site.
+
 **Genesis immigration.** During the first G steps (default 300,000), any species below its floor
-receives immigrants on suitable cells (its realm):
+receives one colonist group per step on suitable cells (its realm):
 - 50% are new random brains.
 - 50% are mutated copies from the species' **elite archive**: 32 genomes, each scored by lifetime
   offspring, then by age. A genome enters the archive when its owner dies, if it beats the weakest.
 
-The floor ramps linearly from `floor0` to 0 over G steps. Immigrants are counted as strays. After G
+The floor ramps linearly from 25% of the species' initial count to 0 over G steps. Immigrants are counted as strays. After G
 steps there is no immigration unless `--strays` is given.
 
-**Gene bank.** The file holds, per species, the elite archive and up to 256 living genomes. Format
+**Gene bank.** The file holds, per species, the elite archive and up to 96 living genomes. Format
 (little-endian):
 1. Header: magic `NRBK`, version u16, species count u16, genome length u16, capacity u32, step u64,
    seed u32.
@@ -377,8 +427,14 @@ in one of two stages:
 - **EGG:** laid at once in the parent's cell. If the egg medium is water, the parent must be in or
   beside water. An egg is immobile, has no brain and can be eaten.
 
-**Costs.** The parent pays f_birth·Emax_child of energy per offspring at conception. If she cannot
-pay, the litter is smaller.
+**Costs** (energy is conserved: a body is never free):
+- **Reserve:** the parent pays the newborn's starting reserve F_BIRTH·Emax_child at conception.
+- **Tissue:** building the newborn's tissue costs C_CARC·m_birth·ρ_meat / GROWTH_EFF. An egg carries
+  it as yolk, so egg-layers pay it at laying. A live-bearing mother pays it step by step during
+  gestation; a mother whose reserve falls below 10% loses the embryo (cause: lost before birth).
+- **Newborn mass** m_birth is a per-species life-history trait (`Birth`, CONSTANTS §species): 15% of
+  adult mass for a Drifter calf, 1% for a Pike or Croaker egg.
+- If the parent cannot pay, the litter is smaller.
 
 **Hatching.** After the gestation or incubation timer ends, the offspring hatches as a JUVENILE.
 
@@ -392,8 +448,8 @@ pay, the litter is smaller.
 | SPORES | LAY | the mat emits a spore (EGG stage, incubation) into the best of 4 hashed cells within 3 cells, by dead matter |
 
 **Two-stage species** (Bloodflies, Croakers) switch realm, locomotion and diet at metamorphosis age.
-Juveniles of every species have mass M·(0.3 + 0.7·min(1, Age/A_m)), so calves are small, and a big
-predator sees them as SMALL.
+Juveniles grow from M·Birth to M by maturity, so calves are small and a big predator sees them as
+SMALL. Growth costs energy (§9.1).
 
 ## 9. Physiology and physical rules
 
@@ -414,6 +470,8 @@ predator sees them as SMALL.
 | movement cost | c_M·M·speed² |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·k_thirst per step (0 for aquatic stages and sessile mats) |
+| growth | a juvenile pays C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF per step until maturity |
+| reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
 
 ### 9.2 Movement and realm
 
@@ -505,7 +563,7 @@ lightS = 1 − 0.70·T
 free   = 1 − G − S − T
 
 G += r_G·grow·lightG·(G + s_G·Seed + σ_G·(Ḡ − G))·free
-S += r_S·grow·lightS·(S + s_S·G)·free
+S += r_S·grow·lightS·(S + s_S·G)·(1 − S − T)                 shrubs overtop grass
 P += r_P·grow·(T̄ + T)·(0.2 + S)·(1 − P − T) − m_P·P + saplings planted by dung
 T += m_P·P·(1 − T) + r_T·grow·T·(1 − T) − d_T·T          (tree death → WOOD)
 G −= shG·T·G,   S −= shS·T·S                              (canopy shading)
@@ -520,7 +578,8 @@ N      −= c_use·(growth of G, S, T)
 POLL   decays at d_P per step
 ```
 
-Here x̄ is the mean of the four neighbours. The grids double-buffer, and rows are computed
+Here x̄ is the mean of the four neighbours. **Light competition:** taller layers overtop lower ones,
+so after growth the cover is clipped from the bottom: T ≤ 1, S ≤ 1 − T, G ≤ 1 − T − S. The grids double-buffer, and rows are computed
 independently (NR-105).
 
 **Herbivory (NR-308)**
@@ -548,14 +607,17 @@ The rates are:
 | wood | very slow |
 | detritus | medium |
 
-NUTRIENT diffuses 5% to the four neighbours each step across the shore, which is the run-off into
-water. Weathering adds c_w·fertility.
+Soil nutrient does not flow between land cells. Water cells mix with water neighbours (N_DIFF), and
+each shore cell loses RUNOFF of its soil nutrient per step into each adjacent water cell (the same
+amount leaves the land and enters the water). Weathering adds c_w·fertility.
 
 ### 10.5 Fire (NR-309)
 
 - **Ignition:** λ·FUEL·(1 − W)² per cell per step.
-- **Spread:** to each neighbour with probability c_spread·FUEL_nb·(1 − W_nb).
-- **A burning cell:** G, S, P, BROWSE, LITTER, NECTAR and SEED drop to 0. T is multiplied by 0.6, and
+- **Spread:** to each neighbour with probability c_spread·FUEL_nb·(1 − W_nb). Calibrated once so that
+  a world without animals burns every ~2 years per cell (savanna fire return: 1–5 years).
+- **A burning cell:** grass and shrubs keep RESPROUT = 25% as rootstock and resprout; saplings,
+  BROWSE, LITTER, NECTAR and SEED drop to 0. T is multiplied by 0.6, and
   the lost T becomes WOOD. ROOT is multiplied by 0.7. N += c_ash × the burned biomass.
 - **Duration:** fire lasts 6 steps.
 
@@ -647,3 +709,37 @@ src/Neuroreef.Server/  Program.cs  SimHost.cs  Wire.cs  Explain.cs  Fingerprint.
 src/Neuroreef.Headless (part of the Server exe: --headless)
 tests/Neuroreef.Tests/
 ```
+
+## 15. The laws and how they were set (NR-321)
+
+The simulation has two kinds of numbers:
+
+1. **Laws**: the physics and chemistry of this world — growth rates, energy densities, rot rates,
+   costs, fire spread. They have no neutral value; someone has to choose them.
+2. **Outcomes**: who survives, how large populations get, whether cycles appear, what behaviour
+   evolves.
+
+Policy, agreed with the user: **laws are set once, from physical plausibility and conservation of
+energy and mass, documented with their origin, and then frozen. They are never adjusted to produce or
+prevent an outcome.** Extinctions, crashes and failures are reported as results. A law is changed
+later only if it breaks a physical rule (for example, creating energy from nothing).
+
+The one-time review made these changes, each for a stated physical reason:
+
+| Change | Reason |
+|---|---|
+| Growth and offspring tissue cost energy (GROWTH_EFF, C_CARC, RHO_MEAT) | a body was free to build, but yielded energy when eaten: energy from nothing |
+| Newborn mass per species (`Birth`) | a fixed 30% newborn made a fish egg cost a third of a fish; real clutch size and egg size trade off |
+| Reserve C_EMAX = 2 | stored reserve of the same order as tissue energy |
+| Canopy shading of grass and shrubs reduced | grass vanished with no animals present |
+| Light competition (taller layers overtop) | grass took all free space and locked shrubs out, which is not how shrubs grow |
+| Resprouting after fire | savanna grasses and shrubs resprout from rootstock |
+| Shrub growth calibrated to ~1/4 year e-folding | measured against shrub recovery after disturbance |
+| Soil nutrient does not diffuse; run-off from shore cells | soil does not flow; nutrients wash into water |
+| Fire spread calibrated to a ~2-year fire return interval | measured in a world without animals (`--empty`) |
+| Super-individual masses raised | one agent stands for more organisms; a representation choice that changes no ecology |
+
+`--empty` runs the vegetation laws without animals, so they can be checked on their own.
+
+Changes to how the population is **seeded** (group colonisation, §7.4) are evolution mechanisms, not
+laws: they decide how colonists arrive, not what happens to them.

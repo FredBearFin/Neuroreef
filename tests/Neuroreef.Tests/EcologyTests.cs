@@ -216,4 +216,39 @@ public class EcologyTests
         Assert.Equal(St.Dead, w.StageOf[a]);
         Assert.Equal(1, w.T.Deaths[0 * Cause.N + Cause.Thirst]);
     }
+
+    [Fact] // NR-320: diet genes trade off within the founder's digestive budget; costly traits raise basal cost
+    public void BodyGenesTradeOff()
+    {
+        var w = new World(16, 1);
+        int i = 0;
+        w.Spc[i] = 0; w.StageOf[i] = St.Adult;      // Drifters
+        Body.Express(w, i);
+        float basal0 = w.PBasal[i], v0 = w.PVmaxA[i], grass0 = w.PDietA[(int)Pool.Grass];
+        float budget = 0; for (int p = 0; p < Pools.N; p++) budget += Roster.All[0].Adult.Diet[p];
+        w.Genome[G.B_DIET + (int)Pool.Grass] = 127;   // specialise on grass
+        w.Genome[G.B_SPEED] = 127;                    // faster
+        Body.Express(w, i);
+        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += w.PDietA[p];
+        Assert.InRange(sum, budget - 0.02f, budget + 0.02f);
+        Assert.True(w.PDietA[(int)Pool.Grass] > grass0);
+        Assert.True(w.PDietA[(int)Pool.Seed] < Roster.All[0].Adult.Diet[(int)Pool.Seed]);
+        Assert.True(w.PVmaxA[i] > v0 * 1.4f);
+        Assert.True(w.PBasal[i] > basal0 * 1.15f);
+    }
+
+    [Fact] // NR-322: a growing juvenile pays for its tissue
+    public void GrowthCostsEnergy()
+    {
+        var w = new World(256, 15); Terrain.Build(w);
+        int a = Make(w, 1, 0), b = Make(w, 1, 1);       // two Browsers, one kept juvenile
+        w.StageOf[b] = St.Juvenile; w.Age[b] = 10;
+        w.Energy[a] = w.Energy[b] = 10f; w.Gut[a] = w.Gut[b] = 0;
+        Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        float costAdult = 10f - w.Energy[a], costJuv = 10f - w.Energy[b];
+        float growth = K.C_CARC * w.PM[b] * (1f - Roster.All[1].Birth) / w.PMature[b] * K.RHO_MEAT / K.GROWTH_EFF;
+        Assert.True(costJuv > growth * 0.99f, $"juvenile paid {costJuv}, growth alone costs {growth}");
+        Assert.True(costAdult < costJuv);
+    }
 }

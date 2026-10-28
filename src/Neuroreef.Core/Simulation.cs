@@ -41,11 +41,14 @@ public sealed class Simulation : IDisposable
         {
             var sp = W.Sp[s];
             var src = bank?.Genomes[s];
+            float gx = 0, gy = 0;
             for (int k = 0; k < (empty ? 0 : sp.InitCount); k++, key++)
             {
+                // founders live in groups (herds, colonies, schools) of GROUP_SIZE around a shared site
+                if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(W, sp.Adult.Realm, key + 0x50000u, out gx, out gy)) break;
                 bool adult = Rng.U(seed, 0, key, Rs.Founder) < 0.7f;
                 ReadOnlySpan<sbyte> g = (src != null && src.Count > 0) ? (ReadOnlySpan<sbyte>)src[(int)(Rng.U(seed, 0, key, Rs.Bank) * src.Count)] : ReadOnlySpan<sbyte>.Empty;
-                Life.Found(W, s, g, adult, key);
+                Life.Found(W, s, g, adult, key, gx, gy);
             }
         }
         Life.Run(W, _active);   // clears newborn flags, counts

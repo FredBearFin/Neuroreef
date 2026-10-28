@@ -1,6 +1,6 @@
 # NEUROREEF 2 — REQUIREMENTS SPECIFICATION
 
-Document NR-RQ-001, Revision B
+Document NR-RQ-001, Revision C
 
 Each requirement has a number, a statement and a verification method:
 **T** = automated test, **A** = analysis of headless runs, **D** = demonstration in the console,
@@ -59,12 +59,15 @@ Each requirement has a number, a statement and a verification method:
 | NR-311 | Each species shall reproduce by its own mode: sexual, hermaphrodite, fission, facultative parthenogenesis, cyclic parthenogenesis or spores (DESIGN §8), with live birth or eggs, and litter size from the body plan. | T |
 | NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
 | NR-313 | Immigrants (genesis immigration, and optional strays after genesis) shall be counted separately from births. After the genesis period, strays shall be off by default. | I |
-| NR-314 | Acceptance: starting from the shipped gene bank, over seeds 1–3 and 200,000 steps with strays off, all 20 species shall be alive in ≥ 90% of telemetry samples. Predator–prey oscillations shall be visible, and no single vegetation layer shall exceed 80% of land cover for more than 25% of the run. Results, including failures, shall be reported. | A |
+| NR-314 | Outcomes shall be observed, not targeted (NR-321). Every headless run shall end with an observation report per species (alive, created, immigrants, conceptions, matings, strikes, kills, deaths by cause, main food) and the run's telemetry. Extinctions and crashes are valid results and shall be reported as such. | A |
 | NR-315 | The roster shall close the energy cycle: every pool has a consumer, every species has a food pool in its realm, every dead pool returns to nutrient. The program shall check this at start-up and refuse to run if it fails. | T |
 | NR-316 | Every species shall have a reproduction mode whose preconditions it can meet in its realm. | T |
 | NR-317 | Mutualisms (pollination raising fruit and seed set; seed dispersal by dung) shall be physical rules, not behaviours. | I |
 | NR-318 | The world shall contain land and freshwater realms (lakes and rivers), linked by shore access, life-stage transitions and nutrient run-off. | I |
 | NR-319 | Numerous small organisms shall be represented as super-individuals with their own brain, food and reproduction. | I |
+| NR-320 | Body traits (mass, speed, sight, armour, strike, litter size, diet efficiencies) shall be heritable and mutable, each with an energy or performance cost; diet changes shall trade off within a fixed digestive budget. | T |
+| NR-321 | The laws of the world shall be set once from physical plausibility and conservation of energy and mass, documented with their origin, and then frozen. No law shall be changed to produce or prevent an ecological outcome. | I |
+| NR-322 | Energy shall be conserved: building tissue (growth, offspring) shall cost the energy that eating that tissue yields, divided by a growth efficiency below 1. | T |
 
 ## 4. Telemetry and analytics (NR-4xx)
 
@@ -91,7 +94,7 @@ Each requirement has a number, a statement and a verification method:
 | No. | Requirement | Ver. |
 |---|---|---|
 | NR-601 | The program shall publish as a single self-contained Windows x64 executable that needs no installed runtime. | D |
-| NR-602 | Starting the executable shall start the simulation, serve the console on port 5800, print the local and LAN addresses, and open the default browser. | D |
+| NR-602 | Starting the executable shall start the simulation, serve the console on port 5800, print the local and LAN addresses, and open the default browser. When all agent slots are in use, the console and reports shall say so. | D |
 | NR-603 | All web assets, including third-party libraries, shall be embedded in the executable. No internet access shall be needed. | I |
 | NR-604 | Continuous integration shall build and test on Windows and Linux and publish the executable as an artifact. | D |
 
@@ -110,7 +113,7 @@ Filled in as tests and analyses are completed. Status: — not started, P pass, 
 |---|---|---|---|
 | NR-101…NR-109 | T/I | `tests/Engineering*` | — |
 | NR-201…NR-213 | T/I/D | `tests/Brain*`, `tests/Primitive*` | — |
-| NR-301…NR-319 | T/A | `tests/Ecology*`, headless report | — |
+| NR-301…NR-322 | T/A/I | `tests/EcologyTests`, headless report, DESIGN §15 | — |
 | NR-401…NR-404 | T/I | `tests/Telemetry*` | — |
 | NR-501…NR-506 | D/T | console screenshots | — |
 | NR-601…NR-604 | D/I | CI artifact | — |
