@@ -56,19 +56,26 @@ public static class Fields
             }
 
             // land producers (DESIGN §10.2)
-            float W = Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * season), 0f, 1f);
+            float W = Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * season) * (1f + w.RainAnom), 0f, 1f);
             w.Moisture[i] = W;
-            float grow = W * N / (N + K.K_N);
+            float nut = N / (N + K.K_N);
+            float grow = W * nut;
+            // water limits each layer differently: grass grows at any moisture, shrubs above W_SHRUB, trees above W_TREE
+            float growS = MathF.Max(0f, (W - K.W_SHRUB) / (1f - K.W_SHRUB)) * nut;
+            float growT = MathF.Max(0f, (W - K.W_TREE) / (1f - K.W_TREE)) * nut;
             float g = G[i], s = w.Shrub[i], t = w.Tree[i], p = w.Sapling[i];
             float lightG = 1f - 0.85f * t - 0.35f * s, lightS = 1f - 0.70f * t;
             float free = MathF.Max(0f, 1f - g - s - t);
             float gbar = 0.25f * (G[xl] + G[xr] + G[up] + G[dn]);
             float tbar = 0.25f * (w.Tree[xl] + w.Tree[xr] + w.Tree[up] + w.Tree[dn]);
             float dG = K.R_G * grow * lightG * (g + K.S_G * Sd[i] + K.G_RAIN + K.SIGMA_G * MathF.Max(0f, gbar - g)) * free;
-            float dS = K.R_S * grow * lightS * (s + K.S_S * g) * MathF.Max(0f, 1f - s - t);   // shrubs overtop grass
-            float dP = K.R_P * grow * (tbar + t) * (0.2f + s) * MathF.Max(0f, 1f - p - t) - K.M_P * p;
+            float dS = K.R_S * growS * lightS * (s + K.S_S * g) * MathF.Max(0f, 1f - s - t);   // shrubs overtop grass
+            // saplings: seed from nearby trees and, rarely, from far away by wind; grass roots take their water
+            float seedSrc = (tbar + t) * (0.2f + s) + K.WIND_SEED / K.R_P * w.TreeMean;
+            float dP = K.R_P * growT * (1f - K.GRASS_COMP * g) * seedSrc * MathF.Max(0f, 1f - p - t) - K.M_P * p;
             float mature = K.M_P * p * (1f - t);
-            float dT = mature + K.R_T * grow * t * (1f - t) - K.D_T * t;
+            float drought = 1f + K.DROUGHT_T * MathF.Max(0f, K.W_TREE - W) / K.W_TREE;
+            float dT = mature + K.R_T * growT * t * (1f - t) - K.D_T * drought * t;
             float shadeG = K.SH_G * t * g, shadeS = K.SH_S * t * s;
             float gn = Math.Clamp(g + dG - shadeG - K.C_LIT * g, 0f, 1f);
             float sn = Math.Clamp(s + dS - shadeS - K.C_LIT * 0.5f * s, 0f, 1f);
@@ -79,7 +86,7 @@ public static class Fields
             if (gn > 1f - tn - sn) gn = MathF.Max(0f, 1f - tn - sn);
             GN[i] = gn; w.ShrubN[i] = sn; w.TreeN[i] = tn;
             w.SaplingN[i] = Math.Clamp(p + dP, 0f, 1f);
-            Wo[i] += K.D_T * t;
+            Wo[i] += K.D_T * drought * t;
             Li[i] += K.C_LIT * (g + 0.5f * s + 0.3f * t) + shadeG + shadeS;
 
             // food pools produced by the vegetation

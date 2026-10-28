@@ -42,7 +42,8 @@ public static class P
     };
 }
 
-/// <summary>Genome layout (DESIGN §7.1): W1 (hidden), W2 (output over [hidden, features]), plasticity genes.</summary>
+/// <summary>Genome layout (DESIGN §7.1): W1 (hidden), W2 (output over [hidden, features]), plasticity genes, body genes,
+/// then (Revision C) the parental-care gene and the reflex genes.</summary>
 public static class G
 {
     public const int NH = 12;                    // recurrent hidden units
@@ -56,7 +57,14 @@ public static class G
     public const int B_MASS = BODY, B_SPEED = BODY + 1, B_SIGHT = BODY + 2, B_ARMOUR = BODY + 3, B_STRIKE = BODY + 4, B_LITTER = BODY + 5,
         B_DIET = BODY + 6;                       // 15 bytes, one per pool
     public const int NBODY = 6 + Pools.N;        // 21
-    public const int LEN = BODY + NBODY;         // 1705 bytes
+    public const int LEN_B = BODY + NBODY;       // 1705 bytes: the genome of Revision B gene banks
+    // parental care (DESIGN §7.8): log-scale multiplier on the species' care level
+    public const int B_CARE = LEN_B;
+    // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
+    public const int NC = 8;                     // reflex inputs (Reflex.Inputs)
+    public const int REFLEX = B_CARE + 1;
+    public const int REFLEXN = P.N * NC;         // 224
+    public const int LEN = REFLEX + REFLEXN;     // 1930 bytes
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
     public static float Gene(sbyte b, float lo, float hi) => lo + (hi - lo) * ((b + 128) / 255f);
@@ -71,7 +79,7 @@ public static class St
 /// <summary>Causes of death (NR-401).</summary>
 public static class Cause
 {
-    public const int Starve = 0, Thirst = 1, Killed = 2, Parasite = 3, Old = 4, Fire = 5, Orphan = 6;
-    public const int N = 7;
-    public static readonly string[] Names = { "starvation", "thirst", "killed", "parasitism", "old age", "fire", "lost before birth" };
+    public const int Starve = 0, Thirst = 1, Killed = 2, Parasite = 3, Old = 4, Fire = 5, Orphan = 6, Disease = 7;
+    public const int N = 8;
+    public static readonly string[] Names = { "starvation", "thirst", "killed", "parasitism", "old age", "fire", "lost before birth", "disease" };
 }

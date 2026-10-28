@@ -71,6 +71,7 @@ public sealed class Species
     public int InitCount;
     public Stage Juv = new(), Adult = new();
     public bool TwoStage;               // metamorphosis at maturity: juvenile stage has its own realm and diet
+    public float Care;                  // parental care level (DESIGN §7.8): mammals and birds feed their young
 
     // Derived (allometry, DESIGN §9.1)
     public float Basal, Emax, GutCap, Digest, Bite, VmaxWalk, Turn, Life, Mature, Sight, Reach, FovCos;
@@ -93,6 +94,9 @@ public sealed class Species
         Sight = MathF.Min(K.MAX_SIGHT, K.C_SIGHT * MathK.Pow(sm, K.EXP_SIGHT) * KSight);
         Reach = 1f + 0.4f * MathK.Pow(Swarm ? 1f : m, 1f / 3f);
         FovCos = MathK.Cos(Fov * 0.5f * MathF.PI / 180f);
+        // mammals (live birth) suckle their young and birds (eggs on land, flying parents) feed their chicks;
+        // fish, amphibians, insects and fungi give no care (DESIGN §7.8)
+        Care = !Swarm && (Medium == Medium.Live || (Medium == Medium.LandEgg && Adult.Loco == Loco.Fly)) ? 1f : 0f;
     }
 
     public float Vmax(Loco l) => l switch

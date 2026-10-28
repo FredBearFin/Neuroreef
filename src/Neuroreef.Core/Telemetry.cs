@@ -12,8 +12,8 @@ public sealed class Telemetry
     readonly World _w;
     public readonly int NS;
     // ---- running counters (cumulative)
-    public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants;
-    public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, RewardSum;
+    public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants, Infections;
+    public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, RewardSum, CareGiven;
     public long SlotShortage;
     public long FireCells;
     public readonly long[] DeathsByAge;     // species * 4: before birth, juvenile, young adult (< 2x maturity), older adult
@@ -23,6 +23,7 @@ public sealed class Telemetry
     readonly double[] _pIntake, _pBasal, _pMove, _pReward;
     long _pFire;
     readonly long[] _pDAge; readonly double[] _pAge;
+    readonly long[] _pInf; readonly double[] _pCare;
 
     // ---- sample layout
     public readonly string[] Names;
@@ -30,10 +31,11 @@ public sealed class Telemetry
     public readonly int OffGlobal, OffSpecies, PerSpecies, OffKill;
     public const int S_COUNT = 0, S_JUV = 1, S_EGGS = 2, S_GEN = 3, S_ENERGY = 4, S_REWARD = 5, S_LEARNED = 6, S_BIRTHS = 7,
         S_CONC = 8, S_DEATHS = 9, S_INTAKE = S_DEATHS + Cause.N, S_SPEND = S_INTAKE + Pools.N, S_STRIKES = S_SPEND + 2, S_KILLS = S_STRIKES + 1,
-        S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4, S_GAINS = S_MEANAGE + 1, S_END = S_GAINS + P.N;
+        S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
+        S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_GAINS = S_CARE + 1, S_END = S_GAINS + P.N;
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
-        G_SEASON = G_ALIVE + 1, G_END = G_SEASON + 1;
+        G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
 
     public readonly float[] Ring;          // RING * Len
     public volatile int Head;              // number of samples written (ring index = (Head-1) % RING)
@@ -46,7 +48,7 @@ public sealed class Telemetry
         _w = w; NS = w.NS;
         int ns = NS;
         Created = new long[ns]; Births = new long[ns]; Conceptions = new long[ns]; Deaths = new long[ns * Cause.N];
-        KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
+        KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; Infections = new long[ns]; CareGiven = new double[ns]; _pInf = new long[ns]; _pCare = new double[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
         Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; RewardSum = new double[ns];
         _pBirths = new long[ns]; _pDeaths = new long[ns * Cause.N]; _pKill = new long[ns * ns]; _pStrikes = new long[ns]; _pKills = new long[ns];
         _pMatings = new long[ns]; _pImm = new long[ns]; _pConc = new long[ns];
@@ -55,7 +57,7 @@ public sealed class Telemetry
         var names = new List<string>();
         names.Add("step");
         for (int p = 0; p < Pools.NFIELD; p++) names.Add("pool." + Pools.Names[p]);
-        names.AddRange(new[] { "cover.shrub", "cover.tree", "cover.sapling", "nutrient.land", "nutrient.water", "fire.ignited", "fire.burning", "agents.alive", "season" });
+        names.AddRange(new[] { "cover.shrub", "cover.tree", "cover.sapling", "nutrient.land", "nutrient.water", "fire.ignited", "fire.burning", "agents.alive", "season", "rain.anomaly" });
         OffGlobal = 0;
         OffSpecies = names.Count;
         PerSpecies = S_END;
@@ -66,7 +68,8 @@ public sealed class Telemetry
             foreach (var c in Cause.Names) names.Add(n + "death." + c);
             foreach (var p in Pools.Names) names.Add(n + "intake." + p);
             names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "strikes", n + "kills", n + "matings", n + "immigrants",
-                n + "deaths.unborn", n + "deaths.juvenile", n + "deaths.young-adult", n + "deaths.old-adult", n + "age-at-death" });
+                n + "deaths.unborn", n + "deaths.juvenile", n + "deaths.young-adult", n + "deaths.old-adult", n + "age-at-death",
+                n + "infected", n + "infections", n + "care.given" });
             foreach (var p in P.Names) names.Add(n + "gain." + p);
         }
         OffKill = names.Count;
@@ -122,6 +125,7 @@ public sealed class Telemetry
         a[G_BURNING] = burning;
         a[G_ALIVE] = w.AliveCount;
         a[G_SEASON] = w.SeasonAt(K.WORLD * 0.5f);
+        a[G_RAIN] = w.RainAnom;
 
         // per-animal statistics
         for (int i = 0; i < w.Cap; i++)
@@ -133,6 +137,7 @@ public sealed class Telemetry
             _cnt[s]++;
             a[o + S_COUNT]++;
             if (st == St.Juvenile) a[o + S_JUV]++;
+            if (w.Infect[i] > 0) a[o + S_SICK]++;
             a[o + S_GEN] += w.Gen[i];
             a[o + S_ENERGY] += w.Energy[i] / w.EmaxOf(i);
             a[o + S_REWARD] += w.RewardMean[i];
@@ -162,6 +167,8 @@ public sealed class Telemetry
             a[o + S_KILLS] = Kills[s] - _pKills[s]; _pKills[s] = Kills[s];
             a[o + S_MATINGS] = Matings[s] - _pMatings[s]; _pMatings[s] = Matings[s];
             a[o + S_IMM] = Immigrants[s] - _pImm[s]; _pImm[s] = Immigrants[s];
+            a[o + S_INFECT] = Infections[s] - _pInf[s]; _pInf[s] = Infections[s];
+            a[o + S_CARE] = (float)(CareGiven[s] - _pCare[s]); _pCare[s] = CareGiven[s];
             long hatched = 0;
             for (int c = 0; c < 4; c++) { int k = s * 4 + c; long d = DeathsByAge[k] - _pDAge[k]; a[o + S_DAGE + c] = d; if (c > 0) hatched += d; _pDAge[k] = DeathsByAge[k]; }
             a[o + S_MEANAGE] = hatched > 0 ? (float)((AgeAtDeath[s] - _pAge[s]) / hatched) : 0f; _pAge[s] = AgeAtDeath[s];

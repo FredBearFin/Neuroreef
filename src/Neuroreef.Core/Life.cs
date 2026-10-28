@@ -38,6 +38,7 @@ public static class Life
         w.Serial[c] = w.NextSerial++;
         w.Children[c] = 0; w.Matured[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
         w.IActs[c] = 0; w.ITarget[c] = -1; w.IMate[c] = -1; w.IScanning[c] = 0; w.ISpeed[c] = 0; w.IHeading[c] = w.Heading[c];
+        w.Infect[c] = 0; w.Immune[c] = 0; w.IInfNear[c] = 0; w.CareLeft[c] = 0; w.CareStep[c] = 0;
         if (mother >= 0)
         {
             w.MotherSlot[c] = mother; w.MotherSerial[c] = w.Serial[mother];
@@ -167,6 +168,8 @@ public static class Life
                 continue;
             }
             int si = w.Spc[i];
+            if (Disease(w, i, si)) continue;          // died of it
+            if (st == St.Juvenile) Care(w, i, si);
             activeCount[si]++;
             if (st == St.Adult)
             {
@@ -206,6 +209,55 @@ public static class Life
                 activeCount[s]++;
             }
         }
+    }
+
+    /// <summary>
+    /// Disease (DESIGN §9.6): one pathogen per species, caught by contact with infected conspecifics (counted by
+    /// DECIDE), so it spreads in crowds and fades in sparse populations. Infection lasts DIS_STEPS, raises basal
+    /// cost (RESOLVE) and may kill; recovery gives immunity for DIS_IMMUNE. Returns true if the animal died.
+    /// </summary>
+    static bool Disease(World w, int i, int s)
+    {
+        uint seed = w.Seed, step = (uint)w.Step;
+        if (w.Infect[i] > 0)
+        {
+            w.Infect[i] -= 1;
+            if (w.Infect[i] <= 0) { w.Infect[i] = 0; w.Immune[i] = K.DIS_IMMUNE; return false; }
+            float hunger = Math.Clamp(1f - w.Energy[i] / w.EmaxOf(i), 0f, 1f);
+            if (Rng.U(seed, step, (uint)i, Rs.Disease + 1) < K.DIS_MORT * (1f + hunger)) { Resolve.Die(w, i, Cause.Disease, -1); return true; }
+            return false;
+        }
+        if (w.Immune[i] > 0) { w.Immune[i] -= 1; return false; }
+        float escape = 1f;
+        for (int n = w.IInfNear[i]; n > 0; n--) escape *= 1f - K.DIS_BETA;
+        float p = 1f - escape * (1f - K.DIS_SPILL);
+        if (Rng.U(seed, step, (uint)i, Rs.Disease) < p) { w.Infect[i] = K.DIS_STEPS; w.T.Infections[s]++; }
+        return false;
+    }
+
+    /// <summary>
+    /// Parental care (DESIGN §7.8): a mammal or bird mother in contact with her young before weaning gives them
+    /// energy (milk, food brought to the nest), up to CARE_RATE x her basal cost per step shared by all her young,
+    /// at efficiency CARE_EFF, keeping CARE_RESERVE of her reserve. The young taste it as food (reward).
+    /// </summary>
+    static void Care(World w, int i, int s)
+    {
+        int m = w.MotherOf(i);
+        if (m < 0 || w.PCare[m] <= 0 || w.Age[i] >= K.WEAN * w.PMature[i]) return;
+        float dx = World.Delta1(w.X[m] - w.X[i]), dy = World.Delta1(w.Y[m] - w.Y[i]), reach = w.PReach[m] + w.PReach[i];
+        if (dx * dx + dy * dy > reach * reach) return;
+        uint mark = (uint)w.Step + 1u;           // 0 = never refreshed
+        if (w.CareStep[m] != mark) { w.CareStep[m] = mark; w.CareLeft[m] = K.CARE_RATE * w.PCare[m] * w.PBasal[m]; }
+        float emax = w.EmaxOf(i);
+        float spare = (w.Energy[m] - K.CARE_RESERVE * w.EmaxOf(m)) * K.CARE_EFF;
+        float give = MathF.Min(MathF.Min(w.CareLeft[m], emax - w.Energy[i]), spare);
+        if (give <= 0) return;
+        w.Energy[i] += give;
+        w.Energy[m] -= give / K.CARE_EFF;
+        w.CareLeft[m] -= give;
+        w.T.SpendRepro[w.Spc[m]] += give / K.CARE_EFF;
+        w.T.CareGiven[s] += give;
+        w.PendingR[i] += K.R_INTAKE * give / emax;
     }
 
     /// <summary>

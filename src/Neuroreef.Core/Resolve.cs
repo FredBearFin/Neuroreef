@@ -120,7 +120,8 @@ public static class Resolve
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
         float moveCost = K.C_MOVE * mass * spd * spd * (body.Loco == Loco.Fly ? K.FLY_COST : 1f);
-        float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f);
+        bool sick = w.Infect[i] > 0;
+        float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST : 1f);
         // growth: a juvenile builds tissue from energy (no free mass, DESIGN §9.1)
         float grow = 0;
         if (w.StageOf[i] == St.Juvenile && w.Age[i] < w.PMature[i])
@@ -151,7 +152,7 @@ public static class Resolve
         w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * body.KThirst);
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
-        w.Pain[i] = MathF.Max(0f, w.Pain[i] - K.PAIN_DECAY);
+        w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
         float fear = w.Feat[i * F.N + F.FEAR];
         r -= K.R_FEAR * MathF.Max(0f, fear - w.LastFear[i]);
         w.LastFear[i] = fear;

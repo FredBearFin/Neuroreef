@@ -343,7 +343,7 @@ public static class Host
                         type = "status", step = w.Step, rate = h.Rate, measured = h.MeasuredRate, paused = h.Paused, alive = w.AliveCount,
                         free = w.FreeTop, capacity = w.Cap, bankSource = h.BankSource, extinct = _s.Extinct(),
                         slotShortage = w.T.SlotShortage, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
-                        season = w.SeasonAt(K.WORLD * 0.5f), phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
+                        season = w.SeasonAt(K.WORLD * 0.5f), rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                     }), ct);
                 }

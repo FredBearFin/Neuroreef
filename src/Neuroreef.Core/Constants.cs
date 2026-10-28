@@ -124,6 +124,7 @@ public static class K
     [K("Brain", "small mutation sigma", "int8", "HT")] public const float MUT_SMALL = 2f;
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
+    [K("Brain", "reflex input weight scale (int8 / 16, as the output layer)", "-", "-")] public const float RSCALE = 1f / 16f;
     [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 64;
     [K("Brain", "share of colonists bred from the archive once it holds 4 genomes (the rest are random brains)", "-", "HT")] public const float ARCHIVE_SHARE = 0.9f;
     [K("Brain", "tournament size when choosing a colonist parent from the archive", "genomes", "HT")] public const int TOURNAMENT = 3;
@@ -160,8 +161,33 @@ public static class K
     [K("Reproduction", "cyclic: max dormancy of resting eggs", "steps", "HT")] public const int RESTING_MAX = 6000;
     [K("Reproduction", "spores: search radius", "cells", "HT")] public const int SPORE_RADIUS = 3;
 
+    // ---------------------------------------------------------------- 6b. parental care (DESIGN §7.8)
+    [K("Care", "milk or chick-feeding energy a mother can give per step, as a multiple of her basal cost (shared by all her young)", "xbasal", "ECO: peak lactation milk energy is about 1-2x maternal basal metabolic rate (Hanwell & Peaker 1977)")] public const float CARE_RATE = 1.5f;
+    [K("Care", "efficiency of turning maternal energy into milk or food for the young", "-", "ECO: milk synthesis efficiency 0.6-0.8")] public const float CARE_EFF = 0.7f;
+    [K("Care", "care ends (weaning) at this share of the time to maturity", "-", "ECO: weaning at roughly a third to a half of the time to maturity in mammals")] public const float WEAN = 0.4f;
+    [K("Care", "a mother keeps at least this share of her energy reserve for herself", "xEmax", "ECO: females in poor condition reduce or stop provisioning")] public const float CARE_RESERVE = 0.4f;
+
+    // ---------------------------------------------------------------- 6c. disease (DESIGN §9.6)
+    [K("Disease", "probability per step of infection per infected conspecific in contact", "/contact/step", "ECO: with the infectious period below, R0 = 0.5 per steady contact: outbreaks need crowding (density-dependent transmission)")] public const float DIS_BETA = 0.01f;
+    [K("Disease", "infectious period", "steps", "ECO: about 1.5% of the lifespan at M=1 (a 1-2 week infection in a 2-year life)")] public const int DIS_STEPS = 50;
+    [K("Disease", "immunity after recovery", "steps", "ECO: acquired immunity lasts months (about 20% of the lifespan at M=1)")] public const int DIS_IMMUNE = 600;
+    [K("Disease", "spillover from the environment (reservoir) per animal per step", "/step", "ECO: rare sporadic infections seed outbreaks")] public const float DIS_SPILL = 1e-5f;
+    [K("Disease", "extra basal cost while infected (fever, immune response)", "xbasal", "ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50%")] public const float DIS_COST = 0.4f;
+    [K("Disease", "probability per step of dying while infected (x(1 + hunger))", "/step", "ECO: about 10% case fatality over the infectious period")] public const float DIS_MORT = 0.002f;
+    [K("Disease", "malaise felt while infected (as pain)", "-", "ECO: sickness behaviour")] public const float DIS_PAIN = 0.3f;
+
+    // ---------------------------------------------------------------- 6d. weather years (DESIGN §10.7)
+    [K("Weather", "standard deviation of the yearly rainfall anomaly", "-", "ECO: interannual rainfall CV 20-35% in semi-arid regions")] public const float RAIN_SD = 0.25f;
+    [K("Weather", "persistence of the rainfall anomaly from one year to the next (AR(1))", "-", "ECO: droughts cluster in runs of years")] public const float RAIN_RHO = 0.4f;
+    [K("Weather", "limit of the rainfall anomaly", "-", "-")] public const float RAIN_MAX = 0.7f;
+
     // ---------------------------------------------------------------- 7. vegetation, soil, water
     [K("Vegetation", "grass growth", "/step", "V1")] public const float R_G = 0.010f;
+    [K("Vegetation", "soil moisture below which shrubs cannot grow (grass has none)", "-", "ECO: woody plants need wetter soils than grasses; savanna woody cover is capped by rainfall (Sankaran et al. 2005)")] public const float W_SHRUB = 0.20f;
+    [K("Vegetation", "soil moisture below which trees and saplings cannot grow", "-", "ECO: as W_SHRUB; trees need the most water")] public const float W_TREE = 0.35f;
+    [K("Vegetation", "share of a sapling's water taken by grass roots at full grass cover", "-", "ECO: Walter's two-layer hypothesis: grass roots take the topsoil water tree seedlings need")] public const float GRASS_COMP = 0.7f;
+    [K("Vegetation", "extra tree mortality at zero moisture (drought die-off), scaled by the shortfall below W_TREE", "x D_T", "ECO: drought years kill trees")] public const float DROUGHT_T = 5f;
+    [K("Vegetation", "long-distance (wind) seed rain: sapling establishment per unit of the world's mean tree cover", "/step", "ECO: rare long-distance dispersal lets trees reach new ground")] public const float WIND_SEED = 0.0004f;
     [K("Vegetation", "grass spread from neighbours", "-", "V1")] public const float SIGMA_G = 0.06f;
     [K("Vegetation", "grass establishment from seed", "-", "HT")] public const float S_G = 0.05f;
     [K("Vegetation", "grass background seed rain", "-", "HT")] public const float G_RAIN = 0.002f;

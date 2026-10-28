@@ -121,6 +121,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
+| RSCALE | 0.0625 | - | reflex input weight scale (int8 / 16, as the output layer) | - |
 | ARCHIVE | 64 | genomes | elite archive size per species | HT |
 | ARCHIVE_SHARE | 0.9 | - | share of colonists bred from the archive once it holds 4 genomes (the rest are random brains) | HT |
 | TOURNAMENT | 3 | genomes | tournament size when choosing a colonist parent from the archive | HT |
@@ -173,11 +174,45 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RESTING_MAX | 6000 | steps | cyclic: max dormancy of resting eggs | HT |
 | SPORE_RADIUS | 3 | cells | spores: search radius | HT |
 
-## 10. Vegetation
+## 10. Care
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| CARE_RATE | 1.5 | xbasal | milk or chick-feeding energy a mother can give per step, as a multiple of her basal cost (shared by all her young) | ECO: peak lactation milk energy is about 1-2x maternal basal metabolic rate (Hanwell & Peaker 1977) |
+| CARE_EFF | 0.7 | - | efficiency of turning maternal energy into milk or food for the young | ECO: milk synthesis efficiency 0.6-0.8 |
+| WEAN | 0.4 | - | care ends (weaning) at this share of the time to maturity | ECO: weaning at roughly a third to a half of the time to maturity in mammals |
+| CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
+
+## 11. Disease
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| DIS_BETA | 0.01 | /contact/step | probability per step of infection per infected conspecific in contact | ECO: with the infectious period below, R0 = 0.5 per steady contact: outbreaks need crowding (density-dependent transmission) |
+| DIS_STEPS | 50 | steps | infectious period | ECO: about 1.5% of the lifespan at M=1 (a 1-2 week infection in a 2-year life) |
+| DIS_IMMUNE | 600 | steps | immunity after recovery | ECO: acquired immunity lasts months (about 20% of the lifespan at M=1) |
+| DIS_SPILL | 1E-05 | /step | spillover from the environment (reservoir) per animal per step | ECO: rare sporadic infections seed outbreaks |
+| DIS_COST | 0.4 | xbasal | extra basal cost while infected (fever, immune response) | ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50% |
+| DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
+| DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
+
+## 12. Weather
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| RAIN_SD | 0.25 | - | standard deviation of the yearly rainfall anomaly | ECO: interannual rainfall CV 20-35% in semi-arid regions |
+| RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
+| RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
+
+## 13. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | R_G | 0.01 | /step | grass growth | V1 |
+| W_SHRUB | 0.2 | - | soil moisture below which shrubs cannot grow (grass has none) | ECO: woody plants need wetter soils than grasses; savanna woody cover is capped by rainfall (Sankaran et al. 2005) |
+| W_TREE | 0.35 | - | soil moisture below which trees and saplings cannot grow | ECO: as W_SHRUB; trees need the most water |
+| GRASS_COMP | 0.7 | - | share of a sapling's water taken by grass roots at full grass cover | ECO: Walter's two-layer hypothesis: grass roots take the topsoil water tree seedlings need |
+| DROUGHT_T | 5 | x D_T | extra tree mortality at zero moisture (drought die-off), scaled by the shortfall below W_TREE | ECO: drought years kill trees |
+| WIND_SEED | 0.0004 | /step | long-distance (wind) seed rain: sapling establishment per unit of the world's mean tree cover | ECO: rare long-distance dispersal lets trees reach new ground |
 | SIGMA_G | 0.06 | - | grass spread from neighbours | V1 |
 | S_G | 0.05 | - | grass establishment from seed | HT |
 | G_RAIN | 0.002 | - | grass background seed rain | HT |
@@ -219,7 +254,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 11. Fire
+## 14. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -234,7 +269,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 12. Species body plans
+## 15. Species body plans
 
 Derived values follow the allometry rules of DESIGN §9.1. S = super-individual.
 

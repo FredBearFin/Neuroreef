@@ -302,7 +302,7 @@ export class Panels {
     const cv = $('causes'); if (!cv) return;
     const w = cv.clientWidth || 420, h = 420; cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
     const g = cv.getContext('2d'); g.scale(devicePixelRatio, devicePixelRatio);
-    const cols = ['#e6c35a', '#5ab0ff', '#ff5d73', '#c02040', '#8aa0b5', '#ff8a2a', '#6a5a8a'];
+    const cols = ['#e6c35a', '#5ab0ff', '#ff5d73', '#c02040', '#8aa0b5', '#ff8a2a', '#6a5a8a', '#7bd46b'];
     const lw = 74, bh = (h - 40) / n; let mx = 1; const D = [];
     for (let s = 0; s < n; s++) { const row = M.causes.map((_, c) => this.recent(this.idx(s, T.fields.deaths + c))); D.push(row); mx = Math.max(mx, row.reduce((a, b) => a + b, 0)); }
     g.font = '9px sans-serif';

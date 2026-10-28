@@ -73,6 +73,11 @@ Each requirement has a number, a statement and a verification method:
 | NR-324 | Every MIGRATE_EVERY steps the best archive genomes of each species shall be copied to the next branch. | T |
 | NR-325 | The evolution settings (EvoSettings) shall be changeable while the prehistory runs and shall reach every branch at the next barrier; they shall not change any law of the world. | T |
 | NR-326 | When the prehistory ends, each species' brains shall come from the branch where it stood best; the bank shall be saved, and the live world created from it shall have no colonists. | T |
+| NR-327 | Every animal shall have inherited reflex genes linking the same eight need-and-opportunity inputs to its primitives; learning shall not change them, and no reflex shall be wired in (DESIGN §7.7). | T |
+| NR-328 | Mammal and bird mothers shall feed their young in contact before weaning, from their own reserve at an efficiency below 1, without taking it below CARE_RESERVE (DESIGN §7.8). | T |
+| NR-329 | Each species shall have a contact-transmitted disease with an infectious period, a metabolic cost, a death rate and immunity after recovery; deaths shall be recorded as "disease" (DESIGN §9.6). | T |
+| NR-330 | Each year shall have its own rainfall anomaly, persistent between years and shared by the branches of a prehistory (DESIGN §10.7). | T |
+| NR-331 | Plant growth shall be limited by water differently per layer (grass, shrubs, trees), grass shall compete with tree seedlings for water, and seeds shall also disperse far by wind (DESIGN §10.2). | I |
 | NR-322 | Energy shall be conserved: building tissue (growth, offspring) shall cost the energy that eating that tissue yields, divided by a growth efficiency below 1. | T |
 
 ## 4. Telemetry and analytics (NR-4xx)
@@ -121,6 +126,7 @@ Filled in as tests and analyses are completed. Status: — not started, P pass, 
 | NR-201…NR-213 | T/I/D | `tests/Brain*`, `tests/Primitive*` | — |
 | NR-301…NR-322 | T/A/I | `tests/EcologyTests`, headless report, DESIGN §15 | — |
 | NR-323…NR-326 | T | `tests/PrehistoryTests` | — |
+| NR-327…NR-331 | T/I | `tests/EcosystemTests`, DESIGN §7.7, §7.8, §9.6, §10.2, §10.7 | — |
 | NR-401…NR-404 | T/I | `tests/Telemetry*` | — |
 | NR-501…NR-506 | D/T | console screenshots | — |
 | NR-601…NR-604 | D/I | CI artifact | — |

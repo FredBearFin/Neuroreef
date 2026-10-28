@@ -473,6 +473,46 @@ each species' gene bank is taken from the branch where it stands best (then by n
 bank is saved as `evolved.nrbank` beside the exe, so the next start skips the prehistory, and the live
 world is created from it. From that moment there are births and deaths only.
 
+### 7.7 Reflexes (Revision C, NR-327)
+
+Real newborns arrive with innate responses that learning cannot erase. Every animal has the same eight
+reflex inputs, each a need met by an opportunity, or an alarm:
+1. hungry × food here
+2. thirsty × water near
+3. tired × safe
+4. ready × mate near
+5. hungry × weak prey near
+6. alarm (fear or pain)
+7. large carnivore near
+8. young × far from mother
+
+Reflex genes R (int8, 28 × 8, appended to the genome) link each input to each primitive:
+`z_p += RSCALE · Σ_c R[p, c]·c`. The plastic output layer is linear in its inputs, so it cannot easily
+express "eat when hungry *and* food is here"; one reflex gene can. The inputs are the same for every
+species. Which primitive each need drives, and how strongly, is evolved: founders get small random
+reflex links by the same rule as the output layer, and nothing is wired in. Reflex rows are inherited
+whole from one parent and mutate like every gene. Learning never changes them.
+
+### 7.8 Parental care (Revision C, NR-328)
+
+Mammals (live birth) suckle their young, and birds (eggs on land, flying parents) feed their chicks.
+Fish, amphibians, insects and fungi give no care. This is a species-level rule from the body plan,
+`Care` = 1 or 0, and a heritable care gene scales it (×/÷ BODY_RANGE_TRAIT).
+
+A mother in contact with her young (within the sum of their reaches) before weaning (age < WEAN ×
+time to maturity) gives them energy each step:
+- up to CARE_RATE × care × her basal cost per step, shared by all her young;
+- never more than they can hold;
+- never taking her own reserve below CARE_RESERVE × Emax.
+
+She pays the energy given divided by CARE_EFF, counted as reproductive spending, so energy is
+conserved. The young taste it as food (reward), so following the mother can be learned and evolved;
+FOLLOW_MOTHER and MOTHER_FAR already exist.
+
+**Genome (Revision C).** After the Revision B layout (1,705 bytes) come B_CARE (1 byte) and the reflex
+genes (224 bytes): G.LEN = 1,930. A Revision B gene bank still loads, with these genes at 0 (species
+care level, no reflexes).
+
 ## 8. Reproduction modes (NR-311, NR-316)
 
 **READY** means all of these hold:
@@ -583,6 +623,21 @@ p = p0 · power/(power + defence) · (1 + 0.8·FATIGUE_v) · (1 − 0.5·SCAN_v)
 | Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy), and the host takes it as damage. The host dies only if its energy reaches 0 (cause: parasitism). |
 | Failure | The victim's PAIN rises (it was attacked). If defence > power, the attacker loses c_retal·(defence − power) energy. |
 
+### 9.6 Disease (Revision C, NR-329)
+
+Each species has its own pathogen, which it catches from infected conspecifics in contact (within the
+sum of their reaches, counted in DECIDE).
+- **Infection:** p = 1 − (1 − DIS_BETA)^contacts · (1 − DIS_SPILL) per step. DIS_SPILL is rare
+  spillover from the environment.
+- **Course:** infection lasts DIS_STEPS. The animal pays DIS_COST extra basal cost (fever) and feels
+  DIS_PAIN as malaise, so it can learn to rest. It dies with probability DIS_MORT·(1 + hunger) per step,
+  recorded as death by "disease".
+- **Recovery:** gives immunity for DIS_IMMUNE steps.
+
+With DIS_BETA·DIS_STEPS = 0.5 per steady contact, an outbreak needs crowding: transmission is
+density-dependent, so disease checks booming populations and fades in sparse ones. Telemetry records
+the number infected, new infections and deaths per species.
+
 ### 9.5 Death
 
 | Cause | Condition |
@@ -621,15 +676,20 @@ W = clamp(W_base·(1 + a_s·SEASON), 0, 1)
 ### 10.2 Producer dynamics (per land cell, per step)
 
 ```
-grow  = W · N/(N + K_N)
+W     = MoistBase · (1 + A_SEASON·SEASON) · (1 + RAIN)          RAIN: this year's anomaly (§10.7)
+grow  = W · N/(N + K_N)                                         grass, and the food pools
+growS = max(0, (W − W_SHRUB)/(1 − W_SHRUB)) · N/(N + K_N)       shrubs need wetter soil
+growT = max(0, (W − W_TREE)/(1 − W_TREE)) · N/(N + K_N)         trees and saplings need the most
 lightG = 1 − 0.85·T − 0.35·S
 lightS = 1 − 0.70·T
 free   = 1 − G − S − T
 
 G += r_G·grow·lightG·(G + s_G·Seed + σ_G·(Ḡ − G))·free
-S += r_S·grow·lightS·(S + s_S·G)·(1 − S − T)                 shrubs overtop grass
-P += r_P·grow·(T̄ + T)·(0.2 + S)·(1 − P − T) − m_P·P + saplings planted by dung
-T += m_P·P·(1 − T) + r_T·grow·T·(1 − T) − d_T·T          (tree death → WOOD)
+S += r_S·growS·lightS·(S + s_S·G)·(1 − S − T)                shrubs overtop grass
+P += r_P·growT·(1 − GRASS_COMP·G)·((T̄ + T)·(0.2 + S) + WIND_SEED/r_P·T_mean)·(1 − P − T) − m_P·P
+     + saplings planted by dung                             grass roots take seedlings' water; wind seed rain
+T += m_P·P·(1 − T) + r_T·growT·T·(1 − T) − d_T·(1 + DROUGHT_T·max(0, W_TREE − W)/W_TREE)·T
+                                                          (tree death → WOOD; droughts kill trees)
 G −= shG·T·G,   S −= shS·T·S                              (canopy shading)
 BROWSE = leaf share of shrub and tree cover, regrows at r_B toward (S + 0.6·T)
 FRUIT  += r_F·T·max(SEASON, 0)·(1 + POLL) − d_F·FRUIT                 (rot → LITTER)
@@ -645,6 +705,14 @@ POLL   decays at d_P per step
 Here x̄ is the mean of the four neighbours. **Light competition:** taller layers overtop lower ones,
 so after growth the cover is clipped from the bottom: T ≤ 1, S ≤ 1 − T, G ≤ 1 − T − S. The grids double-buffer, and rows are computed
 independently (NR-105).
+
+**Water competition (Revision C, NR-331).** Grasses grow at any moisture; shrubs and trees need wetter
+soil (W_SHRUB, W_TREE), so trees are confined to wet ground and wet years, as savanna woody cover is
+capped by rainfall (Sankaran et al. 2005). Grass roots take the topsoil water that tree seedlings need
+(Walter's two-layer hypothesis), so a dense sward keeps trees from establishing. Together with fire
+(which grass survives and saplings do not) this is the mechanism that keeps grasslands open. Seeds
+reach new ground rarely by wind (WIND_SEED, in proportion to the world's mean tree cover) as well as
+from neighbouring trees and in dung.
 
 **Herbivory (NR-308)**
 - Grazing removes GRASS.
@@ -684,6 +752,14 @@ amount leaves the land and enters the water). Weathering adds c_w·fertility.
   BROWSE, LITTER, NECTAR and SEED drop to 0. T is multiplied by 0.6, and
   the lost T becomes WOOD. ROOT is multiplied by 0.7. N += c_ash × the burned biomass.
 - **Duration:** fire lasts 6 steps.
+
+### 10.7 Weather years (Revision C, NR-330)
+
+Each year (T_SEASON steps) has a rainfall anomaly RAIN that scales soil moisture everywhere:
+`RAIN_y = RAIN_RHO·RAIN_(y−1) + √(1 − RAIN_RHO²)·RAIN_SD·n_y`, clamped to ±RAIN_MAX, with n_y a standard
+normal from the terrain seed. So droughts cluster, and the branches of a prehistory share one climate.
+A dry year means less growth, more fire (drier fuel) and dying trees; a wet year the reverse.
+Telemetry records it as `rain.anomaly`.
 
 ### 10.6 Scent
 
@@ -797,6 +873,12 @@ tests/Neuroreef.Tests/
 ```
 
 ## 15. The laws and how they were set (NR-321)
+
+**Revision C** added new mechanisms: reflexes, parental care, disease, weather years, water-limited
+plant growth and wind seed rain (§7.7, §7.8, §9.6, §10.2, §10.7). Their constants were set once from
+the biology cited in the constants table, before any run with them, and are frozen like the rest. The
+existing laws were not changed.
+
 
 The simulation has two kinds of numbers:
 

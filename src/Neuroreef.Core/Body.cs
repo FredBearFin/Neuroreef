@@ -53,6 +53,8 @@ public static class Body
         w.PStrike[i] = sp.Strike * fst;
         w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(sp.Litter * fl), 1, 24);
         w.PUnit[i] = sp.Swarm ? sp.UnitMass * fm : 0f;
+        // care: a lineage can evolve more or less of it; it costs the energy given (DESIGN §7.8)
+        w.PCare[i] = sp.Care * Mul(gn[g + G.B_CARE], K.BODY_RANGE_TRAIT);
         ExpressDiet(w, i, sp.Adult, new Span<float>(w.PDietA, i * Pools.N, Pools.N));
         ExpressDiet(w, i, sp.Juv, new Span<float>(w.PDietJ, i * Pools.N, Pools.N));
     }

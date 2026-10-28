@@ -81,6 +81,7 @@ public sealed class Simulation : IDisposable
         Lap(2);
         Life.Run(w, _active);
         Lap(3);
+        Weather.Update(w);
         _pool.Run(_fieldsJob, K.FW);
         Fields.Swap(w);
         Lap(4);

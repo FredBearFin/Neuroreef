@@ -42,7 +42,7 @@ public class EcologyTests
         Brain.RandomGenome(c, 9, 0, 1235);
         Assert.Equal(a, b);
         Assert.NotEqual(a, c);
-        for (int k = G.BODY; k < G.LEN; k++) Assert.Equal(0, a[k]);
+        for (int k = G.BODY; k < G.REFLEX; k++) Assert.Equal(0, a[k]);     // body and care genes: the species plan
         int nonzero = 0;
         for (int k = 0; k < G.ETA; k++) if (a[k] != 0) nonzero++;
         Assert.True(nonzero > G.ETA / 2);

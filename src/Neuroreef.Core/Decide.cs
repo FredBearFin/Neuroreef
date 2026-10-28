@@ -79,7 +79,7 @@ public static class Decide
         float reach = w.PReach[i];
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         int nOff = R > K.HCELL ? 25 : 9;
-        int seen = 0;
+        int seen = 0, infNear = 0;
         for (int o = 0; o < nOff && seen < K.MAX_NEIGH; o++)
             {
                 int hc = World.WrapI(hcy + Ring[o].dy, K.GW) * K.GW + World.WrapI(hcx + Ring[o].dx, K.GW);
@@ -100,6 +100,7 @@ public static class Decide
                     if (w.Spc[j] == mySpc && sj >= St.Juvenile)
                     {
                         kinSum += close; kinCx += ddx; kinCy += ddy;
+                        if (w.Infect[j] > 0 && d <= reach + w.PReach[j]) infNear++;     // contact with a sick conspecific (DESIGN §9.6)
                         kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
                         if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
                         if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
@@ -270,6 +271,7 @@ public static class Decide
         w.IMate[i] = (mate.J >= 0 && mate.D <= reach + 1f) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
+        w.IInfNear[i] = (byte)Math.Min(255, infNear);
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
         f.CopyTo(new Span<float>(w.Feat, i * F.N, F.N));
         if (probe.Slot == i)

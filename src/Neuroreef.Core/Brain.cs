@@ -2,6 +2,7 @@
 //   hidden h = tanh(W1 · [f, h_prev])          W1 from the genome, fixed for life
 //   z        = W2f · [h, f]                    W2f = genome W2 + what was learned in life
 //   gain g   = sigmoid(z)
+//   reflex   z += R · c                         R from the genome, never learned (DESIGN §7.7)
 // Learning: node perturbation with eligibility traces and a reward baseline (three-factor rule).
 
 using System;
@@ -30,7 +31,10 @@ public static class Brain
         }
         for (int k = G.ETA; k < G.BODY; k++)
             g[k] = (sbyte)(int)(Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 255f - 128f);
-        for (int k = G.BODY; k < G.LEN; k++) g[k] = 0;     // founder body = the species body plan
+        for (int k = G.BODY; k < G.REFLEX; k++) g[k] = 0;  // founder body and care = the species body plan
+        // reflexes: small random links, by the same rule as the output layer (no reflex is wired in)
+        for (int k = G.REFLEX; k < G.LEN; k++)
+            g[k] = (sbyte)MathF.Round((Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f) * K.FOUNDER_W2);
     }
 
     /// <summary>Mutation (DESIGN §7.3): v1's mutateWord rule on every byte.</summary>
@@ -59,8 +63,15 @@ public static class Brain
             bool fromFather = Rng.U(seed, step, key, Rs.Cross + (uint)row) < 0.5f;
             (fromFather ? father : mother).Slice(off, G.NIN).CopyTo(child.Slice(off, G.NIN));
         }
-        for (int k = G.ETA; k < G.LEN; k++)
+        for (int k = G.ETA; k < G.REFLEX; k++)
             child[k] = Rng.U(seed, step, key, Rs.Cross + 100u + (uint)k) < 0.5f ? mother[k] : father[k];
+        for (int p = 0; p < P.N; p++)
+        {
+            // each primitive's reflex row comes from one parent, like the brain's rows
+            int off = G.REFLEX + p * G.NC;
+            bool fromFather = Rng.U(seed, step, key, Rs.Cross + 5000u + (uint)p) < 0.5f;
+            (fromFather ? father : mother).Slice(off, G.NC).CopyTo(child.Slice(off, G.NC));
+        }
     }
 
     /// <summary>Reset the life-time state of slot i from its genome: working weights, traces, hidden state.</summary>
@@ -171,7 +182,9 @@ public static class Brain
     public static unsafe void Forward(World w, int i, ReadOnlySpan<float> f, Span<float> y, Span<float> z, Span<float> g)
     {
         float* u = stackalloc float[G.NIN];
+        float* c = stackalloc float[G.NC];
         for (int k = 0; k < F.N; k++) u[k] = f[k];
+        Reflex.Inputs(f, new Span<float>(c, G.NC));
         fixed (float* hid = &w.Hidden[i * G.NH])
         fixed (sbyte* gen = &w.Genome[i * G.LEN])
         fixed (float* W = &w.W2f[i * G.W2N])
@@ -187,9 +200,14 @@ public static class Brain
                 hid[h] = v; yp[h] = v;
             }
             for (int k = 0; k < F.N; k++) yp[G.NH + k] = f[k];
+            sbyte* rx = gen + G.REFLEX;
             for (int p = 0; p < P.N; p++)
             {
                 float sv = Dot(W + p * G.NIN, yp, G.NIN);
+                sbyte* rr = rx + p * G.NC;
+                float rs = 0;
+                for (int k = 0; k < G.NC; k++) rs += rr[k] * c[k];
+                sv += rs * K.RSCALE;
                 z[p] = sv;
                 g[p] = 1f / (1f + MathK.Exp(-sv));
             }

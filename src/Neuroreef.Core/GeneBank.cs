@@ -72,7 +72,8 @@ public static class GeneBank
         if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'B' || magic[3] != 'K') throw new InvalidDataException("not a gene bank");
         ushort ver = br.ReadUInt16(), ns = br.ReadUInt16(), len = br.ReadUInt16();
         if (ver != Version) throw new InvalidDataException($"gene bank version {ver}, expected {Version}");
-        if (len != G.LEN) throw new InvalidDataException($"gene bank genome length {len}, expected {G.LEN} (brain layout changed)");
+        // a Revision B bank (no care or reflex genes) loads with those genes at 0: the species' care level and no reflexes
+        if (len != G.LEN && len != G.LEN_B) throw new InvalidDataException($"gene bank genome length {len}, expected {G.LEN} (brain layout changed)");
         if (ns != Roster.Count) throw new InvalidDataException($"gene bank has {ns} species, expected {Roster.Count}");
         br.ReadUInt32();
         var d = new Data { Step = br.ReadUInt64(), Seed = br.ReadUInt32(), Genomes = new List<sbyte[]>[ns] };
@@ -83,7 +84,7 @@ public static class GeneBank
             for (int k = 0; k < n; k++)
             {
                 br.ReadSingle();
-                var g = new sbyte[len];
+                var g = new sbyte[G.LEN];
                 for (int b = 0; b < len; b++) g[b] = br.ReadSByte();
                 l.Add(g);
             }

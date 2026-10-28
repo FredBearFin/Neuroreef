@@ -28,6 +28,12 @@ public sealed class World
     public readonly float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmaxA, PVmaxJ, PArmour, PStrike, PUnit;
     public readonly byte[] PLitter;
     public readonly float[] PDietA, PDietJ;   // Cap * Pools.N
+    public readonly float[] PCare;            // parental care level (0 = none; DESIGN §7.8)
+    // ---- agents: care and disease (DESIGN §7.8, §9.6)
+    public readonly float[] CareLeft;         // care a mother can still give this step
+    public readonly uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
+    public readonly float[] Infect, Immune;   // steps left infectious / immune (0 = susceptible)
+    public readonly byte[] IInfNear;          // infected conspecifics in contact, counted by DECIDE (own slot only)
     // ---- agents: brain
     public readonly sbyte[] Genome;        // Cap * G.LEN
     public readonly float[] W2f;           // Cap * G.W2N   working output weights = genome W2 + what was learned (not inherited)
@@ -63,6 +69,10 @@ public sealed class World
     public readonly byte[] Cell;           // Realm bits of the cell (Land, Shallow, Deep)
     public readonly float[] DistWater, DistLand;   // in cells
     public float SeaLevel;
+    // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
+    public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
+    public long RainYear = -1;             // year RainAnom belongs to
+    public float TreeMean;                 // mean tree cover of land cells (refreshed every 32 steps)
 
     // ---- evolution
     public readonly sbyte[] Archive;       // NS * ARCHIVE * G.LEN
@@ -96,7 +106,8 @@ public sealed class World
         PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PBite = new float[c]; PLife = new float[c];
         PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PTurn = new float[c]; PVmaxA = new float[c]; PVmaxJ = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PUnit = new float[c]; PLitter = new byte[c];
-        PDietA = new float[c * Pools.N]; PDietJ = new float[c * Pools.N];
+        PDietA = new float[c * Pools.N]; PDietJ = new float[c * Pools.N]; PCare = new float[c];
+        CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c];
         Genome = new sbyte[(long)c * G.LEN];
         W2f = new float[(long)c * G.W2N];
         Trace = new float[(long)c * G.W2N];
