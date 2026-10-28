@@ -172,7 +172,7 @@ public static class Wire
         });
         var o = new
         {
-            type = "meta", version = 1, world = K.WORLD, fw = K.FW, fd = FD, seed = w.Seed, capacity = w.Cap, genesis = w.Genesis, genesisSteps = w.GenesisSteps,
+            type = "meta", version = 1, world = K.WORLD, fw = K.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
             sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, pools = Pools.Names, causes = Cause.Names,
             fieldLayers = FieldLayers, telemetry = new { names = w.T.Names, offSpecies = w.T.OffSpecies, perSpecies = w.T.PerSpecies, offKill = w.T.OffKill,
                 fields = new { count = Telemetry.S_COUNT, juv = Telemetry.S_JUV, eggs = Telemetry.S_EGGS, gen = Telemetry.S_GEN, energy = Telemetry.S_ENERGY,

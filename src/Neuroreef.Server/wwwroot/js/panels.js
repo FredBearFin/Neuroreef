@@ -415,13 +415,13 @@ export class Panels {
     const diet = M.pools.map((p, k) => [p, s.diet[k], s.juvDiet[k]]).filter(([, a, j]) => a > 0 || j > 0);
     box.innerHTML = `
       <h3><span style="color:${s.color}">●</span> ${s.name} — ${s.niche}</h3>
+      ${this.extinct && this.extinct[s.id] >= 0 ? `<p class="note" style="color:#ff5d73">Extinct since step ${this.extinct[s.id].toLocaleString()}. Nothing in this world is spawned, so it will not return.</p>` : ''}
       <div class="kv">
         <span>alive now</span><span>${fmt(this.last(i(T.fields.count)))}</span>
         <span>juveniles / eggs+embryos</span><span>${fmt(this.last(i(T.fields.juv)))} / ${fmt(this.last(i(T.fields.eggs)))}</span>
         <span>mean generation</span><span>${fmt(this.last(i(T.fields.gen)), 1)}</span>
         <span>mean energy</span><span>${fmt(this.last(i(T.fields.energy)) * 100)}%</span>
         <span>births / conceptions (recent)</span><span>${fmt(this.recent(i(T.fields.births)))} / ${fmt(this.recent(i(T.fields.conc)))}</span>
-        <span>immigrants (recent)</span><span>${fmt(this.recent(i(T.fields.imm)))}</span>
         <span>strikes / successes (recent)</span><span>${fmt(this.recent(i(T.fields.strikes)))} / ${fmt(this.recent(i(T.fields.kills)))}</span>
       </div>
       <h3>founder body plan</h3>

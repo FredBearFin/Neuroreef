@@ -19,7 +19,8 @@ public sealed class Simulation : IDisposable
     readonly Action<int, int> _decideJob, _fieldsJob;
     public readonly int[] ActiveCount;
 
-    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool genesis = true, bool empty = false)
+    /// <param name="prehistory">true only for an evolve run: colonists may then appear (DESIGN §7.4). A live world never spawns.</param>
+    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false)
     {
         W = new World(capacity, seed);
         var fails = Roster.ClosureCheck(W.Sp);
@@ -27,7 +28,7 @@ public sealed class Simulation : IDisposable
         Terrain.Build(W);
         _active = new int[W.NS];
         ActiveCount = _active;
-        W.Genesis = genesis && bank == null && !empty;
+        W.Prehistory = prehistory && !empty;
         Snap = new Snapshot(W);
 
         // the visiting order of RESOLVE: k*A + B (mod Cap) with gcd(A, Cap) = 1

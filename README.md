@@ -21,7 +21,11 @@ generations.
 4. **Tablet:** the console window prints `on your network: http://192.168.x.x:5800`. Open that
    address on the tablet (same Wi-Fi). If Windows asks, allow Neuroreef on private networks.
 
-**Evolve the brains once.** Every animal starts with a random brain. Double-click **Evolve.bat** in
+**The world you watch is births and deaths only.** No animal is ever spawned into it, so an extinct
+species stays extinct. Its first animals need brains that can keep them alive, and those come from a
+**prehistory**: a separate run that stands for the long evolution before the world begins.
+
+**Run the prehistory once.** Double-click **Evolve.bat** in
 the download. It runs the world at full speed without graphics for about an hour, then saves
 `evolved.nrbank` (the evolved brains) and `evolve-report.txt` (what happened to each species, including
 which died out and why). After that, `Neuroreef.exe` starts from the evolved brains automatically.
@@ -31,8 +35,8 @@ Send `evolved.nrbank` back if it should be shipped in the exe for everyone.
 
 | Option | Effect |
 |---|---|
-| `--genesis` | start from random brains even if `evolved.nrbank` exists |
-| `--evolve` | what Evolve.bat runs: a full-speed headless genesis that saves `evolved.nrbank` |
+| `--random-brains` | open the world with random brains even if `evolved.nrbank` exists (no spawning, so most species die out) |
+| `--evolve` | what Evolve.bat runs: the prehistory, headless at full speed, which saves `evolved.nrbank` |
 | `--seed 7` | a different world and run |
 | `--save-bank my.nrbank` / `--load-bank my.nrbank` | keep evolved genomes between runs |
 | `--headless --steps 200000 --csv run.csv` | a long run without the console, with a report at the end |

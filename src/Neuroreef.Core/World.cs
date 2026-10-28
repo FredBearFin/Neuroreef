@@ -71,9 +71,12 @@ public sealed class World
     public readonly float[] KinX, KinY;    // one living adult per species, sampled each LIFECYCLE (colonists land near kin)
     public readonly int[] KinN;
     public readonly sbyte[] Scratch;       // per-thread genome scratch: G.LEN * 2
-    public bool Genesis = true;
-    public bool StraysAfterGenesis;
-    public int GenesisSteps = K.GENESIS;
+    /// <summary>
+    /// True only in a prehistory run (--evolve), the only place colonists may appear. A live world is
+    /// births and deaths only: no animal ever appears except by birth (NR-313).
+    /// </summary>
+    public bool Prehistory;
+    public int PrehistorySteps = K.PREHISTORY;
 
     // ---- telemetry
     public readonly Telemetry T;

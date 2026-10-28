@@ -128,7 +128,7 @@ public static class Life
         return c;
     }
 
-    /// <summary>LIFECYCLE phase: eggs and embryos, hatching, metamorphosis, genesis immigration. Serial.</summary>
+    /// <summary>LIFECYCLE phase: eggs and embryos, hatching, metamorphosis; colonists in a prehistory run only. Serial.</summary>
     public static void Run(World w, int[] activeCount)
     {
         int cap = w.Cap;
@@ -181,14 +181,11 @@ public static class Life
             }
         }
 
-        // genesis immigration (DESIGN §7.4): random brains and mutated elite genomes
-        bool immigrate = w.Genesis && w.Step < (ulong)w.GenesisSteps;
+        // colonists exist only in a prehistory run (DESIGN §7.4). A live world never reaches this point.
+        if (!w.Prehistory || w.Step >= (ulong)w.PrehistorySteps) return;
         for (int s = 0; s < w.NS; s++)
         {
-            float floor;
-            if (immigrate) floor = w.Sp[s].InitCount * K.GENESIS_FLOOR * (1f - (float)w.Step / w.GenesisSteps);
-            else if (w.StraysAfterGenesis) floor = 4;
-            else continue;
+            float floor = w.Sp[s].InitCount * K.PREHISTORY_FLOOR * (1f - (float)w.Step / w.PrehistorySteps);
             if (activeCount[s] >= floor) continue;
             // colonists arrive as one group, next to living kin if there are any (a lone colonist would never find a mate)
             float gx, gy;

@@ -111,8 +111,8 @@ Every text frame has a `type`:
 
 | type | When | Content |
 |---|---|---|
-| `meta` | first frame | world size, species list with body plans, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count |
-| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity, genesis flag, slot shortages, probe serial, follow flag, alive count per species, season |
+| `meta` | first frame | world size, prehistory flag (always false in the console), bank source, species list with body plans, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count |
+| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity, bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, probe serial, follow flag, alive count per species, season |
 | `explain` | every 3 s | `items`: sentences generated from the telemetry (§12.4 of DESIGN), each with `text`, `species` (−1 = none) and `kind` |
 | `fingerprints` | every 3 s | per species: sampled count and up to 3 clusters (`label`, `share`, `top`, `centroid`) |
 | `ack` / `error` | on commands | result of a command |

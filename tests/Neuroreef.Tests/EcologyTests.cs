@@ -111,7 +111,7 @@ public class EcologyTests
         Assert.Equal(Roster.Count, bank.Genomes.Length);
         Assert.True(bank.Total > 100);
         using var sim2 = new Simulation(8192, 3, 2, bank);
-        Assert.False(sim2.W.Genesis);
+        Assert.False(sim2.W.Prehistory);
         Assert.True(sim2.W.AliveCount > 1000);
     }
 
@@ -293,7 +293,7 @@ public class EcologyTests
     [Fact] // DESIGN §7.4: once the archive has genomes, colonists are bred from it
     public void ColonistsAreBredFromTheArchive()
     {
-        using var sim = new Simulation(16384, 41, 1);
+        using var sim = new Simulation(16384, 41, 1, prehistory: true);
         var w = sim.W;
         // put a recognisable genome into the Drifter archive
         for (int k = 0; k < 8; k++)
@@ -317,5 +317,24 @@ public class EcologyTests
         }
         Assert.True(total > 0);
         Assert.True(bred >= total / 2, $"{bred} of {total} colonists bred from the archive");
+    }
+
+    [Fact] // NR-313: in the live world no animal ever appears except by birth; extinction is permanent
+    public void LiveWorldNeverSpawns()
+    {
+        using var sim = new Simulation(16384, 51, 1);           // a live world (not a prehistory)
+        var w = sim.W;
+        long founders = 0; foreach (var c in w.T.Created) founders += c;
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == 0) Resolve.DieNoBody(w, i, Cause.Starve, -1);
+        for (int k = 0; k < 500; k++) sim.Step();
+        int drifters = 0;
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == 0) drifters++;
+        Assert.Equal(0, drifters);
+        foreach (var m in w.T.Immigrants) Assert.Equal(0, m);
+        // every slot created after the founders is a conception, a bud, a spore or a parthenogenetic young
+        long created = 0; foreach (var c in w.T.Created) created += c;
+        long conceived = 0; foreach (var c in w.T.Conceptions) conceived += c;
+        long lays = 0; foreach (var c in w.T.Lays) lays += c;
+        Assert.True(created - founders <= conceived + lays, $"created {created - founders}, conceived {conceived}, lays {lays}");
     }
 }

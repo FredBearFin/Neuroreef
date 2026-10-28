@@ -32,7 +32,7 @@ public static class Host
     public static int Run(Options o, GeneBank.Data? bank)
     {
         Console.WriteLine("NEUROREEF 2");
-        Console.WriteLine(bank != null ? $"starting from the gene bank ({bank.Total} evolved genomes)" : "starting a GENESIS run: random brains");
+        Console.WriteLine("The world is births and deaths only: no animal is ever spawned.");
         using var host = new SimHost(o, bank);
         var state = new Shared(host);
 
@@ -133,7 +133,22 @@ public static class Host
         byte[]? _tele; int _teleHead = -1;
         string _explain = "[]"; string _prints = "[]"; DateTime _explainT;
 
-        public Shared(SimHost h) { H = h; MetaJson = Wire.Meta(h); World = Wire.EncodeWorld(h.W); }
+        public Shared(SimHost h) { H = h; MetaJson = Wire.Meta(h); World = Wire.EncodeWorld(h.W); _extinctAt = new long[h.W.NS]; Array.Fill(_extinctAt, -1L); }
+
+        // the step at which each species was first seen with no living member (no adults, juveniles, eggs or embryos)
+        readonly long[] _extinctAt;
+        readonly int[] _alive = new int[Roster.Count];
+        public long[] Extinct()
+        {
+            lock (_lock)
+            {
+                var w = H.W;
+                Array.Clear(_alive);
+                for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) _alive[w.Spc[i]]++;
+                for (int s = 0; s < w.NS; s++) if (_alive[s] == 0 && _extinctAt[s] < 0 && w.Step > 0) _extinctAt[s] = (long)w.Step;
+                return (long[])_extinctAt.Clone();
+            }
+        }
 
         public (byte[]? data, int head) Telemetry()
         {
@@ -241,7 +256,7 @@ public static class Host
                     await Txt(JsonSerializer.Serialize(new
                     {
                         type = "status", step = w.Step, rate = h.Rate, measured = h.MeasuredRate, paused = h.Paused, alive = w.AliveCount,
-                        free = w.FreeTop, capacity = w.Cap, genesis = w.Genesis && w.Step < (ulong)w.GenesisSteps, genesisSteps = w.GenesisSteps,
+                        free = w.FreeTop, capacity = w.Cap, bankSource = h.BankSource, extinct = _s.Extinct(),
                         slotShortage = w.T.SlotShortage, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
                         season = w.SeasonAt(K.WORLD * 0.5f),
                     }), ct);

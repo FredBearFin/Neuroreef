@@ -6,7 +6,7 @@ import { Panels, bar } from './panels.js';
 
 const $ = (id) => document.getElementById(id);
 const link = new Link();
-let meta = null, world = null, panels = null, probe = null, lastProbeT = 0;
+let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
 
 link.listen('meta', (m) => {
   meta = m;
@@ -96,6 +96,7 @@ function buildControls() {
   const lg = $('legend');
   for (const s of meta.species) {
     const it = document.createElement('span');
+    it.dataset.sp = s.id;
     it.innerHTML = `<i style="background:${s.color}"></i>${s.name}`;
     it.onclick = () => { if (world.hidden.has(s.id)) world.hidden.delete(s.id); else world.hidden.add(s.id); it.classList.toggle('off'); };
     lg.append(it);
@@ -138,11 +139,21 @@ function status(s) {
   $('s-alive').textContent = s.alive.toLocaleString();
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
   $('s-season').textContent = s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying';
-  $('s-genesis').classList.toggle('hidden', !s.genesis);
-  if (s.genesis) $('s-genesis').textContent = `GENESIS ${Math.round(100 * s.step / s.genesisSteps)}%`;
+  $('s-random').classList.toggle('hidden', s.bankSource !== 'random');
+  extinct = s.extinct || [];
+  markExtinct();
   $('s-full').classList.toggle('hidden', s.free > 0);
   if (world && s.follow && s.probe && world.selected !== s.probe && world.mode !== 'overview') world.selected = s.probe;
   if (world && world.mode !== 'overview' && !world.selected && s.probe) world.selected = s.probe;
+}
+
+// an extinct species keeps its label: nothing in this world can bring it back
+function markExtinct() {
+  for (const it of document.querySelectorAll('#legend span')) {
+    const s = meta.species[+it.dataset.sp], at = extinct[s.id];
+    it.innerHTML = `<i style="background:${s.color}"></i>${s.name}${at >= 0 ? ` <b style="color:#ff5d73">extinct at ${at.toLocaleString()}</b>` : ''}`;
+  }
+  if (panels) panels.extinct = extinct;
 }
 
 function feed(e) {

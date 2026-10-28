@@ -17,6 +17,7 @@ public sealed class SimHost : IDisposable
     readonly Thread _thread;
     volatile bool _stop;
     public volatile bool Paused;
+    public readonly string BankSource;
     public volatile float Rate;             // steps per second, 0 = as fast as possible
     int _stepOnce;
     public double MeasuredRate;
@@ -30,9 +31,9 @@ public sealed class SimHost : IDisposable
     public SimHost(Options o, GeneBank.Data? bank)
     {
         _o = o;
-        Sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, o.Genesis || bank == null);
-        Sim.W.GenesisSteps = o.GenesisSteps;
-        Sim.W.StraysAfterGenesis = o.Strays;
+        // the console always shows a live world: births and deaths only, never colonists
+        Sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false);
+        BankSource = o.BankSource;
         Rate = o.Rate;
         _fieldsBuf = new byte[Wire.FieldsSize];
         _probeBuf = new byte[Wire.ProbeSize];

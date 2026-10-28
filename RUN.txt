@@ -3,15 +3,18 @@ NEUROREEF 2 - how to run
 1. Double-click Neuroreef.exe.
    Windows may say "Windows protected your PC" because the program is not signed:
    click "More info", then "Run anyway".
-2. A console window opens and your browser opens the Neuroreef console at http://localhost:5800
+2. (Run Evolve.bat once first; see below.) A console window opens and your browser opens the Neuroreef console at http://localhost:5800
    Keep the console window open; closing it stops the simulation.
 3. Tablet: the console window prints a line "on your network: http://192.168.x.x:5800".
    Open that address in the tablet's browser (same Wi-Fi). If Windows asks whether to allow
    Neuroreef on private networks, click Allow.
 
-Evolving brains (recommended once):
-  Every animal starts with a random brain. To get animals that have learned to live, double-click
-  Evolve.bat. It runs the world at full speed without graphics for about an hour (400,000 steps),
+The world you watch is births and deaths only: no animal is ever spawned into it, and an extinct
+species stays extinct. Its first animals need brains that can keep them alive. Those come from a
+PREHISTORY, a separate run that stands for the long evolution before the world begins.
+
+Running the prehistory (do this first):
+  Double-click Evolve.bat. It runs the world at full speed without graphics for about an hour (400,000 steps),
   then writes:
     evolved.nrbank       the evolved brains
     evolve-report.txt    what happened to each species (including which ones died out, and why)
@@ -20,7 +23,7 @@ Evolving brains (recommended once):
   rename evolved.nrbank to keep an older result.
 
 Options (run from a command prompt in this folder):
-  Neuroreef.exe --genesis            start from random brains even if evolved.nrbank exists
+  Neuroreef.exe --random-brains      open the world with random brains even if evolved.nrbank exists
   Neuroreef.exe --evolve             what Evolve.bat runs
   Neuroreef.exe --seed 7             a different world and run
   Neuroreef.exe --save-bank my.nrbank   save evolved genomes every 50,000 steps and on exit

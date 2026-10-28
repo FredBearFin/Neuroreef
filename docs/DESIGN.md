@@ -38,14 +38,16 @@ Behaviour is not designed.
    Nothing in a species definition says what it should *do*.
 3. **One set of senses, one set of actions.** Every animal has the same 30 senses (§4) and the same
    28 primitive actions (§5). Every animal has the same brain architecture (§7).
-4. **Brains start random.** In a fresh *genesis* run every brain is random. Animals then learn during
+4. **Brains start random, in a prehistory.** In a *prehistory* run every brain starts random. Animals then learn during
    life from a universal reward (relief of hunger, thirst and fatigue, and the success of mating
    and birth, minus pain), and evolution selects the brains that learn and act well. Grazing herds,
    vigilance, hunting, scavenging and following the mother may or may not emerge. The console
    measures which compositions of primitives each species actually uses (§10.3). It does not claim
    them.
-5. **Gene bank.** A long genesis run is saved as a gene bank. The shipped program starts from a bank
-   that we evolved, and `--genesis` starts from random brains.
+5. **The world you watch is births and deaths only.** No animal ever appears in it except by being
+   born from a parent, so an extinct species stays extinct. Its first animals are seeded once, at step
+   0, with brains from a gene bank saved by a prehistory run (`--evolve` / Evolve.bat), which stands
+   for the long evolution before the world begins. Only the prehistory uses colonists (§7.4).
 
 ## 2. System overview
 
@@ -380,24 +382,37 @@ A pool the founder cannot digest can be gained up to 0.15 (before renormalisatio
 maximum, if that pool exists in the stage's realm. A lineage can therefore drift into a neighbouring
 niche (a scavenger that hunts, a browser that grazes) without any species being redesigned.
 
-### 7.4 Genesis (NR-210, NR-212)
+### 7.4 Prehistory and the live world (NR-210, NR-212, NR-313)
+
+**Why there are two kinds of run.** A random brain cannot keep an animal alive long enough to raise
+young, so a world started from random brains with no help empties in its first generation. Real
+animals never start from random brains: their brains were shaped before any one of them was born.
+So evolution from random brains runs in a separate, labelled **prehistory** (`--evolve`), where
+colonists keep species going while brains evolve, and saves its result as a gene bank. The **live
+world**, the one shown in the console, is seeded once from that bank and is then births and deaths
+only. Its code path never reaches the colonist code (`World.Prehistory` is false), and a test kills a
+whole species and checks that it never returns. (An earlier version ran colonists in the console
+world too, which meant that the animals being watched were mostly spawned. That was wrong for a life
+simulation and has been removed.)
+
+The rest of this section describes the prehistory.
 
 **Founders** are random, by the same rule for every species. Memory-layer weights are
 round(U(−1,1)·FOUNDER_W)/16. Output weights are small, round(U(−1,1)·FOUNDER_W2)/16, and the output
 bias column starts at FOUNDER_BIAS/16 = −3 (± FOUNDER_BIAS_NOISE): a **calm newborn brain**, in
 which every primitive starts near 5% and useful actions must be learned or evolved upward. (The
-first genesis runs used large random weights, so every action fired about half the time, and the
+first prehistory runs used large random weights, so every action fired about half the time, and the
 energy spent on constant strikes and mating attempts killed most animals young.) The plasticity
 genes are drawn uniformly from their ranges; body genes start at 0, the species body plan. There is
 no hand wiring, and tests assert that founder genomes depend only on the RNG and that founder gains
 start low.
 
 **Groups.** Real populations are clustered, and a lone colonist cannot find a mate (the Allee
-effect; the first genesis runs showed every sexual species stuck at its floor while colonists were
+effect; the first prehistory runs showed every sexual species stuck at its floor while colonists were
 scattered uniformly). Founders and colonists therefore arrive in groups of GROUP_SIZE = 8 within
 GROUP_SPREAD = 10 units of one site.
 
-**Genesis immigration.** During the first G steps (default 300,000), any species below its floor
+**Colonists (prehistory only).** During the first PREHISTORY steps (default 300,000), any species below its floor
 receives one colonist group per step on suitable cells (its realm):
 - **Breeding from the best.** Each species keeps an **elite archive** of ARCHIVE = 64 genomes. A
   genome enters it when its owner dies, if it beats the weakest. The score counts offspring that
@@ -410,8 +425,7 @@ receives one colonist group per step on suitable cells (its realm):
 - A colonist group lands next to a living adult of its species if one exists (sampled each step),
   so successful genes meet each other.
 
-The floor ramps linearly from 25% of the species' initial count to 0 over G steps. Immigrants are counted as strays. After G
-steps there is no immigration unless `--strays` is given.
+The floor ramps linearly from PREHISTORY_FLOOR = 25% of the species' initial count to 0 over the prehistory. Colonists are counted separately from births. After the colonist period the prehistory continues without them.
 
 **Gene bank.** The file holds, per species, the elite archive and up to 96 living genomes. Format
 (little-endian):
@@ -420,7 +434,7 @@ steps there is no immigration unless `--strays` is given.
 2. Then for each species: count u16, followed by count × (score f32, genome bytes).
 
 A run started with `--load-bank` seeds each species from its bank genomes (mutated) instead of
-random ones, and runs no genesis immigration.
+random ones. A live world never has colonists, with or without a bank.
 
 ## 8. Reproduction modes (NR-311, NR-316)
 

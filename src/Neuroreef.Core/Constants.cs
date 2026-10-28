@@ -128,8 +128,8 @@ public static class K
     [K("Brain", "share of colonists bred from the archive once it holds 4 genomes (the rest are random brains)", "-", "HT")] public const float ARCHIVE_SHARE = 0.9f;
     [K("Brain", "tournament size when choosing a colonist parent from the archive", "genomes", "HT")] public const int TOURNAMENT = 3;
     [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;
-    [K("Brain", "genesis period (immigration floor ramps to 0)", "steps", "HT")] public const int GENESIS = 300000;
-    [K("Brain", "genesis floor as share of initial count", "-", "HT")] public const float GENESIS_FLOOR = 0.25f;
+    [K("Brain", "prehistory: length of the colonist period (the floor ramps to 0); prehistory runs only", "steps", "HT")] public const int PREHISTORY = 300000;
+    [K("Brain", "prehistory: colonist floor as share of initial count", "-", "HT")] public const float PREHISTORY_FLOOR = 0.25f;
     [K("Brain", "founders and colonists arrive in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder or colonist group", "units", "HT")] public const float GROUP_SPREAD = 10f;
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;

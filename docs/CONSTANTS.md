@@ -125,8 +125,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ARCHIVE_SHARE | 0.9 | - | share of colonists bred from the archive once it holds 4 genomes (the rest are random brains) | HT |
 | TOURNAMENT | 3 | genomes | tournament size when choosing a colonist parent from the archive | HT |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
-| GENESIS | 300000 | steps | genesis period (immigration floor ramps to 0) | HT |
-| GENESIS_FLOOR | 0.25 | - | genesis floor as share of initial count | HT |
+| PREHISTORY | 300000 | steps | prehistory: length of the colonist period (the floor ramps to 0); prehistory runs only | HT |
+| PREHISTORY_FLOOR | 0.25 | - | prehistory: colonist floor as share of initial count | HT |
 | GROUP_SIZE | 8 | agents | founders and colonists arrive in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
 | GROUP_SPREAD | 10 | units | radius of a founder or colonist group | HT |
 | BANK_LIVING | 96 | genomes | genomes per species stored in a gene bank (living sample) | HT |

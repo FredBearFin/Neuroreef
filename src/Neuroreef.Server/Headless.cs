@@ -13,21 +13,21 @@ public static class Headless
 {
     public static int Run(Options o, GeneBank.Data? bank)
     {
-        using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, o.Genesis || bank == null, o.Empty);
-        sim.W.GenesisSteps = o.GenesisSteps;
-        sim.W.StraysAfterGenesis = o.Strays;
+        using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: o.Evolve, empty: o.Empty);
+        sim.W.PrehistorySteps = o.PrehistorySteps;
         var w = sim.W;
         if (o.Evolve)
         {
-            Console.WriteLine("NEUROREEF 2  EVOLVE");
-            Console.WriteLine($"Evolving brains from random for {o.Steps:N0} steps at full speed: colonists arrive until step {o.GenesisSteps:N0},");
-            Console.WriteLine("then the world must stand on its own. The evolved brains are saved every 50,000 steps to");
+            Console.WriteLine("NEUROREEF 2  PREHISTORY (evolve)");
+            Console.WriteLine($"This is NOT the world you watch. It stands for the long evolution before it: brains start random,");
+            Console.WriteLine($"and colonists keep each species going until step {o.PrehistorySteps:N0} while brains evolve; after that it");
+            Console.WriteLine($"must stand on its own until step {o.Steps:N0}. The evolved brains are saved every 50,000 steps to");
             Console.WriteLine("  " + o.SaveBank);
             Console.WriteLine("Leave this window open. You can stop with Ctrl+C at any time; the last save is kept.");
             Console.WriteLine();
         }
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
-        Console.WriteLine($"start: {(bank != null ? $"gene bank ({bank.Total} genomes)" : "GENESIS (random brains)")}   alive {w.AliveCount}");
+        Console.WriteLine($"start: {(o.Evolve ? "PREHISTORY, random brains, colonists until step " + o.PrehistorySteps.ToString("N0") : bank != null ? $"live world, brains from gene bank ({bank.Total} genomes), no spawning" : "live world, RANDOM BRAINS, no spawning")}   alive {w.AliveCount}");
         Header(w);
         var sw = Stopwatch.StartNew();
         long lastT = 0; ulong lastStep = 0;

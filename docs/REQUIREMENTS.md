@@ -39,10 +39,10 @@ Each requirement has a number, a statement and a verification method:
 | NR-209 | For any selected animal, the console shall show its features, hidden state, primitive gains, actions and reward every step. | D |
 | NR-210 | No behaviour shall be hand-set. Founder brains shall be drawn from the RNG only; a test shall verify that founder genomes are a function of (seed, slot) alone and contain no species-specific constants. | T |
 | NR-211 | Brains shall learn during life by a reward-modulated rule; the reward shall be the same function of drive relief and pain for every species (DESIGN §7.2). Learned changes shall not be inherited. A test shall show the probability of a rewarded action rising in a two-choice scene. | T |
-| NR-212 | Evolved genomes shall be savable to and loadable from a gene-bank file. A genesis mode shall start from random brains. | T |
+| NR-212 | Evolved genomes shall be savable to and loadable from a gene-bank file. A prehistory mode shall start from random brains. | T |
 | NR-213 | The console shall measure and display which combinations of primitives each species uses (behaviour fingerprints). | D |
 | NR-214 | A life table (deaths by age class and mean age at death, per species) shall be recorded and shown in the console and the headless report. | D |
-| NR-215 | An evolve mode shall run genesis headless at full speed, save the evolved gene bank next to the program, and write an observation report; a normal start shall load that bank automatically. | D |
+| NR-215 | An evolve mode shall run the prehistory headless at full speed, save the evolved gene bank next to the program, and write an observation report; a normal start shall load that bank automatically. | D |
 
 ## 3. Ecology (NR-3xx)
 
@@ -60,7 +60,7 @@ Each requirement has a number, a statement and a verification method:
 | NR-310 | Carcasses, dung and burned vegetation shall return nutrient to the soil. | T |
 | NR-311 | Each species shall reproduce by its own mode: sexual, hermaphrodite, fission, facultative parthenogenesis, cyclic parthenogenesis or spores (DESIGN §8), with live birth or eggs, and litter size from the body plan. | T |
 | NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
-| NR-313 | Immigrants (genesis immigration, and optional strays after genesis) shall be counted separately from births. After the genesis period, strays shall be off by default. | I |
+| NR-313 | No animal in the live world shall appear except by birth from a parent of its species. Colonists are allowed only in a prehistory run, which shall be labelled as such in its output; the console shall show that the world is births-only and mark extinct species permanently. | T |
 | NR-314 | Outcomes shall be observed, not targeted (NR-321). Every headless run shall end with an observation report per species (alive, created, immigrants, conceptions, matings, strikes, kills, deaths by cause, main food) and the run's telemetry. Extinctions and crashes are valid results and shall be reported as such. | A |
 | NR-315 | The roster shall close the energy cycle: every pool has a consumer, every species has a food pool in its realm, every dead pool returns to nutrient. The program shall check this at start-up and refuse to run if it fails. | T |
 | NR-316 | Every species shall have a reproduction mode whose preconditions it can meet in its realm. | T |
