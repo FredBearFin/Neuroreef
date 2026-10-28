@@ -125,13 +125,29 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ARCHIVE_SHARE | 0.9 | - | share of colonists bred from the archive once it holds 4 genomes (the rest are random brains) | HT |
 | TOURNAMENT | 3 | genomes | tournament size when choosing a colonist parent from the archive | HT |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
-| PREHISTORY | 300000 | steps | prehistory: length of the colonist period (the floor ramps to 0); prehistory runs only | HT |
-| PREHISTORY_FLOOR | 0.25 | - | prehistory: colonist floor as share of initial count | HT |
+
+## 6. Prehistory
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| PREHISTORY_STEPS | 500000 | steps | length of a prehistory run | HT |
+| PREHISTORY_COLONISTS | 400000 | steps | colonists arrive until this step (the floor ramps to 0); the rest must stand on its own | HT |
+| BRANCHES | 3 | branches | number of separate branches (populations on the same land) evolving side by side | HT |
+| MIGRATE_EVERY | 20000 | steps | steps between exchanges of the best genomes from each branch to the next | HT |
+| MIGRANTS | 4 | genomes | archive genomes per species sent in one exchange | HT |
+| YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
+| BRANCH_CAPACITY | 24576 | slots | agent slots per branch | HT |
+| PREHISTORY_FLOOR | 0.25 | - | colonist floor as share of initial count | HT |
+
+## 7. Brain
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
 | GROUP_SIZE | 8 | agents | founders and colonists arrive in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
 | GROUP_SPREAD | 10 | units | radius of a founder or colonist group | HT |
 | BANK_LIVING | 96 | genomes | genomes per species stored in a gene bank (living sample) | HT |
 
-## 6. Body
+## 8. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -145,7 +161,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_STRIKE | 0.2 | - | basal cost per unit of extra strike | HT |
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
 
-## 7. Reproduction
+## 9. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -157,7 +173,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RESTING_MAX | 6000 | steps | cyclic: max dormancy of resting eggs | HT |
 | SPORE_RADIUS | 3 | cells | spores: search radius | HT |
 
-## 8. Vegetation
+## 10. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -203,7 +219,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 9. Fire
+## 11. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -218,7 +234,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 10. Species body plans
+## 12. Species body plans
 
 Derived values follow the allometry rules of DESIGN §9.1. S = super-individual.
 

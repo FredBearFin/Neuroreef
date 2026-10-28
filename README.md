@@ -25,17 +25,31 @@ generations.
 species stays extinct. Its first animals need brains that can keep them alive, and those come from a
 **prehistory**: a separate run that stands for the long evolution before the world begins.
 
-**Run the prehistory once.** Double-click **Evolve.bat** in
-the download. It runs the world at full speed without graphics for about an hour, then saves
-`evolved.nrbank` (the evolved brains) and `evolve-report.txt` (what happened to each species, including
-which died out and why). After that, `Neuroreef.exe` starts from the evolved brains automatically.
-Send `evolved.nrbank` back if it should be shipped in the exe for everyone.
+**The first start is the prehistory, and you can watch it.** Without evolved brains, the console
+opens on the **Prehistory** tab. Three branches (separate populations on the same land) evolve at full
+speed, 500,000 steps shown as 500 million symbolic years:
+- tap a branch card to watch that branch in 3D;
+- each square on a card is a species: green self-sustaining, yellow breeding, orange propped up by
+  colonists, red gone;
+- the sliders change the evolution itself while it runs (mutation, selection, colonists, migration,
+  length);
+- **Begin the world now** ends it early.
+
+When it ends, each species takes its brains from the branch where it did best, they are saved as
+`evolved.nrbank`, and the world begins: births and deaths only. The next start skips the prehistory
+(start with `--prehistory` to run a new one). Closing the window during the prehistory saves
+`prehistory-partial.nrbank`.
+
+**Evolve.bat** runs the same prehistory without graphics (a little faster) and also writes
+`evolve-report.txt`: what happened to each species in each branch.
 
 `RUN.txt` in the download lists the options. The most useful ones:
 
 | Option | Effect |
 |---|---|
 | `--random-brains` | open the world with random brains even if `evolved.nrbank` exists (no spawning, so most species die out) |
+| `--prehistory` | run a new prehistory even if `evolved.nrbank` exists |
+| `--branches 4` / `--prehistory-steps 1000000` | more branches (more memory and cores) / a longer prehistory |
 | `--evolve` | what Evolve.bat runs: the prehistory, headless at full speed, which saves `evolved.nrbank` |
 | `--seed 7` | a different world and run |
 | `--save-bank my.nrbank` / `--load-bank my.nrbank` | keep evolved genomes between runs |

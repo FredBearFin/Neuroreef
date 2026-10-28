@@ -3,10 +3,12 @@
 import { Link } from './net.js';
 import { World3D } from './world3d.js';
 import { Panels, bar } from './panels.js';
+import { PrehistoryTab } from './prehistory.js';
 
 const $ = (id) => document.getElementById(id);
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
+let pre = null, phase = null, phaseVersion = -1, lastPre = null;
 
 link.listen('meta', (m) => {
   meta = m;
@@ -14,6 +16,7 @@ link.listen('meta', (m) => {
     world = new World3D($('gl'), meta);
     panels = new Panels(meta, link);
     panels.onSelect = select;
+    pre = new PrehistoryTab(meta, link, $('tab-prehistory'));
     panels.show('inspect');
     buildControls();
     requestAnimationFrame(frame);
@@ -38,6 +41,7 @@ link.listen('probe', (p) => {
   if (now - lastProbeT > 250) { lastProbeT = now; panels.renderProbe(p, world); hud(); }
 });
 link.listen('status', (s) => status(s));
+link.listen('prehistory', (p) => { lastPre = p; if (pre) pre.update(p); });
 link.listen('close', () => $('connect').classList.remove('hidden'));
 link.connect();
 
@@ -135,16 +139,36 @@ function count(k) { return world.perceived.filter((p) => p.kind === k).length; }
 // ------------------------------------------------------------------ top bar and feed
 
 function status(s) {
+  if (s.phase !== phase) enterPhase(s.phase);
+  if (s.phaseVersion !== phaseVersion) {
+    // another simulation is on view (a branch, or the world after the prehistory): drop what we drew
+    phaseVersion = s.phaseVersion;
+    if (panels) panels.rows = [];
+    if (world) { world.selected = 0; probe = null; if (panels) panels.renderProbe(null); hud(); }
+  }
+  if (s.phase === 'prehistory' && lastPre) {
+    $('s-pre').textContent = `PREHISTORY · ${Math.round(lastPre.step * lastPre.yearsPerStep / 1e6)} of ${Math.round(lastPre.settings.totalSteps * lastPre.yearsPerStep / 1e6)} Myr · branch ${String.fromCharCode(65 + s.view)}`;
+  }
   $('s-step').textContent = s.step.toLocaleString();
   $('s-alive').textContent = s.alive.toLocaleString();
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
   $('s-season').textContent = s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying';
-  $('s-random').classList.toggle('hidden', s.bankSource !== 'random');
+  $('s-random').classList.toggle('hidden', s.bankSource !== 'random' || s.phase !== 'live');
   extinct = s.extinct || [];
   markExtinct();
   $('s-full').classList.toggle('hidden', s.free > 0);
   if (world && s.follow && s.probe && world.selected !== s.probe && world.mode !== 'overview') world.selected = s.probe;
   if (world && world.mode !== 'overview' && !world.selected && s.probe) world.selected = s.probe;
+}
+
+function enterPhase(p) {
+  const isPre = p === 'prehistory';
+  phase = p;
+  $('s-pre').classList.toggle('hidden', !isPre);
+  $('s-born').classList.toggle('hidden', isPre);
+  $('tabbtn-pre').classList.toggle('hidden', !isPre);
+  for (const b of document.querySelectorAll('#speed button[data-rate], #speed button[data-cmd=step]')) b.disabled = isPre;
+  if (panels) panels.show(isPre ? 'prehistory' : 'inspect');
 }
 
 // an extinct species keeps its label: nothing in this world can bring it back

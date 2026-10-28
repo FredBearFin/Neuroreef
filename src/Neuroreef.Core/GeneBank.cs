@@ -23,12 +23,29 @@ public static class GeneBank
 
     public static void Save(World w, Stream s)
     {
+        var src = new World[w.NS];
+        for (int k = 0; k < src.Length; k++) src[k] = w;
+        Write(src, s);
+    }
+
+    /// <summary>A bank whose species come from different branches: species s from branches[choice[s]] (prehistory).</summary>
+    public static void SaveMerged(Simulation[] branches, int[] choice, Stream s)
+    {
+        var src = new World[Roster.Count];
+        for (int k = 0; k < src.Length; k++) src[k] = branches[choice[k]].W;
+        Write(src, s);
+    }
+
+    static void Write(World[] src, Stream s)
+    {
+        var w0 = src[0];
         using var bw = new BinaryWriter(s, System.Text.Encoding.ASCII, leaveOpen: true);
         bw.Write("NRBK"u8.ToArray());
-        bw.Write(Version); bw.Write((ushort)w.NS); bw.Write((ushort)G.LEN); bw.Write((uint)w.Cap);
-        bw.Write(w.Step); bw.Write(w.Seed);
-        for (int sp = 0; sp < w.NS; sp++)
+        bw.Write(Version); bw.Write((ushort)w0.NS); bw.Write((ushort)G.LEN); bw.Write((uint)w0.Cap);
+        bw.Write(w0.Step); bw.Write(w0.Seed);
+        for (int sp = 0; sp < w0.NS; sp++)
         {
+            var w = src[sp];
             var entries = new List<(float score, int src, bool archive)>();
             for (int k = 0; k < w.ArchiveCount[sp]; k++) entries.Add((w.ArchiveScore[sp * K.ARCHIVE + k], k, true));
             var living = new List<(float, int, bool)>();
@@ -38,11 +55,11 @@ public static class GeneBank
             living.Sort((a, b) => b.Item1.CompareTo(a.Item1));
             for (int k = 0; k < Math.Min(K.BANK_LIVING, living.Count); k++) entries.Add(living[k]);
             bw.Write((ushort)entries.Count);
-            foreach (var (score, src, archive) in entries)
+            foreach (var (score, idx, archive) in entries)
             {
                 bw.Write(score);
-                var g = archive ? new ReadOnlySpan<sbyte>(w.Archive, (sp * K.ARCHIVE + src) * G.LEN, G.LEN)
-                                : new ReadOnlySpan<sbyte>(w.Genome, src * G.LEN, G.LEN);
+                var g = archive ? new ReadOnlySpan<sbyte>(w.Archive, (sp * K.ARCHIVE + idx) * G.LEN, G.LEN)
+                                : new ReadOnlySpan<sbyte>(w.Genome, idx * G.LEN, G.LEN);
                 foreach (var b in g) bw.Write(b);
             }
         }

@@ -34,14 +34,17 @@ public static class Brain
     }
 
     /// <summary>Mutation (DESIGN §7.3): v1's mutateWord rule on every byte.</summary>
-    public static void Mutate(Span<sbyte> g, uint seed, uint step, uint key)
+    public static void Mutate(Span<sbyte> g, uint seed, uint step, uint key) => Mutate(g, seed, step, key, Defaults);
+    static readonly EvoSettings Defaults = new();
+
+    public static void Mutate(Span<sbyte> g, uint seed, uint step, uint key, EvoSettings e)
     {
         for (int k = 0; k < G.LEN; k++)
         {
             float u = Rng.U(seed, step, key, Rs.Mutate + (uint)k * 8u);
-            if (u >= K.MUT_RATE) continue;
+            if (u >= e.MutRate) continue;
             float n = Rng.N(seed, step, key, Rs.Mutate + (uint)k * 8u + 1u);
-            float d = (u < K.MUT_RATE * K.MUT_BIG_SHARE) ? n * K.MUT_BIG : n * K.MUT_SMALL;
+            float d = (u < e.MutRate * e.MutBigShare) ? n * e.MutBig : n * e.MutSmall;
             int v = g[k] + (int)MathF.Round(d);
             g[k] = (sbyte)Math.Clamp(v, -127, 127);
         }

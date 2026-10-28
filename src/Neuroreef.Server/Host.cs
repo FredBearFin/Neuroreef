@@ -34,6 +34,10 @@ public static class Host
         Console.WriteLine("NEUROREEF 2");
         Console.WriteLine("The world is births and deaths only: no animal is ever spawned.");
         using var host = new SimHost(o, bank);
+        if (host.Pre != null)
+            Console.WriteLine($"No evolved brains yet, so the PREHISTORY runs first: {host.Pre.B.Length} branches evolve at full speed " +
+                $"({host.Pre.Pending.TotalSteps:N0} steps = {(long)host.Pre.Pending.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years). " +
+                "Watch it in the console; the world begins when it ends, or when you press Begin the world.");
         var state = new Shared(host);
 
         var builder = WebApplication.CreateSlimBuilder();
@@ -85,7 +89,16 @@ public static class Host
         status.Start();
         done.Wait();
         Console.WriteLine("stopping...");
-        if (o.SaveBank != null) { GeneBank.Save(host.W, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }
+        var pre = host.Pre;
+        if (pre != null)
+        {
+            // stopped during the prehistory: keep what has evolved so far, without making it the default
+            string part = o.SaveBank ?? Path.Combine(AppContext.BaseDirectory, "prehistory-partial.nrbank");
+            try { pre.StopAndWait(); pre.SaveBank(part); }
+            catch (Exception e) { Console.Error.WriteLine("could not save the prehistory: " + e.Message); }
+            Console.WriteLine($"prehistory stopped at step {pre.Step:N0}; brains so far saved: {part} (start with --load-bank to use them)");
+        }
+        else if (o.SaveBank != null) { GeneBank.Save(host.W, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }
         app.StopAsync().Wait(2000);
         return 0;
     }
@@ -94,6 +107,19 @@ public static class Host
     {
         while (!done.Wait(10000))
         {
+            var pre = h.Pre;
+            if (pre != null)
+            {
+                var parts = new List<string>();
+                for (int b = 0; b < pre.B.Length; b++)
+                {
+                    int self = 0;
+                    for (int sp = 0; sp < Roster.Count; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
+                    parts.Add($"{(char)('A' + b)}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
+                }
+                Console.WriteLine($"prehistory {pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {pre.Step:N0})  {pre.Rate,4:F0} steps/s  " + string.Join("  |  ", parts));
+                continue;
+            }
             var w = h.W;
             Console.WriteLine($"step {w.Step,9:N0}  {h.MeasuredRate,5:F0} steps/s  alive {w.AliveCount,6:N0}{(w.FreeTop == 0 ? "  WORLD FULL: births refused (raise --capacity)" : "")}");
         }
@@ -138,10 +164,21 @@ public static class Host
         // the step at which each species was first seen with no living member (no adults, juveniles, eggs or embryos)
         readonly long[] _extinctAt;
         readonly int[] _alive = new int[Roster.Count];
+        int _phaseSeen = -1;
+        /// <summary>Called under the lock: when the viewed simulation changed (phase or branch), forget per-simulation caches.</summary>
+        void CheckPhase()
+        {
+            if (_phaseSeen == H.PhaseVersion) return;
+            _phaseSeen = H.PhaseVersion;
+            Array.Fill(_extinctAt, -1L); _teleHead = -1; _tele = null; _preJson = null;
+        }
+
         public long[] Extinct()
         {
             lock (_lock)
             {
+                CheckPhase();
+                if (H.IsPrehistory) return (long[])_extinctAt.Clone();     // in the prehistory colonists can return a species
                 var w = H.W;
                 Array.Clear(_alive);
                 for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) _alive[w.Spc[i]]++;
@@ -154,9 +191,48 @@ public static class Host
         {
             lock (_lock)
             {
+                CheckPhase();
                 int head = H.W.T.Head;
                 if (head != _teleHead) { _tele = Wire.EncodeTelemetry(H.W); _teleHead = head; }
                 return (_tele, _teleHead);
+            }
+        }
+
+        string? _preJson; DateTime _preT;
+        /// <summary>Prehistory progress: per branch, per species standing and count; the current evolution settings.</summary>
+        public string? PrehistoryJson()
+        {
+            lock (_lock)
+            {
+                CheckPhase();
+                var pre = H.Pre;
+                if (pre == null) return null;
+                if (_preJson != null && (DateTime.UtcNow - _preT).TotalSeconds < 1) return _preJson;
+                _preT = DateTime.UtcNow;
+                var e = pre.Pending;
+                var branches = new List<object>();
+                foreach (var b in pre.B)
+                {
+                    var stand = new int[Roster.Count]; var count = new int[Roster.Count]; var births = new float[Roster.Count]; var col = new float[Roster.Count];
+                    var gen = new float[Roster.Count];
+                    var last = new float[b.W.T.Len];
+                    bool has = b.W.T.SampleCount > 0 && b.W.T.Sample(b.W.T.SampleCount - 1, last);
+                    for (int s = 0; s < Roster.Count; s++)
+                    {
+                        stand[s] = (int)Prehistory.StandingOf(b, s, out count[s], out births[s], out col[s]);
+                        float g = has ? last[b.W.T.SpeciesOffset(s, Neuroreef.Telemetry.S_GEN)] : 0;
+                        gen[s] = float.IsFinite(g) ? g : 0;    // no animals: the mean is undefined
+                    }
+                    branches.Add(new { step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, colonists = col, generation = gen });
+                }
+                _preJson = JsonSerializer.Serialize(new
+                {
+                    type = "prehistory", step = pre.Step, rate = pre.Rate, paused = pre.Paused, finished = pre.Finished, migrations = pre.Migrations,
+                    yearsPerStep = K.YEARS_PER_STEP, view = H.ViewBranch, branches,
+                    settings = new { mutRate = e.MutRate, mutSmall = e.MutSmall, mutBigShare = e.MutBigShare, mutBig = e.MutBig, archiveShare = e.ArchiveShare,
+                        tournament = e.Tournament, floor = e.Floor, colonistSteps = e.ColonistSteps, totalSteps = e.TotalSteps, migrateEvery = e.MigrateEvery, migrants = e.Migrants },
+                });
+                return _preJson;
             }
         }
 
@@ -205,23 +281,32 @@ public static class Host
                 await Bin(_s.World, cts.Token);
                 var rx = Receive(cts.Token);
                 var tx = SendLoop(cts.Token);
-                await Task.WhenAny(rx, tx);
+                await await Task.WhenAny(rx, tx);     // the second await surfaces a failure
             }
             catch (OperationCanceledException) { }
             catch (WebSocketException) { }
+            catch (Exception e) { Console.Error.WriteLine("console connection failed: " + e.Message); }
             finally { cts.Cancel(); }
         }
 
         async Task SendLoop(CancellationToken ct)
         {
             var h = _s.H;
-            long agentsVer = -1, fieldsVer = -1, probeVer = -1; int teleHead = -1;
+            long agentsVer = -1, fieldsVer = -1, probeVer = -1; int teleHead = -1, phaseSeen = h.PhaseVersion;
+            double nextPre = 0;
             var sw = Stopwatch.StartNew();
             double nextAgents = 0, nextFields = 0, nextTele = 0, nextAnalysis = 0, nextStatus = 0, nextProbe = 0;
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
             {
                 double t = sw.Elapsed.TotalMilliseconds;
+                if (phaseSeen != h.PhaseVersion) { phaseSeen = h.PhaseVersion; _history = true; teleHead = -1; }   // a new simulation is on view
                 if (_history) { _history = false; await Bin(Wire.EncodeHistory(h.W, 400), ct); }
+                if (t >= nextPre)
+                {
+                    nextPre = t + 1000;
+                    var pj = _s.PrehistoryJson();
+                    if (pj != null) await Txt(pj, ct);
+                }
                 if (t >= nextAgents)
                 {
                     nextAgents = t + 1000.0 / Math.Max(1, _agentHz);
@@ -258,7 +343,8 @@ public static class Host
                         type = "status", step = w.Step, rate = h.Rate, measured = h.MeasuredRate, paused = h.Paused, alive = w.AliveCount,
                         free = w.FreeTop, capacity = w.Cap, bankSource = h.BankSource, extinct = _s.Extinct(),
                         slotShortage = w.T.SlotShortage, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
-                        season = w.SeasonAt(K.WORLD * 0.5f),
+                        season = w.SeasonAt(K.WORLD * 0.5f), phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
+                        branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                     }), ct);
                 }
                 if (t >= nextAnalysis)
@@ -303,8 +389,39 @@ public static class Host
                         }
                         case "follow": { bool on = e.GetProperty("on").GetBoolean(); h.Post(s => s.ProbeFollow = on); break; }
                         case "rate": h.Rate = (float)e.GetProperty("value").GetDouble(); break;
-                        case "pause": h.Paused = true; break;
-                        case "resume": h.Paused = false; break;
+                        case "pause": h.SetPaused(true); break;
+                        case "resume": h.SetPaused(false); break;
+                        case "branch": h.View(e.GetProperty("index").GetInt32()); break;
+                        case "begin": h.BeginWorld(); break;
+                        case "evo":
+                        {
+                            // change the evolution settings of the running prehistory (applied at the next barrier)
+                            var pre = h.Pre;
+                            if (pre == null) break;
+                            var el = e.GetProperty("set");
+                            pre.Configure(s =>
+                            {
+                                foreach (var p in el.EnumerateObject())
+                                {
+                                    double v = p.Value.GetDouble();
+                                    switch (p.Name)
+                                    {
+                                        case "mutRate": s.MutRate = (float)v; break;
+                                        case "mutSmall": s.MutSmall = (float)v; break;
+                                        case "mutBigShare": s.MutBigShare = (float)v; break;
+                                        case "mutBig": s.MutBig = (float)v; break;
+                                        case "archiveShare": s.ArchiveShare = (float)v; break;
+                                        case "tournament": s.Tournament = (int)Math.Round(v); break;
+                                        case "floor": s.Floor = (float)v; break;
+                                        case "colonistSteps": s.ColonistSteps = (int)v; break;
+                                        case "totalSteps": s.TotalSteps = (int)v; break;
+                                        case "migrateEvery": s.MigrateEvery = (int)v; break;
+                                        case "migrants": s.Migrants = (int)Math.Round(v); break;
+                                    }
+                                }
+                            });
+                            break;
+                        }
                         case "step": h.StepOnce(); break;
                         case "history": _history = true; break;
                         case "view":

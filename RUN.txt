@@ -3,7 +3,7 @@ NEUROREEF 2 - how to run
 1. Double-click Neuroreef.exe.
    Windows may say "Windows protected your PC" because the program is not signed:
    click "More info", then "Run anyway".
-2. (Run Evolve.bat once first; see below.) A console window opens and your browser opens the Neuroreef console at http://localhost:5800
+2. A console window opens and your browser opens the Neuroreef console at http://localhost:5800
    Keep the console window open; closing it stops the simulation.
 3. Tablet: the console window prints a line "on your network: http://192.168.x.x:5800".
    Open that address in the tablet's browser (same Wi-Fi). If Windows asks whether to allow
@@ -13,14 +13,17 @@ The world you watch is births and deaths only: no animal is ever spawned into it
 species stays extinct. Its first animals need brains that can keep them alive. Those come from a
 PREHISTORY, a separate run that stands for the long evolution before the world begins.
 
-Running the prehistory (do this first):
-  Double-click Evolve.bat. It runs the world at full speed without graphics for about an hour (400,000 steps),
-  then writes:
-    evolved.nrbank       the evolved brains
-    evolve-report.txt    what happened to each species (including which ones died out, and why)
-  After that, double-click Neuroreef.exe: it starts from evolved.nrbank automatically.
-  You can stop Evolve.bat with Ctrl+C; it saves first. Running it again continues from scratch;
-  rename evolved.nrbank to keep an older result.
+The prehistory (the first start):
+  With no evolved brains yet, the console opens on the Prehistory tab. Three branches evolve at full
+  speed: 500,000 steps, shown as 500 million symbolic years. Tap a branch to watch it in 3D; the
+  coloured squares are the species (green = lives on its own, yellow = breeding, orange = kept alive by
+  colonists, red = gone). The sliders change the evolution while it runs. "Begin the world now" ends it
+  early. At the end the best brains of every species are saved as evolved.nrbank and the world begins:
+  births and deaths only. The next start skips the prehistory; Neuroreef.exe --prehistory runs a new one.
+  Closing the window during the prehistory saves prehistory-partial.nrbank.
+
+  Evolve.bat runs the same prehistory without graphics and also writes evolve-report.txt (what
+  happened to each species in each branch, and why).
 
 Options (run from a command prompt in this folder):
   Neuroreef.exe --random-brains      open the world with random brains even if evolved.nrbank exists

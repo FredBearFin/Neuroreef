@@ -39,7 +39,7 @@ public static class Terrain
     public static void Build(World w)
     {
         int FW = K.FW, n = FW * FW;
-        var r = new Rng.Seq(w.Seed * 7919u + 13u);
+        var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
         var elevN = Fbm(ref r, 3, 6);
         var moistN = Fbm(ref r, 4, 4);
         var vegN = Fbm(ref r, 6, 3);

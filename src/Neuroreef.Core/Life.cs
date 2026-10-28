@@ -54,13 +54,13 @@ public static class Life
     public static void CopyGenome(World w, int from, int to, bool mutate)
     {
         Array.Copy(w.Genome, from * G.LEN, w.Genome, to * G.LEN, G.LEN);
-        if (mutate) Brain.Mutate(w.GenomeOf(to), w.Seed, (uint)w.Step, (uint)to + 0x10000u);
+        if (mutate) Brain.Mutate(w.GenomeOf(to), w.Seed, (uint)w.Step, (uint)to + 0x10000u, w.Evo);
     }
 
     public static void CrossGenome(World w, int mother, int father, int child)
     {
         Brain.Crossover(w.GenomeOf(child), w.GenomeOf(mother), w.GenomeOf(father), w.Seed, (uint)w.Step, (uint)child);
-        Brain.Mutate(w.GenomeOf(child), w.Seed, (uint)w.Step, (uint)child + 0x10000u);
+        Brain.Mutate(w.GenomeOf(child), w.Seed, (uint)w.Step, (uint)child + 0x10000u, w.Evo);
     }
 
     /// <summary>Fitness for the archive: offspring that grew up count most (DESIGN §7.4).</summary>
@@ -69,10 +69,14 @@ public static class Life
     /// <summary>Insert the genome of a dying animal into its species' elite archive if it beats the weakest (DESIGN §7.4).</summary>
     public static void ToArchive(World w, int i)
     {
-        int s = w.Spc[i];
-        var sp = w.Sp[s];
         float score = Score(w, i);
         if (score < 0.05f) return;
+        ArchiveInsert(w, w.Spc[i], new ReadOnlySpan<sbyte>(w.Genome, i * G.LEN, G.LEN), score);
+    }
+
+    /// <summary>Put a genome into a species' archive if it beats the weakest entry (also used by migration between branches).</summary>
+    public static void ArchiveInsert(World w, int s, ReadOnlySpan<sbyte> genome, float score)
+    {
         int n = w.ArchiveCount[s], baseI = s * K.ARCHIVE, slot;
         if (n < K.ARCHIVE) { slot = n; w.ArchiveCount[s] = n + 1; }
         else
@@ -82,7 +86,7 @@ public static class Life
             if (score <= worst) return;
         }
         w.ArchiveScore[baseI + slot] = score;
-        Array.Copy(w.Genome, i * G.LEN, w.Archive, (baseI + slot) * G.LEN, G.LEN);
+        genome.CopyTo(new Span<sbyte>(w.Archive, (baseI + slot) * G.LEN, G.LEN));
     }
 
     /// <summary>A random cell suitable for the given realm (hashed tries).</summary>
@@ -120,7 +124,7 @@ public static class Life
         int c = NewSlot(w);
         if (c < 0) return -1;
         if (genome.IsEmpty) Brain.RandomGenome(w.GenomeOf(c), w.Seed, (uint)w.Step, key);
-        else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u); }
+        else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
         Place(w, c, species, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
         w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
         if (adult) w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9));
@@ -182,10 +186,10 @@ public static class Life
         }
 
         // colonists exist only in a prehistory run (DESIGN §7.4). A live world never reaches this point.
-        if (!w.Prehistory || w.Step >= (ulong)w.PrehistorySteps) return;
+        if (!w.Prehistory || w.Step >= (ulong)w.Evo.ColonistSteps) return;
         for (int s = 0; s < w.NS; s++)
         {
-            float floor = w.Sp[s].InitCount * K.PREHISTORY_FLOOR * (1f - (float)w.Step / w.PrehistorySteps);
+            float floor = w.Sp[s].InitCount * w.Evo.Floor * (1f - (float)w.Step / MathF.Max(1, w.Evo.ColonistSteps));
             if (activeCount[s] >= floor) continue;
             // colonists arrive as one group, next to living kin if there are any (a lone colonist would never find a mate)
             float gx, gy;
@@ -212,7 +216,7 @@ public static class Life
     static ReadOnlySpan<sbyte> Colonist(World w, int s, uint key)
     {
         int n = w.ArchiveCount[s];
-        if (n < 4 || Rng.U(w.Seed, (uint)w.Step, key, Rs.Immigrant) >= K.ARCHIVE_SHARE) return ReadOnlySpan<sbyte>.Empty;
+        if (n < 4 || Rng.U(w.Seed, (uint)w.Step, key, Rs.Immigrant) >= w.Evo.ArchiveShare) return ReadOnlySpan<sbyte>.Empty;
         int a = Tournament(w, s, n, key, 0);
         var child = new Span<sbyte>(w.Scratch, 0, G.LEN);
         var pa = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + a) * G.LEN, G.LEN);
@@ -230,7 +234,7 @@ public static class Life
     static int Tournament(World w, int s, int n, uint key, uint round)
     {
         int best = -1; float bs = float.MinValue;
-        for (int t = 0; t < K.TOURNAMENT; t++)
+        for (int t = 0; t < w.Evo.Tournament; t++)
         {
             int k = (int)(Rng.U(w.Seed, (uint)w.Step, key, Rs.Archive + round * 16u + (uint)t) * n);
             float sc = w.ArchiveScore[s * K.ARCHIVE + k];

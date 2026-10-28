@@ -69,6 +69,10 @@ Each requirement has a number, a statement and a verification method:
 | NR-319 | Numerous small organisms shall be represented as super-individuals with their own brain, food and reproduction. | I |
 | NR-320 | Body traits (mass, speed, sight, armour, strike, litter size, diet efficiencies) shall be heritable and mutable, each with an energy or performance cost; diet changes shall trade off within a fixed digestive budget. | T |
 | NR-321 | The laws of the world shall be set once from physical plausibility and conservation of energy and mass, documented with their origin, and then frozen. No law shall be changed to produce or prevent an ecological outcome. | I |
+| NR-323 | Without evolved brains, the program shall run the prehistory live in the console at full speed, in BRANCHES separate populations on the same land, viewable one branch at a time in 3D, with progress shown in symbolic years. | T |
+| NR-324 | Every MIGRATE_EVERY steps the best archive genomes of each species shall be copied to the next branch. | T |
+| NR-325 | The evolution settings (EvoSettings) shall be changeable while the prehistory runs and shall reach every branch at the next barrier; they shall not change any law of the world. | T |
+| NR-326 | When the prehistory ends, each species' brains shall come from the branch where it stood best; the bank shall be saved, and the live world created from it shall have no colonists. | T |
 | NR-322 | Energy shall be conserved: building tissue (growth, offspring) shall cost the energy that eating that tissue yields, divided by a growth efficiency below 1. | T |
 
 ## 4. Telemetry and analytics (NR-4xx)
@@ -116,6 +120,7 @@ Filled in as tests and analyses are completed. Status: — not started, P pass, 
 | NR-101…NR-109 | T/I | `tests/Engineering*` | — |
 | NR-201…NR-213 | T/I/D | `tests/Brain*`, `tests/Primitive*` | — |
 | NR-301…NR-322 | T/A/I | `tests/EcologyTests`, headless report, DESIGN §15 | — |
+| NR-323…NR-326 | T | `tests/PrehistoryTests` | — |
 | NR-401…NR-404 | T/I | `tests/Telemetry*` | — |
 | NR-501…NR-506 | D/T | console screenshots | — |
 | NR-601…NR-604 | D/I | CI artifact | — |

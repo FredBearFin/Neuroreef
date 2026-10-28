@@ -387,7 +387,7 @@ niche (a scavenger that hunts, a browser that grazes) without any species being 
 **Why there are two kinds of run.** A random brain cannot keep an animal alive long enough to raise
 young, so a world started from random brains with no help empties in its first generation. Real
 animals never start from random brains: their brains were shaped before any one of them was born.
-So evolution from random brains runs in a separate, labelled **prehistory** (`--evolve`), where
+So evolution from random brains runs in a separate, labelled **prehistory** (§7.6), where
 colonists keep species going while brains evolve, and saves its result as a gene bank. The **live
 world**, the one shown in the console, is seeded once from that bank and is then births and deaths
 only. Its code path never reaches the colonist code (`World.Prehistory` is false), and a test kills a
@@ -435,6 +435,43 @@ The floor ramps linearly from PREHISTORY_FLOOR = 25% of the species' initial cou
 
 A run started with `--load-bank` seeds each species from its bank genomes (mutated) instead of
 random ones. A live world never has colonists, with or without a bank.
+
+### 7.6 The prehistory run: branches, settings, and the start of the world (NR-323 … NR-326)
+
+**Where it runs.** When `Neuroreef.exe` starts without evolved brains (no `evolved.nrbank`, no shipped
+bank), the console opens on the prehistory: it runs live, at full speed, and can be watched in 3D.
+`--evolve` (Evolve.bat) runs the same thing without the console. `--prehistory` forces a new one.
+
+**Branches (an island model).** BRANCHES = 3 separate populations evolve side by side on the same land
+(the same terrain seed, different run seeds), each on its own thread and each with BRANCH_CAPACITY
+slots. Separate populations explore different solutions; every MIGRATE_EVERY = 20,000 steps the
+MIGRANTS = 4 best archive genomes of each species are copied from each branch into the next one's
+archive, so a good solution found in one can spread. Branches meet at a barrier every 500 steps, so
+they stay in lockstep; settings changes, pauses and migrations happen only there, while no branch is
+stepping, which keeps every branch deterministic for a given sequence of settings.
+
+**Length.** PREHISTORY_STEPS = 500,000 steps, shown as YEARS_PER_STEP = 1,000 symbolic years per step
+(500 million years). The years are a label for the console, not a time scale of the model: one step
+is still one step of the same laws. Colonists arrive until PREHISTORY_COLONISTS = 400,000; the last
+100,000 steps are births only in every branch, so the prehistory ends with a test of whether each
+species can live without help.
+
+**Settings (EvoSettings).** The console's Prehistory tab can change, while it runs: mutation rate and
+size, share of big jumps, the share of colonists bred from the archive, the tournament size, the
+colonist floor, migration interval and count, and when colonists stop and the prehistory ends. These
+are knobs of the evolutionary search, not laws of the world (§15): they change how genomes vary and
+are selected, never what happens to a living animal. They are clamped to ranges where the search
+still works.
+
+**Standing.** For each species in each branch, over the last 32 samples (~1,000 steps):
+self-sustaining (alive; births at least 90% of deaths and at least twice the colonists), breeding
+(births, but not replacing itself), propped (alive only through colonists or unbred founders), or
+gone.
+
+**The start of the world.** At the end (or when "Begin the world" is pressed), the branches stop and
+each species' gene bank is taken from the branch where it stands best (then by numbers alive). The
+bank is saved as `evolved.nrbank` beside the exe, so the next start skips the prehistory, and the live
+world is created from it. From that moment there are births and deaths only.
 
 ## 8. Reproduction modes (NR-311, NR-316)
 

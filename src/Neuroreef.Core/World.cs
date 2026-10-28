@@ -76,14 +76,15 @@ public sealed class World
     /// births and deaths only: no animal ever appears except by birth (NR-313).
     /// </summary>
     public bool Prehistory;
-    public int PrehistorySteps = K.PREHISTORY;
+    public readonly EvoSettings Evo = new();   // the evolutionary search's knobs (prehistory; mutation also in a live world)
+    public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
     public readonly Telemetry T;
 
-    public World(int capacity, uint seed)
+    public World(int capacity, uint seed, uint terrainSeed = 0)
     {
-        Cap = capacity; Seed = seed;
+        Cap = capacity; Seed = seed; TerrainSeed = terrainSeed == 0 ? seed : terrainSeed;
         int c = capacity;
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];
         Energy = new float[c]; Gut = new float[c]; GutEnergy = new float[c]; GutWaste = new float[c]; GutSeedy = new float[c];

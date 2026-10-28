@@ -111,8 +111,9 @@ Every text frame has a `type`:
 
 | type | When | Content |
 |---|---|---|
-| `meta` | first frame | world size, prehistory flag (always false in the console), bank source, species list with body plans, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count |
-| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity, bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, probe serial, follow flag, alive count per species, season |
+| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, species list with body plans, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count |
+| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity, bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, probe serial, follow flag, alive count per species, season, `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath` |
+| `prehistory` | every 1 s, during the prehistory | `step`, `rate` (steps/s per branch), `paused`, `finished`, `migrations`, `yearsPerStep`, `view`, `settings` (the EvoSettings fields), `branches`: per branch `step`, `alive`, `full`, and per species `standing` (0 gone, 1 propped, 2 breeding, 3 self-sustaining), `count`, `births`, `colonists` (last ~1,000 steps), `generation` |
 | `explain` | every 3 s | `items`: sentences generated from the telemetry (§12.4 of DESIGN), each with `text`, `species` (−1 = none) and `kind` |
 | `fingerprints` | every 3 s | per species: sampled count and up to 3 clusters (`label`, `share`, `top`, `centroid`) |
 | `ack` / `error` | on commands | result of a command |
@@ -129,6 +130,11 @@ Every text frame has a `type`:
 | `history` | — | resend HISTORY |
 | `view` | `hz`, `fieldsMs` | AGENTS rate (1–30 Hz) and FIELDS interval (250–10,000 ms) for this client |
 | `savebank` | — | save a gene bank next to the executable |
+| `branch` | `index` | prehistory: view this branch |
+| `evo` | `set`: {field: number} | prehistory: change EvoSettings fields (`mutRate`, `mutSmall`, `mutBigShare`, `mutBig`, `archiveShare`, `tournament`, `floor`, `colonistSteps`, `totalSteps`, `migrateEvery`, `migrants`); applied at the next barrier |
+| `begin` | — | end the prehistory now and start the world from the brains evolved so far |
+
+During the prehistory, `pause` / `resume` hold all branches; `rate` and `step` have no effect.
 
 There is one probe for the simulation: when several clients select animals, the last selection wins.
 

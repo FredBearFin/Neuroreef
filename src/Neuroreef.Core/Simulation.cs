@@ -20,9 +20,9 @@ public sealed class Simulation : IDisposable
     public readonly int[] ActiveCount;
 
     /// <param name="prehistory">true only for an evolve run: colonists may then appear (DESIGN §7.4). A live world never spawns.</param>
-    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false)
+    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0)
     {
-        W = new World(capacity, seed);
+        W = new World(capacity, seed, terrainSeed);
         var fails = Roster.ClosureCheck(W.Sp);
         if (fails.Count > 0) throw new InvalidOperationException("energy-cycle closure check failed:\n  " + string.Join("\n  ", fails));
         Terrain.Build(W);

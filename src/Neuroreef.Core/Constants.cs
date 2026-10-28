@@ -128,8 +128,14 @@ public static class K
     [K("Brain", "share of colonists bred from the archive once it holds 4 genomes (the rest are random brains)", "-", "HT")] public const float ARCHIVE_SHARE = 0.9f;
     [K("Brain", "tournament size when choosing a colonist parent from the archive", "genomes", "HT")] public const int TOURNAMENT = 3;
     [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;
-    [K("Brain", "prehistory: length of the colonist period (the floor ramps to 0); prehistory runs only", "steps", "HT")] public const int PREHISTORY = 300000;
-    [K("Brain", "prehistory: colonist floor as share of initial count", "-", "HT")] public const float PREHISTORY_FLOOR = 0.25f;
+    [K("Prehistory", "length of a prehistory run", "steps", "HT")] public const int PREHISTORY_STEPS = 500000;
+    [K("Prehistory", "colonists arrive until this step (the floor ramps to 0); the rest must stand on its own", "steps", "HT")] public const int PREHISTORY_COLONISTS = 400000;
+    [K("Prehistory", "number of separate branches (populations on the same land) evolving side by side", "branches", "HT")] public const int BRANCHES = 3;
+    [K("Prehistory", "steps between exchanges of the best genomes from each branch to the next", "steps", "HT")] public const int MIGRATE_EVERY = 20000;
+    [K("Prehistory", "archive genomes per species sent in one exchange", "genomes", "HT")] public const int MIGRANTS = 4;
+    [K("Prehistory", "symbolic time shown in the console: years per step", "years", "-")] public const int YEARS_PER_STEP = 1000;
+    [K("Prehistory", "agent slots per branch", "slots", "HT")] public const int BRANCH_CAPACITY = 24576;
+    [K("Prehistory", "colonist floor as share of initial count", "-", "HT")] public const float PREHISTORY_FLOOR = 0.25f;
     [K("Brain", "founders and colonists arrive in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder or colonist group", "units", "HT")] public const float GROUP_SPREAD = 10f;
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;
