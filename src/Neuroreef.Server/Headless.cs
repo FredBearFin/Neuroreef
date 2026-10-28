@@ -149,7 +149,7 @@ public static class Headless
         var o = new StringBuilder();
         o.AppendLine();
         o.AppendLine($"OBSERVATION REPORT at step {w.Step:N0} (seed {w.Seed}). Counts are totals for the whole run.");
-        o.AppendLine("SPECIES       ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost   TOP FOOD (energy)");
+        o.AppendLine("SPECIES       ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease  TOP FOOD (energy)");
         for (int s = 0; s < w.NS; s++)
         {
             var sb = new StringBuilder();
