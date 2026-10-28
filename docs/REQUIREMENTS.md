@@ -1,0 +1,108 @@
+# NEUROREEF 2 — REQUIREMENTS SPECIFICATION
+
+Document NR-RQ-001, Revision A (draft for review)
+
+Each requirement has a number, a statement and a verification method:
+**T** = automated test, **A** = analysis of headless runs, **D** = demonstration in the console,
+**I** = inspection of code or documents. Verification status is tracked in the matrix in section 8.
+
+"Shall" is binding. "Should" is a goal.
+
+---
+
+## 1. Engineering discipline (NR-1xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-101 | The simulation shall allocate all of its working memory during initialisation. No heap allocation shall occur inside the step loop. | T |
+| NR-102 | Capacity (maximum animals) shall be a start-up parameter. Every array size shall be derived from it and from the world size, and listed in the memory map (DESIGN §3). | I |
+| NR-103 | The simulation shall advance in fixed steps. Wall-clock time shall affect only how many steps are run per second, never the result of a step. | I, T |
+| NR-104 | Every random draw shall come from a counter-based hash keyed by (seed, step, slot, stream). The same seed and the same capacity shall give a bit-identical run. | T |
+| NR-105 | The result shall be independent of the number of worker threads (1, 2, 4, 8 compared bit-for-bit). | T |
+| NR-106 | Every tuning value shall be declared once, in `Constants.cs`, with its meaning, unit and origin. `docs/CONSTANTS.md` shall mirror it, and a test shall fail when the two disagree. | T |
+| NR-107 | The simulation core shall have no dependency outside the .NET base library. | I |
+| NR-108 | Every phase of a step shall have a documented contract: what it reads, what it writes, and whether it runs in parallel (DESIGN §4). | I |
+| NR-109 | The state shall be checkable: population counts shall reconcile with births, deaths and strays every step (births − deaths + strays = Δpopulation). | T |
+
+## 2. Decision architecture (NR-2xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-201 | All animals of all species shall use the same perception routine and produce the same feature vector (DESIGN §5.1). | I |
+| NR-202 | No species-pair relation (prey, threat, kin) shall be coded. Animals shall perceive others only through observable attributes: species identity (same or other), relative size, carnivory, motion, age, fatigue. | I |
+| NR-203 | All animals shall share one library of base behaviours (primitives, DESIGN §5.2). No species shall have a primitive that another lacks. | I |
+| NR-204 | Each animal's behaviour shall be determined by its own decision matrix, which maps features and motivations to primitive gains (DESIGN §5.3). | I |
+| NR-205 | The decision matrix shall be heritable, mutated at birth and recombined in sexual reproduction. | T |
+| NR-206 | Compound behaviours (grazing, vigilance, herding, fleeing, stalking, pack hunting, give-up, scavenging, following mother) shall not exist as code. They shall arise only as combinations of primitives. | I |
+| NR-207 | Each founder composition shall produce its intended behaviour in a scripted scene (DESIGN §6): a herd forms; vigilance is triggered by an approaching predator; a pack catches a lone grazer; a scavenger follows hunters; a calf follows its mother. | T |
+| NR-208 | A motivation layer shall carry state between steps, so that a behaviour can persist after its trigger is gone. | T |
+| NR-209 | For any selected animal, the console shall show its features, motivations, primitive gains and actions every step. | D |
+
+## 3. Ecology (NR-3xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-301 | Metabolic rate shall scale with mass^0.75 (Kleiber). Speed, gut capacity, reserves, lifespan and sight shall be derived from mass by the allometric rules in DESIGN §7.1. | I |
+| NR-302 | Food shall pass through a gut of limited capacity and be digested at a limited rate, with efficiency set by diet genes. The resulting intake rate as a function of food density shall saturate (Holling type II). | A |
+| NR-303 | Animals shall need water. Thirst shall rise over time and be cleared only by drinking at water. | T |
+| NR-304 | Strike success shall depend on attacker power, prey mass, prey armour, juvenile status, prey fatigue, prey vigilance and prey group confusion (DESIGN §7.4). Strikes shall cost energy whether they succeed or not. | I, T |
+| NR-305 | Who eats whom shall follow only from diet efficiencies, size and armour. The realised food web shall be measured, not declared. | I, A |
+| NR-306 | Meat-eaters shall leave scent. Prey shall perceive scent and remember attacks (landscape of fear). | T |
+| NR-307 | The vegetation shall have grass, shrub, sapling and tree layers that compete for light, soil nutrient and moisture, giving succession from bare ground toward forest (DESIGN §8). | A |
+| NR-308 | Grazing shall remove grass. Browsing shall remove shrub leaves and kill saplings, so herbivores can hold back succession. | T |
+| NR-309 | A travelling wet/dry season shall modulate moisture. Fire shall ignite in dry fuel, spread and reset vegetation, so the landscape stays a shifting mosaic. | A |
+| NR-310 | Carcasses, dung and burned vegetation shall return nutrient to the soil. | T |
+| NR-311 | Reproduction shall be sexual. It shall need a ready mate nearby, then gestation, then a litter whose size is a body-plan gene. | T |
+| NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
+| NR-313 | Strays (immigrants after extinction) shall be off by default, configurable, and always counted separately. | I |
+| NR-314 | Acceptance: over seeds 1–5 and 200,000 steps, with strays off, all six species shall be alive in ≥ 90% of telemetry samples. Predator–prey oscillations shall be visible, and no single vegetation layer shall exceed 80% of land cover for more than 25% of the run. | A |
+
+## 4. Telemetry and analytics (NR-4xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-401 | The core shall keep running counters: births, deaths by cause (starvation, thirst, killed-by-species, old age, fire), killer × victim matrix, energy income by diet item, energy spending by category, hunts attempted and succeeded, matings, strays. | T |
+| NR-402 | The core shall sample, into fixed ring buffers: population and age structure per species, primitive-usage share per species, mean decision-matrix drift against the founder, vegetation cover by layer, water, fire area, functional-response samples (intake versus local food density). | T |
+| NR-403 | Explanations shown to the user shall be generated only from counters, by documented sentence rules. Each sentence shall carry the numbers it is based on. | I |
+| NR-404 | Headless mode shall write the full telemetry to CSV. | T |
+
+## 5. Console (NR-5xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-501 | The console shall show the world in real-time 3D: terrain, water, vegetation layers, fire, carcasses, and every animal as a per-species 3D model. | D |
+| NR-502 | Camera modes: overview (orbit), follow-cam (third person, follows the lineage when the animal dies), ride-along (first person, with the animal's field of view and perceived animals marked). | D |
+| NR-503 | An "experience a species" control shall pick a living member of that species and enter follow-cam or ride-along. | D |
+| NR-504 | Dashboards: populations and phase plot; causes of death; killer × victim heatmap; energy budget; functional response; behaviour (primitive usage, mean matrix heatmap, drift); vegetation and fire; landscape of fear; per-species dossier; explanation feed. | D |
+| NR-505 | The console shall work in desktop Chrome/Edge/Firefox and in Chrome on an Android tablet, with touch control. | D |
+| NR-506 | A slow client shall never slow the simulation. | T |
+
+## 6. Delivery (NR-6xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-601 | The program shall publish as a single self-contained Windows x64 executable that needs no installed runtime. | D |
+| NR-602 | Starting the executable shall start the simulation, serve the console on port 5800, print the local and LAN addresses, and open the default browser. | D |
+| NR-603 | All web assets, including third-party libraries, shall be embedded in the executable. No internet access shall be needed. | I |
+| NR-604 | Continuous integration shall build and test on Windows and Linux and publish the executable as an artifact. | D |
+
+## 7. Performance goals (NR-7xx)
+
+| No. | Requirement | Ver. |
+|---|---|---|
+| NR-701 | The simulation should sustain ≥ 60 steps/s with 20,000 animals on a 6-core desktop CPU. | A |
+| NR-702 | The console should render ≥ 50 frames/s at 1080p on a mid-range discrete GPU with 20,000 animals. | D |
+
+## 8. Verification matrix
+
+Filled in as tests and analyses are completed. Status: — not started, P pass, F fail.
+
+| No. | Method | Evidence | Status |
+|---|---|---|---|
+| NR-101…NR-109 | T/I | `tests/Engineering*` | — |
+| NR-201…NR-209 | T/I/D | `tests/Behaviour*`, scripted scenes | — |
+| NR-301…NR-314 | T/A | `tests/Ecology*`, headless report | — |
+| NR-401…NR-404 | T/I | `tests/Telemetry*` | — |
+| NR-501…NR-506 | D/T | console screenshots | — |
+| NR-601…NR-604 | D/I | CI artifact | — |
+| NR-701…NR-702 | A/D | benchmark output | — |
