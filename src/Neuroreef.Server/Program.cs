@@ -18,6 +18,19 @@ public static class Program
         // gene bank: --load-bank, then evolved.nrbank beside the exe, then the bank shipped with this build.
         // With none of these (or with --prehistory) the console runs a prehistory first.
         GeneBank.Data? bank = null;
+        // a saved world (world.nrck beside the exe) is continued first, then a prehistory in progress
+        string savedWorld = Path.Combine(AppContext.BaseDirectory, "world.nrck");
+        if (!o.Evolve && !o.Headless && !o.NoCheckpoint && !o.NewWorld && !o.NewPrehistory && !o.RandomBrains && o.LoadBank == null && File.Exists(savedWorld))
+        {
+            Console.WriteLine("continuing your saved world (" + savedWorld + "); Neuroreef.exe --new-world starts a new one");
+            o.ResumeWorld = true;
+            return Host.Run(o, null);
+        }
+        if (o.NewWorld && File.Exists(savedWorld))
+        {
+            File.Move(savedWorld, savedWorld + ".old", overwrite: true);
+            Console.WriteLine("a new world: the previous one was kept as " + savedWorld + ".old");
+        }
         // a prehistory in progress (its checkpoint beside the exe) is resumed before anything else
         if (!o.Evolve && !o.Headless && !o.NoCheckpoint)
         {

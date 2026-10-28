@@ -25,6 +25,22 @@ The prehistory (the first start):
   Evolve.bat runs the same prehistory without graphics and also writes evolve-report.txt (what
   happened to each species in each branch, and why).
 
+YOUR WORLD IS SAVED
+  The world saves itself every 30 minutes and when you close the window (Ctrl+C), to world.nrck.
+  Starting Neuroreef.exe again continues it exactly where it was. To start a new world instead:
+  Neuroreef.exe --new-world (the old one is kept as world.nrck.old).
+
+DATA EXPORT
+  The "Export data" button (top bar) downloads everything recorded so far as a zip: population.csv
+  (alive per clade over time), traits.csv, deaths.csv, clades.csv, telemetry.csv (every number) and
+  report.txt. The same files are also written to the exports folder beside Neuroreef.exe every 30
+  minutes and when you close it. At the end of a prehistory, every branch's data is exported too.
+
+BRANCHES
+  At the end of a prehistory every branch's brains are saved: branch-0.nrbank, branch-1.nrbank, ...
+  On the Prehistory tab, "Begin the world from branch N" picks the branch your world starts from.
+  To start a world from another branch later: Neuroreef.exe --new-world --load-bank branch-1.nrbank
+
 RUNNING THE PREHISTORY FOR WEEKS (LongRun.bat)
   Double-click LongRun.bat. It evolves with no graphics, so the whole CPU goes to evolution, and runs
   until you stop it. Every 30 minutes it saves its whole state to prehistory.nrck (about 2-3 GB).

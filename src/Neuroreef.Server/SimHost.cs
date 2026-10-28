@@ -30,6 +30,10 @@ public sealed class SimHost : IDisposable
     Simulation? _live;
     public volatile int ViewBranch;
     volatile bool _begin;
+    volatile int _beginBranch = -1;
+    public string? WorldPath;                // the live world's whole state: autosaved here, resumed on the next start
+    public string ExportRoot = Path.Combine(AppContext.BaseDirectory, "exports");
+    double _lastSave;
     public string BankSource { get; private set; }
     public string? BankPath { get; private set; }
     public int PhaseVersion;                 // increments when the viewed simulation changes (phase or branch)
@@ -52,7 +56,17 @@ public sealed class SimHost : IDisposable
         BankSource = o.BankSource;
         _fieldsBuf = new byte[Wire.FieldsSize];
         _probeBuf = new byte[Wire.ProbeSize];
-        if (bank != null || o.RandomBrains)
+        WorldPath = o.NoCheckpoint ? null : Path.Combine(AppContext.BaseDirectory, "world.nrck");
+        if (o.ResumeWorld && WorldPath != null)
+        {
+            // continue a saved world exactly where it was: build an empty world of its size, then load its state
+            var (cap, seed, ts) = Checkpoint.WorldHeader(WorldPath);
+            _live = new Simulation(cap, seed, o.Threads, null, prehistory: false, empty: true, terrainSeed: ts);
+            Checkpoint.LoadWorld(_live.W, WorldPath);
+            BankSource = "saved world";
+            Console.WriteLine($"continuing your saved world at step {_live.W.Step:N0} ({_live.W.AliveCount:N0} alive)");
+        }
+        else if (bank != null || o.RandomBrains)
             _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed);
         else
         {
@@ -80,7 +94,40 @@ public sealed class SimHost : IDisposable
 
     public void Post(Action<Simulation> cmd) => _cmds.Enqueue(cmd);
     public void StepOnce() => Interlocked.Exchange(ref _stepOnce, 1);
-    public void BeginWorld() => _begin = true;
+    public void BeginWorld(int branch = -1) { _beginBranch = branch; _begin = true; }
+
+    /// <summary>Folder the current world (or viewed branch) exports to.</summary>
+    public string ExportDir => Path.Combine(ExportRoot, IsPrehistory ? $"prehistory-branch-{ViewBranch}" : $"world-seed{W.Seed}");
+
+    /// <summary>Write the export on the simulation thread; completes with the folder (or an error).</summary>
+    public System.Threading.Tasks.Task<string> RequestExport()
+    {
+        var tcs = new System.Threading.Tasks.TaskCompletionSource<string>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+        Post(s => { try { tcs.SetResult(Export.Write(s, ExportDir)); } catch (Exception e) { tcs.SetException(e); } });
+        return tcs.Task;
+    }
+
+    /// <summary>Save the live world's whole state and its data export (call on the simulation thread, or after Stop).</summary>
+    public void SaveLive()
+    {
+        var sim = _live;
+        if (sim == null) return;
+        if (WorldPath != null)
+            try { Checkpoint.SaveWorld(sim.W, WorldPath); } catch (Exception e) { Console.Error.WriteLine("world save failed: " + e.Message); }
+        try { Export.Write(sim, ExportDir); } catch (Exception e) { Console.Error.WriteLine("export failed: " + e.Message); }
+    }
+
+    /// <summary>Stop the simulation thread, then save (the program is closing).</summary>
+    public void StopAndSave()
+    {
+        _stop = true;
+        if (_thread.IsAlive) _thread.Join(30000);
+        if (_live != null)
+        {
+            SaveLive();
+            Console.WriteLine($"world saved at step {_live.W.Step:N0}: start Neuroreef.exe again to continue it. Data: {ExportDir}");
+        }
+    }
 
     public void SetPaused(bool p) { Paused = p; if (Pre != null) Pre.Paused = p; }
 
@@ -128,6 +175,7 @@ public sealed class SimHost : IDisposable
             steps++;
             Publish(racy: false);
             if (_o.SaveBank != null && sim.W.Step % 50000 == 0) { try { GeneBank.Save(sim.W, _o.SaveBank); } catch (Exception e) { Console.Error.WriteLine("bank save failed: " + e.Message); } }
+            if (now - _lastSave >= _o.CheckpointMinutes * 60) { _lastSave = now; SaveLive(); }
             if (now - lastT >= 1.0) { MeasuredRate = (steps - lastSteps) / (now - lastT); lastT = now; lastSteps = steps; }
         }
     }
@@ -138,9 +186,19 @@ public sealed class SimHost : IDisposable
         var pre = Pre!;
         pre.StopAndWait();
         Console.WriteLine($"prehistory ended at step {pre.Step:N0} ({pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years)");
-        var bank = pre.Bank();
+        // every branch is kept: its brains (branch-N.nrbank) and its data (exports/prehistory-branch-N)
+        for (int b = 0; b < pre.B.Length; b++)
+        {
+            try { GeneBank.Save(pre.B[b].W, Path.Combine(AppContext.BaseDirectory, $"branch-{b}.nrbank")); } catch (Exception e) { Console.Error.WriteLine(e.Message); }
+            try { Export.Write(pre.B[b], Path.Combine(ExportRoot, $"prehistory-branch-{b}")); } catch (Exception e) { Console.Error.WriteLine(e.Message); }
+        }
+        int chosen = _beginBranch >= 0 && _beginBranch < pre.B.Length ? _beginBranch : pre.BestBranch();
+        Console.WriteLine($"all branches saved as branch-0..{pre.B.Length - 1}.nrbank; the world begins from branch {chosen}" + (_beginBranch < 0 ? " (most self-sustaining clades)" : " (your choice)"));
+        Console.WriteLine("  to start a world from another branch later: Neuroreef.exe --load-bank branch-N.nrbank");
+        var ms = new MemoryStream(); GeneBank.Save(pre.B[chosen].W, ms); ms.Position = 0;
+        var bank = GeneBank.Load(ms);
         string path = _o.SaveBank ?? Path.Combine(AppContext.BaseDirectory, "evolved.nrbank");
-        try { pre.SaveBank(path); BankPath = path; Console.WriteLine("evolved brains saved: " + path + " (the next start uses them)"); }
+        try { GeneBank.Save(pre.B[chosen].W, path); BankPath = path; Console.WriteLine("evolved brains saved: " + path + " (the next start uses them)"); }
         catch (Exception e) { Console.Error.WriteLine("could not save the evolved brains: " + e.Message); }
         var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed);
         // the prehistory is over: its state is kept, but the next start will not resume it

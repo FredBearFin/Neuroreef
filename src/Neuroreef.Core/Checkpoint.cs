@@ -67,6 +67,46 @@ public static class Checkpoint
         foreach (var s in pre.B) Read(br, s.W);
     }
 
+    // ------------------------------------------------------------------ one world (the live world: save and continue)
+
+    /// <summary>Save one world's whole state ("NRWK"). Call between steps.</summary>
+    public static void SaveWorld(World w, string path)
+    {
+        string tmp = path + ".tmp";
+        using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
+        using (var bw = new BinaryWriter(fs))
+        {
+            bw.Write("NRWK"u8.ToArray()); bw.Write(Version);
+            bw.Write(G.LEN); bw.Write(w.Cap); bw.Write(w.Seed); bw.Write(w.TerrainSeed);
+            Write(bw, w);
+            fs.Flush(true);
+        }
+        File.Move(tmp, path, overwrite: true);
+    }
+
+    /// <summary>Read a saved world's capacity and seeds, to build a world it fits into.</summary>
+    public static (int cap, uint seed, uint terrainSeed) WorldHeader(string path)
+    {
+        using var fs = File.OpenRead(path);
+        using var br = new BinaryReader(fs);
+        var magic = br.ReadBytes(4);
+        if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'W' || magic[3] != 'K') throw new InvalidDataException("not a saved world");
+        if (br.ReadUInt16() != Version) throw new InvalidDataException("saved world from another version of the program");
+        int len = br.ReadInt32();
+        if (len != G.LEN) throw new InvalidDataException($"saved world genome length {len}, this program uses {G.LEN} (the rules changed)");
+        return (br.ReadInt32(), br.ReadUInt32(), br.ReadUInt32());
+    }
+
+    public static void LoadWorld(World w, string path)
+    {
+        var (cap, seed, ts) = WorldHeader(path);
+        if (cap != w.Cap || seed != w.Seed || ts != w.TerrainSeed) throw new InvalidDataException("saved world does not fit this world");
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+        using var br = new BinaryReader(fs);
+        br.ReadBytes(4); br.ReadUInt16(); br.ReadInt32(); br.ReadInt32(); br.ReadUInt32(); br.ReadUInt32();
+        Read(br, w);
+    }
+
     // ------------------------------------------------------------------ object tree
 
     static void Write(BinaryWriter bw, object o)

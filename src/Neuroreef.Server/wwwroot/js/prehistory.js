@@ -32,7 +32,8 @@ export class PrehistoryTab {
       <p class="note">Before the world begins, life evolves here at full speed in separate worlds on the same land.
         Each starts from the same random ancestors and is then births and deaths only: nothing is ever added, so a clade
         that dies out is gone from that branch. Clades split (speciate) on their own, so each branch grows its own tree
-        of clades. When the prehistory ends, the world starts from the branch that did best.</p>
+        of clades. When the prehistory ends, every branch's brains are saved (branch-0.nrbank, branch-1.nrbank, ...) and the world starts
+        from the branch you pick below, or from the one that did best.</p>
       <div id="pre-prog"><div class="pre-bar"><div id="pre-fill"></div></div>
         <div class="pre-line"><b id="pre-years">–</b><span id="pre-eta"></span></div></div>
       <div class="pre-btns"><button id="pre-pause">Pause</button><button id="pre-begin" class="go">Begin the world now</button></div>
@@ -96,11 +97,17 @@ export class PrehistoryTab {
         return `<span class="sc" title="${esc(tip)}" style="background:${STAND_C[k]};border-top-color:${c.color}"></span>`;
       }).join('');
       return `<div class="branch${i === p.view ? ' on' : ''}" data-b="${i}">
-        <div class="bh"><i style="background:${BRANCH_C[i % BRANCH_C.length]}"></i><b>Branch ${String.fromCharCode(65 + i)}</b>
+        <div class="bh"><i style="background:${BRANCH_C[i % BRANCH_C.length]}"></i><b>Branch ${i}</b>
           <span>${b.alive.toLocaleString()} alive · ${used.length} clades · <b style="color:${STAND_C[3]}">${self}</b> self-sustaining · ${gone} gone · ${(b.splits || 0).toLocaleString()} speciation${b.splits === 1 ? '' : 's'}${b.full ? ' · <b style="color:var(--warn)">full</b>' : ''}</span></div>
-        <div class="scs">${chips || '<span class="note">no clades</span>'}</div></div>`;
+        <div class="scs">${chips || '<span class="note">no clades</span>'}</div>
+        <button class="go small" data-begin="${i}" title="End the prehistory and begin the world from this branch's clades">Begin the world from branch ${i}</button></div>`;
     }).join('') + `<p class="note">One square per clade, coloured by how it is doing (the stripe on top is the clade's own colour). Hover a square for the clade.</p>`;
     for (const d of box.querySelectorAll('.branch')) d.onclick = () => this.link.send({ cmd: 'branch', index: +d.dataset.b });
+    for (const btn of box.querySelectorAll('[data-begin]')) btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const n = btn.dataset.begin;
+      if (confirm(`End the prehistory now and begin the world from branch ${n}? Every branch's brains are kept.`)) this.link.send({ cmd: 'begin', branch: +btn.dataset.begin });
+    };
   }
 
   _chart(p) {
@@ -120,7 +127,7 @@ export class PrehistoryTab {
       this.plot = new uPlot({ width: w, height: 170, scales: { x: { time: false }, y: { range: (u, mn, mx) => [0, Math.max(4, Math.ceil(mx * 1.15))] } },
         axes: [{ stroke: '#6f8599', grid: { stroke: '#16212c' }, size: 30, values: (u, v) => v.map((x) => x + ' Myr') }, { stroke: '#6f8599', grid: { stroke: '#16212c' }, size: 34 }],
         cursor: { drag: { x: false, y: false } },
-        series: [{ label: 'Myr' }, ...p.branches.map((b, i) => ({ label: 'Branch ' + String.fromCharCode(65 + i), stroke: BRANCH_C[i % BRANCH_C.length], width: 1.6, points: { show: false } }))] }, s, host);
+        series: [{ label: 'Myr' }, ...p.branches.map((b, i) => ({ label: 'Branch ' + i, stroke: BRANCH_C[i % BRANCH_C.length], width: 1.6, points: { show: false } }))] }, s, host);
     } else this.plot.setData(s);
   }
 }

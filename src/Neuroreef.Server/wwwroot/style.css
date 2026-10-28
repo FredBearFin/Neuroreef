@@ -123,3 +123,7 @@ button.go { border-color: #4fd18b; color: #4fd18b; }
   #legend { max-width: 92%; }
   #hint { display: none; }
 }
+
+#export.btn { color: var(--fg, #d8e2ec); text-decoration: none; border: 1px solid #2a3b4e; border-radius: 6px; padding: 4px 10px; margin-right: 8px; font-size: 12px; white-space: nowrap; }
+#export.btn:hover { background: #16212c; }
+button.small { font-size: 11px; padding: 3px 8px; margin-top: 6px; }

@@ -204,7 +204,7 @@ function status(s) {
     if (world) { world.selected = 0; probe = null; if (panels) panels.renderProbe(null); hud(); }
   }
   if (s.phase === 'prehistory' && lastPre) {
-    $('s-pre').textContent = `PREHISTORY · ${Math.round(lastPre.step * lastPre.yearsPerStep / 1e6)} of ${Math.round(lastPre.settings.totalSteps * lastPre.yearsPerStep / 1e6)} Myr · branch ${String.fromCharCode(65 + s.view)}`;
+    $('s-pre').textContent = `PREHISTORY · ${Math.round(lastPre.step * lastPre.yearsPerStep / 1e6)} of ${Math.round(lastPre.settings.totalSteps * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
   }
   $('s-step').textContent = s.step.toLocaleString();
   if (panels) panels.setStep(s.step);

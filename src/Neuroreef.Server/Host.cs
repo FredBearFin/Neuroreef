@@ -49,6 +49,16 @@ public static class Host
 
         var asm = Assembly.GetExecutingAssembly();
         app.MapGet("/api/meta", () => Results.Content(state.MetaJson, "application/json"));
+        // the data export as a zip (written fresh on the simulation thread)
+        app.MapGet("/api/export.zip", async () =>
+        {
+            try
+            {
+                string dir = await host.RequestExport();
+                return Results.File(Export.Zip(dir), "application/zip", $"neuroreef-{Path.GetFileName(dir)}-step{host.W.Step}.zip");
+            }
+            catch (Exception ex) { return Results.Problem("export failed: " + ex.Message); }
+        });
         app.Map("/ws", async ctx =>
         {
             if (!ctx.WebSockets.IsWebSocketRequest) { ctx.Response.StatusCode = 400; return; }
@@ -90,6 +100,7 @@ public static class Host
         done.Wait();
         Console.WriteLine("stopping...");
         var pre = host.Pre;
+        if (pre == null) { host.StopAndSave(); app.StopAsync().Wait(2000); return 0; }
         if (pre != null)
         {
             // stopped during the prehistory: keep what has evolved so far, without making it the default
@@ -116,7 +127,7 @@ public static class Host
                 {
                     int self = 0;
                     for (int sp = 0; sp < K.CLADES; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
-                    parts.Add($"{(char)('A' + b)}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
+                    parts.Add($"branch {b}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
                 }
                 Console.WriteLine($"prehistory {pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {pre.Step:N0})  {pre.Rate,4:F0} steps/s  " + string.Join("  |  ", parts));
                 continue;
@@ -417,7 +428,8 @@ public static class Host
                         case "pause": h.SetPaused(true); break;
                         case "resume": h.SetPaused(false); break;
                         case "branch": h.View(e.GetProperty("index").GetInt32()); break;
-                        case "begin": h.BeginWorld(); break;
+                        case "begin": h.BeginWorld(e.TryGetProperty("branch", out var br) ? br.GetInt32() : -1); break;
+                        case "export": _ = h.RequestExport(); break;
                         case "evo":
                         {
                             // change the evolution settings of the running prehistory (applied at the next barrier)

@@ -16,7 +16,7 @@ public sealed class Options
     public int ReportEvery = 2000;
     public string? LoadBank, SaveBank, Csv, CheckpointPath;
     public double CheckpointMinutes = 30;
-    public bool NoCheckpoint, ResumePrehistory;
+    public bool NoCheckpoint, ResumePrehistory, ResumeWorld, NewWorld;
     public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
 
     /// <summary>The prehistory's starting evolution settings from the command line.</summary>
@@ -101,6 +101,7 @@ public sealed class Options
                 case "--checkpoint": o.CheckpointPath = Next(); break;
                 case "--checkpoint-minutes": o.CheckpointMinutes = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--no-checkpoint": o.NoCheckpoint = true; break;
+                case "--new-world": o.NewWorld = true; break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");

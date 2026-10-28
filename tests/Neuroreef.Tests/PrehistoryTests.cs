@@ -68,6 +68,50 @@ public class PrehistoryTests
         finally { System.IO.File.Delete(path); }
     }
 
+    static byte[] WorldState(World w)
+    {
+        string p = System.IO.Path.GetTempFileName();
+        try { Checkpoint.SaveWorld(w, p); return System.IO.File.ReadAllBytes(p); } finally { System.IO.File.Delete(p); }
+    }
+
+    [Fact] // a live world saved and continued is exactly the world that never stopped
+    public void SavedWorldContinuesExactly()
+    {
+        using var a = new Simulation(8192, 91, 1);
+        for (int k = 0; k < 300; k++) a.Step();
+        string path = System.IO.Path.GetTempFileName();
+        try
+        {
+            Checkpoint.SaveWorld(a.W, path);
+            var (cap, seed, ts) = Checkpoint.WorldHeader(path);
+            using var b = new Simulation(cap, seed, 1, null, prehistory: false, empty: true, terrainSeed: ts);
+            Checkpoint.LoadWorld(b.W, path);
+            for (int k = 0; k < 200; k++) { a.Step(); b.Step(); }
+            Assert.True(WorldState(a.W).AsSpan().SequenceEqual(WorldState(b.W)), "continued world differs");
+        }
+        finally { System.IO.File.Delete(path); }
+    }
+
+    [Fact] // the data export writes every file, with one population column per clade
+    public void ExportWritesTheData()
+    {
+        using var sim = new Simulation(8192, 92, 1);
+        for (int k = 0; k < 400; k++) sim.Step();
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nr-export-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Neuroreef.Server.Export.Write(sim, dir);
+            foreach (var f in new[] { "population.csv", "traits.csv", "deaths.csv", "telemetry.csv", "clades.csv", "report.txt" })
+                Assert.True(System.IO.File.Exists(System.IO.Path.Combine(dir, f)), f);
+            var pop = System.IO.File.ReadAllLines(System.IO.Path.Combine(dir, "population.csv"));
+            Assert.StartsWith("step,", pop[0]);
+            Assert.True(pop.Length > 5);
+            Assert.Equal(pop[0].Split(',').Length, pop[^1].Split(',').Length);
+            Assert.NotEmpty(Neuroreef.Server.Export.Zip(dir));
+        }
+        finally { if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true); }
+    }
+
     [Fact] // NR-323, NR-325: branches step in lockstep; a settings change reaches every branch at a barrier
     public void BranchesRunInLockstepAndTakeSettings()
     {
