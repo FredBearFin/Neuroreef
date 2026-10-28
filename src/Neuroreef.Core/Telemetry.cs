@@ -35,10 +35,12 @@ public sealed class Telemetry
         S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
         S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_TRAITS = S_ARCH + 1, S_GAINS = S_TRAITS + NTRAITS, S_END = S_GAINS + P.N;
     /// <summary>Evolving traits recorded per species (mean over living animals): body multipliers (1 = founder) and diet.</summary>
-    public const int NTRAITS = 13, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
-        T_LITTER = 8, T_CARE = 9, T_MEAT = 10, T_SEXUAL = 11, T_LIVE = 12;
+    public const int NTRAITS = 23, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
+        T_LITTER = 8, T_CARE = 9, T_MEAT = 10, T_SEXUAL = 11, T_LIVE = 12, T_LEGN = 13, T_LIFE = 14, T_MATURE = 15, T_BRAIN = 16,
+        T_HERM = 17, T_FEMALE = 18, T_IMMUNE = 19, T_FINN = 20, T_EYEN = 21, T_VIR = 22;
     public static readonly string[] TraitNames = { "mass", "legs", "fins", "wings", "speed", "sight", "armour", "strike", "litter", "care",
-        "meat-eating", "sexual share", "live-birth share" };
+        "meat-eating", "sexual share", "live-birth share", "legs (count)", "lifespan", "age at maturity", "brain units",
+        "hermaphrodite share", "daughter share", "immunity", "fin pairs", "eye pairs", "pathogen virulence" };
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
@@ -163,6 +165,16 @@ public sealed class Telemetry
             a[o + S_TRAITS + T_MEAT] += w.PDiet[i * Pools.N + (int)Pool.Meat];
             a[o + S_TRAITS + T_SEXUAL] += w.PSexual[i];
             a[o + S_TRAITS + T_LIVE] += w.PLive[i];
+            a[o + S_TRAITS + T_LEGN] += w.PLegs[i] >= K.LIMB_MIN ? 2 * w.PLegPairs[i] : 0;
+            a[o + S_TRAITS + T_LIFE] += w.PLife[i];
+            a[o + S_TRAITS + T_MATURE] += w.PMature[i];
+            a[o + S_TRAITS + T_BRAIN] += w.PBrain[i];
+            a[o + S_TRAITS + T_HERM] += w.PHerm[i];
+            a[o + S_TRAITS + T_FEMALE] += w.PSexRatio[i];
+            a[o + S_TRAITS + T_IMMUNE] += w.PImmune[i];
+            a[o + S_TRAITS + T_FINN] += w.PFinPairs[i];
+            a[o + S_TRAITS + T_EYEN] += w.PEyePairs[i];
+            a[o + S_TRAITS + T_VIR] += w.Virulence[i];                // summed over the infected (others are 0)
             a[o + S_GEN] += w.Gen[i];
             a[o + S_ENERGY] += w.Energy[i] / w.EmaxOf(i);
             a[o + S_REWARD] += w.RewardMean[i];
@@ -182,6 +194,7 @@ public sealed class Telemetry
             float n = MathF.Max(1, _cnt[s]);
             a[o + S_GEN] /= n; a[o + S_ENERGY] /= n; a[o + S_REWARD] /= n; a[o + S_LEARNED] /= n; a[o + S_KIT] /= n;
             for (int k = 0; k < NTRAITS; k++) a[o + S_TRAITS + k] /= n;
+            a[o + S_TRAITS + T_VIR] *= n / MathF.Max(1f, a[o + S_SICK]);   // mean over the infected only
             float best = 0;
             for (int k = 0; k < w.ArchiveCount[s]; k++) best = MathF.Max(best, w.ArchiveScore[s * K.ARCHIVE + k]);
             a[o + S_ARCH] = best;

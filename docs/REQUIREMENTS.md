@@ -1,6 +1,6 @@
 # NEUROREEF 2 — REQUIREMENTS SPECIFICATION
 
-Document NR-RQ-001, Revision C
+Document NR-RQ-001, Revision G
 
 Each requirement has a number, a statement and a verification method:
 **T** = automated test, **A** = analysis of headless runs, **D** = demonstration in the console,
@@ -29,7 +29,7 @@ Each requirement has a number, a statement and a verification method:
 | No. | Requirement | Ver. |
 |---|---|---|
 | NR-201 | All animals of all species shall use the same perception routine and produce the same feature vector (DESIGN §5.1). | I |
-| NR-202 | No species-pair relation (prey, threat, kin) shall be coded. Animals shall perceive others only through observable attributes: species identity (same or other), relative size, carnivory, motion, age, fatigue. | I |
+| NR-202 | No species-pair relation (prey, threat, kin) and no designed category of other organism (big, small, carnivore) shall be coded. Organisms shall perceive others only through raw observable quantities: looking alike, relative size, closing speed, weapons, meat-eating, vulnerability (DESIGN §4). | I |
 | NR-203 | All animals shall share one library of base behaviours (primitives, DESIGN §5.2). No species shall have a primitive that another lacks. | I |
 | NR-204 | Each animal's behaviour shall be determined by its own brain (identical architecture for every species), which maps features and hidden state to primitive gains (DESIGN §7). | I |
 | NR-205 | The brain genome shall be heritable, mutated at birth and recombined in sexual reproduction. | T |
@@ -58,7 +58,7 @@ Each requirement has a number, a statement and a verification method:
 | NR-308 | Grazing shall remove grass. Browsing shall remove shrub leaves and kill saplings, so herbivores can hold back succession. | T |
 | NR-309 | A travelling wet/dry season shall modulate moisture. Fire shall ignite in dry fuel, spread and reset vegetation, so the landscape stays a shifting mosaic. | A |
 | NR-310 | Carcasses, dung and burned vegetation shall return nutrient to the soil. | T |
-| NR-311 | Reproduction shall come from each organism's genes: sexual (mating within its clade) or asexual (alone), eggs or live birth, litter size and newborn size (DESIGN §8). | T |
+| NR-311 | Reproduction shall come from each organism's genes: sexual (separate sexes with an evolved sex ratio, or hermaphrodite) or asexual (alone), eggs or live birth, litter size and newborn size (DESIGN §8). | T |
 | NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
 | NR-313 | No animal in any run, prehistory or live, shall appear except by birth from a parent of its species after the founders of step 0; an extinct species stays extinct. The console shall show that the world is births-only and mark extinct species permanently. | T |
 | NR-314 | Outcomes shall be observed, not targeted (NR-321). Every headless run shall end with an observation report per species (alive, created, immigrants, conceptions, matings, strikes, kills, deaths by cause, main food) and the run's telemetry. Extinctions and crashes are valid results and shall be reported as such. | A |
@@ -67,9 +67,9 @@ Each requirement has a number, a statement and a verification method:
 | NR-317 | Mutualisms (pollination raising fruit and seed set; seed dispersal by dung) shall be physical rules, not behaviours. | I |
 | NR-318 | The world shall contain land and freshwater realms (lakes and rivers), linked by shore access, life-stage transitions and nutrient run-off. | I |
 | NR-319 | (Withdrawn in Revision F: super-individuals were a designed representation of small species.) | — |
-| NR-320 | Every organism's body (mass, legs, fins, wings, speed, sight, field of view, armour, weapons, diet, life history) shall be expressed from its own genes on fixed absolute ranges, each with an energy or performance cost; locomotion and realm shall follow from the organs (DESIGN §6.3). | T |
+| NR-320 | Every organism's body (mass, legs, fins, wings, speed, sight, field of view, armour, weapons, diet, organ counts, lifespan, development time, brain size, immunity, life history) shall be expressed from its own genes on fixed absolute ranges, each with an energy or performance cost; speed in each medium and the realm shall follow smoothly from the organs, with no designed threshold (DESIGN §6.3). | T |
 | NR-333 | A clade whose body genes have separated into two clusters with few intermediates shall split into two clades; a split shall never create an organism (DESIGN §7.9). | T |
-| NR-334 | Sexual organisms shall mate only within their own clade (DESIGN §7.9). | T |
+| NR-334 | There shall be no species check on mating: the chance that a mating produces young shall fall with the genetic distance of the two organisms (DESIGN §7.9, §8). | T |
 | NR-321 | The laws of the world shall be set once from physical plausibility and conservation of energy and mass, documented with their origin, and then frozen. No law shall be changed to produce or prevent an ecological outcome. | I |
 | NR-323 | Without evolved brains, the program shall run the prehistory live in the console at full speed, in BRANCHES separate populations on the same land, viewable one branch at a time in 3D, with progress shown in symbolic years. | T |
 | NR-324 | (Withdrawn in Revision E: no genomes pass between prehistory branches.) | — |
@@ -77,7 +77,7 @@ Each requirement has a number, a statement and a verification method:
 | NR-326 | When the prehistory ends, each species' brains shall come from the branch where it stood best; the bank shall be saved, and the live world created from it shall have no colonists. | T |
 | NR-327 | Every animal shall have inherited reflex genes linking the same nine need, opportunity and danger inputs to its primitives; learning shall not change them. Founders shall carry the same innate starter kit (eat, seek food, seek water, drink, rest, flee, follow mother) as mutable genes; no other behaviour shall be designed (DESIGN §7.7). | T |
 | NR-328 | Mammal and bird mothers shall feed their young in contact before weaning, from their own reserve at an efficiency below 1, without taking it below CARE_RESERVE (DESIGN §7.8). | T |
-| NR-329 | Each species shall have a contact-transmitted disease with an infectious period, a metabolic cost, a death rate and immunity after recovery; deaths shall be recorded as "disease" (DESIGN §9.6). | T |
+| NR-329 | Disease shall be contact-transmitted between organisms that look alike, with an infectious period, a metabolic cost, a death rate and immunity after recovery; each strain shall carry a heritable, mutating virulence and each host an immunity gene; deaths shall be recorded as "disease" (DESIGN §9.6). | T |
 | NR-330 | Each year shall have its own rainfall anomaly, persistent between years and shared by the branches of a prehistory (DESIGN §10.7). | T |
 | NR-331 | Plant growth shall be limited by water differently per layer (grass, shrubs, trees), grass shall compete with tree seedlings for water, and seeds shall also disperse far by wind (DESIGN §10.2). | I |
 | NR-322 | Energy shall be conserved: building tissue (growth, offspring) shall cost the energy that eating that tissue yields, divided by a growth efficiency below 1. | T |

@@ -192,7 +192,9 @@ public static class Brain
         fixed (float* yp = y)
         {
             for (int k = 0; k < G.NH; k++) u[F.N + k] = hid[k];
-            for (int h = 0; h < G.NH; h++)
+            int units = w.PBrain[i];                 // the brain-size gene: memory units beyond it do not exist
+            for (int h = units; h < G.NH; h++) { hid[h] = 0f; yp[h] = 0f; u[F.N + h] = 0f; }
+            for (int h = 0; h < units; h++)
             {
                 sbyte* row = gen + h * G.NIN;
                 float s0 = 0, s1 = 0;

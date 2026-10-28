@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
 let pre = null, phase = null, phaseVersion = -1, lastPre = null;
+let clades = [], pendingClades = null;   // the live clade table (32 slots; unused ones have used = false)
 
 link.listen('meta', (m) => {
   meta = m;
@@ -21,8 +22,10 @@ link.listen('meta', (m) => {
     buildControls();
     requestAnimationFrame(frame);
   }
+  setClades(pendingClades || m.species, 0); pendingClades = null;
   $('connect').classList.add('hidden');
 });
+link.listen('clades', (c) => { if (!meta) { pendingClades = c.list; return; } setClades(c.list, c.step); });
 link.listen('world', (w) => world && world.setWorld(w));
 link.listen('agents', (a) => world && world.setAgents(a));
 link.listen('fields', (f) => { if (world) world.setFields(f); if (panels) panels.setFields(f); });
@@ -52,6 +55,61 @@ function frame() {
 
 // ------------------------------------------------------------------ selection and cameras
 
+// ------------------------------------------------------------------ the clade table
+
+function setClades(list, step) {
+  if (!list) return;
+  clades = list;
+  meta.species = list;           // everything that reads meta.species sees the live table
+  if (world && typeof world.setClades === 'function') world.setClades(list);
+  if (panels) panels.setClades(list, step);
+  if (pre && typeof pre.setClades === 'function') pre.setClades(list);
+  buildLegend();
+  fillExperience();
+}
+
+const cladeOf = (s) => clades[s] && clades[s].used ? clades[s] : null;
+// the clade table is resent the moment a clade dies out; it is the authority on extinction
+const extinctAt = (c) => c.alive ? -1 : c.extinct;
+
+// the legend: living clades with their colour, name and count; extinct ones greyed with the step they died out.
+// An extinct clade keeps its label: nothing in this world can bring it back.
+let legendSig = '';
+function buildLegend() {
+  const lg = $('legend'); if (!lg || !world) return;
+  const used = clades.filter((c) => c.used);
+  const alive = used.filter((c) => extinctAt(c) < 0).sort((a, b) => b.count - a.count || a.id - b.id);
+  const dead = used.filter((c) => extinctAt(c) >= 0).sort((a, b) => extinctAt(b) - extinctAt(a));
+  const sig = alive.map((c) => `${c.serial}:${c.count}:${c.color}`).join() + '|' + dead.map((c) => `${c.serial}:${extinctAt(c)}`).join() + '|' + [...world.hidden].join();
+  if (sig === legendSig) return;
+  legendSig = sig;
+  lg.innerHTML = '';
+  for (const s of alive.concat(dead)) {
+    const at = extinctAt(s), it = document.createElement('span');
+    it.dataset.sp = s.id;
+    it.title = `${s.name} · ${s.niche}${s.parent >= 0 ? ` · split off at step ${s.born.toLocaleString()}` : ' · ancestor'}`;
+    if (at >= 0) { it.className = 'ext'; it.innerHTML = `<i></i>${s.name} <b>extinct at ${at.toLocaleString()}</b>`; }
+    else it.innerHTML = `<i style="background:${s.color}"></i>${s.name} <em>${s.count.toLocaleString()}</em>`;
+    if (world.hidden.has(s.id)) it.classList.add('off');
+    it.onclick = () => { if (world.hidden.has(s.id)) world.hidden.delete(s.id); else world.hidden.add(s.id); it.classList.toggle('off'); legendSig = ''; };
+    lg.append(it);
+  }
+}
+
+// the Experience select lists the living clades
+function fillExperience() {
+  const sel = $('exp-species'); if (!sel) return;
+  const alive = clades.filter((c) => c.used && extinctAt(c) < 0);
+  const sig = alive.map((c) => c.serial + c.name).join();
+  if (sel.dataset.sig === sig) return;
+  sel.dataset.sig = sig;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  for (const s of alive) sel.append(new Option(s.name, s.id));
+  if (alive.some((c) => String(c.id) === prev)) sel.value = prev;
+  $('exp-go').disabled = !alive.length;
+}
+
 function select(serial, follow) {
   if (!world) return;
   world.selected = serial;
@@ -61,7 +119,7 @@ function select(serial, follow) {
 }
 
 function setCam(m) {
-  if (m !== 'overview' && !world.selected) {
+  if (m !== 'overview' && !world.selected && $('exp-species').value !== '') {
     // no animal selected: experience the chosen species
     link.send({ cmd: 'pick', species: +$('exp-species').value });
   }
@@ -74,8 +132,9 @@ function setCam(m) {
 function buildControls() {
   for (const b of document.querySelectorAll('#cams button')) b.onclick = () => setCam(b.dataset.cam);
   const sel = $('exp-species');
-  for (const s of meta.species) sel.append(new Option(s.name, s.id));
+  fillExperience();
   $('exp-go').onclick = () => {
+    if (sel.value === '') return;
     link.send({ cmd: 'pick', species: +sel.value });
     world.selected = 0;
     if (world.mode === 'overview') { world.setMode('follow'); for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === 'follow'); }
@@ -96,15 +155,7 @@ function buildControls() {
     const s = world.pick(e.clientX, e.clientY);
     if (s) select(s);
   });
-  // legend toggles species visibility
-  const lg = $('legend');
-  for (const s of meta.species) {
-    const it = document.createElement('span');
-    it.dataset.sp = s.id;
-    it.innerHTML = `<i style="background:${s.color}"></i>${s.name}`;
-    it.onclick = () => { if (world.hidden.has(s.id)) world.hidden.delete(s.id); else world.hidden.add(s.id); it.classList.toggle('off'); };
-    lg.append(it);
-  }
+  // the legend (toggles clade visibility) is built from the clade table: buildLegend()
   // a small screen (tablet) asks for fewer frames
   if (matchMedia('(max-width: 900px)').matches) link.send({ cmd: 'view', hz: 12, fieldsMs: 2000 });
 }
@@ -116,7 +167,7 @@ function hud() {
   if (!probe || !world || world.mode === 'overview') { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   const P = meta.probe, f = probe.f, sc = (n) => f[P.scal + P.scalars.indexOf(n)];
-  const sp = meta.species[sc('species') | 0];
+  const sp = cladeOf(sc('species') | 0) || { name: '?', color: '#8aa0b5', niche: '' };
   $('hud-name').innerHTML = `<span style="color:${sp.color}">●</span> ${sp.name} #${probe.serial}`;
   $('hud-sub').textContent = `${sp.niche} · ${['', 'egg', 'embryo', 'juvenile', 'adult'][sc('stage') | 0]} · generation ${sc('generation') | 0} · ${world.mode === 'ride' ? 'riding along' : 'following'}`;
   const feat = (n) => f[P.feat + meta.features.indexOf(n)];
@@ -142,14 +193,21 @@ function status(s) {
   if (s.phase !== phase) enterPhase(s.phase);
   if (s.phaseVersion !== phaseVersion) {
     // another simulation is on view (a branch, or the world after the prehistory): drop what we drew
+    const first = phaseVersion === -1;
     phaseVersion = s.phaseVersion;
-    if (panels) panels.rows = [];
+    if (!first) {
+      // the history frame of the new simulation may have arrived before this status: ask for it again
+      if (panels) panels.reset();
+      link.send({ cmd: 'history' });
+      legendSig = '';
+    }
     if (world) { world.selected = 0; probe = null; if (panels) panels.renderProbe(null); hud(); }
   }
   if (s.phase === 'prehistory' && lastPre) {
     $('s-pre').textContent = `PREHISTORY · ${Math.round(lastPre.step * lastPre.yearsPerStep / 1e6)} of ${Math.round(lastPre.settings.totalSteps * lastPre.yearsPerStep / 1e6)} Myr · branch ${String.fromCharCode(65 + s.view)}`;
   }
   $('s-step').textContent = s.step.toLocaleString();
+  if (panels) panels.setStep(s.step);
   $('s-alive').textContent = s.alive.toLocaleString();
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +
@@ -172,20 +230,18 @@ function enterPhase(p) {
   if (panels) panels.show(isPre ? 'prehistory' : 'inspect');
 }
 
-// an extinct species keeps its label: nothing in this world can bring it back
+// the status frame says which clades died out (it arrives more often than the clade table)
 function markExtinct() {
-  for (const it of document.querySelectorAll('#legend span')) {
-    const s = meta.species[+it.dataset.sp], at = extinct[s.id];
-    it.innerHTML = `<i style="background:${s.color}"></i>${s.name}${at >= 0 ? ` <b style="color:#ff5d73">extinct at ${at.toLocaleString()}</b>` : ''}`;
-  }
   if (panels) panels.extinct = extinct;
+  buildLegend();
+  fillExperience();
 }
 
 function feed(e) {
   const box = $('feed');
   if (!e.items.length) { box.innerHTML = '<span class="item">no large changes in the last ~1,000 steps</span>'; return; }
   box.innerHTML = e.items.slice(0, 6).map((it) => {
-    const c = it.species >= 0 ? meta.species[it.species].color : '#8aa0b5';
+    const c = it.species >= 0 && cladeOf(it.species) ? cladeOf(it.species).color : '#8aa0b5';
     return `<span class="item"><i style="background:${c}"></i>${it.text}</span>`;
   }).join('');
 }

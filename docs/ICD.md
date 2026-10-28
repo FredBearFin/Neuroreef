@@ -1,6 +1,6 @@
 # NEUROREEF 2 — INTERFACE CONTROL DOCUMENT
 
-Document NR-ICD-001, Revision C. This is the link between the simulation server and the browser
+Document NR-ICD-001, Revision D (AGENTS format 4). This is the link between the simulation server and the browser
 console. Encoders: `src/Neuroreef.Core/Snapshot.cs` (AGENTS) and `src/Neuroreef.Server/Wire.cs`
 (all others). Decoder: `src/Neuroreef.Server/wwwroot/js/net.js`. Test: `tests/Neuroreef.Tests/WireTests.cs`.
 
@@ -39,7 +39,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | Offset | Type | Field |
 |---|---|---|
 | 8 | u32 | count n |
-| 12 | 20 B × n | records (every living organism except embryos); header byte 1 = format version 3 |
+| 12 | 24 B × n | records (every living organism except embryos); header byte 1 = format version 4 |
 
 Each record:
 
@@ -60,6 +60,10 @@ Each record:
 | 17 | i8 | body gene: armour |
 | 18 | i8 | body gene: strike |
 | 19 | i8 | meat-eating efficiency × 254 − 127 |
+| 20 | u8 | leg pairs (1..4) |
+| 21 | u8 | locomotion label (Loco: walk, swim, wade, fly, settled), for drawing only |
+| 22 | u8 | fin pairs (1..4) |
+| 23 | u8 | eye pairs (1..4) |
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 

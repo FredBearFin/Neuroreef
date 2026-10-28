@@ -128,7 +128,7 @@ public class EcosystemTests
         int a = Animal(w, 0, true, 4);
         w.Energy[a] = w.EmaxOf(a);
         var act = new int[w.NS];
-        for (int t = 0; t < 400 && w.Infect[a] == 0; t++) { w.IInfNear[a] = 5; Life.Run(w, act); w.Step++; }
+        for (int t = 0; t < 400 && w.Infect[a] == 0; t++) { w.IInfNear[a] = 5; w.IVirNear[a] = 1f; Life.Run(w, act); w.Step++; }
         Assert.True(w.Infect[a] > 0, "never infected despite contacts");
         Assert.Equal(1, w.T.Infections[0]);
         for (int t = 0; t < K.DIS_STEPS + 2 && w.StageOf[a] != St.Dead; t++) { w.IInfNear[a] = 0; w.Energy[a] = w.EmaxOf(a); Life.Run(w, act); w.Step++; }

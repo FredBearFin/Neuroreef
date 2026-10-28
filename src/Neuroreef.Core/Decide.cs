@@ -64,16 +64,18 @@ public static class Decide
         float R = w.PSight[i] * (scanning ? 1.3f : 1f);
         float R2 = R * R;
         float fovCos = scanning ? -2f : w.PFovCos[i];
-        float vmax = w.Vmax(i);
         int cell = World.FIdx(x, y);
+        float vmax = w.Vmax(i, cell);
         bool ready = Ready(w, i);
         int mySpc = w.Spc[i];
         bool myJuv = stg == St.Juvenile;
 
-        // ---- perception of other animals (spatial hash, radius 1 or 2 cells)
-        float kinSum = 0, kinCx = 0, kinCy = 0, kinHx = 0, kinHy = 0, sepX = 0, sepY = 0, crowd = 0, bigSum = 0, smallSum = 0;
-        Near kin = new() { D = 1e9f, J = -1 }, big = new() { D = 1e9f, J = -1 }, small = new() { D = 1e9f, J = -1 },
-             carn = new() { D = 1e9f, J = -1 }, mate = new() { D = 1e9f, J = -1 }, strike = new() { D = 1e9f, J = -1 }, strikeBig = new() { D = 1e9f, J = -1 };
+        // ---- perception of other organisms (spatial hash, radius 1 or 2 cells). Kin are others that look like
+        // this organism; every other organism is sensed through raw quantities, with no designed category
+        float kinSum = 0, kinCx = 0, kinCy = 0, kinHx = 0, kinHy = 0, sepX = 0, sepY = 0, crowd = 0, otherSum = 0, virSum = 0;
+        Near kin = new() { D = 1e9f, J = -1 }, o1 = new() { D = 1e9f, J = -1 }, o2 = new() { D = 1e9f, J = -1 },
+             mate = new() { D = 1e9f, J = -1 }, strike = new() { D = 1e9f, J = -1 }, strikeBig = new() { D = 1e9f, J = -1 };
+        float o2Mass = -1f, strikeBigMass = -1f;
         float reach = w.PReach[i];
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         int nOff = R > K.HCELL ? 25 : 9;
@@ -95,32 +97,26 @@ public static class Decide
                     float close = 1f - d / R;
                     crowd += close;
                     byte sj = w.StageOf[j];
-                    if (w.Spc[j] == mySpc && sj >= St.Juvenile)
+                    bool active = sj >= St.Juvenile;
+                    // disease passes between organisms in contact that look alike (a pathogen adapted to a host kind)
+                    if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && Body.LooksAlike(w, i, j)) { infNear++; virSum += w.Virulence[j]; }
+                    if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    if (active && Body.LooksAlike(w, i, j))
                     {
                         kinSum += close; kinCx += ddx; kinCy += ddy;
-                        if (w.Infect[j] > 0 && d <= reach + w.PReach[j]) infNear++;     // contact with a sick conspecific (DESIGN §9.6)
                         kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
                         if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
                         if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                        if (ready && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                         continue;
                     }
-                    // heterospecific (or egg of any species)
-                    float mj = sj == St.Egg ? 0f : w.ApparentMass(j);
-                    if (sj == St.Egg || mj * 1.15f < myMass)
-                    {
-                        smallSum += close;
-                        if (d < small.D) small = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                        if (d <= reach + 0.5f && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    }
-                    else if (mj > myMass * 1.15f)
-                    {
-                        bigSum += close;
-                        if (d < big.D) big = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                        if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(mj) && d < strikeBig.D) strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    }
-                    else if (d <= reach + 0.5f && d < strikeBig.D) strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    if (sj >= St.Juvenile && w.Carnivory(j) > 0.3f && d < carn.D) carn = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    // any other organism, or an egg (an egg does not look like its parent)
+                    otherSum += close;
+                    float mj = w.ApparentMass(j);
+                    if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    if (mj > o2Mass) { o2Mass = mj; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
+                    float reachJ = reach + 0.5f + 0.4f * MathK.Cbrt(mj);
+                    if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
                 }
             }
         // ---- features (DESIGN §4)
@@ -146,20 +142,10 @@ public static class Decide
             f[F.MOTHER_FAR] = MathF.Min(1f, MathF.Sqrt(mdx * mdx + mdy * mdy) / R);
         }
         f[F.MATE_CLOSE] = mate.J >= 0 ? 1f - mate.D / R : 0f;
-        f[F.BIG_CLOSE] = big.J >= 0 ? 1f - big.D / R : 0f;
-        f[F.BIG_DENSITY] = MathK.Tanh(bigSum);
-        if (big.J >= 0)
-        {
-            int j = big.J;
-            float rvx = w.Speed[j] * MathK.Cos(w.Heading[j]) - w.Speed[i] * fx, rvy = w.Speed[j] * MathK.Sin(w.Heading[j]) - w.Speed[i] * fy;
-            float closing = -(rvx * big.Dx + rvy * big.Dy) / big.D;
-            f[F.BIG_APPROACH] = Math.Clamp(closing / MathF.Max(vmax, 0.05f), -1f, 1f);
-            f[F.BIG_CARN] = w.StageOf[j] >= St.Juvenile ? w.Carnivory(j) : 0f;
-        }
-        f[F.SMALL_CLOSE] = small.J >= 0 ? 1f - small.D / R : 0f;
-        f[F.SMALL_DENSITY] = MathK.Tanh(smallSum);
-        if (small.J >= 0) f[F.SMALL_WEAK] = Weakness(w, small.J);
-        f[F.CARN_CLOSE] = carn.J >= 0 ? 1f - carn.D / R : 0f;
+        if (o1.J >= 0) Other(w, i, o1, R, vmax, fx, fy, myMass, f, F.O1_CLOSE);
+        if (o2.J >= 0) Other(w, i, o2, R, vmax, fx, fy, myMass, f, F.O2_CLOSE);
+        if (o1.J >= 0) f[F.O1_WEAK] = Weakness(w, o1.J);
+        f[F.OTHERS] = MathK.Tanh(otherSum);
 
         float bestFood = 1e-6f;
         for (int p = 0; p < Pools.NFIELD; p++) bestFood = MathF.Max(bestFood, diet[p] * Pools.Rho[p]);
@@ -217,20 +203,20 @@ public static class Decide
             float l = MathF.Sqrt(vx * vx + vy * vy);
             if (l > 1e-6f) { sx += gain * vx / l; sy += gain * vy / l; }
         }
-        if (small.J >= 0)
+        if (o1.J >= 0)
         {
-            Add(g[P.SEEK_SMALL], small.Dx, small.Dy);
-            int j = small.J;
-            float lead = small.D / MathF.Max(vmax, 0.1f);
-            Add(g[P.INTERCEPT_SMALL], small.Dx + w.Speed[j] * MathK.Cos(w.Heading[j]) * lead, small.Dy + w.Speed[j] * MathK.Sin(w.Heading[j]) * lead);
-            float side = (kin.J >= 0 && (small.Dx * kin.Dy - small.Dy * kin.Dx) > 0) ? -1f : 1f;
-            Add(g[P.CIRCLE_SMALL], -small.Dy * side, small.Dx * side);
+            Add(g[P.APPROACH_1], o1.Dx, o1.Dy);
+            Add(g[P.FLEE_1], -o1.Dx, -o1.Dy);
+            int j = o1.J;
+            float lead = o1.D / MathF.Max(vmax, 0.1f);
+            Add(g[P.INTERCEPT_1], o1.Dx + w.Speed[j] * MathK.Cos(w.Heading[j]) * lead, o1.Dy + w.Speed[j] * MathK.Sin(w.Heading[j]) * lead);
+            float side = (kin.J >= 0 && (o1.Dx * kin.Dy - o1.Dy * kin.Dx) > 0) ? -1f : 1f;
+            Add(g[P.CIRCLE_1], -o1.Dy * side, o1.Dx * side);
         }
-        if (big.J >= 0) { Add(g[P.SEEK_BIG], big.Dx, big.Dy); Add(g[P.FLEE_BIG], -big.Dx, -big.Dy); }
-        if (carn.J >= 0)
+        if (o2.J >= 0)
         {
-            if (carn.D > R * 0.5f) Add(g[P.SHADOW_CARN], carn.Dx, carn.Dy); else Add(g[P.SHADOW_CARN], -carn.Dy, carn.Dx);
-            Add(g[P.FLEE_CARN], -carn.Dx, -carn.Dy);
+            Add(g[P.APPROACH_2], o2.Dx, o2.Dy); Add(g[P.FLEE_2], -o2.Dx, -o2.Dy);
+            if (o2.D > R * 0.5f) Add(g[P.SHADOW_2], o2.Dx, o2.Dy); else Add(g[P.SHADOW_2], -o2.Dy, o2.Dx);
         }
         if (kinSum > 0)
         {
@@ -265,11 +251,13 @@ public static class Decide
         w.IHeading[i] = newH;
         w.ISpeed[i] = spd;
         w.IActs[i] = acts;
-        w.ITarget[i] = w.PParasite[i] != 0 ? (strikeBig.J >= 0 ? strikeBig.J : -1) : (strike.J >= 0 ? strike.J : strikeBig.J);
+        // a strike hits the nearest other in reach; a blood-drinker goes for the largest in reach
+        w.ITarget[i] = w.PParasite[i] != 0 ? strikeBig.J : strike.J;
         w.IMate[i] = (mate.J >= 0 && mate.D <= reach + 1f) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
         w.IInfNear[i] = (byte)Math.Min(255, infNear);
+        w.IVirNear[i] = infNear > 0 ? virSum / infNear : 0f;
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
         f.CopyTo(new Span<float>(w.Feat, i * F.N, F.N));
         if (probe.Slot == i)
@@ -286,12 +274,30 @@ public static class Decide
         return w.Energy[i] > K.READY_ENERGY * w.EmaxOf(i);
     }
 
-    /// <summary>A mate must be ready, of the same clade (reproductive isolation), sexual like this organism, and of the other sex.</summary>
+    /// <summary>
+    /// A possible mate: ready, sexual, with the same sex system, and of the other sex (any two hermaphrodites can mate).
+    /// There is no species check here: whether the mating produces young depends on how different their genes are
+    /// (Resolve.Mate, D_COMPAT), so hybrids are possible and species separate gradually (DESIGN §7.9).
+    /// </summary>
     public static bool ValidPartner(World w, int i, int j)
     {
-        if (w.Spc[i] != w.Spc[j] || w.PSexual[i] == 0 || w.PSexual[j] == 0) return false;
+        if (w.PSexual[i] == 0 || w.PSexual[j] == 0 || w.PHerm[i] != w.PHerm[j]) return false;
         if (!Ready(w, j)) return false;
-        return w.Sex[i] != w.Sex[j];
+        return w.PHerm[i] != 0 || w.Sex[i] != w.Sex[j];
+    }
+
+    /// <summary>Raw senses of another organism, written from feature index k: close, relative size, closing speed, armed, meat-eating.</summary>
+    static void Other(World w, int i, Near o, float R, float vmax, float fx, float fy, float myMass, Span<float> f, int k)
+    {
+        int j = o.J;
+        float mj = w.ApparentMass(j);
+        f[k] = 1f - o.D / R;
+        f[k + 1] = MathK.Tanh(MathK.Log(MathF.Max(mj, 1e-4f) / MathF.Max(myMass, 1e-4f)));
+        float rvx = w.Speed[j] * MathK.Cos(w.Heading[j]) - w.Speed[i] * fx, rvy = w.Speed[j] * MathK.Sin(w.Heading[j]) - w.Speed[i] * fy;
+        f[k + 2] = Math.Clamp(-(rvx * o.Dx + rvy * o.Dy) / MathF.Max(o.D, 1e-3f) / MathF.Max(vmax, 0.05f), -1f, 1f);
+        bool active = w.StageOf[j] >= St.Juvenile;
+        f[k + 3] = active ? MathK.Tanh(w.PStrike[j] * MathK.Cbrt(mj / MathF.Max(myMass, 1e-4f))) : 0f;
+        f[k + 4] = active ? w.Carnivory(j) : 0f;
     }
 
     public static float Weakness(World w, int j)

@@ -27,7 +27,7 @@ public static class Resolve
     static void One(World w, int i)
     {
         var T = w.T;
-        var loco = w.LocoOf(i); var realm = w.RealmOf(i); float kThirst = w.PKThirst[i];
+        var loco = w.LocoOf(i); var realm = w.RealmOf(i);
         int s = w.Spc[i];
         uint seed = w.Seed, step = (uint)w.Step;
         float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
@@ -54,7 +54,7 @@ public static class Resolve
         if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < K.FIRE_KILL) { Die(w, i, Cause.Fire, -1); return; }
 
         // ---- 2. drink
-        if ((acts & BIT_DRINK) != 0 && kThirst > 0 && w.DistWater[cell] <= 1.5f)
+        if ((acts & BIT_DRINK) != 0 && w.DistWater[cell] <= 1.5f)
         {
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
@@ -120,7 +120,7 @@ public static class Resolve
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
         float moveCost = K.C_MOVE * mass * spd * spd * (loco == Loco.Fly ? K.FLY_COST : 1f);
         bool sick = w.Infect[i] > 0;
-        float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST : 1f);
+        float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
         // growth: a juvenile builds tissue from its spare energy (no free mass, DESIGN §9.1). It grows at most at
         // the rate that would reach adult size at PMature, and only from energy above GROW_RESERVE of its reserve:
         // a well-fed youngster grows fast, a hungry one slowly, a starving one not at all
@@ -154,7 +154,8 @@ public static class Resolve
         }
         if (w.Energy[i] > emax) w.Energy[i] = emax;
 
-        w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * kThirst);
+        // an organism dries out on land, less on moist ground; in water it does not (DESIGN §9.4)
+        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
         w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
@@ -236,7 +237,11 @@ public static class Resolve
         return rew;
     }
 
-    /// <summary>Sexual reproduction (DESIGN §8): two ready organisms of the same clade and opposite sex.</summary>
+    /// <summary>
+    /// Sexual reproduction (DESIGN §8, §7.9): two ready organisms of a compatible sex system. Both pay the cost of mating;
+    /// whether young result depends on how alike their genes are, p = exp(-(d/D_COMPAT)^2), so close relatives
+    /// breed freely, diverged ones rarely, and species separate gradually. Hermaphrodites both conceive.
+    /// </summary>
     static float Mate(World w, int i, int j, int cell)
     {
         if (!Decide.Ready(w, i) || w.StageOf[j] == St.Dead || !Decide.ValidPartner(w, i, j)) return 0;
@@ -248,6 +253,14 @@ public static class Resolve
         w.PendingR[j] += K.R_MATE;
         w.T.Matings[w.Spc[i]]++;
         float rew = K.R_MATE;
+        float d = Body.Distance(w, i, j) / K.D_COMPAT;
+        if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Compat) >= MathK.Exp(-d * d)) return rew;   // incompatible: no young
+        if (w.PHerm[i] != 0)
+        {
+            rew += Conceive(w, i, j, w.PLitter[i]);
+            w.PendingR[j] += Conceive(w, j, i, w.PLitter[j]);
+            return rew;
+        }
         int mother = w.Sex[i] == 0 ? i : j, father = mother == i ? j : i;
         float rb = Conceive(w, mother, father, w.PLitter[mother]);
         if (mother == i) rew += rb; else w.PendingR[j] += rb;

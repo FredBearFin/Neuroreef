@@ -15,7 +15,7 @@ public sealed class Snapshot
     int _readyLen, _readLen;
     int _fresh;                 // 1 when _ready holds a frame the reader has not taken
     public volatile bool Requested;
-    public const int REC = 20;  // bytes per agent record (ICD §1, AGENTS)
+    public const int REC = 24;  // bytes per agent record (ICD §1, AGENTS)
 
     public Snapshot(World w)
     {
@@ -54,7 +54,7 @@ public sealed class Snapshot
     int Encode(byte[] b)
     {
         var w = _w;
-        b[0] = 0x02; b[1] = 3; b[2] = 0; b[3] = 0;
+        b[0] = 0x02; b[1] = 4; b[2] = 0; b[3] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(4), (uint)w.Step);
         int n = 0, o = 12;
         float sx = 65536f / K.WORLD;
@@ -88,6 +88,9 @@ public sealed class Snapshot
             span[17] = (byte)w.Genome[g + G.B_ARMOUR];
             span[18] = (byte)w.Genome[g + G.B_STRIKE];
             span[19] = (byte)(sbyte)Math.Clamp((int)MathF.Round(w.PDiet[i * Pools.N + (int)Pool.Meat] * 254f - 127f), -127, 127);   // meat-eating
+            span[20] = w.PLegPairs[i];                                   // number of leg pairs (1..4)
+            span[21] = w.PLoco[i];                                       // locomotion: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
+            span[22] = w.PFinPairs[i]; span[23] = w.PEyePairs[i];        // fin pairs, eye pairs (1..4)
             o += REC; n++;
         }
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(8), (uint)n);

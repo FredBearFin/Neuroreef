@@ -108,6 +108,15 @@ public static class Clades
         body[G.B_SEX - B] = (sbyte)(U(11) < 0.5f ? -40 : 40);
         body[G.B_LIVE - B] = (sbyte)(U(12) < 0.5f ? -40 : 40);
         body[G.B_BIRTH - B] = (sbyte)((U(13) - 0.5f) * 120f);
+        body[G.B_LEGN - B] = (sbyte)((U(14) * 2f - 1f) * 127f);   // any number of leg pairs
+        body[G.B_FINN - B] = (sbyte)((U(15) * 2f - 1f) * 127f);   // fin pairs
+        body[G.B_EYEN - B] = (sbyte)((U(16) * 2f - 1f) * 127f);   // eye pairs
+        body[G.B_LIFE - B] = (sbyte)((U(17) - 0.5f) * 120f);      // lifespan, development and brain size: anywhere mid-range
+        body[G.B_DEVEL - B] = (sbyte)((U(18) - 0.5f) * 120f);
+        body[G.B_BRAIN - B] = (sbyte)((U(19) * 2f - 1f) * 127f);
+        body[G.B_HERM - B] = (sbyte)(U(35) < 0.5f ? -40 : 40);     // separate sexes or hermaphrodite
+        body[G.B_SEXRATIO - B] = (sbyte)((U(36) - 0.5f) * 40f);    // about even sex ratio
+        body[G.B_IMMUNE - B] = (sbyte)((U(37) * 2f - 1f) * 127f);
         // diet: the primary producers of its realm, in random proportions; every other pool near zero
         int[] plants = land ? new[] { (int)Pool.Grass, (int)Pool.Browse, (int)Pool.Seed, (int)Pool.Root, (int)Pool.Fruit, (int)Pool.Nectar }
                             : new[] { (int)Pool.Algae, (int)Pool.Phyto };

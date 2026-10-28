@@ -16,7 +16,7 @@ public static class Reflex
     public const int HUNGRY_FOOD = 0, HUNGRY = 1, THIRSTY = 2, THIRSTY_AT_WATER = 3, TIRED_SAFE = 4, DANGER = 5, LOST = 6,
         READY_MATE = 7, HUNGRY_PREY = 8;
     public static readonly string[] Names = { "hungry and food here", "hungry", "thirsty", "thirsty and at water", "tired and safe",
-        "large carnivore near", "young and far from mother", "ready and a mate near", "hungry and weak prey near" };
+        "armed larger meat-eater near", "young and far from mother", "ready and a mate near", "hungry and weak prey near" };
 
     /// <summary>The starter kit: (input, primitive) pairs set to KIT_W in every founder.</summary>
     public static readonly (int c, int p)[] Kit =
@@ -24,7 +24,7 @@ public static class Reflex
         (HUNGRY_FOOD, P.EAT), (HUNGRY, P.CLIMB_FOOD),                 // eat when hungry and food is here; else move toward food
         (THIRSTY, P.SEEK_WATER), (THIRSTY_AT_WATER, P.DRINK),         // go to water when thirsty; drink there
         (TIRED_SAFE, P.REST),                                         // rest when tired and nothing is threatening
-        (DANGER, P.FLEE_CARN), (DANGER, P.FLEE_BIG),                  // flee a large carnivore
+        (DANGER, P.FLEE_1), (DANGER, P.FLEE_2),                        // flee an armed, larger meat-eater
         (LOST, P.FOLLOW_MOTHER),                                      // a young animal follows its mother
     };
 
@@ -36,9 +36,12 @@ public static class Reflex
         c[THIRSTY] = f[F.THIRST];
         c[THIRSTY_AT_WATER] = f[F.THIRST] * MathF.Max(0f, (f[F.WATER_CLOSE] - 0.75f) * 4f);   // within about 2 cells of water
         c[TIRED_SAFE] = f[F.FATIGUE] * (1f - f[F.FEAR]);
-        c[DANGER] = f[F.BIG_CLOSE] * f[F.BIG_CARN];
+        c[DANGER] = MathF.Max(Threat(f, F.O1_CLOSE), Threat(f, F.O2_CLOSE));
         c[LOST] = f[F.JUVENILE] * f[F.MOTHER_FAR];
         c[READY_MATE] = f[F.READY] * f[F.MATE_CLOSE];
-        c[HUNGRY_PREY] = f[F.HUNGER] * f[F.SMALL_CLOSE] * f[F.SMALL_WEAK];
+        c[HUNGRY_PREY] = f[F.HUNGER] * f[F.O1_CLOSE] * f[F.O1_WEAK];
     }
+
+    // close x eats meat x armed x larger (k = the CLOSE feature of that sensed organism)
+    static float Threat(ReadOnlySpan<float> f, int k) => f[k] * f[k + 4] * f[k + 3] * MathF.Max(0f, f[k + 1]);
 }

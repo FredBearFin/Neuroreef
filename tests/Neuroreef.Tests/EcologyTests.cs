@@ -43,13 +43,18 @@ public class EcologyTests
             Body.Express(w, 0); return w.LocoOf(0);
         }
         Assert.Equal(Loco.Walk, L(100, -127, -127));
-        Assert.Equal(Realm.Land, w.RealmOf(0));
-        Assert.Equal(1f, w.PKThirst[0]);
+        Assert.Equal(0, (int)(w.RealmOf(0) & Realm.Deep));          // cannot stay up in open water
+        Assert.True(w.PVLand[0] > w.PVWater[0]);
         Assert.Equal(Loco.Swim, L(-127, 100, -127));
-        Assert.Equal(Realm.Water, w.RealmOf(0));
-        Assert.Equal(0f, w.PKThirst[0]);
+        Assert.NotEqual(0, (int)(w.RealmOf(0) & Realm.Deep));
+        Assert.True(w.PVWater[0] > w.PVLand[0] && w.PVLand[0] > 0);   // a legless swimmer can still crawl
+        // speed follows smoothly from organ size: half a fin swims, slower than a whole one
+        L(-127, 0, -127); float half = w.PVWater[0];
+        L(-127, 127, -127); Assert.True(w.PVWater[0] > half && half > 0);
+        // flight needs enough wing for the body's weight
+        Assert.Equal(Loco.Fly, L(-127, -127, 127, -100));
+        Assert.NotEqual(Loco.Fly, L(-127, -127, 127, 127));
         Assert.Equal(Loco.Wade, L(100, 100, -127));
-        Assert.Equal(Loco.Fly, L(-127, -127, 127));
         Assert.Equal(Loco.Sessile, L(-127, -127, -127));
         Assert.Equal(0f, w.PVmax[0]);
         // costs: an organism with all organs pays more than one without; wings cost more on a heavier body
@@ -151,7 +156,8 @@ public class EcologyTests
         var w = new World(256, 11);
         Terrain.Build(w);
         int a = Make(w, 0, 0, sexual, live), b = Make(w, cladeB, 1, sexual, live);
-        w.Genome[b * G.LEN + G.B_MASS] = w.Genome[a * G.LEN + G.B_MASS];
+        for (int k = G.BODY; k < G.BODY + G.NBODY; k++) w.Genome[b * G.LEN + k] = w.Genome[a * G.LEN + k];   // genetically alike
+        Body.Express(w, b); w.Energy[b] = w.EmaxOf(b); w.Age[b] = w.PMature[b] * 2;
         w.Sex[a] = 0; w.Sex[b] = 1;
         w.X[b] = w.X[a] + 0.5f; w.Y[b] = w.Y[a];
         return (w, a, b);
@@ -167,6 +173,7 @@ public class EcologyTests
         w.Genome[g + G.B_LIVE] = (sbyte)(live ? 60 : -60);
         w.Genome[g + G.B_LEGS] = 100; w.Genome[g + G.B_FINS] = -127; w.Genome[g + G.B_WINGS] = -127;   // a walker
         w.Genome[g + G.B_LITTER] = 40;
+        w.Genome[g + G.B_HERM] = -60;                                // separate sexes
         Body.Express(w, c);
         w.Flags[c] = 0;
         w.Energy[c] = w.EmaxOf(c);
@@ -221,14 +228,46 @@ public class EcologyTests
         Assert.True(w.T.Lays[0] >= 1);
     }
 
-    [Fact] // NR-334: organisms of different clades cannot interbreed
-    public void DifferentCladesCannotMate()
+    [Fact] // NR-334: there is no species check; mating fails more the more two genomes differ, and costs are still paid
+    public void DistantGenomesCannotProduceYoung()
     {
         var (w, a, b) = Pair(true, true, cladeB: 1);
+        Assert.True(Decide.ValidPartner(w, a, b));                  // a different clade is still a possible mate
+        for (int k = G.B_LEGS; k <= G.B_IMMUNE; k++) w.Genome[b * G.LEN + k] = (sbyte)(w.Genome[a * G.LEN + k] > 0 ? -127 : 127);
+        w.Genome[b * G.LEN + G.B_SEX] = 60; w.Genome[b * G.LEN + G.B_HERM] = -60;   // still sexual, separate sexes
+        Body.Express(w, b); w.Energy[b] = w.EmaxOf(b); w.Age[b] = w.PMature[b] * 2;
+        Assert.True(Body.Distance(w, a, b) > 4f * K.D_COMPAT);
+        float ea = w.Energy[a];
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         Assert.Equal(0, Count(w, St.Embryo));
-        Assert.False(Decide.ValidPartner(w, a, b));
+        Assert.Equal(1, w.T.Matings[0]);
+        Assert.True(w.Energy[a] < ea);
+    }
+
+    [Fact] // NR-334: two hermaphrodites mate and both conceive
+    public void HermaphroditesBothConceive()
+    {
+        var (w, a, b) = Pair(true, true);
+        foreach (int i in new[] { a, b }) { w.Genome[i * G.LEN + G.B_HERM] = 60; Body.Express(w, i); w.Energy[i] = w.EmaxOf(i); w.Age[i] = w.PMature[i] * 2; }
+        w.Sex[b] = w.Sex[a];
+        Act(w, a, P.MATE, b); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        Assert.NotEqual(0, w.Flags[a] & Flag.Carrying);
+        Assert.NotEqual(0, w.Flags[b] & Flag.Carrying);
+    }
+
+    [Fact] // NR-303: thirst rises on land only
+    public void NoThirstInWater()
+    {
+        var w = new World(256, 14); Terrain.Build(w);
+        int a = Make(w, 0, 0);
+        int wc = -1; for (int c = 0; c < K.FW * K.FW && wc < 0; c++) if ((w.Cell[c] & (byte)Realm.Deep) != 0) wc = c;
+        Assert.True(wc >= 0);
+        w.X[a] = (wc % K.FW + 0.5f) * K.FCELL; w.Y[a] = (wc / K.FW + 0.5f) * K.FCELL;
+        w.Genome[a * G.LEN + G.B_FINS] = 127; Body.Express(w, a);
+        for (int t = 0; t < 50; t++) { Act(w, a, P.REST); w.IActs[a] = 0; Resolve.Run(w, 1, 0); }
+        Assert.Equal(0f, w.Thirst[a]);
     }
 
     [Fact]
@@ -265,7 +304,6 @@ public class EcologyTests
         float basal0 = w.PBasal[i], v0 = w.PVmax[i], grass0 = w.PDiet[(int)Pool.Grass], seed0 = w.PDiet[(int)Pool.Seed];
         float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += w.PDiet[p];
         Assert.InRange(sum0, K.DIET_BUDGET - 0.02f, K.DIET_BUDGET + 0.02f);
-        Assert.Equal(0f, w.PDiet[(int)Pool.Algae]);        // a walker cannot graze algae
         w.Genome[G.B_DIET + (int)Pool.Grass] = 127;        // specialise on grass
         w.Genome[G.B_SPEED] = 127;                         // faster
         Body.Express(w, i);
@@ -274,7 +312,9 @@ public class EcologyTests
         Assert.True(w.PDiet[(int)Pool.Grass] > grass0);
         Assert.True(w.PDiet[(int)Pool.Seed] < seed0);
         Assert.True(w.PVmax[i] > v0 * 1.4f);
-        Assert.True(w.PBasal[i] > basal0 * 1.15f);
+        // the speed gene adds exactly its own cost to the basal rate (other costs unchanged)
+        float extra = K.COST_SPEED * (Body.Factor(127, K.BODY_RANGE_TRAIT) - 1f) * K.C_BASAL * MathK.Pow(w.PM[i], K.EXP_BASAL);
+        Assert.Equal(basal0 + extra, w.PBasal[i], 4);
     }
 
     [Fact] // NR-322: a growing juvenile pays for its tissue

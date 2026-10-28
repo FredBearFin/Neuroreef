@@ -117,7 +117,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.000508906 | - | mutation probability per genome byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 0.000468604 | - | mutation probability per genome byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
@@ -153,9 +153,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
 | MASS_LO | 0.05 | M | smallest body mass a mass gene can give | ECO: a small invertebrate-sized organism |
 | MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
-| LIMB_MIN | 0.3 | - | organ size (0..1) from which legs or fins work for walking or swimming | - |
-| WING_MIN | 0.5 | - | wing size (0..1) from which an organism can fly | - |
-| COST_LIMB | 0.15 | xbasal | basal cost per unit of leg or fin size | ECO: locomotor muscle is maintained at a cost |
+| LIMB_MIN | 0.3 | - | organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth) | - |
+| COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size, or of leg size per pair of legs | ECO: locomotor muscle is maintained at a cost |
 | COST_WING | 0.5 | xbasal | basal cost per unit of wing size, times mass^(1/3) | ECO: flight power rises faster than mass, so flight favours the small |
 | COST_ARMOUR_ABS | 0.12 | xbasal | basal cost per unit of armour | ECO: heavy armour is costly to carry and grow |
 | COST_STRIKE_ABS | 0.15 | xbasal | basal cost per unit of weaponry | ECO: jaws, teeth and claws are costly tissue |
@@ -169,6 +168,23 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOV_HI | 360 | degrees | widest field of view a gene can give | ECO: prey with lateral eyes |
 | C_GEST | 150 | steps | gestation (or incubation) at M=1, scaling with M^0.25 | ECO: gestation scales about as M^0.25 |
 | C_COOL | 150 | steps | breeding cooldown at M=1, scaling with M^0.25 | ECO: as gestation |
+| WING_LIFT | 1.6 | - | a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading) | ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings |
+| DEEP_SWIM | 0.3 | - | swimming power (share of the body's top speed in water) needed to stay in deep water | ECO: staying up in open water needs swimming power |
+| CRAWL | 0.05 | - | a legless body crawls on land at this share of its top speed | ECO: worms, snakes and stranded fish move slowly without legs |
+| SOIL_WATER | 0.8 | - | share of thirst a land organism avoids by taking water from wet soil and moist food | ECO: many animals and all settled organisms take water from their surroundings |
+| COST_EYE | 0.04 | xbasal | basal cost per eye pair | ECO: eyes and visual brain are costly tissue |
+| EYE_FOV | 0.3 | - | field of view added by each extra eye pair (share of the base field) | ECO: more eyes cover more directions |
+| FIN_TURN | 0.2 | - | turning added per extra fin pair (times fin size) | ECO: paired fins steer and brake |
+| LIFE_RANGE | 2 | - | range of the lifespan and development multipliers (x/÷) | - |
+| COST_LONGEVITY | 0.25 | xbasal | basal cost per unit of extra lifespan (longer life needs more body repair) | ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977) |
+| DEVEL_AGING | 0.5 | - | lifespan scales with the development multiplier to this power (fast developers age sooner) | ECO: the fast-slow life-history continuum |
+| BRAIN_MIN | 2 | units | fewest memory units a brain can have | - |
+| COST_BRAIN | 0.15 | xbasal | basal cost of a full brain (all memory units), scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates |
+| COST_HERM | 0.05 | xbasal | basal cost of being a hermaphrodite (keeping both sexes' organs) | ECO: hermaphrodites maintain male and female function |
+| COST_IMMUNE | 0.12 | xbasal | basal cost of full immune investment | ECO: immune defence is costly (Lochmiller & Deerenberg 2000) |
+| IMMUNE_PROTECT | 0.8 | - | share of infection and disease death that full immune investment prevents | ECO: partial, not total, protection |
+| D_COMPAT | 0.3 | - | genetic distance at which mating succeeds with probability 1/e (body genes / 127, Euclidean) | ECO: hybrid incompatibility rises with genetic distance (Dobzhansky-Muller; Orr 1995) |
+| KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, Euclidean) | ECO: animals recognise their kind by appearance |
 
 ## 9. Clades
 
@@ -209,7 +225,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DIS_STEPS | 50 | steps | infectious period | ECO: about 1.5% of the lifespan at M=1 (a 1-2 week infection in a 2-year life) |
 | DIS_IMMUNE | 600 | steps | immunity after recovery | ECO: acquired immunity lasts months (about 20% of the lifespan at M=1) |
 | DIS_SPILL | 1E-05 | /step | spillover from the environment (reservoir) per animal per step | ECO: rare sporadic infections seed outbreaks |
-| DIS_COST | 0.4 | xbasal | extra basal cost while infected (fever, immune response) | ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50% |
+| VIR_MUT | 0.1 | - | spread of a pathogen's virulence at each transmission (log-normal) | ECO: pathogens mutate as they spread; virulence evolves (Anderson & May 1982) |
+| DIS_COST | 0.4 | xbasal | extra basal cost while infected, per unit of virulence (fever, immune response) | ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50% |
 | DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
 | DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
 

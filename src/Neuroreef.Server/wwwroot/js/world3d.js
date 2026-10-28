@@ -1,4 +1,5 @@
-// The 3D view: terrain, water, vegetation, fire, and every animal as a per-species low-poly model.
+// The 3D view: terrain, water, vegetation, fire, and every organism drawn from its own genes (creatures/body.js):
+// one instanced mesh of detailed, animated bodies near the camera and one of low-detail bodies beyond it.
 // World x maps to three.js x, world y maps to three.js z, height is three.js y. The world is a torus:
 // the terrain is drawn as a 3x3 tiling around the camera, and every animal is drawn at its copy nearest
 // to the camera.
@@ -6,13 +7,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { agentAt } from './net.js';
-import { merge } from './creatures/far.js';
-import { buildSpecies } from './creatures/index.js';
-import { withAnim } from './creatures/anim.js';
+import { merge } from './creatures/kit.js';
+import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize } from './creatures/body.js';
 
 const RELIEF = 55;
-const NEAR_DIST = 90;        // animals closer than this to the camera are drawn with the detailed, animated model
-const NEAR_CAP = 1500;       // at most this many per species           // world units of height between lake level and the highest peak
+const NEAR_DIST = 90;        // organisms closer than this to the camera are drawn with the detailed body
+const NEAR_CAP = 4096;       // at most this many detailed bodies; the rest get the low-detail one
+const NCLADES = 32;
 
 export class World3D {
   constructor(canvas, meta) {
@@ -42,11 +43,11 @@ export class World3D {
     this.mode = 'overview';
     this.agents = new Map();          // serial -> state for interpolation
     this.frameT = 0; this.frameDt = 50;
-    this.hidden = new Set();          // species hidden by the legend
+    this.hidden = new Set();          // clades hidden by the legend
     this.selected = 0;
     this.perceived = [];
     this.tmp = {};
-    this._buildSpecies();
+    this._buildBodies();
     this._buildMarkers();
     this.resize();
     addEventListener('resize', () => this.resize());
@@ -233,37 +234,39 @@ export class World3D {
 
   // ------------------------------------------------------------------ animals
 
-  _buildSpecies() {
-    this.spMeshes = [];
-    for (const sp of this.meta.species) {
-      // near: detailed and animated (creatures/); far: the simple shape in one colour
-      const b = buildSpecies(sp);
-      const S = { b, size: sp.swarm ? 1.6 : 1.5 * Math.cbrt(sp.mass), fly: sp.loco === 'Fly', swim: sp.loco === 'Swim', juvSwim: sp.juvLoco === 'Swim', near: null, far: null };
-      this._alloc(S, 'near', NEAR_CAP); this._alloc(S, 'far', 512);
-      this.spMeshes.push(S);
-    }
+  _buildBodies() {
+    this.bodyMat = bodyMaterial();
+    this.nearGeo = bodyGeometry('near'); this.farGeo = bodyGeometry('far');
+    this.near = this._allocBodies(null, this.nearGeo, NEAR_CAP);
+    this.far = this._allocBodies(null, this.farGeo, 4096);
+    this.cladeRGB = new Float32Array(NCLADES * 3).fill(0.5);
+    this.setClades(this.meta.species || []);
     this.eggs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 6, 4), new THREE.MeshLambertMaterial({ color: 0xffffff }), 4096);
     this.eggs.count = 0; this.eggs.frustumCulled = false;
     this.eggs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(4096 * 3), 3);
     this.scene.add(this.eggs);
   }
 
-  /** (Re)create the near or far instanced mesh of a species with room for cap animals. */
-  _alloc(S, which, cap) {
-    const old = S[which];
-    if (old) { this.scene.remove(old.mesh); old.mesh.dispose(); if (which === 'near') old.mesh.geometry.dispose(); }
-    const geo = which === 'near' ? withAnim(S.b.nearGeo, cap) : S.b.farGeo;
-    const mesh = new THREE.InstancedMesh(geo, which === 'near' ? S.b.nearMat : S.b.farMat, cap);
-    mesh.count = 0; mesh.frustumCulled = false;
-    this.scene.add(mesh);
-    if (which === 'far') mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-    S[which] = { mesh, cap, anim: which === 'near' ? geo.attributes.aAnim : null, body: which === 'near' ? geo.attributes.aBody : null };
+  /** (Re)create an instanced body mesh with room for cap organisms. */
+  _allocBodies(old, geo, cap) {
+    if (old) { this.scene.remove(old.mesh); old.mesh.geometry.dispose(); old.mesh.dispose(); }
+    const B = bodyMesh(geo, this.bodyMat, cap);
+    this.scene.add(B.mesh);
+    return B;
   }
 
-  _grow(k, need) {
-    const S = this.spMeshes[k];
-    let cap = S.far.cap; while (cap < need) cap *= 2;
-    this._alloc(S, 'far', cap);
+  /** The clade table (meta.species, then each 'clades' frame): per-clade colours, sight and field of view. */
+  setClades(list) {
+    if (!Array.isArray(list)) return;
+    this.clades = list;
+    const n = Math.max(NCLADES, list.length);
+    if (this.cladeRGB.length < n * 3) this.cladeRGB = new Float32Array(n * 3).fill(0.5);
+    const c = new THREE.Color();
+    for (const cl of list) {
+      if (!cl || cl.id === undefined || cl.id >= n) continue;
+      c.set(cl.color || '#8aa0b5');
+      this.cladeRGB[cl.id * 3] = c.r; this.cladeRGB[cl.id * 3 + 1] = c.g; this.cladeRGB[cl.id * 3 + 2] = c.b;
+    }
   }
 
   setAgents(a) {
@@ -276,14 +279,20 @@ export class World3D {
       if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h }; this.agents.set(o.serial, e); }
       else { e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h; }
       e.sp = o.sp; e.stage = o.stage; e.acts = o.acts; e.scan = o.scan; e.rest = o.rest; e.energy = o.energy; e.gen = gen; e.carry = o.carrying;
-      e.gMass = o.gMass; e.gSpeed = o.gSpeed; e.gArmour = o.gArmour; e.gDiet = o.gDiet;
+      if (e.gMass !== o.gMass || e.legs !== o.legs || e.fins !== o.fins || e.wings !== o.wings || e.legPairs !== o.legPairs || e.finPairs !== o.finPairs || e.eyePairs !== o.eyePairs || e.loco !== o.loco) {
+        // the body this organism's genes built (constant for its life)
+        e.gMass = o.gMass; e.m01 = o.m01; e.mass = o.mass; e.size = bodySize(o.mass);
+        e.legs = o.legs; e.fins = o.fins; e.wings = o.wings; e.loco = o.loco; e.legPairs = o.legPairs; e.finPairs = o.finPairs; e.eyePairs = o.eyePairs;
+        e.fly = o.loco === 'Fly'; e.swim = o.loco === 'Swim';
+      }
+      e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;
   }
 
   /** Interpolated, camera-relative position of an agent. */
-  _pos(e, alpha, cx, cz) {
+  _pos(e, alpha, cx, cz, out = [0, 0, 0]) {
     const W = this.W;
     let dx = e.x - e.px, dy = e.y - e.py;
     if (dx > W / 2) dx -= W; else if (dx < -W / 2) dx += W;
@@ -291,7 +300,8 @@ export class World3D {
     let x = e.px + dx * alpha, y = e.py + dy * alpha;
     x += Math.round((cx - x) / W) * W; y += Math.round((cz - y) / W) * W;
     let dh = e.h - e.ph; if (dh > Math.PI) dh -= 2 * Math.PI; else if (dh < -Math.PI) dh += 2 * Math.PI;
-    return [x, y, e.ph + dh * alpha];
+    out[0] = x; out[1] = y; out[2] = e.ph + dh * alpha;
+    return out;
   }
 
   _buildMarkers() {
@@ -358,7 +368,7 @@ export class World3D {
     this._selPos = selP;
 
     if (this.mode !== 'overview' && selP) {
-      const sp = this.meta.species[sel.sp], sz = this.spMeshes[sel.sp].size * (sel.stage === 1 ? 0.6 : 1);
+      const sz = this._size(sel);
       const gh = this._height(sel, selP[0], selP[1]);
       const fx = Math.cos(selP[2]), fz = Math.sin(selP[2]);
       this._camH = this._camH === undefined ? selP[2] : lerpAngle(this._camH, selP[2], 0.08);
@@ -401,78 +411,55 @@ export class World3D {
     this._plants(false);
     if (this.flames) { this.flames.material.opacity = 0.65 + 0.3 * Math.sin(now / 90); }
 
-    // animals
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    const counts = new Int32Array(this.spMeshes.length);
-    for (const e of this.agents.values()) if (e.stage !== 0) counts[e.sp]++;
-    for (let i = 0; i < this.spMeshes.length; i++) if (counts[i] > this.spMeshes[i].far.cap) this._grow(i, counts[i]);
-    counts.fill(0);
-    const nearN = new Int32Array(this.spMeshes.length);
+    // organisms: one mesh of detailed bodies near the camera, one of low-detail bodies beyond
+    let total = 0;
+    for (const e of this.agents.values()) if (e.stage !== 0) total++;
+    if (total > this.far.cap) { let cap = this.far.cap; while (cap < total) cap *= 2; this.far = this._allocBodies(this.far, this.farGeo, cap); }
+    const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0];
     const camX = this.camera.position.x, camZ = this.camera.position.z, near2 = NEAR_DIST * NEAR_DIST;
-    for (const S of this.spMeshes) S.b.nearMat.userData.uniforms.uTime.value = now / 1000;
-    let ne = 0;
-    const eggCol = new THREE.Color(), tint = new THREE.Color();
-    const t = now / 1000;
+    this.bodyMat.userData.uniforms.uTime.value = now / 1000;
+    let nn = 0, nf = 0, ne = 0;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    const eggCol = new THREE.Color(), white = new THREE.Color(1, 1, 1);
+    const t = now / 1000, Wh = W / 2;
     for (const [serial, e] of this.agents) {
       if (this.hidden.has(e.sp)) continue;
-      const [x, y, h] = this._pos(e, alpha, cx, cz);
-      const S = this.spMeshes[e.sp];
+      const [x, y, h] = this._pos(e, alpha, cx, cz, P3);
+      const ci = e.sp * 3;
       if (e.stage === 0) {
         if (ne >= 4096) continue;
         p.set(x, this.heightAt(x, y) + 0.3, y); q.identity(); s.set(1, 0.8, 1);
         this.eggs.setMatrixAt(ne, m.compose(p, q, s));
-        this.eggs.setColorAt(ne, eggCol.set(this.meta.species[e.sp].color).lerp(new THREE.Color(1, 1, 1), 0.6));
+        this.eggs.setColorAt(ne, eggCol.setRGB(rgb[ci], rgb[ci + 1], rgb[ci + 2]).lerp(white, 0.6));
         ne++; continue;
       }
-      // the mass gene scales the body (x/÷ 2 in mass at the gene's ends, so x/÷ 1.26 in length)
-      const sc = S.size * (e.stage === 1 ? 0.55 : 1) * Math.cbrt(Math.pow(2, e.gMass || 0));
+      const size = e.size, sc = size * (e.stage === 1 ? 0.55 : 1);
       let gy = this._height(e, x, y);
-      if (S.fly && !(e.rest)) gy += 3.5 + Math.sin(t * 3 + serial) * 0.6;
-      p.set(x, gy, y);
-      q.setFromAxisAngle(up, -h);
-      s.set(sc, sc * (e.rest ? 0.7 : 1), sc);
-      m.compose(p, q, s);
+      if (e.fly && !e.rest) gy += 3.5 + Math.sin(t * 3 + serial) * 0.6;
+      // gait from the distance moved since the last frame
+      let mdx = e.x - e.px, mdy = e.y - e.py;
+      if (mdx > Wh) mdx -= W; else if (mdx < -Wh) mdx += W;
+      if (mdy > Wh) mdy -= W; else if (mdy < -Wh) mdy += W;
+      const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * size + 0.05));
+      e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
       const ddx = x - camX, ddz = y - camZ;
-      if (ddx * ddx + ddz * ddz < near2 && nearN[e.sp] < S.near.cap) {
-        // close to the camera: the animated model; gait from the distance moved since the last frame
-        const k = nearN[e.sp]++;
-        S.near.mesh.setMatrixAt(k, m);
-        let mdx = e.x - e.px, mdy = e.y - e.py;
-        if (mdx > this.W / 2) mdx -= this.W; else if (mdx < -this.W / 2) mdx += this.W;
-        if (mdy > this.W / 2) mdy -= this.W; else if (mdy < -this.W / 2) mdy += this.W;
-        const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * S.size + 0.05));
-        e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
-        const A = S.near.anim.array;
-        A[k * 4] = e.gait; A[k * 4 + 1] = (serial % 997) / 997; A[k * 4 + 2] = e.acts; A[k * 4 + 3] = e.rest ? 1 : 0;
-        const B = S.near.body.array;
-        B[k * 4] = e.gSpeed || 0; B[k * 4 + 1] = e.gArmour || 0; B[k * 4 + 2] = e.gDiet || 0;
-      } else {
-        const k = counts[e.sp]++;
-        S.far.mesh.setMatrixAt(k, m);
-        // far: armour darkens, diet tints (as the near shader does)
-        const d = e.gDiet || 0, a = 1 - 0.28 * Math.max(-0.5, Math.min(1, e.gArmour || 0));
-        tint.setRGB(a * (d > 0 ? 1 + 0.25 * d : 1 + 0.2 * d), a * (d > 0 ? 1 - 0.22 * d : 1 - 0.2 * d), a * (d > 0 ? 1 - 0.26 * d : 1 + 0.2 * d));
-        S.far.mesh.setColorAt(k, tint);
-      }
+      let B, k;
+      if (ddx * ddx + ddz * ddz < near2 && nn < near.cap) { B = near; k = nn++; } else { B = far; k = nf++; if (k >= far.cap) continue; }
+      setBody(B, k, x, gy, y, h, sc, sc * (e.rest && !e.fly ? 0.7 : 1), e, e.gait, (serial % 997) / 997, e.acts, e.rest ? 1 : 0, rgb[ci], rgb[ci + 1], rgb[ci + 2]);
     }
-    for (let i = 0; i < this.spMeshes.length; i++) {
-      const S = this.spMeshes[i];
-      S.far.mesh.count = counts[i]; S.far.mesh.instanceMatrix.needsUpdate = true;
-      S.near.mesh.count = nearN[i]; S.near.mesh.instanceMatrix.needsUpdate = true; S.near.anim.needsUpdate = true; S.near.body.needsUpdate = true;
-      if (S.far.mesh.instanceColor) S.far.mesh.instanceColor.needsUpdate = true;
-    }
+    commitBodies(near, nn); commitBodies(far, nf);
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
 
     // selection marker, field of view and perceived animals
     if (sel && selP) {
-      const sz = this.spMeshes[sel.sp].size;
+      const sz = this._size(sel);
       const gh = this._height(sel, selP[0], selP[1]);
       this.selRing.visible = this.mode !== 'ride';
       this.selRing.position.set(selP[0], gh + 0.2, selP[1]); this.selRing.scale.setScalar(sz * 1.4 + 0.8 + 0.2 * Math.sin(now / 200));
       this.selBeam.visible = this.mode === 'overview'; this.selBeam.position.set(selP[0], gh, selP[1]);
-      const sp = this.meta.species[sel.sp];
-      const R = probe && probe.serial === this.selected ? probe.sight : sp.sight;
-      const fov = (sel.scan ? 360 : sp.fov) * Math.PI / 180;
+      const cl = (this.clades && this.clades[sel.sp]) || {};
+      const R = probe && probe.serial === this.selected ? probe.sight : (cl.sight || 20);
+      const fov = (sel.scan ? 360 : (cl.fov || 300)) * Math.PI / 180;
       this.fov.visible = this.mode !== 'overview';
       if (this._fovKey !== R + ':' + fov) {
         this._fovKey = R + ':' + fov;
@@ -486,33 +473,35 @@ export class World3D {
     this.renderer.render(this.scene, this.camera);
   }
 
-  _height(e, x, y) {
-    const S = this.spMeshes[e.sp];
-    const swim = e.stage === 1 ? S.juvSwim : S.swim;
-    return this.heightAt(x, y, swim);
-  }
+  _height(e, x, y) { return this.heightAt(x, y, e.swim); }
+
+  /** View size of an organism (its own mass; juveniles smaller). */
+  _size(e) { return (e.size || 1.5) * (e.stage === 1 ? 0.55 : 1); }
+
+  /** Body mass of an organism (juveniles about half). */
+  _mass(e) { return (e.mass || 1) * (e.stage === 1 ? 0.5 : 1); }
 
   /** Mark the animals the selected one can see: kin blue, smaller green, larger red, eggs white. */
   _perceive(sel, selP, R, fov, alpha, cx, cz) {
     if (this.mode === 'overview') { this.percMesh.count = 0; return; }
-    const sp = this.meta.species, me = sp[sel.sp], myMass = (me.swarm ? me.unitMass : me.mass) * (sel.stage === 1 ? me.birth + 0.4 : 1);
+    const myMass = this._mass(sel), P3 = [0, 0, 0];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), col = new THREE.Color();
     let n = 0; const fx = Math.cos(selP[2]), fz = Math.sin(selP[2]);
     const list = [];
     for (const [ser, e] of this.agents) {
       if (ser === this.selected || n >= 128) continue;
-      const [x, y] = this._pos(e, alpha, cx, cz);
+      const [x, y] = this._pos(e, alpha, cx, cz, P3);
       const dx = x - selP[0], dy = y - selP[1], d = Math.hypot(dx, dy);
       if (d > R || d < 0.01) continue;
       if (fov < 6.2 && (dx * fx + dy * fz) / d < Math.cos(fov / 2)) continue;
-      const o = sp[e.sp]; const mj = (o.swarm ? o.unitMass : o.mass) * (e.stage === 1 ? o.birth + 0.4 : 1);
+      const mj = this._mass(e);
       let kind;
       if (e.stage === 0) { col.set(0xffffff); kind = 'egg'; }
       else if (e.sp === sel.sp) { col.set(0x5aa8ff); kind = 'kin'; }
       else if (mj * 1.15 < myMass) { col.set(0x5dff8a); kind = 'smaller'; }
       else if (mj > myMass * 1.15) { col.set(0xff4d5e); kind = 'larger'; }
       else { col.set(0xffd34d); kind = 'similar'; }
-      const sz = this.spMeshes[e.sp].size * (e.stage === 1 ? 0.55 : 1) * 1.3 + 0.6;
+      const sz = this._size(e) * 1.3 + 0.6;
       p.set(x, this._height(e, x, y) + 0.25, y); q.identity(); s.set(sz, 1, sz);
       this.percMesh.setMatrixAt(n, m.compose(p, q, s)); this.percMesh.setColorAt(n, col); n++;
       list.push({ serial: ser, sp: e.sp, kind, d });

@@ -30,12 +30,14 @@ public sealed class World
     public readonly byte[] PLitter;
     public readonly float[] PDiet;            // Cap * Pools.N digestive efficiencies
     public readonly float[] PCare;            // parental care level (0 = none; DESIGN §7.8)
-    public readonly float[] PBirth, PKThirst, PFovCos, PGest, PCool, PLegs, PFins, PWings;
-    public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite;
+    public readonly float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
+    public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PBrain, PHerm;
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
     public readonly float[] CareLeft;         // care a mother can still give this step
     public readonly uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
     public readonly float[] Infect, Immune;   // steps left infectious / immune (0 = susceptible)
+    public readonly float[] Virulence;        // virulence of the pathogen strain an infected organism carries
+    public readonly float[] IVirNear;         // mean virulence of the infected contacts, from DECIDE
     public readonly byte[] IInfNear;          // infected conspecifics in contact, counted by DECIDE (own slot only)
     // ---- agents: brain
     public readonly sbyte[] Genome;        // Cap * G.LEN
@@ -110,11 +112,13 @@ public sealed class World
         PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PTurn = new float[c]; PVmax = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PLitter = new byte[c];
         PDiet = new float[c * Pools.N]; PCare = new float[c];
-        PBirth = new float[c]; PKThirst = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
+        PBirth = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
+        PVLand = new float[c]; PVWater = new float[c]; PVAir = new float[c]; PSexRatio = new float[c]; PImmune = new float[c];
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
-        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c];
+        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PLegPairs = new byte[c];
+        PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
-        CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c];
+        CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c];
         Genome = new sbyte[(long)c * G.LEN];
         W2f = new float[(long)c * G.W2N];
         Trace = new float[(long)c * G.W2N];
@@ -186,7 +190,18 @@ public sealed class World
 
     public float Carnivory(int i) => PDiet[i * Pools.N + (int)Neuroreef.Pool.Meat];
 
-    public float Vmax(int i) => PVmax[i] * MathF.Max(0.3f, MassOf(i) / PM[i]);
+    /// <summary>Top speed in the medium of a cell: flying, swimming (deep water), wading (shallow) or on land.</summary>
+    public float Vmax(int i, int cell)
+    {
+        float v;
+        if (PLoco[i] == (byte)Neuroreef.Loco.Fly) v = PVAir[i];
+        else if ((Cell[cell] & (byte)Realm.Deep) != 0) v = PVWater[i];
+        else if ((Cell[cell] & (byte)Realm.Shallow) != 0) v = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
+        else v = PVLand[i];
+        return v * MathF.Max(0.3f, MassOf(i) / PM[i]);
+    }
+
+    public float Vmax(int i) => Vmax(i, FIdx(X[i], Y[i]));
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 

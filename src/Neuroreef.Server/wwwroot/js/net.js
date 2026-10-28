@@ -1,6 +1,6 @@
 // The link to the simulation (docs/ICD.md). Decodes frames into plain objects and hands them to listeners.
 
-export const REC = 16;   // bytes per AGENTS record
+export const REC = 24;   // bytes per AGENTS record (header byte 1 = 4)
 export const T_WORLD = 1, T_AGENTS = 2, T_FIELDS = 3, T_TELEMETRY = 4, T_HISTORY = 5, T_PROBE = 6;
 
 export class Link {
@@ -66,13 +66,13 @@ export class Link {
   }
 }
 
-/** Decode one AGENTS record (12 bytes) at index k. */
+/** Decode one AGENTS record (24 bytes) at index k. */
 export function agentAt(a, k, world, out) {
   const o = k * REC, dv = a.dv, b = a.bytes;
   out.x = dv.getUint16(o, true) * world / 65536;
   out.y = dv.getUint16(o + 2, true) * world / 65536;
   out.h = b[o + 4] * (Math.PI * 2 / 256);
-  out.sp = b[o + 5] & 31;
+  out.sp = b[o + 5] & 31;      // clade slot
   out.sex = (b[o + 5] >> 5) & 1;
   const st = b[o + 6];
   out.stage = st & 3;          // 0 egg, 1 juvenile, 2 adult
@@ -80,9 +80,27 @@ export function agentAt(a, k, world, out) {
   out.energy = (st >> 5) / 7;
   out.acts = b[o + 7];
   out.serial = dv.getUint32(o + 8, true);
-  // the animal's own body genes (-1..1): mass, speed, armour; diet drift toward meat
-  out.gMass = dv.getInt8(o + 12) / 127; out.gSpeed = dv.getInt8(o + 13) / 127; out.gArmour = dv.getInt8(o + 14) / 127; out.gDiet = dv.getInt8(o + 15) / 127;
+  // the organism's own body genes (bytes 12-19, int8): organ sizes are (g + 127) / 254, 0..1
+  const gm = dv.getInt8(o + 12);
+  out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.05 * Math.pow(40 / 0.05, out.m01);
+  out.legs = (dv.getInt8(o + 13) + 127) / 254; out.fins = (dv.getInt8(o + 14) + 127) / 254; out.wings = (dv.getInt8(o + 15) + 127) / 254;
+  out.sight = (dv.getInt8(o + 16) + 127) / 254; out.armour = (dv.getInt8(o + 17) + 127) / 254; out.strike = (dv.getInt8(o + 18) + 127) / 254;
+  out.meat = (dv.getInt8(o + 19) + 127) / 254;    // meat-eating efficiency, 0..0.95
+  out.legPairs = Math.min(4, Math.max(1, b[o + 20]));   // 2 to 8 legs
+  out.finPairs = Math.min(4, b[o + 22] || 1);             // side fins
+  out.eyePairs = Math.min(4, b[o + 23] || 1);
+  out.locoCode = b[o + 21];                              // computed by the sim: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
+  out.loco = LOCO[out.locoCode] || locoOf(out.legs, out.fins, out.wings);
   return out;
+}
+
+export const LOCO = ['Walk', 'Wade', 'Swim', 'Fly', 'Sessile'];
+
+/** Locomotion from the organs, as the sim decides it (Body.cs): 'Fly', 'Wade', 'Walk', 'Swim' or 'Sessile'. */
+export function locoOf(legs, fins, wings) {
+  if (wings >= 0.5) return 'Fly';
+  const walk = legs >= 0.3, swim = fins >= 0.3;
+  return walk && swim ? 'Wade' : walk ? 'Walk' : swim ? 'Swim' : 'Sessile';
 }
 
 // action bits in AGENTS byte 7 (primitive order from EAT)

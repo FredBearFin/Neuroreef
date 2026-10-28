@@ -145,9 +145,8 @@ public static class K
     // ---------------------------------------------------------------- 5c. bodies from genes (DESIGN §6.3, Revision F)
     [K("Body", "smallest body mass a mass gene can give", "M", "ECO: a small invertebrate-sized organism")] public const float MASS_LO = 0.05f;
     [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units)")] public const float MASS_HI = 40f;
-    [K("Body", "organ size (0..1) from which legs or fins work for walking or swimming", "-", "-")] public const float LIMB_MIN = 0.3f;
-    [K("Body", "wing size (0..1) from which an organism can fly", "-", "-")] public const float WING_MIN = 0.5f;
-    [K("Body", "basal cost per unit of leg or fin size", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;
+    [K("Body", "organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth)", "-", "-")] public const float LIMB_MIN = 0.3f;
+    [K("Body", "basal cost per unit of fin size, or of leg size per pair of legs", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;
     [K("Body", "basal cost per unit of wing size, times mass^(1/3)", "xbasal", "ECO: flight power rises faster than mass, so flight favours the small")] public const float COST_WING = 0.5f;
     [K("Body", "basal cost per unit of armour", "xbasal", "ECO: heavy armour is costly to carry and grow")] public const float COST_ARMOUR_ABS = 0.12f;
     [K("Body", "basal cost per unit of weaponry", "xbasal", "ECO: jaws, teeth and claws are costly tissue")] public const float COST_STRIKE_ABS = 0.15f;
@@ -161,6 +160,24 @@ public static class K
     [K("Body", "widest field of view a gene can give", "degrees", "ECO: prey with lateral eyes")] public const float FOV_HI = 360f;
     [K("Body", "gestation (or incubation) at M=1, scaling with M^0.25", "steps", "ECO: gestation scales about as M^0.25")] public const float C_GEST = 150f;
     [K("Body", "breeding cooldown at M=1, scaling with M^0.25", "steps", "ECO: as gestation")] public const float C_COOL = 150f;
+
+    [K("Body", "a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading)", "-", "ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings")] public const float WING_LIFT = 1.6f;
+    [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
+    [K("Body", "a legless body crawls on land at this share of its top speed", "-", "ECO: worms, snakes and stranded fish move slowly without legs")] public const float CRAWL = 0.05f;
+    [K("Body", "share of thirst a land organism avoids by taking water from wet soil and moist food", "-", "ECO: many animals and all settled organisms take water from their surroundings")] public const float SOIL_WATER = 0.8f;
+    [K("Body", "basal cost per eye pair", "xbasal", "ECO: eyes and visual brain are costly tissue")] public const float COST_EYE = 0.04f;
+    [K("Body", "field of view added by each extra eye pair (share of the base field)", "-", "ECO: more eyes cover more directions")] public const float EYE_FOV = 0.3f;
+    [K("Body", "turning added per extra fin pair (times fin size)", "-", "ECO: paired fins steer and brake")] public const float FIN_TURN = 0.2f;
+    [K("Body", "range of the lifespan and development multipliers (x/÷)", "-", "-")] public const float LIFE_RANGE = 2f;
+    [K("Body", "basal cost per unit of extra lifespan (longer life needs more body repair)", "xbasal", "ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977)")] public const float COST_LONGEVITY = 0.25f;
+    [K("Body", "lifespan scales with the development multiplier to this power (fast developers age sooner)", "-", "ECO: the fast-slow life-history continuum")] public const float DEVEL_AGING = 0.5f;
+    [K("Body", "fewest memory units a brain can have", "units", "-")] public const int BRAIN_MIN = 2;
+    [K("Body", "basal cost of a full brain (all memory units), scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates")] public const float COST_BRAIN = 0.15f;
+    [K("Body", "basal cost of being a hermaphrodite (keeping both sexes' organs)", "xbasal", "ECO: hermaphrodites maintain male and female function")] public const float COST_HERM = 0.05f;
+    [K("Body", "basal cost of full immune investment", "xbasal", "ECO: immune defence is costly (Lochmiller & Deerenberg 2000)")] public const float COST_IMMUNE = 0.12f;
+    [K("Body", "share of infection and disease death that full immune investment prevents", "-", "ECO: partial, not total, protection")] public const float IMMUNE_PROTECT = 0.8f;
+    [K("Body", "genetic distance at which mating succeeds with probability 1/e (body genes / 127, Euclidean)", "-", "ECO: hybrid incompatibility rises with genetic distance (Dobzhansky-Muller; Orr 1995)")] public const float D_COMPAT = 0.3f;
+    [K("Body", "others whose visible body genes are this close look like kin (body genes / 127, Euclidean)", "-", "ECO: animals recognise their kind by appearance")] public const float KIN_LOOK = 0.25f;
 
     // ---------------------------------------------------------------- 5d. clades and speciation (DESIGN §7.9)
     [K("Clades", "clade slots (lineages that can exist at once)", "clades", "-: limited by the console frame (5 bits)")] public const int CLADES = 32;
@@ -189,7 +206,8 @@ public static class K
     [K("Disease", "infectious period", "steps", "ECO: about 1.5% of the lifespan at M=1 (a 1-2 week infection in a 2-year life)")] public const int DIS_STEPS = 50;
     [K("Disease", "immunity after recovery", "steps", "ECO: acquired immunity lasts months (about 20% of the lifespan at M=1)")] public const int DIS_IMMUNE = 600;
     [K("Disease", "spillover from the environment (reservoir) per animal per step", "/step", "ECO: rare sporadic infections seed outbreaks")] public const float DIS_SPILL = 1e-5f;
-    [K("Disease", "extra basal cost while infected (fever, immune response)", "xbasal", "ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50%")] public const float DIS_COST = 0.4f;
+    [K("Disease", "spread of a pathogen's virulence at each transmission (log-normal)", "-", "ECO: pathogens mutate as they spread; virulence evolves (Anderson & May 1982)")] public const float VIR_MUT = 0.1f;
+    [K("Disease", "extra basal cost while infected, per unit of virulence (fever, immune response)", "xbasal", "ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50%")] public const float DIS_COST = 0.4f;
     [K("Disease", "probability per step of dying while infected (x(1 + hunger))", "/step", "ECO: about 10% case fatality over the infectious period")] public const float DIS_MORT = 0.002f;
     [K("Disease", "malaise felt while infected (as pain)", "-", "ECO: sickness behaviour")] public const float DIS_PAIN = 0.3f;
 

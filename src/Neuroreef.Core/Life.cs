@@ -34,11 +34,13 @@ public static class Life
         w.Energy[c] = energy; w.Gut[c] = 0; w.GutEnergy[c] = 0; w.GutWaste[c] = 0; w.GutSeedy[c] = 0;
         w.Grown[c] = 0;
         w.Thirst[c] = 0; w.Fatigue[c] = 0; w.Age[c] = 0; w.Pain[c] = 0; w.Cooldown[c] = 0; w.Timer[c] = 0; w.LastFear[c] = 0;
-        w.Sex[c] = (byte)(Rng.U(seed, step, (uint)c, Rs.Sex) < 0.5f ? 0 : 1);
+        // sex: the mother's sex-ratio gene gives the chance of a daughter (0 = female)
+        float pFemale = mother >= 0 && w.PHerm[mother] == 0 ? w.PSexRatio[mother] : 0.5f;
+        w.Sex[c] = (byte)(Rng.U(seed, step, (uint)c, Rs.Sex) < pFemale ? 0 : 1);
         w.Serial[c] = w.NextSerial++;
         w.Children[c] = 0; w.Matured[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
         w.IActs[c] = 0; w.ITarget[c] = -1; w.IMate[c] = -1; w.IScanning[c] = 0; w.ISpeed[c] = 0; w.IHeading[c] = w.Heading[c];
-        w.Infect[c] = 0; w.Immune[c] = 0; w.IInfNear[c] = 0; w.CareLeft[c] = 0; w.CareStep[c] = 0;
+        w.Infect[c] = 0; w.Immune[c] = 0; w.Virulence[c] = 0; w.IInfNear[c] = 0; w.IVirNear[c] = 0; w.CareLeft[c] = 0; w.CareStep[c] = 0;
         if (mother >= 0)
         {
             w.MotherSlot[c] = mother; w.MotherSerial[c] = w.Serial[mother];
@@ -183,26 +185,39 @@ public static class Life
     }
 
     /// <summary>
-    /// Disease (DESIGN §9.6): one pathogen per species, caught by contact with infected conspecifics (counted by
-    /// DECIDE), so it spreads in crowds and fades in sparse populations. Infection lasts DIS_STEPS, raises basal
-    /// cost (RESOLVE) and may kill; recovery gives immunity for DIS_IMMUNE. Returns true if the animal died.
+    /// Disease (DESIGN §9.6): pathogens are caught by contact with infected organisms that look alike (counted by
+    /// DECIDE), so they spread in crowds and fade in sparse populations. Each infection carries its own virulence v,
+    /// inherited from the strain caught and mutated (VIR_MUT): a more virulent strain spreads better per contact but
+    /// costs and kills its host more, so virulence evolves. The host's immunity gene lowers both infection and death.
+    /// Infection lasts DIS_STEPS; recovery gives immunity for DIS_IMMUNE. Returns true if the organism died.
     /// </summary>
     static bool Disease(World w, int i, int s)
     {
         uint seed = w.Seed, step = (uint)w.Step;
+        float protect = 1f - K.IMMUNE_PROTECT * w.PImmune[i];
         if (w.Infect[i] > 0)
         {
             w.Infect[i] -= 1;
-            if (w.Infect[i] <= 0) { w.Infect[i] = 0; w.Immune[i] = K.DIS_IMMUNE; return false; }
+            if (w.Infect[i] <= 0) { w.Infect[i] = 0; w.Virulence[i] = 0; w.Immune[i] = K.DIS_IMMUNE; return false; }
             float hunger = Math.Clamp(1f - w.Energy[i] / w.EmaxOf(i), 0f, 1f);
-            if (Rng.U(seed, step, (uint)i, Rs.Disease + 1) < K.DIS_MORT * (1f + hunger)) { Resolve.Die(w, i, Cause.Disease, -1); return true; }
+            if (Rng.U(seed, step, (uint)i, Rs.Disease + 1) < K.DIS_MORT * w.Virulence[i] * (1f + hunger) * protect) { Resolve.Die(w, i, Cause.Disease, -1); return true; }
             return false;
         }
         if (w.Immune[i] > 0) { w.Immune[i] -= 1; return false; }
+        int n = w.IInfNear[i];
+        float v = n > 0 ? w.IVirNear[i] : 1f;
+        float beta = K.DIS_BETA * 1.5f * v / (0.5f + v) * protect;     // transmission saturates with virulence
         float escape = 1f;
-        for (int n = w.IInfNear[i]; n > 0; n--) escape *= 1f - K.DIS_BETA;
-        float p = 1f - escape * (1f - K.DIS_SPILL);
-        if (Rng.U(seed, step, (uint)i, Rs.Disease) < p) { w.Infect[i] = K.DIS_STEPS; w.T.Infections[s]++; }
+        for (; n > 0; n--) escape *= 1f - beta;
+        float pContact = 1f - escape, pSpill = K.DIS_SPILL * protect;
+        float u = Rng.U(seed, step, (uint)i, Rs.Disease);
+        if (u < pContact + pSpill)
+        {
+            float v0 = u < pContact ? w.IVirNear[i] : 1f;           // a strain caught from a neighbour, or a new one from the reservoir
+            w.Infect[i] = K.DIS_STEPS;
+            w.Virulence[i] = Math.Clamp(v0 * MathK.Exp(K.VIR_MUT * Rng.N(seed, step, (uint)i, Rs.Disease + 2)), 0.05f, 10f);
+            w.T.Infections[s]++;
+        }
         return false;
     }
 

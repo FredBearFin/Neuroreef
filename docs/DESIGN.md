@@ -1,7 +1,19 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision F. It implements NR-RQ-001 Revision F (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision G. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision G: no designed categories left in bodies, senses or breeding** (the user:
+"where else have you [hand-fixed things]")
+- Senses are raw (§4): the nearest and the largest other organism, by relative size, closing speed,
+  weapons and diet. No "big", "small" or "carnivore" category. Kin = looks alike.
+- Organs act smoothly (§6.3, §9.2): half a fin swims, a legless body crawls, flight follows wing
+  loading. Leg, fin and eye counts, lifespan, development time, brain size, hermaphroditism, sex
+  ratio and immunity are genes, each with a cost.
+- Mating has no species check (§7.9, §8): fertility falls with genetic distance, so species separate
+  gradually and hybrids are possible.
+- Thirst depends on where an organism is, not what it is (§6.3). Pathogens evolve their virulence
+  (§9.6).
 
 **Changes in Revision F: open-ended evolution** (the user: "you set a small amount of rules and
 circumstances emerge")
@@ -103,13 +115,20 @@ is a limit of the computer, not an ecological result.
 The total is about 0.9 GB at the default capacity and scales linearly with `--capacity`
 (`--capacity 32768` halves it).
 
-## 4. Senses: the shared feature vector (30 entries)
+## 4. Senses: the shared feature vector (34 entries)
 
-These are identical for every animal (NR-201). Other animals are seen only through observable
-attributes (NR-202), within the sight range R and field of view Φ. SCAN widens Φ to 360° and R by
-30% on the next step. "Closeness" of an animal at distance d is 1 − d/R. "Density" is
-tanh(Σ closeness). The neighbourhood examined is capped at 96 animals per step, taken in
-spatial-hash order.
+These are identical for every organism (NR-201). Others are seen only through raw observable
+quantities (NR-202), within the sight range R and field of view Φ. There are no designed
+categories such as "predator", "big" or "prey": an organism senses how large, how fast-closing,
+how armed and how meat-eating the others are, and its brain and selection decide what that
+means. SCAN widens Φ to 360° and R by 30% on the next step. "Closeness" of an organism at distance
+d is 1 − d/R. "Density" is tanh(Σ closeness). The neighbourhood examined is capped at 96 organisms
+per step, taken in spatial-hash order.
+
+**Kin** are others that look like this organism: their visible body genes (mass, legs, fins, wings,
+armour, strike, leg and fin counts) lie within KIN_LOOK of its own (Revision G). Kinship is a
+perception, not a species label, so it can blur and split as bodies diverge. An egg never looks
+like kin.
 
 **Self and drives (0–9)**
 
@@ -126,37 +145,36 @@ spatial-hash order.
 | 8 | PAIN | recent damage received, decays |
 | 9 | CARRYING | 1 while gestating embryos |
 
-**Others (10–21)**
+**Others (10–25)**. O1 is the nearest non-kin organism or egg; O2 is the largest non-kin in view.
 
 | i | Name | Meaning |
 |---|---|---|
-| 10 | KIN_DENSITY | conspecifics |
-| 11 | KIN_CLOSE | nearest conspecific |
+| 10 | KIN_DENSITY | organisms that look alike |
+| 11 | KIN_CLOSE | nearest of those |
 | 12 | MOTHER_FAR | 1 − closeness of mother; 0 if none or adult |
-| 13 | MATE_CLOSE | nearest READY conspecific that is a valid partner |
-| 14 | BIG_CLOSE | nearest heterospecific more than 15% heavier |
-| 15 | BIG_DENSITY | density of those |
-| 16 | BIG_APPROACH | closing speed of nearest big / own vmax, −1..1 |
-| 17 | BIG_CARN | carnivory trait of the nearest big (visible attribute) |
-| 18 | SMALL_CLOSE | nearest heterospecific or egg more than 15% lighter |
-| 19 | SMALL_DENSITY | density of those |
-| 20 | SMALL_WEAK | vulnerability of nearest small: egg, juvenile, fatigued, low armour |
-| 21 | CARN_CLOSE | nearest heterospecific meat-eater of any size |
+| 13 | MATE_CLOSE | nearest READY organism that is a possible partner (§8) |
+| 14, 20 | O1_CLOSE, O2_CLOSE | closeness |
+| 15, 21 | O1_SIZE, O2_SIZE | tanh(ln(m_other / m_self)), −1..1 |
+| 16, 22 | O1_APPROACH, O2_APPROACH | closing speed / own vmax, −1..1 |
+| 17, 23 | O1_ARMED, O2_ARMED | tanh(strike_other · cbrt(m_other / m_self)) |
+| 18, 24 | O1_MEAT, O2_MEAT | meat-eating share of the other's diet (a visible attribute) |
+| 19 | O1_WEAK | vulnerability of O1: egg, juvenile, fatigued, low armour |
+| 25 | OTHERS | density of all non-kin |
 
-**Environment (22–29)**
+**Environment (26–33)**
 
 | i | Name | Meaning |
 |---|---|---|
-| 22 | FOOD_HERE | value of the best digestible food in own cell: max over pools of ρ·eff·amount, normalised |
-| 23 | FOOD_GRAD | strength of the gradient of digestible food value |
-| 24 | IN_WATER | 1 if standing or swimming in water |
-| 25 | WATER_CLOSE | closeness of the nearest water (distance map) |
-| 26 | LAND_CLOSE | closeness of the nearest land |
-| 27 | FEAR | scent of meat-eaters here, plus fire nearby |
-| 28 | CROWD | total animal density, any species |
-| 29 | SEASON | sin of the season phase at own position (−1 dry … +1 wet) |
+| 26 | FOOD_HERE | value of the best digestible food in own cell: max over pools of ρ·eff·amount, normalised |
+| 27 | FOOD_GRAD | strength of the gradient of digestible food value |
+| 28 | IN_WATER | 1 if standing or swimming in water |
+| 29 | WATER_CLOSE | closeness of the nearest water (distance map) |
+| 30 | LAND_CLOSE | closeness of the nearest land |
+| 31 | FEAR | scent of meat-eaters here, plus fire nearby |
+| 32 | CROWD | total animal density, any species |
+| 33 | SEASON | sin of the season phase at own position (−1 dry … +1 wet) |
 
-Smelling digestible food (features 22–23, primitive CLIMB_FOOD) is physiology. A body's senses are
+Smelling digestible food (features 26–27, primitive CLIMB_FOOD) is physiology. A body's senses are
 tuned to what its gut can digest, the way taste is. It says nothing about when to eat, or whether
 eating beats fleeing; that is the brain's job.
 
@@ -168,13 +186,13 @@ Identical for every animal (NR-203).
 
 | p | Name | Vector |
 |---|---|---|
-| 0 | SEEK_SMALL | toward nearest small |
-| 1 | SEEK_BIG | toward nearest big |
-| 2 | SHADOW_CARN | toward nearest meat-eater beyond R/2, tangential inside R/2 |
-| 3 | FLEE_BIG | away from nearest big |
-| 4 | FLEE_CARN | away from nearest meat-eater |
-| 5 | INTERCEPT_SMALL | toward predicted position of nearest small |
-| 6 | CIRCLE_SMALL | perpendicular to its bearing, on the side away from kin |
+| 0 | APPROACH_NEAREST | toward O1 (the nearest non-kin) |
+| 1 | APPROACH_LARGEST | toward O2 (the largest non-kin in view) |
+| 2 | SHADOW_LARGEST | toward O2 beyond R/2, tangential inside R/2 |
+| 3 | FLEE_LARGEST | away from O2 |
+| 4 | FLEE_NEAREST | away from O1 |
+| 5 | INTERCEPT_NEAREST | toward predicted position of O1 |
+| 6 | CIRCLE_NEAREST | perpendicular to O1's bearing, on the side away from kin |
 | 7 | COHERE | toward kin centroid |
 | 8 | SEPARATE | away from kin closer than 2 units |
 | 9 | ALIGN | mean kin heading |
@@ -199,7 +217,7 @@ Identical for every animal (NR-203).
 | p | Name | Precondition |
 |---|---|---|
 | 20 | EAT | digestible food here; gut not full; not scanning |
-| 21 | STRIKE | a heterospecific within reach (smaller preferred); not an egg or embryo |
+| 21 | STRIKE | the nearest non-kin organism or egg within reach (a blood-drinker: the largest in reach) |
 | 22 | DRINK | land-stage animal; water within reach |
 | 23 | MATE | READY; valid partner READY within reach; mode allows sex now (§8) |
 | 24 | REST | — |
@@ -260,26 +278,33 @@ mutated. Hunters, scavengers, parasites, flyers and waders can only appear by ev
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 
-The body genes (G.BODY, 29 bytes) are mapped to absolute ranges (`Body.Express`). Every trait has a
+The body genes (G.BODY, 38 bytes) are mapped to absolute ranges (`Body.Express`). Every trait has a
 cost:
 
 | Trait | Gene → value | Cost / effect |
 |---|---|---|
 | mass | log range MASS_LO..MASS_HI | all of allometry (§9.1) |
-| legs, fins, wings | organ size 0..1 | locomotion: fly if wings ≥ WING_MIN; walk if legs ≥ LIMB_MIN; swim if fins ≥ LIMB_MIN; wade if both; settled if none. Realm follows. COST_LIMB·(legs + fins) and COST_WING·wings·M^(1/3) basal |
+| legs, fins, wings | organ size 0..1 | speed in each medium follows smoothly from the organs (Revision G): land v·(CRAWL + (1 − CRAWL)·legs), water v·SWIM_SPEED·(0.1 + 0.9·fins), air only if wings·WING_LIFT ≥ M^(1/3) (wing loading). Any organism may enter land and shallows; deep water needs 0.1 + 0.9·fins ≥ DEEP_SWIM. Settled only with almost no organ at all. Half a fin is half a fin. COST_LIMB·(legs·legPairs + fins·finPairs)/2 and COST_WING·wings·M^(1/3) basal |
+| leg, fin, eye pairs | 1..4 | more leg pairs spread an armoured body's drag (÷√pairs); more fin pairs turn faster (FIN_TURN); more eye pairs widen the field of view (EYE_FOV); COST_EYE per eye pair |
+| lifespan | ×/÷ LIFE_RANGE | COST_LONGEVITY·(k − 1) basal (body repair) |
+| development | ×/÷ LIFE_RANGE | maturity time × k; lifespan × k^DEVEL_AGING (fast developers age sooner) |
+| brain | BRAIN_MIN..12 memory units | units beyond it do not exist; COST_BRAIN·units/12 basal |
+| hermaphrodite | sign | both sexes in one body: any two hermaphrodites can mate and both conceive; COST_HERM basal |
+| sex ratio | 0..1 | the chance that a separate-sexed mother's young is a daughter |
+| immunity | 0..1 | lowers infection and disease death by IMMUNE_PROTECT·imm; COST_IMMUNE·imm basal |
 | speed, sight | ×/÷ BODY_RANGE_TRAIT | COST_SPEED, COST_SIGHT basal |
 | field of view | FOV_LO..FOV_HI | narrow sees further: range × (1.6 − fov/360) |
 | armour | 0..ARMOUR_MAX | defence; COST_ARMOUR_ABS basal; slows (ARMOUR_DRAG) |
 | strike | 0..STRIKE_MAX | needed to kill or drain; COST_STRIKE_ABS basal |
 | diet | 15 shares of DIET_BUDGET | a pool the realm cannot offer is never digested; blood > meat with strike drains (parasite habit) |
-| sex | sign | sexual (two sexes, mates within the clade) or asexual (LAY: mutated copies) |
+| sex | sign | sexual (mates, §8) or asexual (LAY: mutated copies) |
 | live birth | sign | live (mother carries embryos, pays tissue during gestation) or eggs (yolk paid at laying) |
 | litter | 1..LITTER_MAX | the mother's energy limits how many she makes |
 | newborn share | log BIRTH_LO..BIRTH_HI | big young cost more and grow up sooner |
 | care | 0..1 | §7.8 |
 
-Land organisms feel thirst. Swimmers and settled organisms draw water from their surroundings; waders
-need half. Gestation and breeding cooldown scale as C_GEST·M^0.25 and C_COOL·M^0.25.
+Thirst rises only on land cells, by C_THIRST·(1 − SOIL_WATER·moisture): any organism in water draws
+water from it, and moist ground dries an organism out more slowly (Revision G). Gestation and breeding cooldown scale as C_GEST·M^0.25 and C_COOL·M^0.25.
 
 ### 6.4 Energy-cycle closure
 
@@ -460,7 +485,7 @@ reflex genes set to KIT_W (+ the usual small random spread):
 - thirsty → SEEK_WATER
 - thirsty × at water → DRINK
 - tired × safe → REST
-- large carnivore near → FLEE_CARN and FLEE_BIG
+- an armed, larger meat-eater near (O1 or O2: close × meat × armed × larger) → FLEE_NEAREST and FLEE_LARGEST
 - young × far from mother → FOLLOW_MOTHER
 
 At full need a kit reflex gives about 88% (5 against the calm bias of −3). This is the one designed
@@ -492,7 +517,10 @@ A **clade** is a lineage: one of the ancestors, or a group that split from anoth
 generated name, a colour (each ancestor a distinct hue; a daughter a shift of its parent's), its
 parent, its ancestor, and its birth and extinction steps (`Clades.cs`, up to K.CLADES = 32 at once,
 since the console frame has 5 bits for it).
-- **Reproductive isolation:** sexual organisms mate only with the other sex of their own clade.
+- **Reproductive isolation is gradual (Revision G):** there is no clade check on mating. A mating
+  produces young with probability exp(−(d/D_COMPAT)²), d the genetic distance of the two body genomes,
+  so close relatives breed freely, hybrids between nearby clades are possible, and diverged lineages
+  stop interbreeding by themselves. A hybrid takes its mother's clade.
 - **Speciation:** every SPEC_EVERY steps, each clade with at least 2·MIN_SPLIT members is examined.
   1. Up to 512 members' body genes (/127) are clustered by a deterministic 2-means.
   2. If the centres are more than SPLIT_SEP × the within-cluster RMS spread apart and at least
@@ -500,16 +528,19 @@ since the console frame has 5 bits for it).
      clade. This is the genotypic-cluster species concept: two clusters with few intermediates.
   3. Every member of the clade, eggs and embryos included, is assigned to the nearer centre.
 
-  A split never creates an organism. From then on the two clades cannot interbreed and diverge
-  independently.
+  A split never creates an organism and does not change who can mate: it names divergence that has
+  already happened.
 - A slot is recycled only CLADE_RECYCLE steps after its clade went extinct.
 - The prehistory starts each branch from its own random ancestors. The world begins from the best
   branch as a whole (§7.6); per-species choice across branches no longer applies.
 
 ## 8. Reproduction (Revision F, NR-311)
 
-- **Sexual organisms** reproduce with MATE: two ready organisms of the same clade and opposite sex in
-  reach. The mother conceives a litter of crossovers.
+- **Sexual organisms** reproduce with MATE: two ready organisms in reach, both sexual, with the same
+  sex system, and of opposite sex unless both are hermaphrodites. Both pay the mating cost. With
+  probability exp(−(d/D_COMPAT)²) (§7.9) the mother conceives a litter of crossovers; two
+  hermaphrodites both conceive. A separate-sexed mother's young are daughters with the probability of
+  her sex-ratio gene.
 - **Asexual organisms** reproduce alone with LAY: a litter of mutated copies, at no partner cost. This
   saves the two-fold cost of sex but loses crossover.
 
@@ -537,7 +568,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | reach | 1 + 0.4·M^(1/3) |
 | movement cost | c_M·M·speed² |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
-| thirst | +c_θ·k_thirst per step (0 for aquatic stages and sessile mats) |
+| thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
 | growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
 | reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
 
@@ -546,12 +577,11 @@ because its genes differ moves to the nearest allowed cell, or dies.
 - The heading turns toward the desired heading by at most the turn rate.
 - A move into a cell outside the stage's realm is refused. The animal stays where it is and turns by
   ±90° (hashed).
-- Realms:
-  - land walkers: land cells only
-  - swimmers: water cells only
-  - waders: land, or water with depth < shallow
-  - flyers: anywhere, but cannot rest, eat or lay over deep water
-- Sessile mats have speed 0. They grow only by spores.
+- Realms (Revision G): every mobile organism may move on land and in shallow water; deep water needs
+  enough fin (DEEP_SWIM); a flyer goes anywhere. Its top speed depends on the cell it is in: in the air
+  for a flyer, otherwise its land speed on land, its water speed in deep water, and the better of its
+  water speed and 0.6 × its land speed in shallows.
+- Settled organisms have speed 0.
 
 ### 9.3 Gut, digestion and intake (NR-302)
 
@@ -587,20 +617,24 @@ p = p0 · power/(power + defence) · (1 + 0.8·FATIGUE_v) · (1 − 0.5·SCAN_v)
 | Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy), and the host takes it as damage. The host dies only if its energy reaches 0 (cause: parasitism). |
 | Failure | The victim's PAIN rises (it was attacked). If defence > power, the attacker loses c_retal·(defence − power) energy. |
 
-### 9.6 Disease (Revision C, NR-329)
+### 9.6 Disease (Revision C, NR-329; Revision G)
 
-Each species has its own pathogen, which it catches from infected conspecifics in contact (within the
-sum of their reaches, counted in DECIDE).
-- **Infection:** p = 1 − (1 − DIS_BETA)^contacts · (1 − DIS_SPILL) per step. DIS_SPILL is rare
-  spillover from the environment.
-- **Course:** infection lasts DIS_STEPS. The animal pays DIS_COST extra basal cost (fever) and feels
-  DIS_PAIN as malaise, so it can learn to rest. It dies with probability DIS_MORT·(1 + hunger) per step,
-  recorded as death by "disease".
+Pathogens spread by contact between organisms that look alike (kin, §4: within the sum of their reaches,
+counted in DECIDE). Each infection carries its own **virulence** v.
+- **Infection:** per contact β = DIS_BETA·1.5·v/(0.5 + v)·(1 − IMMUNE_PROTECT·imm), v the mean
+  virulence of the infected neighbours; p = 1 − (1 − β)^contacts, plus rare spillover DIS_SPILL from the
+  environment, which brings a strain of v = 1.
+- **Evolution of the pathogen:** a new infection takes the strain it caught and mutates it,
+  v' = v·exp(VIR_MUT·N(0, 1)), clamped to 0.05..10. A more virulent strain spreads better per contact
+  (saturating) but costs and kills its host more, so the virulence that wins is an outcome.
+- **Course:** infection lasts DIS_STEPS. The organism pays DIS_COST·v extra basal cost (fever) and feels
+  DIS_PAIN as malaise, so it can learn to rest. It dies with probability
+  DIS_MORT·v·(1 + hunger)·(1 − IMMUNE_PROTECT·imm) per step, recorded as death by "disease".
 - **Recovery:** gives immunity for DIS_IMMUNE steps.
+- **Host defence:** the immunity gene (§6.3) is a cost paid every step against a risk that depends on
+  crowding.
 
-With DIS_BETA·DIS_STEPS = 0.5 per steady contact, an outbreak needs crowding: transmission is
-density-dependent, so disease checks booming populations and fades in sparse ones. Telemetry records
-the number infected, new infections and deaths per species.
+Telemetry records the number infected, new infections, deaths and the mean virulence per clade.
 
 ### 9.5 Death
 

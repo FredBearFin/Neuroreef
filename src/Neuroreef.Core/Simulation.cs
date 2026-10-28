@@ -101,12 +101,11 @@ public sealed class Simulation : IDisposable
         w.CladeScratch.Version++;
     }
 
+    /// <summary>Where a founder from this genome can be placed: water if it swims better than it walks, else land.</summary>
     static Realm RealmOfGenome(sbyte[] g)
     {
-        float legs = Body.Organ(g[G.B_LEGS]), fins = Body.Organ(g[G.B_FINS]), wings = Body.Organ(g[G.B_WINGS]);
-        if (wings >= K.WING_MIN) return Realm.Land;
-        if (legs >= K.LIMB_MIN) return Realm.Land;
-        return fins >= K.LIMB_MIN || fins > legs ? Realm.Water : Realm.Land;
+        float legs = Body.Organ(g[G.B_LEGS]), fins = Body.Organ(g[G.B_FINS]);
+        return K.SWIM_SPEED * (0.1f + 0.9f * fins) > K.CRAWL + (1f - K.CRAWL) * legs ? Realm.Water : Realm.Land;
     }
 
     static int Gcd(int a, int b) { while (b != 0) (a, b) = (b, a % b); return a; }

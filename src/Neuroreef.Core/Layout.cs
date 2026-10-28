@@ -5,29 +5,36 @@ using System;
 
 namespace Neuroreef;
 
-/// <summary>Feature indices: the 30 senses every animal has.</summary>
+/// <summary>
+/// Feature indices: the 34 senses every organism has (Revision F: no built-in categories). Others are not sorted
+/// into "bigger", "smaller" or "carnivore" by a designed threshold: an organism senses the two others that stand
+/// out - the nearest (O1) and the largest in view (O2) - through raw quantities (how close, relative size, closing
+/// speed, how armed, how meat-eating, how weak). What counts as prey or danger is for evolution and learning.
+/// Kin are others that look like itself (similar body genes).
+/// </summary>
 public static class F
 {
     public const int BIAS = 0, HUNGER = 1, THIRST = 2, FATIGUE = 3, READY = 4, AGE = 5, JUVENILE = 6, FULL = 7, PAIN = 8, CARRYING = 9,
         KIN_DENSITY = 10, KIN_CLOSE = 11, MOTHER_FAR = 12, MATE_CLOSE = 13,
-        BIG_CLOSE = 14, BIG_DENSITY = 15, BIG_APPROACH = 16, BIG_CARN = 17,
-        SMALL_CLOSE = 18, SMALL_DENSITY = 19, SMALL_WEAK = 20, CARN_CLOSE = 21,
-        FOOD_HERE = 22, FOOD_GRAD = 23, IN_WATER = 24, WATER_CLOSE = 25, LAND_CLOSE = 26, FEAR = 27, CROWD = 28, SEASON = 29;
-    public const int N = 30;
+        O1_CLOSE = 14, O1_SIZE = 15, O1_APPROACH = 16, O1_ARMED = 17, O1_MEAT = 18, O1_WEAK = 19,
+        O2_CLOSE = 20, O2_SIZE = 21, O2_APPROACH = 22, O2_ARMED = 23, O2_MEAT = 24, OTHERS = 25,
+        FOOD_HERE = 26, FOOD_GRAD = 27, IN_WATER = 28, WATER_CLOSE = 29, LAND_CLOSE = 30, FEAR = 31, CROWD = 32, SEASON = 33;
+    public const int N = 34;
     public static readonly string[] Names =
     {
         "BIAS", "HUNGER", "THIRST", "FATIGUE", "READY", "AGE", "JUVENILE", "FULL", "PAIN", "CARRYING",
         "KIN_DENSITY", "KIN_CLOSE", "MOTHER_FAR", "MATE_CLOSE",
-        "BIG_CLOSE", "BIG_DENSITY", "BIG_APPROACH", "BIG_CARN",
-        "SMALL_CLOSE", "SMALL_DENSITY", "SMALL_WEAK", "CARN_CLOSE",
+        "NEAREST_CLOSE", "NEAREST_SIZE", "NEAREST_APPROACH", "NEAREST_ARMED", "NEAREST_MEAT", "NEAREST_WEAK",
+        "LARGEST_CLOSE", "LARGEST_SIZE", "LARGEST_APPROACH", "LARGEST_ARMED", "LARGEST_MEAT", "OTHERS",
         "FOOD_HERE", "FOOD_GRAD", "IN_WATER", "WATER_CLOSE", "LAND_CLOSE", "FEAR", "CROWD", "SEASON",
     };
 }
 
-/// <summary>Primitive indices: the 28 base behaviours every animal has.</summary>
+/// <summary>Primitive indices: the 28 base behaviours every organism has. Steering toward or away from the two others
+/// it senses (nearest = 1, largest = 2) replaces designed "seek prey" / "flee predator" primitives.</summary>
 public static class P
 {
-    public const int SEEK_SMALL = 0, SEEK_BIG = 1, SHADOW_CARN = 2, FLEE_BIG = 3, FLEE_CARN = 4, INTERCEPT_SMALL = 5, CIRCLE_SMALL = 6,
+    public const int APPROACH_1 = 0, APPROACH_2 = 1, SHADOW_2 = 2, FLEE_2 = 3, FLEE_1 = 4, INTERCEPT_1 = 5, CIRCLE_1 = 6,
         COHERE = 7, SEPARATE = 8, ALIGN = 9, FOLLOW_MOTHER = 10, SEEK_MATE = 11, CLIMB_FOOD = 12, SEEK_WATER = 13, SEEK_LAND = 14,
         AVOID_FEAR = 15, WANDER = 16,
         HOLD = 17, SCAN = 18, SPRINT = 19,
@@ -37,7 +44,7 @@ public static class P
     public const int FIRST_ACTION = 20; // 20..27 discrete actions
     public static readonly string[] Names =
     {
-        "SEEK_SMALL", "SEEK_BIG", "SHADOW_CARN", "FLEE_BIG", "FLEE_CARN", "INTERCEPT_SMALL", "CIRCLE_SMALL",
+        "APPROACH_NEAREST", "APPROACH_LARGEST", "SHADOW_LARGEST", "FLEE_LARGEST", "FLEE_NEAREST", "INTERCEPT_NEAREST", "CIRCLE_NEAREST",
         "COHERE", "SEPARATE", "ALIGN", "FOLLOW_MOTHER", "SEEK_MATE", "CLIMB_FOOD", "SEEK_WATER", "SEEK_LAND",
         "AVOID_FEAR", "WANDER", "HOLD", "SCAN", "SPRINT",
         "EAT", "STRIKE", "DRINK", "MATE", "REST", "MARK", "LAY", "CACHE",
@@ -48,10 +55,10 @@ public static class P
 /// genes that build the whole organism (DESIGN §6.3, Revision F), then the reflex genes.</summary>
 public static class G
 {
-    public const int NH = 12;                    // recurrent hidden units
-    public const int NIN = F.N + NH;             // 42 inputs to the hidden layer and to the output layer
-    public const int W1N = NH * NIN;             // 504
-    public const int W2N = P.N * NIN;            // 1176 (plastic)
+    public const int NH = 12;                    // recurrent hidden units at most (a brain gene decides how many are used)
+    public const int NIN = F.N + NH;             // 46 inputs to the hidden layer and to the output layer
+    public const int W1N = NH * NIN;             // 552
+    public const int W2N = P.N * NIN;            // 1288 (plastic)
     public const int W1 = 0, W2 = W1N;
     public const int ETA = W1N + W2N, LAMBDA = ETA + 1, SIGMA = ETA + 2, KAPPA = ETA + 3;
     // body genes (DESIGN §6.3): absolute values on fixed ranges; nothing is relative to a designed species
@@ -63,13 +70,22 @@ public static class G
         B_FOV = B_CARE + 4,                      // field of view (wide and short against narrow and long)
         B_SEX = B_CARE + 5,                      // >= 0 sexual, < 0 asexual
         B_LIVE = B_CARE + 6,                     // >= 0 live birth (gestation), < 0 eggs
-        B_BIRTH = B_CARE + 7;                    // newborn mass as a share of adult mass
-    public const int NBODY = B_BIRTH + 1 - BODY; // 29
+        B_BIRTH = B_CARE + 7,                    // newborn mass as a share of adult mass
+        B_LEGN = B_CARE + 8,                     // number of leg pairs (1..4: 2 to 8 legs)
+        B_LIFE = B_CARE + 9,                     // lifespan multiplier (x/÷ 2): longer life costs body upkeep
+        B_DEVEL = B_CARE + 10,                   // development time multiplier (x/÷ 2): fast developers age sooner
+        B_BRAIN = B_CARE + 11,                   // memory units in use (BRAIN_MIN..G.NH): a bigger brain costs energy
+        B_HERM = B_CARE + 12,                    // >= 0 hermaphrodite (both sexes in one), < 0 two separate sexes
+        B_SEXRATIO = B_CARE + 13,                // share of a mother's young that are female (separate sexes)
+        B_FINN = B_CARE + 14,                    // number of fin pairs (1..4)
+        B_EYEN = B_CARE + 15,                    // number of eye pairs (1..4)
+        B_IMMUNE = B_CARE + 16;                  // immune investment (0..1): resists disease, costs energy
+    public const int NBODY = B_IMMUNE + 1 - BODY;   // 38
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
     public const int NC = 9;                     // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;
     public const int REFLEXN = P.N * NC;         // 252
-    public const int LEN = REFLEX + REFLEXN;     // 1965 bytes
+    public const int LEN = REFLEX + REFLEXN;     // 2134 bytes
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
     public static float Gene(sbyte b, float lo, float hi) => lo + (hi - lo) * ((b + 128) / 255f);

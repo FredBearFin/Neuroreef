@@ -1,10 +1,11 @@
 // The Prehistory tab (DESIGN §7.6): progress in symbolic years, the evolution settings as sliders,
-// one card per branch with every species' standing, and the button that begins the world.
+// one card per branch with the standing of each of its clades, and the button that begins the world.
 // The settings change how genomes vary and are selected; they never change a law of the world.
 
 import uPlot from '../lib/uPlot.esm.js';
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const STAND = ['gone (extinct here)', 'dying (no births)', 'breeding, not keeping up', 'self-sustaining'];
 const STAND_C = ['#ff5d73', '#ff9a3d', '#e6c35a', '#4fd18b'];
 const BRANCH_C = ['#4fd1c5', '#a77bff', '#ffb547', '#ff5d8f', '#7bd46b', '#5ab0ff'];
@@ -28,16 +29,16 @@ export class PrehistoryTab {
     host.innerHTML = `
       <h3>Prehistory</h3>
       <p class="note">Before the world begins, life evolves here at full speed in separate worlds on the same land.
-        Each starts from founders and is then births and deaths only: nothing is ever added, so a species that dies
-        out is gone from that branch. When it ends, each species takes its brains from the branch where it did best,
-        and the world starts from those animals.</p>
+        Each starts from the same random ancestors and is then births and deaths only: nothing is ever added, so a clade
+        that dies out is gone from that branch. Clades split (speciate) on their own, so each branch grows its own tree
+        of clades. When the prehistory ends, the world starts from the branch that did best.</p>
       <div id="pre-prog"><div class="pre-bar"><div id="pre-fill"></div></div>
         <div class="pre-line"><b id="pre-years">–</b><span id="pre-eta"></span></div></div>
       <div class="pre-btns"><button id="pre-pause">Pause</button><button id="pre-begin" class="go">Begin the world now</button></div>
       <h3>Branches <span class="dim">· tap one to watch it</span></h3>
       <div id="pre-branches"></div>
       <div class="pre-key">${STAND.map((s, i) => `<span><i style="background:${STAND_C[i]}"></i>${s}</span>`).join('')}</div>
-      <h3>Self-sustaining species per branch</h3>
+      <h3>Self-sustaining clades per branch</h3>
       <div id="pre-chart"></div>
       <h3>Evolution settings</h3>
       <p class="note">Mutation: how much each newborn's genes differ from its parents'. Changes apply to every branch within a moment.</p>
@@ -79,17 +80,25 @@ export class PrehistoryTab {
   }
 
   _branches(p) {
-    const box = $('pre-branches'), sp = this.meta.species;
+    const box = $('pre-branches'), names = this.meta.traitNames, NT = names.length;
     box.innerHTML = p.branches.map((b, i) => {
-      const self = b.standing.filter((s) => s === 3).length, gone = b.standing.filter((s) => s === 0).length;
-      const NT = this.meta.traitNames.length;
-      const tr = (s) => b.count[s] > 0 ? ' · evolved: ' + this.meta.traitNames.slice(0, 4).map((n, k) => `${n} ×${b.traits[s * NT + k].toFixed(2)}`).join(', ') : '';
-      const chips = b.standing.map((st, s) => `<span class="sc" title="${sp[s].name}: ${STAND[st]} · ${b.count[s].toLocaleString()} alive · ${Math.round(b.births[s])} births in the last ~1,000 steps · generation ${b.generation[s].toFixed(1)}${tr(s)}" style="background:${STAND_C[st]}"></span>`).join('');
+      // this branch's own clade table: the clades differ between branches
+      const cl = b.clades || [], used = cl.filter((c) => c && c.used);
+      const st = (s) => (b.standing && b.standing[s]) | 0;
+      const self = used.filter((c) => st(c.id) === 3).length, gone = used.filter((c) => st(c.id) === 0).length;
+      const tr = (s) => b.count[s] > 0 && b.traits ? '\nevolved: ' + names.map((n, k) => `${n} ×${(b.traits[s * NT + k] ?? 0).toFixed(2)}`).join(', ') : '';
+      const order = used.slice().sort((a, c) => (st(c.id) > 0) - (st(a.id) > 0) || a.ancestor - c.ancestor || a.born - c.born);
+      const chips = order.map((c) => {
+        const s = c.id, k = st(s);
+        const tip = `${c.name} · ${c.niche || '–'}\n${STAND[k]} · ${(b.count[s] | 0).toLocaleString()} alive · ${Math.round(b.births[s] || 0)} births in the last ~1,000 steps · generation ${(b.generation[s] || 0).toFixed(1)}` +
+          `\n${c.parent >= 0 ? `split off at step ${c.born.toLocaleString()}` : 'ancestor'}${c.extinct >= 0 && !c.alive ? ` · extinct at ${c.extinct.toLocaleString()}` : ''}${tr(s)}`;
+        return `<span class="sc" title="${esc(tip)}" style="background:${STAND_C[k]};border-top-color:${c.color}"></span>`;
+      }).join('');
       return `<div class="branch${i === p.view ? ' on' : ''}" data-b="${i}">
         <div class="bh"><i style="background:${BRANCH_C[i % BRANCH_C.length]}"></i><b>Branch ${String.fromCharCode(65 + i)}</b>
-          <span>${b.alive.toLocaleString()} alive · <b style="color:${STAND_C[3]}">${self}</b> self-sustaining · ${gone} gone${b.full ? ' · <b style="color:var(--warn)">full</b>' : ''}</span></div>
-        <div class="scs">${chips}</div></div>`;
-    }).join('') + `<p class="note">Hover a square for the species.</p>`;
+          <span>${b.alive.toLocaleString()} alive · ${used.length} clades · <b style="color:${STAND_C[3]}">${self}</b> self-sustaining · ${gone} gone · ${(b.splits || 0).toLocaleString()} speciation${b.splits === 1 ? '' : 's'}${b.full ? ' · <b style="color:var(--warn)">full</b>' : ''}</span></div>
+        <div class="scs">${chips || '<span class="note">no clades</span>'}</div></div>`;
+    }).join('') + `<p class="note">One square per clade, coloured by how it is doing (the stripe on top is the clade's own colour). Hover a square for the clade.</p>`;
     for (const d of box.querySelectorAll('.branch')) d.onclick = () => this.link.send({ cmd: 'branch', index: +d.dataset.b });
   }
 
@@ -98,7 +107,7 @@ export class PrehistoryTab {
     if (!s.length || s[0][s[0].length - 1] < p.step / 1e6 * yps) {
       if (!s.length) { s.push([]); for (let i = 0; i < p.branches.length; i++) s.push([]); }
       s[0].push(p.step * yps / 1e6);
-      p.branches.forEach((b, i) => s[i + 1].push(b.standing.filter((x) => x === 3).length));
+      p.branches.forEach((b, i) => s[i + 1].push((b.clades || []).filter((c) => c && c.used && b.standing[c.id] === 3).length));
       if (s[0].length > 2000) for (const a of s) a.shift();
     }
     const host = $('pre-chart');
@@ -107,7 +116,7 @@ export class PrehistoryTab {
     if (!this.plot || this.plotW !== w) {
       if (this.plot) this.plot.destroy();
       this.plotW = w;
-      this.plot = new uPlot({ width: w, height: 170, scales: { x: { time: false }, y: { range: [0, this.meta.species.length] } },
+      this.plot = new uPlot({ width: w, height: 170, scales: { x: { time: false }, y: { range: (u, mn, mx) => [0, Math.max(4, Math.ceil(mx * 1.15))] } },
         axes: [{ stroke: '#6f8599', grid: { stroke: '#16212c' }, size: 30, values: (u, v) => v.map((x) => x + ' Myr') }, { stroke: '#6f8599', grid: { stroke: '#16212c' }, size: 34 }],
         cursor: { drag: { x: false, y: false } },
         series: [{ label: 'Myr' }, ...p.branches.map((b, i) => ({ label: 'Branch ' + String.fromCharCode(65 + i), stroke: BRANCH_C[i % BRANCH_C.length], width: 1.6, points: { show: false } }))] }, s, host);
