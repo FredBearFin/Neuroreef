@@ -120,9 +120,9 @@ public static class Clades
         // diet: the primary producers of its realm, in random proportions; every other pool near zero
         int[] plants = land ? new[] { (int)Pool.Grass, (int)Pool.Browse, (int)Pool.Seed, (int)Pool.Root, (int)Pool.Fruit, (int)Pool.Nectar }
                             : new[] { (int)Pool.Algae, (int)Pool.Phyto };
-        // every other pool low but not at the floor (well under 1% of the diet each), so selection can act on it
-        // (Revision H: at -127 a meat or carrion gene was ~0.1%, and climbing out took ~1e5 generations)
-        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-110 + (int)(U(40 + p) * 40f));
+        // every other pool near zero; the diet map is linear (Body.ExpressDiet), so every gene step counts the same
+        // and selection can act on a pool from zero (Revision H)
+        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-127 + (int)(U(40 + p) * 10f));
         foreach (int p in plants) body[G.B_DIET - B + p] = (sbyte)(U(20 + p) * 127f);
     }
 
@@ -193,7 +193,7 @@ public static class Clades
         }
         float sep = MathF.Sqrt(Dist2C(x.C1, x.C2));
         float rms = MathF.Sqrt(spread / n);
-        if (sep < K.SPLIT_MIN_D || sep < K.SPLIT_SEP * rms) return -1;
+        if (sep / MathF.Sqrt(D) < K.SPLIT_MIN_D || sep < K.SPLIT_SEP * rms) return -1;   // SPLIT_MIN_D is per gene (RMS)
         // count the whole clade by nearest centre; both sides must be viable populations
         int c1 = 0, c2 = 0;
         for (int i = 0; i < w.Cap; i++)

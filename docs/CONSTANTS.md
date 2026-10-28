@@ -11,11 +11,11 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| WORLD | 1024 | units | side of the toroidal world | HT |
+| WORLD | 512 | units | side of the toroidal world | HT: 512 (Revision H) so that food, not the slot count, limits a branch's population |
 | FCELL | 4 | units | field cell side | V1 |
-| FW | 256 | cells | field grid side (WORLD/FCELL) | - |
+| FW | 128 | cells | field grid side (WORLD/FCELL) | - |
 | HCELL | 16 | units | spatial-hash cell side | V1 |
-| GW | 64 | cells | spatial-hash grid side | - |
+| GW | 32 | cells | spatial-hash grid side | - |
 | CAPACITY | 65536 | slots | default agent slots (animals, eggs, embryos) | HT |
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
 | RIVER_ACC | 900 | cells | catchment (cells) above which a cell is river | HT |
@@ -188,7 +188,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_HERM | 0.05 | xbasal | basal cost of being a hermaphrodite (keeping both sexes' organs) | ECO: hermaphrodites maintain male and female function |
 | COST_IMMUNE | 0.12 | xbasal | basal cost of full immune investment | ECO: immune defence is costly (Lochmiller & Deerenberg 2000) |
 | IMMUNE_PROTECT | 0.8 | - | share of infection and disease death that full immune investment prevents | ECO: partial, not total, protection |
-| D_COMPAT | 0.45 | - | genetic distance at which mating succeeds with probability 1/e (body genes / 127, RMS per gene) | ECO: hybrid incompatibility comes from differences fixed between populations (Dobzhansky-Muller; Orr 1995), not from variation within one: normal spread (SD ~0.09) stays fully fertile |
+| D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
 ## 9. Clades
@@ -202,7 +202,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
 | MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
 | SPLIT_SEP | 1.5 | - | two gene clusters are separate species when their centres are this many times their spread apart | ECO: genotypic-cluster species (Mallet 1995): two clusters with few intermediates |
-| SPLIT_MIN_D | 0.25 | - | and at least this far apart (body genes / 127, Euclidean) | - |
+| SPLIT_MIN_D | 0.228 | - | and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2 | ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H) |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
 ## 10. Reproduction

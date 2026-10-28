@@ -14,7 +14,8 @@ public sealed class Telemetry
     // ---- running counters (cumulative)
     public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants, Infections;
     public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, RewardSum, CareGiven;
-    public long SlotShortage;
+    public long SlotShortage, FullSteps;
+    public ulong LastFullStep = ulong.MaxValue;
     public long Splits;                     // speciation events (DESIGN §7.9)
     public long FireCells;
     public readonly long[] DeathsByAge;     // species * 4: before birth, juvenile, young adult (< 2x maturity), older adult

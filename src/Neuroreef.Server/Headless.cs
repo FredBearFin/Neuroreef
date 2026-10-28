@@ -200,9 +200,9 @@ public static class Headless
         }
         o.AppendLine();
         o.AppendLine($"slot shortages (births or matings refused because the world was full): {T.SlotShortage}");
-        long conceived = 0; foreach (var c in T.Conceptions) conceived += c;
-        if (T.SlotShortage > 0.001 * Math.Max(1, conceived))
-            o.AppendLine($"WARNING: the slot cap, not food, limited this world ({T.SlotShortage:N0} refusals against {conceived:N0} conceptions): selection was distorted");
+        o.AppendLine($"steps on which the world was full: {T.FullSteps:N0} of {sim.W.Step:N0}");
+        if (T.FullSteps > 0.01 * Math.Max(1UL, sim.W.Step))
+            o.AppendLine("WARNING: the slot cap, not food, limited this world on more than 1% of steps: selection was distorted");
         return o.ToString();
     }
 

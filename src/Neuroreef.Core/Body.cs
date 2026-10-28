@@ -113,7 +113,7 @@ public static class Body
         float sum = 0;
         for (int p = 0; p < Pools.N; p++)
         {
-            float raw = Reachable(realm, p) ? MathK.Exp(w.Genome[g + G.B_DIET + p] * (1f / 127f) * MathK.Log(20f)) : 0f;
+            float raw = Reachable(realm, p) ? Organ(w.Genome[g + G.B_DIET + p]) : 0f;   // linear: no plateau at the floor
             dst[p] = raw; sum += raw;
         }
         float k = sum > 0 ? K.DIET_BUDGET / sum : 0;

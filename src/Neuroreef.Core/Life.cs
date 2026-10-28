@@ -8,7 +8,7 @@ public static class Life
 {
     public static int NewSlot(World w)
     {
-        if (w.FreeTop == 0) { w.T.SlotShortage++; return -1; }
+        if (w.FreeTop == 0) { w.T.SlotShortage++; if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; } return -1; }
         int c = w.FreeStack[--w.FreeTop];
         w.AliveCount++;
         return c;

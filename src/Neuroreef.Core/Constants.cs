@@ -26,7 +26,7 @@ public sealed class KAttribute : Attribute
 public static class K
 {
     // ---------------------------------------------------------------- 1. world
-    [K("World", "side of the toroidal world", "units", "HT")] public const int WORLD = 1024;
+    [K("World", "side of the toroidal world", "units", "HT: 512 (Revision H) so that food, not the slot count, limits a branch's population")] public const int WORLD = 512;
     [K("World", "field cell side", "units", "V1")] public const int FCELL = 4;
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
@@ -181,7 +181,7 @@ public static class K
     [K("Body", "basal cost of being a hermaphrodite (keeping both sexes' organs)", "xbasal", "ECO: hermaphrodites maintain male and female function")] public const float COST_HERM = 0.05f;
     [K("Body", "basal cost of full immune investment", "xbasal", "ECO: immune defence is costly (Lochmiller & Deerenberg 2000)")] public const float COST_IMMUNE = 0.12f;
     [K("Body", "share of infection and disease death that full immune investment prevents", "-", "ECO: partial, not total, protection")] public const float IMMUNE_PROTECT = 0.8f;
-    [K("Body", "genetic distance at which mating succeeds with probability 1/e (body genes / 127, RMS per gene)", "-", "ECO: hybrid incompatibility comes from differences fixed between populations (Dobzhansky-Muller; Orr 1995), not from variation within one: normal spread (SD ~0.09) stays fully fertile")] public const float D_COMPAT = 0.45f;
+    [K("Body", "genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene)", "-", "ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001")] public const float D_COMPAT = 0.25f;
     [K("Body", "others whose visible body genes are this close look like kin (body genes / 127, RMS per gene)", "-", "ECO: animals recognise their kind by appearance")] public const float KIN_LOOK = 0.25f;
 
     // ---------------------------------------------------------------- 5d. clades and speciation (DESIGN §7.9)
@@ -192,7 +192,7 @@ public static class K
     [K("Clades", "steps between speciation checks", "steps", "-")] public const int SPEC_EVERY = 2000;
     [K("Clades", "smallest cluster that can become a species", "organisms", "ECO: a viable population")] public const int MIN_SPLIT = 40;
     [K("Clades", "two gene clusters are separate species when their centres are this many times their spread apart", "-", "ECO: genotypic-cluster species (Mallet 1995): two clusters with few intermediates")] public const float SPLIT_SEP = 1.5f;
-    [K("Clades", "and at least this far apart (body genes / 127, Euclidean)", "-", "-")] public const float SPLIT_MIN_D = 0.25f;
+    [K("Clades", "and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2", "-", "ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H)")] public const float SPLIT_MIN_D = 0.228f;
     [K("Clades", "an extinct clade's slot is reused only after this many steps", "steps", "-")] public const int CLADE_RECYCLE = 20000;
 
     // ---------------------------------------------------------------- 6. reproduction

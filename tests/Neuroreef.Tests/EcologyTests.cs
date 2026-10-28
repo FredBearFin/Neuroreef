@@ -25,7 +25,7 @@ public class EcologyTests
             bool land = s < K.ANCESTORS_LAND;
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             float plants = 0; for (int p = 0; p <= (int)Pool.Phyto; p++) plants += w.PDiet[i * Pools.N + p];
-            Assert.True(plants > 0.75f * K.DIET_BUDGET, $"clade {s} plant share {plants}");
+            Assert.True(plants > 0.7f * K.DIET_BUDGET, $"clade {s} plant share {plants}");
             Assert.True(w.PStrike[i] < 0.35f * K.STRIKE_MAX);
         }
         // the ancestors differ from each other: their bodies are random, not designed
@@ -302,8 +302,8 @@ public class EcologyTests
         Assert.True(eb - w.Energy[b] < 0.1f * eb, "a 0.05-mass striker took more than 10% of a 40-mass body's reserve in 20 strikes");
     }
 
-    [Fact] // DESIGN §4 (Revision H): an egg of one's own kind is kin, so it is not a strike target
-    public void OwnKindEggIsNotATarget()
+    [Fact] // DESIGN §4, §9.4 (Revision H): an own-kind egg is kin: struck only when no other kind is in reach (cannibalism stays possible)
+    public void OwnKindEggIsStruckOnlyWhenNothingElseIs()
     {
         var w = new World(256, 31); Terrain.Build(w);
         int a = Make(w, 0, 0, sexual: false, live: false);
@@ -314,7 +314,15 @@ public class EcologyTests
         Body.Express(w, e); w.Flags[e] = 0;
         Simulation.BuildFor(w);
         Decide.Run(w, a, new Decide.ProbeBuf());
-        Assert.NotEqual(e, w.ITarget[a]);
+        Assert.Equal(e, w.ITarget[a]);                                // nothing else: the egg (cannibalism)
+        int o = Make(w, 1, 5);                                         // another kind, in reach
+        for (int k = G.B_LEGS; k <= G.B_FINN; k++) w.Genome[o * G.LEN + k] = (sbyte)(w.Genome[a * G.LEN + k] > 0 ? -127 : 127);
+        w.Genome[o * G.LEN + G.B_MASS] = w.Genome[a * G.LEN + G.B_MASS];
+        Body.Express(w, o); w.X[o] = w.X[a] + 0.6f; w.Y[o] = w.Y[a]; w.Flags[o] = 0;
+        Assert.False(Body.LooksAlike(w, a, o));
+        Simulation.BuildFor(w);
+        Decide.Run(w, a, new Decide.ProbeBuf());
+        Assert.Equal(o, w.ITarget[a]);
     }
 
     [Fact] // DESIGN §8 (Revision H): the father gets a short refractory period; an infertile mating leaves the female free

@@ -14,7 +14,9 @@ cloners and egg-eating, or made hunting unreachable)
 - Ancestors' non-plant diet genes start low but off the floor, so selection can act on them (§6.2).
 - One brain per ancestor; founders vary around it (FOUNDER_W_SD), so crossover recombines related
   networks (§6.2).
-- The report warns when the slot cap, not food, limited the world.
+- The report warns when the slot cap, not food, limited the world (on more than 1% of steps). The world
+  is 512 units square so that food limits a branch first.
+- Speciation needs the two centres to be at least half-infertile (SPLIT_MIN_D, RMS per gene).
 
 **Changes in Revision G.1: variation to evolve from.** The first Revision G run showed no body change
 at all: founders were near-clones and body genes shared the brain's per-byte mutation rate (0.018
@@ -105,8 +107,8 @@ Headless mode runs the same core with no server and writes reports, CSV files an
 
 ## 3. World and memory map
 
-The world is a torus of WORLD = 1024 units. The field grid has cells of 4 units (FW = 256, 65,536
-cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = 65,536 agent slots by
+The world is a torus of WORLD = 512 units (Revision H; 1024 before). The field grid has cells of 4 units (FW = 128, 16,384
+cells). The spatial hash has cells of 16 units (GW = 32). C = capacity = 65,536 agent slots by
 default (`--capacity`). Eggs and embryos occupy slots too. When every slot is in use, births and
 immigrants are refused and counted (`SlotShortage`); the console shows **WORLD FULL**, because that
 is a limit of the computer, not an ecological result.
@@ -297,8 +299,8 @@ at random within the "simple" corner of the gene space (`Clades.AncestorBody`):
 Each founder has its own random brain plus the starter kit (§7.7), and the ancestor's body with
 standing variation: each body gene ± FOUNDER_BODY_SD, as in any natural population (Revision G.1).
 Revision H: all founders of an ancestor share its one random brain, each byte ± FOUNDER_W_SD; and an
-ancestor's non-plant diet genes start at random between −110 and −70 (well under 1% of the diet each),
-not at the floor, so meat or carrion eating can be selected. Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
+ancestor's non-plant diet genes start near zero. Diet genes map linearly to digestive shares (Revision
+H: the old exponential map made the floor a plateau that selection could not climb). Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 
@@ -545,7 +547,9 @@ generated name, a colour (each ancestor a distinct hue; a daughter a shift of it
 parent, its ancestor, and its birth and extinction steps (`Clades.cs`, up to K.CLADES = 32 at once,
 since the console frame has 5 bits for it).
 - **Reproductive isolation is gradual (Revision G):** there is no clade check on mating. A mating
-  produces young with probability exp(−(d/D_COMPAT)²), d the genetic distance of the two body genomes,
+  produces young with probability exp(−(d/D_COMPAT)⁴), d the RMS per-gene distance of the two body
+  genomes (Revision H: the quartic follows Orr's snowball, incompatibilities growing with the square of the
+  substitutions; normal variation stays fertile, independent lineages are not),
   so close relatives breed freely, hybrids between nearby clades are possible, and diverged lineages
   stop interbreeding by themselves. A hybrid takes its mother's clade.
 - **Speciation:** every SPEC_EVERY steps, each clade with at least 2·MIN_SPLIT members is examined.
@@ -567,7 +571,7 @@ since the console frame has 5 bits for it).
   rests REFRACT × his cooldown, the mother enters her cooldown only if she conceives; a male is ready
   when he can afford the mating and keep 15% of his reserve): two ready organisms in reach, both sexual, with the same
   sex system, and of opposite sex unless both are hermaphrodites. Both pay the mating cost. With
-  probability exp(−(d/D_COMPAT)²) (§7.9) the mother conceives a litter of crossovers; two
+  probability exp(−(d/D_COMPAT)⁴) (§7.9) the mother conceives a litter of crossovers; two
   hermaphrodites both conceive. A separate-sexed mother's young are daughters with the probability of
   her sex-ratio gene.
 - **Asexual organisms** reproduce alone with LAY: a litter of mutated copies, at no partner cost. This
@@ -626,7 +630,8 @@ A full gut blocks EAT, so the intake rate saturates (Holling type II) from handl
 ### 9.4 Strikes, kills and parasitism (NR-304)
 
 **Target (Revision H):** the nearest organism or egg within reach that does not look like kin (§4); a
-blood-drinker picks the largest in reach. An egg of one's own kind is kin and is never a target.
+blood-drinker picks the largest in reach. Kin, own-kind eggs included, is struck only when no other kind
+is in reach, so cannibalism stays possible but is never forced.
 
 **A hit lands with probability:**
 ```
@@ -644,7 +649,7 @@ A body's own mass is its first defence: a small striker rarely hurts a large ani
 |---|---|
 | Hit | The victim loses C_DAMAGE·power energy and feels pain. It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space; the rest becomes CARRION (DETRITUS in water). |
 | Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy). The host dies only if its energy reaches 0 (cause: parasitism). |
-| Miss | The victim's PAIN rises. If defence > power, the attacker loses c_retal·(defence − power) energy. |
+| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. |
 
 ### 9.6 Disease (Revision C, NR-329; Revision G)
 

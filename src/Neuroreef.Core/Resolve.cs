@@ -205,9 +205,11 @@ public static class Resolve
         {
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + K.PAIN_HIT);
             w.PendingR[v] -= K.R_PAIN * 0.05f;
-            if (defence > power)
+            // a victim hits back with its own weapons (passive tissue and eggs do not)
+            float back = egg ? 0f : w.PStrike[v] * w.ApparentMass(v);
+            if (back > power)
             {
-                float hurt = K.C_RETAL * (defence - power);
+                float hurt = K.C_RETAL * (back - power);
                 w.Energy[a] -= hurt;
                 rew -= K.R_PAIN * hurt / emax;
             }
@@ -258,7 +260,7 @@ public static class Resolve
         float dx = World.Delta1(w.X[j] - w.X[i]), dy = World.Delta1(w.Y[j] - w.Y[i]);
         float rr = w.PReach[i] * 2f + 0.5f;
         if (dx * dx + dy * dy > rr * rr) return 0;
-        if (w.FreeTop == 0) { w.T.SlotShortage++; return 0; }     // no room for young: nothing happens, nothing is paid
+        if (w.FreeTop == 0) { w.T.SlotShortage++; if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; } return 0; }     // no room for young: nothing happens, nothing is paid
         w.Energy[i] -= K.C_MATE * w.PM[i]; w.Energy[j] -= K.C_MATE * w.PM[j];
         w.PendingR[j] += K.R_MATE;
         w.T.Matings[w.Spc[i]]++;
@@ -268,7 +270,7 @@ public static class Resolve
         // the father has only a short refractory period; a mother's breeding cooldown starts when she conceives (Conceive)
         w.Cooldown[father] = K.REFRACT * w.PCool[father];
         float d = Body.Distance(w, i, j) / K.D_COMPAT;
-        if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Compat) >= MathK.Exp(-d * d)) return rew;   // incompatible: no young
+        if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Compat) >= MathK.Exp(-d * d * d * d)) return rew;   // incompatible: no young
         if (herm)
         {
             rew += Conceive(w, i, j, w.PLitter[i]);

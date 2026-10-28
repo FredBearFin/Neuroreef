@@ -74,7 +74,8 @@ public static class Decide
         // this organism; every other organism is sensed through raw quantities, with no designed category
         float kinSum = 0, kinCx = 0, kinCy = 0, kinHx = 0, kinHy = 0, sepX = 0, sepY = 0, crowd = 0, otherSum = 0, virSum = 0;
         Near kin = new() { D = 1e9f, J = -1 }, o1 = new() { D = 1e9f, J = -1 }, o2 = new() { D = 1e9f, J = -1 },
-             mate = new() { D = 1e9f, J = -1 }, strike = new() { D = 1e9f, J = -1 }, strikeBig = new() { D = 1e9f, J = -1 };
+             mate = new() { D = 1e9f, J = -1 }, strike = new() { D = 1e9f, J = -1 }, strikeBig = new() { D = 1e9f, J = -1 },
+             strikeKin = new() { D = 1e9f, J = -1 };
         float o2Mass = -1f, strikeBigMass = -1f;
         float reach = w.PReach[i];
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
@@ -102,9 +103,11 @@ public static class Decide
                     bool alike = Body.LooksAlike(w, i, j);
                     if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; }
                     if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    if (alike && !active) continue;                          // an egg of one's own kind: kin, left alone
                     if (alike)
                     {
+                        // kin is not sensed as an "other", but a strike can still fall on it (cannibalism)
+                        if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(j)) && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                        if (!active) continue;                               // an own-kind egg is not counted as kin around it
                         kinSum += close; kinCx += ddx; kinCy += ddy;
                         kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
                         if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
@@ -254,7 +257,8 @@ public static class Decide
         w.ISpeed[i] = spd;
         w.IActs[i] = acts;
         // a strike hits the nearest other in reach; a blood-drinker goes for the largest in reach
-        w.ITarget[i] = w.PParasite[i] != 0 ? strikeBig.J : strike.J;
+        // only when no other kind is in reach does a strike fall on kin
+        w.ITarget[i] = w.PParasite[i] != 0 ? strikeBig.J : strike.J >= 0 ? strike.J : strikeKin.J;
         w.IMate[i] = (mate.J >= 0 && mate.D <= reach + 1f) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
