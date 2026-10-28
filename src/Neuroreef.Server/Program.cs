@@ -19,8 +19,10 @@ public static class Program
         {
             try
             {
-                if (o.LoadBank != null) bank = GeneBank.Load(o.LoadBank);
-                else bank = ShippedBank();
+                string evolved = Path.Combine(AppContext.BaseDirectory, "evolved.nrbank");
+                if (o.LoadBank != null) { bank = GeneBank.Load(o.LoadBank); Console.WriteLine("gene bank: " + o.LoadBank); }
+                else if (File.Exists(evolved)) { bank = GeneBank.Load(evolved); Console.WriteLine("gene bank: " + evolved + " (your evolved brains)"); }
+                else { bank = ShippedBank(); if (bank != null) Console.WriteLine("gene bank: shipped with this build"); }
             }
             catch (Exception e) { Console.Error.WriteLine("gene bank not usable (" + e.Message + "); starting a genesis run"); bank = null; }
         }

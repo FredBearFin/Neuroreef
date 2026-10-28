@@ -101,7 +101,10 @@ public static class K
     // ---------------------------------------------------------------- 5. brains, learning, evolution
     [K("Brain", "genome weight scale (int8 / 16)", "-", "-")] public const float WSCALE = 1f / 16f;
     [K("Brain", "max |weight| (genome + learned)", "-", "-")] public const float WMAX = 7.9f;
-    [K("Brain", "founder weight range: round(U(-1,1)*FOUNDER_W)", "int8", "HT")] public const int FOUNDER_W = 12;
+    [K("Brain", "founder memory-layer (W1) weight range: round(U(-1,1)*FOUNDER_W)", "int8", "HT")] public const int FOUNDER_W = 12;
+    [K("Brain", "founder output-layer (W2) weight range", "int8", "HT")] public const int FOUNDER_W2 = 4;
+    [K("Brain", "founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain)", "int8", "HT")] public const int FOUNDER_BIAS = -48;
+    [K("Brain", "random spread of the founder output bias", "int8", "HT")] public const int FOUNDER_BIAS_NOISE = 4;
     [K("Brain", "learning rate eta range low", "-", "HT")] public const float ETA_LO = 0.002f;
     [K("Brain", "learning rate eta range high", "-", "HT")] public const float ETA_HI = 0.06f;
     [K("Brain", "trace decay lambda range low", "-", "HT")] public const float LAMBDA_LO = 0.50f;
@@ -121,7 +124,10 @@ public static class K
     [K("Brain", "small mutation sigma", "int8", "HT")] public const float MUT_SMALL = 2f;
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
-    [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 32;
+    [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 64;
+    [K("Brain", "share of colonists bred from the archive once it holds 4 genomes (the rest are random brains)", "-", "HT")] public const float ARCHIVE_SHARE = 0.9f;
+    [K("Brain", "tournament size when choosing a colonist parent from the archive", "genomes", "HT")] public const int TOURNAMENT = 3;
+    [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;
     [K("Brain", "genesis period (immigration floor ramps to 0)", "steps", "HT")] public const int GENESIS = 300000;
     [K("Brain", "genesis floor as share of initial count", "-", "HT")] public const float GENESIS_FLOOR = 0.25f;
     [K("Brain", "founders and colonists arrive in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;

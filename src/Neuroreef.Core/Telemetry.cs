@@ -16,10 +16,13 @@ public sealed class Telemetry
     public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, RewardSum;
     public long SlotShortage;
     public long FireCells;
+    public readonly long[] DeathsByAge;     // species * 4: before birth, juvenile, young adult (< 2x maturity), older adult
+    public readonly double[] AgeAtDeath;    // sum of age at death of hatched animals
     // ---- previous cumulative values, to form per-window deltas
     readonly long[] _pBirths, _pDeaths, _pKill, _pStrikes, _pKills, _pMatings, _pImm, _pConc;
     readonly double[] _pIntake, _pBasal, _pMove, _pReward;
     long _pFire;
+    readonly long[] _pDAge; readonly double[] _pAge;
 
     // ---- sample layout
     public readonly string[] Names;
@@ -27,7 +30,7 @@ public sealed class Telemetry
     public readonly int OffGlobal, OffSpecies, PerSpecies, OffKill;
     public const int S_COUNT = 0, S_JUV = 1, S_EGGS = 2, S_GEN = 3, S_ENERGY = 4, S_REWARD = 5, S_LEARNED = 6, S_BIRTHS = 7,
         S_CONC = 8, S_DEATHS = 9, S_INTAKE = S_DEATHS + Cause.N, S_SPEND = S_INTAKE + Pools.N, S_STRIKES = S_SPEND + 2, S_KILLS = S_STRIKES + 1,
-        S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_GAINS = S_IMM + 1, S_END = S_GAINS + P.N;
+        S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4, S_GAINS = S_MEANAGE + 1, S_END = S_GAINS + P.N;
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_END = G_SEASON + 1;
@@ -43,7 +46,7 @@ public sealed class Telemetry
         _w = w; NS = w.NS;
         int ns = NS;
         Created = new long[ns]; Births = new long[ns]; Conceptions = new long[ns]; Deaths = new long[ns * Cause.N];
-        KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns];
+        KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
         Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; RewardSum = new double[ns];
         _pBirths = new long[ns]; _pDeaths = new long[ns * Cause.N]; _pKill = new long[ns * ns]; _pStrikes = new long[ns]; _pKills = new long[ns];
         _pMatings = new long[ns]; _pImm = new long[ns]; _pConc = new long[ns];
@@ -62,7 +65,8 @@ public sealed class Telemetry
             names.AddRange(new[] { n + "count", n + "juveniles", n + "eggs", n + "generation", n + "energy", n + "reward", n + "learned", n + "births", n + "conceptions" });
             foreach (var c in Cause.Names) names.Add(n + "death." + c);
             foreach (var p in Pools.Names) names.Add(n + "intake." + p);
-            names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "strikes", n + "kills", n + "matings", n + "immigrants" });
+            names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "strikes", n + "kills", n + "matings", n + "immigrants",
+                n + "deaths.unborn", n + "deaths.juvenile", n + "deaths.young-adult", n + "deaths.old-adult", n + "age-at-death" });
             foreach (var p in P.Names) names.Add(n + "gain." + p);
         }
         OffKill = names.Count;
@@ -158,6 +162,9 @@ public sealed class Telemetry
             a[o + S_KILLS] = Kills[s] - _pKills[s]; _pKills[s] = Kills[s];
             a[o + S_MATINGS] = Matings[s] - _pMatings[s]; _pMatings[s] = Matings[s];
             a[o + S_IMM] = Immigrants[s] - _pImm[s]; _pImm[s] = Immigrants[s];
+            long hatched = 0;
+            for (int c = 0; c < 4; c++) { int k = s * 4 + c; long d = DeathsByAge[k] - _pDAge[k]; a[o + S_DAGE + c] = d; if (c > 0) hatched += d; _pDAge[k] = DeathsByAge[k]; }
+            a[o + S_MEANAGE] = hatched > 0 ? (float)((AgeAtDeath[s] - _pAge[s]) / hatched) : 0f; _pAge[s] = AgeAtDeath[s];
         }
         for (int k = 0; k < NS * NS; k++) { a[OffKill + k] = KillMatrix[k] - _pKill[k]; _pKill[k] = KillMatrix[k]; }
 

@@ -36,7 +36,7 @@ public static class Life
         w.Thirst[c] = 0; w.Fatigue[c] = 0; w.Age[c] = 0; w.Pain[c] = 0; w.Cooldown[c] = 0; w.Timer[c] = 0; w.LastFear[c] = 0;
         w.Sex[c] = (byte)(Rng.U(seed, step, (uint)c, Rs.Sex) < 0.5f ? 0 : 1);
         w.Serial[c] = w.NextSerial++;
-        w.Children[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
+        w.Children[c] = 0; w.Matured[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
         w.IActs[c] = 0; w.ITarget[c] = -1; w.IMate[c] = -1; w.IScanning[c] = 0; w.ISpeed[c] = 0; w.IHeading[c] = w.Heading[c];
         if (mother >= 0)
         {
@@ -63,12 +63,15 @@ public static class Life
         Brain.Mutate(w.GenomeOf(child), w.Seed, (uint)w.Step, (uint)child + 0x10000u);
     }
 
+    /// <summary>Fitness for the archive: offspring that grew up count most (DESIGN §7.4).</summary>
+    public static float Score(World w, int i) => K.SCORE_MATURED * w.Matured[i] + w.Children[i] + 0.1f * MathF.Min(1f, w.Age[i] / w.PLife[i]);
+
     /// <summary>Insert the genome of a dying animal into its species' elite archive if it beats the weakest (DESIGN §7.4).</summary>
     public static void ToArchive(World w, int i)
     {
         int s = w.Spc[i];
         var sp = w.Sp[s];
-        float score = w.Children[i] + 0.1f * MathF.Min(1f, w.Age[i] / w.PLife[i]);
+        float score = Score(w, i);
         if (score < 0.05f) return;
         int n = w.ArchiveCount[s], baseI = s * K.ARCHIVE, slot;
         if (n < K.ARCHIVE) { slot = n; w.ArchiveCount[s] = n + 1; }
@@ -130,6 +133,7 @@ public static class Life
     {
         int cap = w.Cap;
         Array.Clear(activeCount);
+        Array.Clear(w.KinN);
         for (int i = 0; i < cap; i++)
         {
             byte st = w.StageOf[i];
@@ -158,10 +162,19 @@ public static class Life
                 if (resting ? (w.SeasonAt(w.Y[i]) > 0.2f || w.Timer[i] <= 0) : w.Timer[i] <= 0) Hatch(w, i);
                 continue;
             }
-            activeCount[w.Spc[i]]++;
+            int si = w.Spc[i];
+            activeCount[si]++;
+            if (st == St.Adult)
+            {
+                // reservoir-sample one living adult per species: colonist groups land next to kin
+                int nk = ++w.KinN[si];
+                if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Place + 300u) * nk < 1f) { w.KinX[si] = w.X[i]; w.KinY[si] = w.Y[i]; }
+            }
             if (st == St.Juvenile && w.Age[i] >= w.PMature[i])
             {
                 w.StageOf[i] = St.Adult;
+                int m = w.MotherOf(i);
+                if (m >= 0) w.Matured[m]++;
                 // metamorphosis: if the adult cannot live where the juvenile is, it moves to the nearest allowed side
                 if (sp.TwoStage && !w.CellAllows(World.FIdx(w.X[i], w.Y[i]), sp.Adult.Realm))
                     if (RandomSite(w, sp.Adult.Realm, (uint)i, out float x, out float y)) { w.X[i] = x; w.Y[i] = y; }
@@ -177,18 +190,14 @@ public static class Life
             else if (w.StraysAfterGenesis) floor = 4;
             else continue;
             if (activeCount[s] >= floor) continue;
-            // colonists arrive as one group at one site (a lone colonist would never find a mate)
-            if (!RandomSite(w, w.Sp[s].Adult.Realm, (uint)s + 0x30000u, out float gx, out float gy)) continue;
+            // colonists arrive as one group, next to living kin if there are any (a lone colonist would never find a mate)
+            float gx, gy;
+            if (w.KinN[s] > 0) { gx = w.KinX[s]; gy = w.KinY[s]; }
+            else if (!RandomSite(w, w.Sp[s].Adult.Realm, (uint)s + 0x30000u, out gx, out gy)) continue;
             for (int k = 0; k < K.GROUP_SIZE && activeCount[s] < floor; k++)
             {
                 uint key = (uint)(s * 1000 + k) + 0x40000u;
-                int n = w.ArchiveCount[s];
-                ReadOnlySpan<sbyte> gsrc = ReadOnlySpan<sbyte>.Empty;
-                if (n > 0 && Rng.U(w.Seed, (uint)w.Step, key, Rs.Immigrant) < 0.5f)
-                {
-                    int pick = (int)(Rng.U(w.Seed, (uint)w.Step, key, Rs.Archive) * n);
-                    gsrc = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + pick) * G.LEN, G.LEN);
-                }
+                ReadOnlySpan<sbyte> gsrc = Colonist(w, s, key);
                 int c = Found(w, s, gsrc, true, key, gx, gy);
                 if (c < 0) break;
                 w.Flags[c] |= Flag.Immigrant;
@@ -196,6 +205,41 @@ public static class Life
                 activeCount[s]++;
             }
         }
+    }
+
+    /// <summary>
+    /// Genome of a colonist (DESIGN §7.4): once the archive holds 4 genomes, ARCHIVE_SHARE of colonists are bred
+    /// from it, parents chosen by tournament; sexual species get a crossover of two winners. The rest are random.
+    /// Returns empty for a random brain. Uses the world's scratch buffer.
+    /// </summary>
+    static ReadOnlySpan<sbyte> Colonist(World w, int s, uint key)
+    {
+        int n = w.ArchiveCount[s];
+        if (n < 4 || Rng.U(w.Seed, (uint)w.Step, key, Rs.Immigrant) >= K.ARCHIVE_SHARE) return ReadOnlySpan<sbyte>.Empty;
+        int a = Tournament(w, s, n, key, 0);
+        var child = new Span<sbyte>(w.Scratch, 0, G.LEN);
+        var pa = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + a) * G.LEN, G.LEN);
+        bool sexual = w.Sp[s].Mode is Repro.Sexual or Repro.Hermaphrodite or Repro.Facultative or Repro.Cyclic;
+        if (sexual)
+        {
+            int b = Tournament(w, s, n, key, 1);
+            var pb = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + b) * G.LEN, G.LEN);
+            Brain.Crossover(child, pa, pb, w.Seed, (uint)w.Step, key + 0x60000u);
+        }
+        else pa.CopyTo(child);
+        return child;      // Found() mutates it
+    }
+
+    static int Tournament(World w, int s, int n, uint key, uint round)
+    {
+        int best = -1; float bs = float.MinValue;
+        for (int t = 0; t < K.TOURNAMENT; t++)
+        {
+            int k = (int)(Rng.U(w.Seed, (uint)w.Step, key, Rs.Archive + round * 16u + (uint)t) * n);
+            float sc = w.ArchiveScore[s * K.ARCHIVE + k];
+            if (sc > bs) { bs = sc; best = k; }
+        }
+        return best;
     }
 
     static void Hatch(World w, int i)

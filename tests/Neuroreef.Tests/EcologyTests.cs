@@ -269,4 +269,53 @@ public class EcologyTests
         Assert.True(j >= 0);
         Assert.Equal(0, sim.W.Spc[j]);
     }
+
+    [Fact] // NR-210: calm newborn brains - every primitive of every founder starts rare (same rule for all species)
+    public void FounderBrainsStartCalm()
+    {
+        var w = new World(256, 2);
+        var rs = new Rng.Seq(3);
+        var f = new float[F.N]; var y = new float[G.NIN]; var z = new float[P.N]; var g = new float[P.N];
+        double sum = 0; int n = 0;
+        for (int i = 0; i < 200; i++)
+        {
+            Brain.RandomGenome(w.GenomeOf(i), 2, 0, (uint)i);
+            for (int p = 0; p < P.N; p++) Assert.InRange(w.Genome[i * G.LEN + G.W2 + p * G.NIN + G.NH + F.BIAS], K.FOUNDER_BIAS - K.FOUNDER_BIAS_NOISE, K.FOUNDER_BIAS + K.FOUNDER_BIAS_NOISE);
+            w.Spc[i] = (byte)(i % Roster.Count); w.StageOf[i] = St.Adult;
+            Body.Express(w, i); Brain.InitLife(w, i);
+            f[F.BIAS] = 1; for (int k = 1; k < F.N; k++) f[k] = rs.Next();
+            Brain.Forward(w, i, f, y, z, g);
+            for (int p = 0; p < P.N; p++) { sum += g[p]; n++; }
+        }
+        Assert.True(sum / n < 0.12, $"mean founder gain {sum / n:F3}");
+    }
+
+    [Fact] // DESIGN §7.4: once the archive has genomes, colonists are bred from it
+    public void ColonistsAreBredFromTheArchive()
+    {
+        using var sim = new Simulation(16384, 41, 1);
+        var w = sim.W;
+        // put a recognisable genome into the Drifter archive
+        for (int k = 0; k < 8; k++)
+        {
+            var g = new Span<sbyte>(w.Archive, k * G.LEN, G.LEN);
+            g.Fill(5); g.Slice(G.BODY).Clear();
+            w.ArchiveScore[k] = 10 + k;
+        }
+        w.ArchiveCount[0] = 8;
+        // remove the living Drifters so the floor triggers immigration
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == 0) Resolve.DieNoBody(w, i, Cause.Starve, -1);
+        w.ArchiveCount[0] = 8;      // deaths may have added entries; keep only ours
+        sim.Step();
+        int bred = 0, total = 0;
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] == St.Dead || w.Spc[i] != 0 || (w.Flags[i] & Flag.Immigrant) == 0) continue;
+            total++;
+            int fives = 0; for (int k = 0; k < 200; k++) if (w.Genome[i * G.LEN + G.W2 + k] == 5) fives++;
+            if (fives > 150) bred++;
+        }
+        Assert.True(total > 0);
+        Assert.True(bred >= total / 2, $"{bred} of {total} colonists bred from the archive");
+    }
 }

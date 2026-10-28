@@ -18,8 +18,16 @@ public static class Brain
     /// <summary>A random founder genome: a function of (seed, slot, step) only (NR-210).</summary>
     public static void RandomGenome(Span<sbyte> g, uint seed, uint step, uint key)
     {
+        // memory layer: random; output layer: small random weights and a low bias, so every action of
+        // every species starts rare and must be learned or evolved upward ("calm newborn brain")
         for (int k = 0; k < G.ETA; k++)
-            g[k] = (sbyte)MathF.Round((Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f) * K.FOUNDER_W);
+        {
+            float u = Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f;
+            int col = (k - G.W2) % G.NIN;
+            if (k < G.W2) g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W);
+            else if (col == G.NH + F.BIAS) g[k] = (sbyte)(K.FOUNDER_BIAS + (int)MathF.Round(u * K.FOUNDER_BIAS_NOISE));
+            else g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W2);
+        }
         for (int k = G.ETA; k < G.BODY; k++)
             g[k] = (sbyte)(int)(Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 255f - 128f);
         for (int k = G.BODY; k < G.LEN; k++) g[k] = 0;     // founder body = the species body plan

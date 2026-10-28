@@ -17,12 +17,23 @@ public static class Headless
         sim.W.GenesisSteps = o.GenesisSteps;
         sim.W.StraysAfterGenesis = o.Strays;
         var w = sim.W;
+        if (o.Evolve)
+        {
+            Console.WriteLine("NEUROREEF 2  EVOLVE");
+            Console.WriteLine($"Evolving brains from random for {o.Steps:N0} steps at full speed: colonists arrive until step {o.GenesisSteps:N0},");
+            Console.WriteLine("then the world must stand on its own. The evolved brains are saved every 50,000 steps to");
+            Console.WriteLine("  " + o.SaveBank);
+            Console.WriteLine("Leave this window open. You can stop with Ctrl+C at any time; the last save is kept.");
+            Console.WriteLine();
+        }
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
         Console.WriteLine($"start: {(bank != null ? $"gene bank ({bank.Total} genomes)" : "GENESIS (random brains)")}   alive {w.AliveCount}");
         Header(w);
         var sw = Stopwatch.StartNew();
         long lastT = 0; ulong lastStep = 0;
-        for (long k = 0; k < o.Steps; k++)
+        bool stop = false;
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop = true; Console.WriteLine("stopping after this step (saving)..."); };
+        for (long k = 0; k < o.Steps && !stop; k++)
         {
             sim.Step();
             if (w.Step % (ulong)o.ReportEvery == 0)
@@ -34,7 +45,9 @@ public static class Headless
             if (o.SaveBank != null && w.Step % 50000 == 0) GeneBank.Save(w, o.SaveBank);
         }
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
-        Summary(sim);
+        string summary = Summary(sim);
+        Console.Write(summary);
+        if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, summary); Console.WriteLine("report written: " + o.ReportTxt); }
         if (o.SaveBank != null) { GeneBank.Save(w, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }
         if (o.Csv != null) { WriteCsv(w, o.Csv); Console.WriteLine("telemetry written: " + o.Csv); }
         return 0;
@@ -74,11 +87,13 @@ public static class Headless
     }
 
     /// <summary>End-of-run observation table from the cumulative counters (what happened, not what should).</summary>
-    public static void Summary(Simulation sim)
+    public static string Summary(Simulation sim)
     {
         var w = sim.W; var T = w.T;
-        Console.WriteLine();
-        Console.WriteLine("SPECIES       ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost   TOP FOOD (energy)");
+        var o = new StringBuilder();
+        o.AppendLine();
+        o.AppendLine($"OBSERVATION REPORT at step {w.Step:N0} (seed {w.Seed}). Counts are totals for the whole run.");
+        o.AppendLine("SPECIES       ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost   TOP FOOD (energy)");
         for (int s = 0; s < w.NS; s++)
         {
             var sb = new StringBuilder();
@@ -89,9 +104,20 @@ public static class Headless
             int best = -1; double bv = 0, tot = 0;
             for (int p = 0; p < Pools.N; p++) { double v = T.Intake[s * Pools.N + p]; tot += v; if (v > bv) { bv = v; best = p; } }
             sb.Append("   ").Append(best >= 0 ? $"{Pools.Names[best]} {bv:F0} of {tot:F0}" : "none");
-            Console.WriteLine(sb.ToString());
+            o.AppendLine(sb.ToString());
         }
-        Console.WriteLine($"slot shortages (births or immigrants refused because the world was full): {T.SlotShortage}");
+        o.AppendLine();
+        o.AppendLine("LIFE TABLE: where each species' life cycle breaks (deaths by age class, whole run)");
+        o.AppendLine("SPECIES      UNBORN  JUVENILE  YOUNG ADULT  OLDER ADULT   MEAN AGE AT DEATH  MATURITY AGE");
+        for (int s = 0; s < w.NS; s++)
+        {
+            long a0 = T.DeathsByAge[s * 4], a1 = T.DeathsByAge[s * 4 + 1], a2 = T.DeathsByAge[s * 4 + 2], a3 = T.DeathsByAge[s * 4 + 3];
+            double mean = (a1 + a2 + a3) > 0 ? T.AgeAtDeath[s] / (a1 + a2 + a3) : 0;
+            o.AppendLine($"{w.Sp[s].Name,-12}{a0,7}{a1,10}{a2,13}{a3,13}{mean,20:F0}{w.Sp[s].Mature,14:F0}");
+        }
+        o.AppendLine();
+        o.AppendLine($"slot shortages (births or immigrants refused because the world was full): {T.SlotShortage}");
+        return o.ToString();
     }
 
     public static void WriteCsv(World w, string path)

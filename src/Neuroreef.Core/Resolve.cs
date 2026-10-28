@@ -400,7 +400,11 @@ public static class Resolve
     {
         int s = w.Spc[i];
         w.T.Deaths[s * Cause.N + cause]++;
-        if (w.StageOf[i] >= St.Juvenile) Life.ToArchive(w, i);
+        byte st = w.StageOf[i];
+        int cls = st <= St.Embryo ? 0 : st == St.Juvenile ? 1 : w.Age[i] < 2f * w.PMature[i] ? 2 : 3;
+        w.T.DeathsByAge[s * 4 + cls]++;
+        if (cls > 0) w.T.AgeAtDeath[s] += w.Age[i];
+        if (st >= St.Juvenile) Life.ToArchive(w, i);
         Life.FreeSlot(w, i);
     }
 }

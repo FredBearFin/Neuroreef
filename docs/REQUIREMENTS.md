@@ -41,6 +41,8 @@ Each requirement has a number, a statement and a verification method:
 | NR-211 | Brains shall learn during life by a reward-modulated rule; the reward shall be the same function of drive relief and pain for every species (DESIGN §7.2). Learned changes shall not be inherited. A test shall show the probability of a rewarded action rising in a two-choice scene. | T |
 | NR-212 | Evolved genomes shall be savable to and loadable from a gene-bank file. A genesis mode shall start from random brains. | T |
 | NR-213 | The console shall measure and display which combinations of primitives each species uses (behaviour fingerprints). | D |
+| NR-214 | A life table (deaths by age class and mean age at death, per species) shall be recorded and shown in the console and the headless report. | D |
+| NR-215 | An evolve mode shall run genesis headless at full speed, save the evolved gene bank next to the program, and write an observation report; a normal start shall load that bank automatically. | D |
 
 ## 3. Ecology (NR-3xx)
 

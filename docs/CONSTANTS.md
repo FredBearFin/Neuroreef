@@ -98,7 +98,10 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | WSCALE | 0.0625 | - | genome weight scale (int8 / 16) | - |
 | WMAX | 7.9 | - | max |weight| (genome + learned) | - |
-| FOUNDER_W | 12 | int8 | founder weight range: round(U(-1,1)*FOUNDER_W) | HT |
+| FOUNDER_W | 12 | int8 | founder memory-layer (W1) weight range: round(U(-1,1)*FOUNDER_W) | HT |
+| FOUNDER_W2 | 4 | int8 | founder output-layer (W2) weight range | HT |
+| FOUNDER_BIAS | -48 | int8 | founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain) | HT |
+| FOUNDER_BIAS_NOISE | 4 | int8 | random spread of the founder output bias | HT |
 | ETA_LO | 0.002 | - | learning rate eta range low | HT |
 | ETA_HI | 0.06 | - | learning rate eta range high | HT |
 | LAMBDA_LO | 0.5 | - | trace decay lambda range low | HT |
@@ -118,7 +121,10 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
-| ARCHIVE | 32 | genomes | elite archive size per species | HT |
+| ARCHIVE | 64 | genomes | elite archive size per species | HT |
+| ARCHIVE_SHARE | 0.9 | - | share of colonists bred from the archive once it holds 4 genomes (the rest are random brains) | HT |
+| TOURNAMENT | 3 | genomes | tournament size when choosing a colonist parent from the archive | HT |
+| SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 | GENESIS | 300000 | steps | genesis period (immigration floor ramps to 0) | HT |
 | GENESIS_FLOOR | 0.25 | - | genesis floor as share of initial count | HT |
 | GROUP_SIZE | 8 | agents | founders and colonists arrive in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |

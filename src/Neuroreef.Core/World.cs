@@ -22,7 +22,7 @@ public sealed class World
     public readonly byte[] Spc, StageOf, Sex, Flags;
     public readonly ushort[] Gen;
     public readonly uint[] Serial, MotherSerial;
-    public readonly int[] MotherSlot, Children, LastChildSlot;
+    public readonly int[] MotherSlot, Children, LastChildSlot, Matured;
     public readonly uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
     public readonly float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmaxA, PVmaxJ, PArmour, PStrike, PUnit;
@@ -68,6 +68,8 @@ public sealed class World
     public readonly sbyte[] Archive;       // NS * ARCHIVE * G.LEN
     public readonly float[] ArchiveScore;  // NS * ARCHIVE
     public readonly int[] ArchiveCount;
+    public readonly float[] KinX, KinY;    // one living adult per species, sampled each LIFECYCLE (colonists land near kin)
+    public readonly int[] KinN;
     public readonly sbyte[] Scratch;       // per-thread genome scratch: G.LEN * 2
     public bool Genesis = true;
     public bool StraysAfterGenesis;
@@ -86,7 +88,7 @@ public sealed class World
         Reward = new float[c]; RewardMean = new float[c]; PendingR = new float[c]; LastFear = new float[c];
         Spc = new byte[c]; StageOf = new byte[c]; Sex = new byte[c]; Flags = new byte[c];
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
-        MotherSlot = new int[c]; Children = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
+        MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
         PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PBite = new float[c]; PLife = new float[c];
         PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PTurn = new float[c]; PVmaxA = new float[c]; PVmaxJ = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PUnit = new float[c]; PLitter = new byte[c];
@@ -119,6 +121,7 @@ public sealed class World
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];
         ArchiveCount = new int[NS];
+        KinX = new float[NS]; KinY = new float[NS]; KinN = new int[NS];
         Scratch = new sbyte[G.LEN * 2];
 
         T = new Telemetry(this);

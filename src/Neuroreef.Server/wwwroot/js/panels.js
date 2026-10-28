@@ -436,6 +436,10 @@ export class Panels {
       </div>
       <h3>can digest (efficiency; juvenile stage in brackets)</h3>${diet.map(([p, a, j]) => bar(p + (s.twoStage && j !== a ? ` (${fmt(j, 2)})` : ''), a, 1, '#c9a86a')).join('')}
       <h3>actually ate (recent energy share)</h3>${intake.length ? intake.map(([p, v]) => bar(p, v / itot, 1, '#7bd46b')).join('') : '<p class="note">nothing recently</p>'}
+      <h3>where the life cycle breaks (deaths by age, recent)</h3>
+      <p class="note">If most deaths are before birth or as juveniles, the species is not raising its young; mean age at death ${fmt(this.last(i(T.fields.meanAge)))} steps against maturity at ${fmt(s.mature)}.</p>
+      ${(() => { const names = ['before birth', 'juvenile', 'young adult', 'older adult']; const v = names.map((_, k) => this.recent(i(T.fields.dage + k))); const mx = Math.max(1, ...v);
+         return names.map((n, k) => bar(n, v[k], mx, ['#6a5a8a', '#e6c35a', '#4fd1c5', '#8aa0b5'][k], false, fmt(v[k]))).join(''); })()}
       <h3>died of (recent)</h3>${deaths.length ? deaths.map(([c, v]) => bar(c, v, Math.max(...deaths.map((d) => d[1])), '#ff5d73', false, fmt(v))).join('') : '<p class="note">no deaths recently</p>'}
       <h3>count history</h3><div id="sp-chart"></div>`;
     delete this.charts.sp;

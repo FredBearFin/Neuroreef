@@ -10,7 +10,8 @@ public sealed class Options
     public int Capacity = K.CAPACITY;
     public int Threads = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 8));
     public int Port = 5800;
-    public bool Headless, Genesis, Strays, NoBrowser, PrintConstants, Help, Empty;
+    public bool Headless, Genesis, Strays, NoBrowser, PrintConstants, Help, Empty, Evolve, StepsSet;
+    public string? ReportTxt;
     public long Steps = 100000;
     public int ReportEvery = 2000;
     public string? LoadBank, SaveBank, Csv;
@@ -21,11 +22,14 @@ public sealed class Options
 
   Neuroreef.exe [options]
 
-  (no options)          start the simulation (from the shipped gene bank if this build has one, otherwise a genesis
-                        run from random brains) and open the console in the browser
+  (no options)          start the simulation and open the console in the browser. Brains come from evolved.nrbank
+                        next to the exe if it exists, else the shipped gene bank if this build has one, else
+                        a genesis run from random brains
+  --evolve              evolve brains: a headless genesis run at full speed (400,000 steps, about an hour on a
+                        desktop) that saves evolved.nrbank and evolve-report.txt/.csv next to the exe
   --genesis             start from random brains (no gene bank), with genesis immigration
   --seed N              world and run seed (default 1)
-  --capacity N          agent slots (default 32768)
+  --capacity N          agent slots (default 65536)
   --threads N           worker threads (default: cores - 1, max 8)
   --port N              web console port (default 5800)
   --rate N              steps per second (default 30, 0 = as fast as possible)
@@ -65,13 +69,24 @@ public sealed class Options
                 case "--genesis-steps": o.GenesisSteps = int.Parse(Next()); break;
                 case "--headless": o.Headless = true; break;
                 case "--empty": o.Empty = true; break;
-                case "--steps": o.Steps = long.Parse(Next()); break;
+                case "--steps": o.Steps = long.Parse(Next()); o.StepsSet = true; break;
+                case "--evolve": o.Evolve = true; break;
                 case "--report": o.ReportEvery = int.Parse(Next()); break;
                 case "--csv": o.Csv = Next(); break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");
             }
+        }
+        if (o.Evolve)
+        {
+            string dir = AppContext.BaseDirectory;
+            o.Headless = true; o.Genesis = true;
+            if (!o.StepsSet) o.Steps = 400000;
+            if (o.ReportEvery == 2000) o.ReportEvery = 10000;
+            o.SaveBank ??= System.IO.Path.Combine(dir, "evolved.nrbank");
+            o.Csv ??= System.IO.Path.Combine(dir, "evolve-report.csv");
+            o.ReportTxt = System.IO.Path.Combine(dir, "evolve-report.txt");
         }
         return o;
     }

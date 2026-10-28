@@ -32,12 +32,20 @@ jobs:
         run: dotnet publish src/Neuroreef.Server -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o dist
       - name: Smoke test (headless, 300 steps)
         run: dist\Neuroreef.exe --headless --steps 300 --report 100 --capacity 16384
+      - name: Smoke test (evolve, 600 steps)
+        run: |
+          dist\Neuroreef.exe --evolve --steps 600 --capacity 16384
+          if (!(Test-Path dist\evolved.nrbank)) { throw 'evolved.nrbank not written' }
+          Remove-Item dist\evolved.nrbank, dist\evolve-report.*
       - name: Add run instructions
         shell: pwsh
-        run: Copy-Item RUN.txt dist/RUN.txt
+        run: |
+          Copy-Item RUN.txt dist/RUN.txt
+          Copy-Item Evolve.bat dist/Evolve.bat
       - uses: actions/upload-artifact@v4
         with:
           name: Neuroreef-win-x64
           path: |
             dist/Neuroreef.exe
             dist/RUN.txt
+            dist/Evolve.bat

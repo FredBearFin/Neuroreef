@@ -34,7 +34,7 @@ public static class GeneBank
             var living = new List<(float, int, bool)>();
             for (int i = 0; i < w.Cap; i++)
                 if (w.StageOf[i] >= St.Juvenile && w.Spc[i] == sp)
-                    living.Add((w.Children[i] + 0.1f * MathF.Min(1f, w.Age[i] / w.PLife[i]), i, false));
+                    living.Add((Life.Score(w, i), i, false));
             living.Sort((a, b) => b.Item1.CompareTo(a.Item1));
             for (int k = 0; k < Math.Min(K.BANK_LIVING, living.Count); k++) entries.Add(living[k]);
             bw.Write((ushort)entries.Count);

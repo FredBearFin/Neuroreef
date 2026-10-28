@@ -382,9 +382,15 @@ niche (a scavenger that hunts, a browser that grazes) without any species being 
 
 ### 7.4 Genesis (NR-210, NR-212)
 
-**Founders** are random. Every founder weight is round(U(−1,1)·12)/16, drawn from the run's hash.
-The plasticity genes are drawn uniformly from their ranges. There is no hand wiring, and a test
-asserts that founder genomes depend only on the RNG.
+**Founders** are random, by the same rule for every species. Memory-layer weights are
+round(U(−1,1)·FOUNDER_W)/16. Output weights are small, round(U(−1,1)·FOUNDER_W2)/16, and the output
+bias column starts at FOUNDER_BIAS/16 = −3 (± FOUNDER_BIAS_NOISE): a **calm newborn brain**, in
+which every primitive starts near 5% and useful actions must be learned or evolved upward. (The
+first genesis runs used large random weights, so every action fired about half the time, and the
+energy spent on constant strikes and mating attempts killed most animals young.) The plasticity
+genes are drawn uniformly from their ranges; body genes start at 0, the species body plan. There is
+no hand wiring, and tests assert that founder genomes depend only on the RNG and that founder gains
+start low.
 
 **Groups.** Real populations are clustered, and a lone colonist cannot find a mate (the Allee
 effect; the first genesis runs showed every sexual species stuck at its floor while colonists were
@@ -393,9 +399,16 @@ GROUP_SPREAD = 10 units of one site.
 
 **Genesis immigration.** During the first G steps (default 300,000), any species below its floor
 receives one colonist group per step on suitable cells (its realm):
-- 50% are new random brains.
-- 50% are mutated copies from the species' **elite archive**: 32 genomes, each scored by lifetime
-  offspring, then by age. A genome enters the archive when its owner dies, if it beats the weakest.
+- **Breeding from the best.** Each species keeps an **elite archive** of ARCHIVE = 64 genomes. A
+  genome enters it when its owner dies, if it beats the weakest. The score counts offspring that
+  grew up most: SCORE_MATURED·(offspring that reached maturity) + offspring conceived + 0.1·(age /
+  lifespan).
+- Once the archive holds 4 genomes, ARCHIVE_SHARE = 90% of colonists are bred from it. Parents are
+  chosen by tournament (best of TOURNAMENT = 3 random entries). A colonist of a sexual species is a
+  crossover of two winners; an asexual one is a copy. Both are then mutated.
+- The other 10% are new random brains, which keeps variation.
+- A colonist group lands next to a living adult of its species if one exists (sampled each step),
+  so successful genes meet each other.
 
 The floor ramps linearly from 25% of the species' initial count to 0 over G steps. Immigrants are counted as strays. After G
 steps there is no immigration unless `--strays` is given.
@@ -664,6 +677,12 @@ Taken every 32 steps. Per species:
 Global:
 - total amount in each pool
 - burning cells, nutrient (land and water)
+
+### 12.2b Life table (NR-214)
+
+Deaths by age class per species (before birth, juvenile, young adult < 2× maturity, older adult) and
+the mean age at death, in the samples, the headless report and the Species tab. It shows where a
+life cycle breaks.
 
 ### 12.3 Behaviour fingerprints (NR-213)
 
