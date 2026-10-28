@@ -26,7 +26,7 @@ public sealed class KAttribute : Attribute
 public static class K
 {
     // ---------------------------------------------------------------- 1. world
-    [K("World", "side of the toroidal world", "units", "HT: 512 (Revision H) so that food, not the slot count, limits a branch's population")] public const int WORLD = 512;
+    [K("World", "side of the toroidal world", "units", "HT")] public const int WORLD = 1024;
     [K("World", "field cell side", "units", "V1")] public const int FCELL = 4;
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
@@ -142,7 +142,7 @@ public static class K
     [K("Prehistory", "length of a prehistory run", "steps", "HT")] public const int PREHISTORY_STEPS = 500000;
     [K("Prehistory", "number of separate branches (populations on the same land) evolving side by side", "branches", "HT")] public const int BRANCHES = 3;
     [K("Prehistory", "symbolic time shown in the console: years per step", "years", "-")] public const int YEARS_PER_STEP = 1000;
-    [K("Prehistory", "agent slots per branch", "slots", "HT")] public const int BRANCH_CAPACITY = 24576;
+    [K("Prehistory", "agent slots per branch", "slots", "HT: doubled in Revision H so that food, not slots, limits a branch (the report warns if the cap binds)")] public const int BRANCH_CAPACITY = 49152;
     [K("Brain", "founders start in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder group", "units", "HT")] public const float GROUP_SPREAD = 10f;
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;

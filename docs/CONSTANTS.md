@@ -11,11 +11,11 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| WORLD | 512 | units | side of the toroidal world | HT: 512 (Revision H) so that food, not the slot count, limits a branch's population |
+| WORLD | 1024 | units | side of the toroidal world | HT |
 | FCELL | 4 | units | field cell side | V1 |
-| FW | 128 | cells | field grid side (WORLD/FCELL) | - |
+| FW | 256 | cells | field grid side (WORLD/FCELL) | - |
 | HCELL | 16 | units | spatial-hash cell side | V1 |
-| GW | 32 | cells | spatial-hash grid side | - |
+| GW | 64 | cells | spatial-hash grid side | - |
 | CAPACITY | 65536 | slots | default agent slots (animals, eggs, embryos) | HT |
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
 | RIVER_ACC | 900 | cells | catchment (cells) above which a cell is river | HT |
@@ -164,7 +164,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PREHISTORY_STEPS | 500000 | steps | length of a prehistory run | HT |
 | BRANCHES | 3 | branches | number of separate branches (populations on the same land) evolving side by side | HT |
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
-| BRANCH_CAPACITY | 24576 | slots | agent slots per branch | HT |
+| BRANCH_CAPACITY | 49152 | slots | agent slots per branch | HT: doubled in Revision H so that food, not slots, limits a branch (the report warns if the cap binds) |
 
 ## 11. Brain
 

@@ -121,9 +121,8 @@ public static class Clades
         // diet: the primary producers of its realm, in random proportions; every other pool near zero
         int[] plants = land ? new[] { (int)Pool.Grass, (int)Pool.Browse, (int)Pool.Seed, (int)Pool.Root, (int)Pool.Fruit, (int)Pool.Nectar }
                             : new[] { (int)Pool.Algae, (int)Pool.Phyto };
-        // every other pool near zero; the diet map is linear (Body.ExpressDiet), so every gene step counts the same
-        // and selection can act on a pool from zero (Revision H)
-        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-127 + (int)(U(40 + p) * 10f));
+        // every other pool low but off the floor (about 0.1-0.4% of the diet each), so selection can act on it
+        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-110 + (int)(U(40 + p) * 40f));
         foreach (int p in plants) body[G.B_DIET - B + p] = (sbyte)(U(20 + p) * 127f);
     }
 

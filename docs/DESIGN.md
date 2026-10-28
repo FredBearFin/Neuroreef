@@ -14,8 +14,8 @@ cloners and egg-eating, or made hunting unreachable)
 - Ancestors' non-plant diet genes start low but off the floor, so selection can act on them (§6.2).
 - One brain per ancestor; founders vary around it (FOUNDER_W_SD), so crossover recombines related
   networks (§6.2).
-- The report warns when the slot cap, not food, limited the world (on more than 1% of steps). The world
-  is 512 units square so that food limits a branch first.
+- The report warns when the slot cap, not food, limited the world (on more than 1% of steps). Each
+  prehistory branch has 49,152 slots so that food limits it first.
 - Speciation needs the two centres to be at least half-infertile (SPLIT_MIN_D, RMS per gene).
 
 **Changes in Revision G.1: variation to evolve from.** The first Revision G run showed no body change
@@ -107,8 +107,8 @@ Headless mode runs the same core with no server and writes reports, CSV files an
 
 ## 3. World and memory map
 
-The world is a torus of WORLD = 512 units (Revision H; 1024 before). The field grid has cells of 4 units (FW = 128, 16,384
-cells). The spatial hash has cells of 16 units (GW = 32). C = capacity = 65,536 agent slots by
+The world is a torus of WORLD = 1024 units. The field grid has cells of 4 units (FW = 256, 65,536
+cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = 65,536 agent slots by
 default (`--capacity`). Eggs and embryos occupy slots too. When every slot is in use, births and
 immigrants are refused and counted (`SlotShortage`); the console shows **WORLD FULL**, because that
 is a limit of the computer, not an ecological result.
@@ -299,8 +299,9 @@ at random within the "simple" corner of the gene space (`Clades.AncestorBody`):
 Each founder has its own random brain plus the starter kit (§7.7), and the ancestor's body with
 standing variation: each body gene ± FOUNDER_BODY_SD, as in any natural population (Revision G.1).
 Revision H: all founders of an ancestor share its one random brain, each byte ± FOUNDER_W_SD; and an
-ancestor's non-plant diet genes start near zero. Diet genes map linearly to digestive shares (Revision
-H: the old exponential map made the floor a plateau that selection could not climb). Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
+ancestor's non-plant diet genes start between −110 and −70 instead of at the floor, so meat or carrion
+eating can be selected. (A linear diet map was tried and withdrawn: it made every ancestor an even
+generalist, each bite yielded about a third less, and populations starved.) Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 
