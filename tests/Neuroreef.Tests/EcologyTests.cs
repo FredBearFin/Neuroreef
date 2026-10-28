@@ -375,6 +375,30 @@ public class EcologyTests
         Assert.True(D(f1, other) > 2f * D(f1, f2));
     }
 
+    [Fact] // DESIGN §8: a hermaphrodite can mate with a male (it is the mother) and pays for siring only when it sires
+    public void HermaphroditeMatesWithAMale()
+    {
+        var (w, a, b) = Pair(true, true);
+        w.Genome[a * G.LEN + G.B_HERM] = 60; Body.Express(w, a); w.Energy[a] = w.EmaxOf(a); w.Age[a] = w.PMature[a] * 2;
+        w.Sex[b] = 1;
+        Assert.True(Decide.ValidPartner(w, a, b));
+        Act(w, a, P.MATE, b); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        Assert.NotEqual(0, w.Flags[a] & Flag.Carrying);              // the hermaphrodite carries the young
+        Assert.Equal(0, w.Flags[b] & Flag.Carrying);
+    }
+
+    [Fact] // DESIGN §6.3: wings too small to fly still speed a runner (wing-assisted running)
+    public void PartialWingsHelpARunner()
+    {
+        var w = new World(16, 1);
+        w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_MASS] = 60;
+        w.Genome[G.B_WINGS] = -127; Body.Express(w, 0); float none = w.PVLand[0];
+        w.Genome[G.B_WINGS] = -20; Body.Express(w, 0);
+        Assert.NotEqual(Loco.Fly, w.LocoOf(0));
+        Assert.True(w.PVLand[0] > none);
+    }
+
     [Fact] // NR-303: thirst rises on land only
     public void NoThirstInWater()
     {

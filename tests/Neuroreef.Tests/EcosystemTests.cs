@@ -120,6 +120,35 @@ public class EcosystemTests
         Assert.Equal(ej, w.Energy[j]);
     }
 
+    [Fact] // DESIGN §9.6: matching alleles: a strain infects a host whose recognition genes match its key far more often
+    public void StrainsInfectMatchingHostsMore()
+    {
+        int Infections(bool match)
+        {
+            using var sim = new Simulation(16384, 64, 1, empty: true);
+            var w = sim.W;
+            int a = Animal(w, 0, true, 4), src = Animal(w, 0, true, 5);
+            w.Infect[src] = K.DIS_STEPS; w.Virulence[src] = 1f;
+            for (int k = 0; k < G.NMHC; k++)
+            {
+                w.Strain[src * G.NMHC + k] = w.Genome[a * G.LEN + G.B_MHC + k];
+                if (!match) w.Strain[src * G.NMHC + k] = (sbyte)(w.Genome[a * G.LEN + G.B_MHC + k] > 0 ? -127 : 127);
+            }
+            var act = new int[w.NS]; int n = 0;
+            for (int t = 0; t < 3000; t++)
+            {
+                w.IInfNear[a] = 3; w.IVirNear[a] = 1f; w.IStrainSrc[a] = src; w.Infect[src] = K.DIS_STEPS;
+                w.Energy[a] = w.EmaxOf(a); w.Energy[src] = w.EmaxOf(src);
+                Life.Run(w, act); w.Step++;
+                if (w.Infect[a] > 0) { n++; w.Infect[a] = 0; w.Immune[a] = 0; }
+                if (w.StageOf[a] == St.Dead) break;
+            }
+            return n;
+        }
+        int hit = Infections(true), miss = Infections(false);
+        Assert.True(hit > 5 * Math.Max(1, miss), $"matching {hit}, mismatched {miss}");
+    }
+
     [Fact] // NR-329: contact with infected conspecifics infects; infection ends in recovery with immunity, or death
     public void DiseaseSpreadsByContactAndLeavesImmunity()
     {

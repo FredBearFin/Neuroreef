@@ -58,7 +58,13 @@ public static class K
     [K("Allometry", "lifespan at M=1", "steps", "V1")] public const float C_LIFE = 3200f;
     [K("Allometry", "maturity age at M=1", "steps", "V1")] public const float C_MATURE = 250f;
     [K("Allometry", "sight range at M=1", "units", "V1")] public const float C_SIGHT = 16f;
-    [K("Allometry", "movement cost", "E/(M*v^2)", "V1")] public const float C_MOVE = 0.0020f;
+    [K("Allometry", "movement cost (x C_SPEED x M^EXP_MOVE x speed)", "E/(M^0.7*v*C_SPEED)", "V1")] public const float C_MOVE = 0.0020f;
+    [K("Allometry", "mass exponent of the cost of transport", "-", "ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982)")] public const float EXP_MOVE = 0.7f;
+    [K("Allometry", "speed gained on land per unit of wing that cannot yet lift the body (wing-assisted running, gliding)", "-", "ECO: proto-wings aid running up slopes and gliding before powered flight (Dial 2003)")] public const float GLIDE = 0.3f;
+    [K("Reproduction", "extra cost to a hermaphrodite of fathering young (male function)", "E/M", "ECO: sex allocation: male function costs female output (Charnov 1982)")] public const float C_SIRE = 0.02f;
+    [K("Disease", "match width: a strain infects a host whose recognition genes are within this RMS distance (/127) of its key", "-", "ECO: matching-alleles host-parasite genetics (Hamilton 1980; Lively 2010): rare host genotypes escape, which can favour sex")] public const float MHC_W = 0.35f;
+    [K("Disease", "mutation of a strain's key per transmission (SD)", "int8", "ECO: pathogens evolve far faster than their hosts")] public const float MHC_MUT = 6f;
+    [K("Clades", "two clusters are separate species when, along the axis between their centres, the gap is this many pooled SDs", "-", "ECO: genotypic clusters with few intermediates (Mallet 1995)")] public const float SPLIT_GAP = 3f;
     [K("Allometry", "thirst rise per step (death after ~830 dry steps)", "/step", "HT")] public const float C_THIRST = 0.0012f;
     [K("Allometry", "fatigue gain at full sprint", "/step", "HT")] public const float C_FATIGUE = 0.012f;
     [K("Allometry", "fatigue recovery (x3 resting)", "/step", "HT")] public const float C_RECOVER = 0.004f;
@@ -191,7 +197,6 @@ public static class K
     [K("Clades", "founding organisms per ancestor", "organisms", "HT")] public const int ANCESTOR_COUNT = 600;
     [K("Clades", "steps between speciation checks", "steps", "-")] public const int SPEC_EVERY = 2000;
     [K("Clades", "smallest cluster that can become a species", "organisms", "ECO: a viable population")] public const int MIN_SPLIT = 40;
-    [K("Clades", "two gene clusters are separate species when their centres are this many times their spread apart", "-", "ECO: genotypic-cluster species (Mallet 1995): two clusters with few intermediates")] public const float SPLIT_SEP = 1.5f;
     [K("Clades", "and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2", "-", "ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H)")] public const float SPLIT_MIN_D = 0.228f;
     [K("Clades", "an extinct clade's slot is reused only after this many steps", "steps", "-")] public const int CLADE_RECYCLE = 20000;
 

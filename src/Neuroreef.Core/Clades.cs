@@ -117,6 +117,7 @@ public static class Clades
         body[G.B_HERM - B] = (sbyte)(U(35) < 0.5f ? -40 : 40);     // separate sexes or hermaphrodite
         body[G.B_SEXRATIO - B] = (sbyte)((U(36) - 0.5f) * 40f);    // about even sex ratio
         body[G.B_IMMUNE - B] = (sbyte)((U(37) * 2f - 1f) * 127f);
+        for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // diet: the primary producers of its realm, in random proportions; every other pool near zero
         int[] plants = land ? new[] { (int)Pool.Grass, (int)Pool.Browse, (int)Pool.Seed, (int)Pool.Root, (int)Pool.Fruit, (int)Pool.Nectar }
                             : new[] { (int)Pool.Algae, (int)Pool.Phyto };
@@ -175,25 +176,38 @@ public static class Clades
         Array.Copy(x.Vec, f1 * D, x.C1, 0, D);
         int f2 = Farthest(x.Vec, n, x.C1);
         Array.Copy(x.Vec, f2 * D, x.C2, 0, D);
-        int n1 = 0, n2 = 0; float spread = 0;
+        int n1 = 0, n2 = 0; 
         Span<float> s1 = stackalloc float[D];
         for (int it = 0; it < 10; it++)
         {
             Array.Clear(x.M);                     // M accumulates cluster 2, s1 cluster 1
             s1.Clear();
-            n1 = n2 = 0; spread = 0;
+            n1 = n2 = 0;
             for (int a = 0; a < n; a++)
             {
                 float d1 = Dist2(x.Vec, a, x.C1), d2 = Dist2(x.Vec, a, x.C2);
-                if (d1 <= d2) { n1++; for (int k = 0; k < D; k++) s1[k] += x.Vec[a * D + k]; spread += d1; }
-                else { n2++; for (int k = 0; k < D; k++) x.M[k] += x.Vec[a * D + k]; spread += d2; }
+                if (d1 <= d2) { n1++; for (int k = 0; k < D; k++) s1[k] += x.Vec[a * D + k]; }
+                else { n2++; for (int k = 0; k < D; k++) x.M[k] += x.Vec[a * D + k]; }
             }
             if (n1 == 0 || n2 == 0) return -1;
             for (int k = 0; k < D; k++) { x.C1[k] = s1[k] / n1; x.C2[k] = x.M[k] / n2; }
         }
         float sep = MathF.Sqrt(Dist2C(x.C1, x.C2));
-        float rms = MathF.Sqrt(spread / n);
-        if (sep / MathF.Sqrt(D) < K.SPLIT_MIN_D || sep < K.SPLIT_SEP * rms) return -1;   // SPLIT_MIN_D is per gene (RMS)
+        if (sep < 1e-6f || sep / MathF.Sqrt(D) < K.SPLIT_MIN_D) return -1;   // SPLIT_MIN_D is per gene (RMS)
+        // few intermediates: along the axis between the centres, the gap is SPLIT_GAP pooled SDs (Revision H; the old
+        // whole-genome spread test was ~9 sigma for a sexual population and almost never passed)
+        float m1 = 0, m2 = 0, q1 = 0, q2 = 0; int k1 = 0, k2 = 0;
+        for (int a = 0; a < n; a++)
+        {
+            float t = 0;
+            for (int k = 0; k < D; k++) t += (x.Vec[a * D + k] - x.C1[k]) * (x.C2[k] - x.C1[k]);
+            t /= sep;
+            if (Dist2(x.Vec, a, x.C1) <= Dist2(x.Vec, a, x.C2)) { m1 += t; q1 += t * t; k1++; } else { m2 += t; q2 += t * t; k2++; }
+        }
+        if (k1 == 0 || k2 == 0) return -1;
+        m1 /= k1; m2 /= k2;
+        float pooled = MathF.Sqrt(MathF.Max(1e-8f, (q1 - k1 * m1 * m1 + q2 - k2 * m2 * m2) / n));
+        if ((m2 - m1) / pooled < K.SPLIT_GAP) return -1;
         // count the whole clade by nearest centre; both sides must be viable populations
         int c1 = 0, c2 = 0;
         for (int i = 0; i < w.Cap; i++)

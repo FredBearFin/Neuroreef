@@ -80,7 +80,7 @@ public static class Decide
         float reach = w.PReach[i];
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         int nOff = R > K.HCELL ? 25 : 9;
-        int seen = 0, infNear = 0;
+        int seen = 0, infNear = 0, strainSrc = -1;
         for (int o = 0; o < nOff && seen < K.MAX_NEIGH; o++)
             {
                 int hc = World.WrapI(hcy + Ring[o].dy, K.GW) * K.GW + World.WrapI(hcx + Ring[o].dx, K.GW);
@@ -101,7 +101,7 @@ public static class Decide
                     bool active = sj >= St.Juvenile;
                     // disease passes between organisms in contact that look alike (a pathogen adapted to a host kind)
                     bool alike = Body.LooksAlike(w, i, j);
-                    if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; }
+                    if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; strainSrc = j; }
                     if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                     if (alike)
                     {
@@ -264,6 +264,7 @@ public static class Decide
         w.IKinDensity[i] = f[F.KIN_DENSITY];
         w.IInfNear[i] = (byte)Math.Min(255, infNear);
         w.IVirNear[i] = infNear > 0 ? virSum / infNear : 0f;
+        w.IStrainSrc[i] = strainSrc;
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
         f.CopyTo(new Span<float>(w.Feat, i * F.N, F.N));
         if (probe.Slot == i)
@@ -290,9 +291,10 @@ public static class Decide
     /// </summary>
     public static bool ValidPartner(World w, int i, int j)
     {
-        if (w.PSexual[i] == 0 || w.PSexual[j] == 0 || w.PHerm[i] != w.PHerm[j]) return false;
+        if (w.PSexual[i] == 0 || w.PSexual[j] == 0) return false;
         if (!Ready(w, j)) return false;
-        return w.PHerm[i] != 0 || w.Sex[i] != w.Sex[j];
+        // a hermaphrodite can mate with anyone sexual (mixed systems, so switching is not fatal); two separate-sexed need opposite sexes
+        return w.PHerm[i] != 0 || w.PHerm[j] != 0 || w.Sex[i] != w.Sex[j];
     }
 
     /// <summary>Raw senses of another organism, written from feature index k: close, relative size, closing speed, armed, meat-eating.</summary>

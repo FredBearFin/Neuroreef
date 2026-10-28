@@ -79,6 +79,7 @@ public static class Body
         float vLand = v * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         bool flies = wings * K.WING_LIFT >= MathK.Cbrt(m);
+        if (!flies) vLand *= 1f + K.GLIDE * wings * wings * K.WING_LIFT / MathK.Cbrt(m);   // wings that cannot lift still help (partial flight)
         float vAir = flies ? v * K.FLY_SPEED * MathF.Min(1f, wings * K.WING_LIFT / MathK.Cbrt(m) - 0.5f) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
@@ -133,8 +134,9 @@ public static class Body
     public static float Distance(World w, int a, int b)
     {
         int ga = a * G.LEN + G.BODY, gb = b * G.LEN + G.BODY; float s = 0;
-        for (int k = 0; k < G.NBODY; k++) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
-        return MathF.Sqrt(s / G.NBODY);
+        const int N = G.NBODY - G.NMHC;              // recognition genes are not part of fertility (balancing selection keeps them diverse)
+        for (int k = 0; k < N; k++) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
+        return MathF.Sqrt(s / N);
     }
 
     static readonly int[] Visible = { G.B_MASS, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_ARMOUR, G.B_STRIKE, G.B_LEGN, G.B_FINN };

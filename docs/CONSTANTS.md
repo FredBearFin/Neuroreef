@@ -46,7 +46,33 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_LIFE | 3200 | steps | lifespan at M=1 | V1 |
 | C_MATURE | 250 | steps | maturity age at M=1 | V1 |
 | C_SIGHT | 16 | units | sight range at M=1 | V1 |
-| C_MOVE | 0.002 | E/(M*v^2) | movement cost | V1 |
+| C_MOVE | 0.002 | E/(M^0.7*v*C_SPEED) | movement cost (x C_SPEED x M^EXP_MOVE x speed) | V1 |
+| EXP_MOVE | 0.7 | - | mass exponent of the cost of transport | ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982) |
+| GLIDE | 0.3 | - | speed gained on land per unit of wing that cannot yet lift the body (wing-assisted running, gliding) | ECO: proto-wings aid running up slopes and gliding before powered flight (Dial 2003) |
+
+## 3. Reproduction
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| C_SIRE | 0.02 | E/M | extra cost to a hermaphrodite of fathering young (male function) | ECO: sex allocation: male function costs female output (Charnov 1982) |
+
+## 4. Disease
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| MHC_W | 0.35 | - | match width: a strain infects a host whose recognition genes are within this RMS distance (/127) of its key | ECO: matching-alleles host-parasite genetics (Hamilton 1980; Lively 2010): rare host genotypes escape, which can favour sex |
+| MHC_MUT | 6 | int8 | mutation of a strain's key per transmission (SD) | ECO: pathogens evolve far faster than their hosts |
+
+## 5. Clades
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| SPLIT_GAP | 3 | - | two clusters are separate species when, along the axis between their centres, the gap is this many pooled SDs | ECO: genotypic clusters with few intermediates (Mallet 1995) |
+
+## 6. Allometry
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
 | C_THIRST | 0.0012 | /step | thirst rise per step (death after ~830 dry steps) | HT |
 | C_FATIGUE | 0.012 | /step | fatigue gain at full sprint | HT |
 | C_RECOVER | 0.004 | /step | fatigue recovery (x3 resting) | HT |
@@ -58,7 +84,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
 | GROW_RESERVE | 0.5 | xEmax | a juvenile grows only from energy above this share of its reserve | ECO: growth is fuelled by surplus after maintenance; hungry young grow slowly (Revision D) |
 
-## 3. Food
+## 7. Food
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -78,7 +104,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RHO_MEAT | 4 | E/M | energy density of body tissue (meat); also the cost of building tissue | ECO: tissue ~2-4x the stored reserve per unit mass |
 | RHO_BLOOD | 3 | E/M | energy density of blood | ECO: below tissue |
 
-## 4. Hunting
+## 8. Hunting
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -94,7 +120,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |
 
-## 5. Brain
+## 9. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -120,7 +146,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.000468604 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 0.000467727 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -131,7 +157,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ARCHIVE | 64 | genomes | elite archive size per species | HT |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 
-## 6. Prehistory
+## 10. Prehistory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -140,7 +166,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
 | BRANCH_CAPACITY | 24576 | slots | agent slots per branch | HT |
 
-## 7. Brain
+## 11. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -148,7 +174,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | GROUP_SPREAD | 10 | units | radius of a founder group | HT |
 | BANK_LIVING | 96 | genomes | genomes per species stored in a gene bank (living sample) | HT |
 
-## 8. Body
+## 12. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -191,7 +217,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
-## 9. Clades
+## 13. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -201,11 +227,10 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ANCESTOR_COUNT | 600 | organisms | founding organisms per ancestor | HT |
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
 | MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
-| SPLIT_SEP | 1.5 | - | two gene clusters are separate species when their centres are this many times their spread apart | ECO: genotypic-cluster species (Mallet 1995): two clusters with few intermediates |
 | SPLIT_MIN_D | 0.228 | - | and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2 | ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H) |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 10. Reproduction
+## 14. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -214,7 +239,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 11. Care
+## 15. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -223,7 +248,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 12. Disease
+## 16. Disease
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -236,7 +261,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
 | DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
 
-## 13. Weather
+## 17. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -244,7 +269,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 14. Vegetation
+## 18. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -295,7 +320,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 15. Fire
+## 19. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -310,6 +335,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 16. Organisms
+## 20. Organisms
 
 There are no designed species (Revision F). Life starts from 6 land and 4 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

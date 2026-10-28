@@ -40,7 +40,7 @@ public static class Life
         w.Serial[c] = w.NextSerial++;
         w.Children[c] = 0; w.Matured[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
         w.IActs[c] = 0; w.ITarget[c] = -1; w.IMate[c] = -1; w.IScanning[c] = 0; w.ISpeed[c] = 0; w.IHeading[c] = w.Heading[c];
-        w.Infect[c] = 0; w.Immune[c] = 0; w.Virulence[c] = 0; w.IInfNear[c] = 0; w.IVirNear[c] = 0; w.CareLeft[c] = 0; w.CareStep[c] = 0;
+        w.Infect[c] = 0; w.Immune[c] = 0; w.Virulence[c] = 0; w.IInfNear[c] = 0; w.IVirNear[c] = 0; w.IStrainSrc[c] = -1; w.CareLeft[c] = 0; w.CareStep[c] = 0;
         if (mother >= 0)
         {
             w.MotherSlot[c] = mother; w.MotherSerial[c] = w.Serial[mother];
@@ -207,7 +207,11 @@ public static class Life
         if (w.Immune[i] > 0) { w.Immune[i] -= 1; return false; }
         int n = w.IInfNear[i];
         float v = n > 0 ? w.IVirNear[i] : 1f;
-        float beta = K.DIS_BETA * 1.5f * v / (0.5f + v) * protect;     // transmission saturates with virulence
+        // matching alleles: a strain infects a host whose recognition genes match its key (Red Queen, Hamilton 1980)
+        int src = w.IStrainSrc[i];
+        bool fromContact = n > 0 && src >= 0 && w.Infect[src] > 0;
+        float match = fromContact ? Match(w, src, i) : 1f;
+        float beta = K.DIS_BETA * 1.5f * v / (0.5f + v) * protect * match;     // transmission saturates with virulence
         float escape = 1f;
         for (; n > 0; n--) escape *= 1f - beta;
         float pContact = 1f - escape, pSpill = K.DIS_SPILL * protect;
@@ -217,9 +221,24 @@ public static class Life
             float v0 = u < pContact ? w.IVirNear[i] : 1f;           // a strain caught from a neighbour, or a new one from the reservoir
             w.Infect[i] = K.DIS_STEPS;
             w.Virulence[i] = Math.Clamp(v0 * MathK.Exp(K.VIR_MUT * Rng.N(seed, step, (uint)i, Rs.Disease + 2)), 0.05f, 10f);
+            // the strain's key: the contact's, mutated; a new strain from the reservoir has a random key
+            for (int k = 0; k < G.NMHC; k++)
+            {
+                float key = u < pContact && fromContact ? w.Strain[src * G.NMHC + k] + Rng.N(seed, step, (uint)i, Rs.Disease + 100u + (uint)k) * K.MHC_MUT
+                                                        : Rng.U(seed, step, (uint)i, Rs.Disease + 100u + (uint)k) * 254f - 127f;
+                w.Strain[i * G.NMHC + k] = (sbyte)Math.Clamp((int)MathF.Round(key), -127, 127);
+            }
             w.T.Infections[s]++;
         }
         return false;
+    }
+
+    /// <summary>How well the strain carried by s matches host h's recognition genes (1 = perfect).</summary>
+    static float Match(World w, int s, int h)
+    {
+        float d2 = 0; int gh = h * G.LEN + G.B_MHC;
+        for (int k = 0; k < G.NMHC; k++) { float d = (w.Strain[s * G.NMHC + k] - w.Genome[gh + k]) * (1f / 127f); d2 += d * d; }
+        return MathK.Exp(-d2 / G.NMHC / (K.MHC_W * K.MHC_W));
     }
 
     /// <summary>

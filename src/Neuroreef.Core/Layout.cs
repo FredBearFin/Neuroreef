@@ -79,8 +79,10 @@ public static class G
         B_SEXRATIO = B_CARE + 13,                // share of a mother's young that are female (separate sexes)
         B_FINN = B_CARE + 14,                    // number of fin pairs (1..4)
         B_EYEN = B_CARE + 15,                    // number of eye pairs (1..4)
-        B_IMMUNE = B_CARE + 16;                  // immune investment (0..1): resists disease, costs energy
-    public const int NBODY = B_IMMUNE + 1 - BODY;   // 38
+        B_IMMUNE = B_CARE + 16,                  // immune investment (0..1): resists disease, costs energy
+        B_MHC = B_CARE + 17;                     // NMHC recognition genes: a pathogen strain must match them to infect
+    public const int NMHC = 4;
+    public const int NBODY = B_MHC + NMHC - BODY;   // 42
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
     public const int NC = 9;                     // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;

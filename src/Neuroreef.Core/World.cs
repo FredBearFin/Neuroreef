@@ -38,6 +38,8 @@ public sealed class World
     public readonly float[] Infect, Immune;   // steps left infectious / immune (0 = susceptible)
     public readonly float[] Virulence;        // virulence of the pathogen strain an infected organism carries
     public readonly float[] IVirNear;         // mean virulence of the infected contacts, from DECIDE
+    public readonly sbyte[] Strain;           // NMHC bytes per slot: the recognition key of the strain an organism carries
+    public readonly int[] IStrainSrc;         // an infected contact whose strain this organism is exposed to, from DECIDE (-1 none)
     public readonly byte[] IInfNear;          // infected conspecifics in contact, counted by DECIDE (own slot only)
     // ---- agents: brain
     public readonly sbyte[] Genome;        // Cap * G.LEN
@@ -118,7 +120,7 @@ public sealed class World
         PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PLegPairs = new byte[c];
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
-        CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c];
+        CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];
         Genome = new sbyte[(long)c * G.LEN];
         W2f = new float[(long)c * G.W2N];
         Trace = new float[(long)c * G.W2N];

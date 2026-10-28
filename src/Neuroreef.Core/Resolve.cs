@@ -118,7 +118,8 @@ public static class Resolve
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
-        float moveCost = K.C_MOVE * mass * spd * spd * (loco == Loco.Fly ? K.FLY_COST : 1f);
+        // cost of transport: ~M^0.7 x speed (Taylor et al. 1982); equal to the old M*v^2 rule at M=1 and full walking speed
+        float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f);
         bool sick = w.Infect[i] > 0;
         float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
         // growth: a juvenile builds tissue from its spare energy (no free mass, DESIGN §9.1). It grows at most at
@@ -265,14 +266,18 @@ public static class Resolve
         w.PendingR[j] += K.R_MATE;
         w.T.Matings[w.Spc[i]]++;
         float rew = K.R_MATE;
-        bool herm = w.PHerm[i] != 0;
-        int mother = herm || w.Sex[i] == 0 ? i : j, father = mother == i ? j : i;
+        bool hi = w.PHerm[i] != 0, hj = w.PHerm[j] != 0, herm = hi && hj;
+        // with one hermaphrodite, the separate-sexed partner keeps its role; a hermaphrodite meeting a male is the mother
+        int mother = herm ? i : hi ? (w.Sex[j] == 0 ? j : i) : hj ? (w.Sex[i] == 0 ? i : j) : w.Sex[i] == 0 ? i : j;
+        int father = mother == i ? j : i;
+        if (w.PHerm[father] != 0) w.Energy[father] -= K.C_SIRE * w.PM[father];   // male function costs a hermaphrodite
         // the father has only a short refractory period; a mother's breeding cooldown starts when she conceives (Conceive)
         w.Cooldown[father] = K.REFRACT * w.PCool[father];
         float d = Body.Distance(w, i, j) / K.D_COMPAT;
         if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Compat) >= MathK.Exp(-d * d * d * d)) return rew;   // incompatible: no young
         if (herm)
         {
+            w.Energy[i] -= K.C_SIRE * w.PM[i];                     // both sire as well
             rew += Conceive(w, i, j, w.PLitter[i]);
             w.PendingR[j] += Conceive(w, j, i, w.PLitter[j]);
             return rew;
