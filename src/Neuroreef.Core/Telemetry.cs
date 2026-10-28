@@ -47,6 +47,8 @@ public sealed class Telemetry
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
 
     public readonly float[] Ring;          // RING * Len
+    public readonly float[] LongRing;      // LONG_RING * Len: one sample in LONG_EVERY, for runs of weeks
+    public int LongHead;
     public volatile int Head;              // number of samples written (ring index = (Head-1) % RING)
     readonly float[] _acc;                 // scratch per sample
     readonly int[] _cnt;
@@ -87,6 +89,7 @@ public sealed class Telemetry
         Names = names.ToArray();
         Len = Names.Length;
         Ring = new float[K.RING * Len];
+        LongRing = new float[K.LONG_RING * Len];
         _acc = new float[Len];
         _cnt = new int[ns];
     }
@@ -107,6 +110,17 @@ public sealed class Telemetry
     }
 
     public int SampleCount => Math.Min(Head, K.RING);
+
+    /// <summary>The thinned long history (one sample in LONG_EVERY): k = 0 is the oldest kept.</summary>
+    public bool LongSample(int k, Span<float> dst)
+    {
+        int head = LongHead, n = Math.Min(head, K.LONG_RING);
+        if (k < 0 || k >= n) return false;
+        new ReadOnlySpan<float>(LongRing, ((head - n + k) % K.LONG_RING) * Len, Len).CopyTo(dst);
+        return true;
+    }
+
+    public int LongCount => Math.Min(LongHead, K.LONG_RING);
 
     /// <summary>Take a sample (every SAMPLE_EVERY steps). Serial; no allocation.</summary>
     public void Take()
@@ -220,6 +234,7 @@ public sealed class Telemetry
 
         int idx = Head % K.RING;
         Array.Copy(a, 0, Ring, idx * Len, Len);
+        if (Head % K.LONG_EVERY == 0) { Array.Copy(a, 0, LongRing, (LongHead % K.LONG_RING) * Len, Len); LongHead++; }
         Head = Head + 1;
     }
 

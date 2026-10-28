@@ -23,6 +23,11 @@ public sealed class Prehistory : IDisposable
     public volatile bool Finished;
     public ulong Step => B[0].W.Step;
     public double Rate;                          // steps per second (per branch, all in lockstep)
+    public string? CheckpointPath;               // when set, the whole state is saved here every CheckpointMinutes (at a barrier)
+    public double CheckpointMinutes = 30;
+    public string? LastCheckpointError;
+    public DateTime LastCheckpoint = DateTime.MinValue;
+    long _lastSaveMs;
     long _lastT; ulong _lastStep;
     readonly System.Diagnostics.Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -99,7 +104,24 @@ public sealed class Prehistory : IDisposable
         long t = _sw.ElapsedMilliseconds;
         if (t - _lastT >= 1000) { Rate = (step - _lastStep) * 1000.0 / Math.Max(1, t - _lastT); _lastT = t; _lastStep = step; }
         if (step >= (ulong)e.TotalSteps) Finished = true;
+        if (CheckpointPath != null && t - _lastSaveMs >= CheckpointMinutes * 60_000) { _lastSaveMs = t; SaveCheckpoint(); }
         while (_paused && !_stop) Thread.Sleep(50);
+    }
+
+    /// <summary>Save the whole state now. Call only while no branch is stepping (at a barrier, or after StopAndWait).</summary>
+    public void SaveCheckpoint()
+    {
+        if (CheckpointPath == null) return;
+        try { Checkpoint.Save(this, CheckpointPath); LastCheckpoint = DateTime.Now; LastCheckpointError = null; }
+        catch (Exception ex) { LastCheckpointError = ex.Message; Console.Error.WriteLine("checkpoint failed: " + ex.Message); }
+    }
+
+    /// <summary>Resume from a checkpoint (before Start). The current settings (Pending) replace the saved ones.</summary>
+    public void LoadCheckpoint(string path)
+    {
+        Checkpoint.Load(this, path);
+        foreach (var s in B) s.W.Evo.CopyFrom(Pending);
+        _lastStep = Step;
     }
 
     // ------------------------------------------------------------------ progress and the result

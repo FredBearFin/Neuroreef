@@ -18,6 +18,16 @@ public static class Program
         // gene bank: --load-bank, then evolved.nrbank beside the exe, then the bank shipped with this build.
         // With none of these (or with --prehistory) the console runs a prehistory first.
         GeneBank.Data? bank = null;
+        // a prehistory in progress (its checkpoint beside the exe) is resumed before anything else
+        if (!o.Evolve && !o.Headless && !o.NoCheckpoint)
+        {
+            o.CheckpointPath ??= Path.Combine(AppContext.BaseDirectory, "prehistory.nrck");
+            if (File.Exists(o.CheckpointPath) && o.LoadBank == null && !o.RandomBrains && !o.NewPrehistory)
+            {
+                Console.WriteLine("a prehistory is in progress: resuming it from " + o.CheckpointPath);
+                o.NewPrehistory = true; o.ResumePrehistory = true;
+            }
+        }
         if (!o.Evolve && !o.RandomBrains && !o.NewPrehistory)
         {
             try

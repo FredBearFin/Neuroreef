@@ -94,9 +94,10 @@ public static class Host
         {
             // stopped during the prehistory: keep what has evolved so far, without making it the default
             string part = o.SaveBank ?? Path.Combine(AppContext.BaseDirectory, "prehistory-partial.nrbank");
-            try { pre.StopAndWait(); pre.SaveBank(part); }
+            try { pre.StopAndWait(); pre.SaveCheckpoint(); pre.SaveBank(part); }
             catch (Exception e) { Console.Error.WriteLine("could not save the prehistory: " + e.Message); }
             Console.WriteLine($"prehistory stopped at step {pre.Step:N0}; brains so far saved: {part} (start with --load-bank to use them)");
+            if (pre.CheckpointPath != null) Console.WriteLine("its whole state is saved: start Neuroreef.exe again to resume it");
         }
         else if (o.SaveBank != null) { GeneBank.Save(host.W, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }
         app.StopAsync().Wait(2000);

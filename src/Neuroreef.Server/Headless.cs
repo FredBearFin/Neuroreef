@@ -48,8 +48,24 @@ public static class Headless
         var e = o.PrehistorySettings(stepsAreLength: true);
         using var pre = new Prehistory(o.Branches, K.BRANCH_CAPACITY, o.Seed, o.Threads, e);
         var s0 = pre.Pending;
+        if (o.CheckpointPath != null)
+        {
+            pre.CheckpointPath = o.CheckpointPath; pre.CheckpointMinutes = o.CheckpointMinutes;
+            if (File.Exists(o.CheckpointPath))
+            {
+                try { pre.LoadCheckpoint(o.CheckpointPath); Console.WriteLine($"RESUMED from {o.CheckpointPath} at step {pre.Step:N0}"); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}");
+                    Console.Error.WriteLine("Move or delete that file to start a new prehistory, or start with the options it was made with.");
+                    return 2;
+                }
+            }
+        }
         Console.WriteLine("NEUROREEF 2  PREHISTORY");
-        Console.WriteLine($"{pre.B.Length} separate worlds evolve over {s0.TotalSteps:N0} steps ({(long)s0.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years).");
+        if (s0.TotalSteps == int.MaxValue) Console.WriteLine($"{pre.B.Length} separate worlds evolve until you stop them (Ctrl+C saves and stops).");
+        else Console.WriteLine($"{pre.B.Length} separate worlds evolve over {s0.TotalSteps:N0} steps ({(long)s0.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years).");
+        if (pre.CheckpointPath != null) Console.WriteLine($"Whole state saved every {pre.CheckpointMinutes:0} min to {pre.CheckpointPath}; run the same command again to resume.");
         Console.WriteLine("Each starts from founders and is then births and deaths only: nothing is ever added. A species that dies out is gone.");
         Console.WriteLine("The world you watch starts from the brains this saves:");
         Console.WriteLine("  " + o.SaveBank);
@@ -82,6 +98,9 @@ public static class Headless
             }
         }
         pre.StopAndWait();
+        pre.SaveCheckpoint();
+        if (pre.Finished && pre.CheckpointPath != null)   // reached its length: the next start is a new prehistory
+            try { File.Move(pre.CheckpointPath, pre.CheckpointPath + ".done", overwrite: true); } catch (Exception ex) { Console.Error.WriteLine(ex.Message); }
         Console.WriteLine($"done: {pre.Step:N0} steps in {sw.Elapsed.TotalMinutes:F1} min");
         var report = new StringBuilder();
         report.AppendLine($"NEUROREEF 2 PREHISTORY REPORT: {pre.Step:N0} steps, {pre.B.Length} branches (separate births-only worlds), seed {o.Seed}");
@@ -113,9 +132,10 @@ public static class Headless
             {
                 if (!pre.B[bestB].W.Sp[s].Used) continue;
                 float[] f0 = new float[tr.Length + 1], f1 = new float[tr.Length + 1]; bool seen = false;
-                for (int k = 0; k < T.SampleCount; k++)
+                // the long history first (runs of days), then the recent ring
+                for (int k = 0; k < T.LongCount + T.SampleCount; k++)
                 {
-                    T.Sample(k, row);
+                    if (k < T.LongCount) T.LongSample(k, row); else T.Sample(k - T.LongCount, row);
                     if (row[T.SpeciesOffset(s, Telemetry.S_COUNT)] <= 0) continue;
                     for (int q = 0; q < tr.Length; q++) f1[q] = row[T.SpeciesOffset(s, Telemetry.S_TRAITS + tr[q])];
                     f1[tr.Length] = row[T.SpeciesOffset(s, Telemetry.S_KIT)];

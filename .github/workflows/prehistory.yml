@@ -79,6 +79,7 @@ jobs:
         run: |
           Copy-Item RUN.txt dist/RUN.txt
           Copy-Item Evolve.bat dist/Evolve.bat
+          Copy-Item LongRun.bat dist/LongRun.bat
           Copy-Item result/evolve-report.txt dist/evolve-report.txt
           Copy-Item result/evolved.nrbank dist/evolved-shipped.nrbank
       - uses: actions/upload-artifact@v4
@@ -88,5 +89,6 @@ jobs:
             dist/Neuroreef.exe
             dist/RUN.txt
             dist/Evolve.bat
+            dist/LongRun.bat
             dist/evolve-report.txt
             dist/evolved-shipped.nrbank

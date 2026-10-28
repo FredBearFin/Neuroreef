@@ -14,13 +14,16 @@ public sealed class Options
     public string? ReportTxt;
     public long Steps = 100000;
     public int ReportEvery = 2000;
-    public string? LoadBank, SaveBank, Csv;
+    public string? LoadBank, SaveBank, Csv, CheckpointPath;
+    public double CheckpointMinutes = 30;
+    public bool NoCheckpoint, ResumePrehistory;
     public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
 
     /// <summary>The prehistory's starting evolution settings from the command line.</summary>
     public EvoSettings PrehistorySettings(bool stepsAreLength)
     {
-        var e = new EvoSettings { TotalSteps = stepsAreLength && StepsSet ? (int)Steps : PrehistorySteps };
+        long n = stepsAreLength && StepsSet ? Steps : PrehistorySteps;
+        var e = new EvoSettings { TotalSteps = n <= 0 || n > int.MaxValue ? int.MaxValue : (int)n };   // 0 = until stopped
         return e;
     }
     public string BankSource = "random";      // evolved, shipped, file, or random
@@ -53,7 +56,13 @@ public sealed class Options
   --save-bank FILE      where to save evolved brains (default evolved.nrbank next to the exe)
 
   --evolve              the prehistory without the console (headless): saves evolved.nrbank and
-                        evolve-report.txt/.csv next to the exe (what Evolve.bat runs)
+                        evolve-report.txt/.csv next to the exe (what Evolve.bat runs). It saves its
+                        whole state to prehistory.nrck every 30 minutes; starting it again with the
+                        same --branches and --seed resumes from there (a reboot loses at most 30 min)
+  --steps 0             evolve: run until stopped (Ctrl+C saves and stops)
+  --checkpoint FILE     evolve: where to save and resume the whole state (default prehistory.nrck)
+  --checkpoint-minutes N   evolve: minutes between saves (default 30)
+  --no-checkpoint       evolve: never save or resume the whole state
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
   --report N            headless: report interval in steps (default 2000)
@@ -89,6 +98,9 @@ public sealed class Options
                 case "--evolve": o.Evolve = true; break;
                 case "--report": o.ReportEvery = int.Parse(Next()); break;
                 case "--csv": o.Csv = Next(); break;
+                case "--checkpoint": o.CheckpointPath = Next(); break;
+                case "--checkpoint-minutes": o.CheckpointMinutes = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--no-checkpoint": o.NoCheckpoint = true; break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");
@@ -102,6 +114,7 @@ public sealed class Options
             o.SaveBank ??= System.IO.Path.Combine(dir, "evolved.nrbank");
             o.Csv ??= System.IO.Path.Combine(dir, "evolve-report.csv");
             o.ReportTxt = System.IO.Path.Combine(dir, "evolve-report.txt");
+            if (!o.NoCheckpoint) o.CheckpointPath ??= System.IO.Path.Combine(dir, "prehistory.nrck");
         }
         return o;
     }

@@ -28,6 +28,6 @@ public sealed class EvoSettings
         MutSmall = System.Math.Clamp(MutSmall, 0.5f, 12f);
         MutBigShare = System.Math.Clamp(MutBigShare, 0f, 0.5f);
         MutBig = System.Math.Clamp(MutBig, 1f, 64f);
-        TotalSteps = System.Math.Clamp(TotalSteps, 1000, 5000000);
+        TotalSteps = System.Math.Clamp(TotalSteps, 1000, int.MaxValue);   // int.MaxValue = until stopped
     }
 }

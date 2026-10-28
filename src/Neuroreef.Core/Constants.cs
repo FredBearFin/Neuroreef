@@ -39,6 +39,8 @@ public static class K
     [K("World", "season amplitude on moisture", "-", "V1")] public const float A_SEASON = 0.45f;
     [K("World", "telemetry sample interval", "steps", "HT")] public const int SAMPLE_EVERY = 32;
     [K("World", "telemetry ring length", "samples", "HT")] public const int RING = 4096;
+    [K("World", "long-history ring length (one sample in LONG_EVERY)", "samples", "HT: with LONG_EVERY it covers 33 million steps")] public const int LONG_RING = 2048;
+    [K("World", "samples between long-history samples", "samples", "HT")] public const int LONG_EVERY = 512;
     [K("World", "max neighbours examined per animal per step", "animals", "HT")] public const int MAX_NEIGH = 64;
     [K("World", "max sight range (bounded by the 5x5 hash neighbourhood)", "units", "HT")] public const float MAX_SIGHT = 32f;
 

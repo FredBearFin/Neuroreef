@@ -42,6 +42,7 @@ jobs:
         run: |
           Copy-Item RUN.txt dist/RUN.txt
           Copy-Item Evolve.bat dist/Evolve.bat
+          Copy-Item LongRun.bat dist/LongRun.bat
       - uses: actions/upload-artifact@v4
         with:
           name: Neuroreef-win-x64
@@ -49,3 +50,4 @@ jobs:
             dist/Neuroreef.exe
             dist/RUN.txt
             dist/Evolve.bat
+            dist/LongRun.bat

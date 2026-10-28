@@ -58,6 +58,20 @@ public sealed class SimHost : IDisposable
         {
             Pre = new Prehistory(o.Branches, K.BRANCH_CAPACITY, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false));
             BankSource = "prehistory";
+            if (o.CheckpointPath != null)
+            {
+                Pre.CheckpointPath = o.CheckpointPath; Pre.CheckpointMinutes = o.CheckpointMinutes;
+                if (o.ResumePrehistory)
+                {
+                    Pre.LoadCheckpoint(o.CheckpointPath);   // a checkpoint that does not fit stops the program with its reason
+                    Console.WriteLine($"resumed the prehistory at step {Pre.Step:N0}");
+                }
+                else if (File.Exists(o.CheckpointPath))
+                {
+                    File.Move(o.CheckpointPath, o.CheckpointPath + ".old", overwrite: true);   // --prehistory: a new one; keep the old state
+                    Console.WriteLine("a new prehistory: the previous one's state was kept as " + o.CheckpointPath + ".old");
+                }
+            }
         }
         _thread = new Thread(Loop) { IsBackground = true, Name = "neuroreef-host", Priority = ThreadPriority.AboveNormal };
     }
@@ -129,6 +143,9 @@ public sealed class SimHost : IDisposable
         try { pre.SaveBank(path); BankPath = path; Console.WriteLine("evolved brains saved: " + path + " (the next start uses them)"); }
         catch (Exception e) { Console.Error.WriteLine("could not save the evolved brains: " + e.Message); }
         var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed);
+        // the prehistory is over: its state is kept, but the next start will not resume it
+        if (pre.CheckpointPath != null && File.Exists(pre.CheckpointPath))
+            try { File.Move(pre.CheckpointPath, pre.CheckpointPath + ".done", overwrite: true); } catch (Exception e) { Console.Error.WriteLine(e.Message); }
         pre.Dispose();
         Pre = null;
         _live = live;

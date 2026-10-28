@@ -29,6 +29,45 @@ public class PrehistoryTests
         Assert.True(created - founders <= conceived + lays, $"created {created - founders}, conceived {conceived}, lays {lays}");
     }
 
+    static void RunTo(Prehistory pre, int steps)
+    {
+        pre.Configure(s => s.TotalSteps = steps);
+        pre.Start();
+        var until = DateTime.UtcNow.AddMinutes(10);
+        while (!pre.Finished && DateTime.UtcNow < until) Thread.Sleep(20);
+        Assert.True(pre.Finished);
+        pre.StopAndWait();
+    }
+
+    static byte[] State(Prehistory pre)
+    {
+        string p = System.IO.Path.GetTempFileName();
+        try { Checkpoint.Save(pre, p); return System.IO.File.ReadAllBytes(p); } finally { System.IO.File.Delete(p); }
+    }
+
+    [Fact] // DESIGN §7.6: a prehistory saved and resumed continues exactly as one that never stopped
+    public void CheckpointResumesExactly()
+    {
+        byte[] straight;
+        using (var a = new Prehistory(2, 8192, 81, 2)) { RunTo(a, 1500); straight = State(a); }
+        string path = System.IO.Path.GetTempFileName();
+        try
+        {
+            using (var b = new Prehistory(2, 8192, 81, 2)) { RunTo(b, 1000); Checkpoint.Save(b, path); }
+            using var c = new Prehistory(2, 8192, 81, 2);
+            c.LoadCheckpoint(path);
+            Assert.Equal(1000UL, c.Step);
+            RunTo(c, 1500);
+            var resumed = State(c);
+            Assert.Equal(straight.Length, resumed.Length);
+            Assert.True(straight.AsSpan().SequenceEqual(resumed), "resumed state differs from the straight run");
+            // a checkpoint for another seed is refused
+            using var d = new Prehistory(2, 8192, 82, 2);
+            Assert.Throws<System.IO.InvalidDataException>(() => d.LoadCheckpoint(path));
+        }
+        finally { System.IO.File.Delete(path); }
+    }
+
     [Fact] // NR-323, NR-325: branches step in lockstep; a settings change reaches every branch at a barrier
     public void BranchesRunInLockstepAndTakeSettings()
     {

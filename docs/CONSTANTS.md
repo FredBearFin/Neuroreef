@@ -24,6 +24,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | A_SEASON | 0.45 | - | season amplitude on moisture | V1 |
 | SAMPLE_EVERY | 32 | steps | telemetry sample interval | HT |
 | RING | 4096 | samples | telemetry ring length | HT |
+| LONG_RING | 2048 | samples | long-history ring length (one sample in LONG_EVERY) | HT: with LONG_EVERY it covers 33 million steps |
+| LONG_EVERY | 512 | samples | samples between long-history samples | HT |
 | MAX_NEIGH | 64 | animals | max neighbours examined per animal per step | HT |
 | MAX_SIGHT | 32 | units | max sight range (bounded by the 5x5 hash neighbourhood) | HT |
 

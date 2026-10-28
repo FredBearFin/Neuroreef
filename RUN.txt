@@ -25,6 +25,27 @@ The prehistory (the first start):
   Evolve.bat runs the same prehistory without graphics and also writes evolve-report.txt (what
   happened to each species in each branch, and why).
 
+RUNNING THE PREHISTORY FOR WEEKS (LongRun.bat)
+  Double-click LongRun.bat. It evolves with no graphics, so the whole CPU goes to evolution, and runs
+  until you stop it. Every 30 minutes it saves its whole state to prehistory.nrck (about 2-3 GB).
+  - If the PC restarts, the power goes or the window is closed: double-click LongRun.bat again. It
+    resumes from the last save; at most 30 minutes are lost. It also restarts itself after a crash.
+  - To see how it is doing: the window prints a line every 10,000 steps (alive organisms and
+    self-sustaining species per branch). Press Ctrl+C, then double-click LongRun.bat again: it saves
+    the report evolve-report.txt and the brains evolved.nrbank, then carries on from where it was.
+  - To stop for good: press Ctrl+C. Then double-click Neuroreef.exe to watch the world that evolved.
+    (Rename prehistory.nrck first if you also want Neuroreef.exe to stop offering to resume it.)
+  Before you leave it running:
+  - Plug in the power. LongRun.bat turns off sleep and hibernate while on mains power.
+  - Settings > Windows Update > Pause updates (up to 5 weeks), so Windows does not restart the PC.
+  - Optional: to start it automatically after a restart, press Win+R, type shell:startup, and put a
+    shortcut to LongRun.bat in the folder that opens.
+  - Keep about 10 GB free on the drive (the state file and its temporary copy while saving).
+  Start it again with the same options it was started with (LongRun.bat always uses the same ones).
+
+  Neuroreef.exe (the console) also saves its prehistory every 30 minutes and offers to resume it,
+  if you prefer to watch the branches in 3D while they evolve (slower: the graphics take CPU).
+
 Options (run from a command prompt in this folder):
   Neuroreef.exe --random-brains      open the world with random brains even if evolved.nrbank exists
   Neuroreef.exe --evolve             what Evolve.bat runs
