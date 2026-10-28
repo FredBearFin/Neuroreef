@@ -163,7 +163,7 @@ public static class K
     [K("Body", "basal cost per unit of weaponry", "xbasal", "ECO: jaws, teeth and claws are costly tissue")] public const float COST_STRIKE_ABS = 0.15f;
     [K("Body", "largest armour a gene can give", "-", "-")] public const float ARMOUR_MAX = 3f;
     [K("Body", "largest weaponry (strike) a gene can give", "-", "-")] public const float STRIKE_MAX = 2f;
-    [K("Body", "sum of digestive efficiencies an organism can have (a generalist spreads it, a specialist concentrates it)", "-", "ECO: digestive specialisation trades off breadth against efficiency")] public const float DIET_BUDGET = 1.0f;
+    [K("Body", "length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it", "-", "ECO: digestive specialisation trades off breadth against efficiency")] public const float DIET_BUDGET = 1.0f;
     [K("Body", "largest litter a gene can give", "young", "-")] public const int LITTER_MAX = 12;
     [K("Body", "smallest newborn mass as a share of adult mass", "-", "ECO: fish and insect eggs")] public const float BIRTH_LO = 0.01f;
     [K("Body", "largest newborn mass as a share of adult mass", "-", "ECO: precocial mammals")] public const float BIRTH_HI = 0.3f;

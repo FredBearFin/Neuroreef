@@ -114,12 +114,14 @@ public static class Body
         float sum = 0;
         for (int p = 0; p < Pools.N; p++)
         {
-            // exponential map: a specialist digests its main food well (Revision H tried a linear map: every ancestor became
-            // an even generalist, each bite yielded a third less, and populations starved)
-            float raw = Reachable(realm, p) ? MathK.Exp(w.Genome[g + G.B_DIET + p] * (1f / 127f) * MathK.Log(20f)) : 0f;
-            dst[p] = raw; sum += raw;
+            // linear map, L2 budget (Revision I): every gene step counts the same, so a pool can be selected up from zero,
+            // and a small side share costs a specialist almost nothing, which is how omnivory starts. An even 6-way
+            // generalist digests each food at ~0.41 against a specialist's 0.95. (A linear map with an L1 budget starved:
+            // every ancestor became an even generalist at 1/6 per food.)
+            float raw = Reachable(realm, p) ? Organ(w.Genome[g + G.B_DIET + p]) : 0f;
+            dst[p] = raw; sum += raw * raw;
         }
-        float k = sum > 0 ? K.DIET_BUDGET / sum : 0;
+        float k = sum > 0 ? K.DIET_BUDGET / MathF.Sqrt(sum) : 0;
         for (int p = 0; p < Pools.N; p++) dst[p] = MathF.Min(0.95f, dst[p] * k);
     }
 

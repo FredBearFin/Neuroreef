@@ -314,8 +314,10 @@ Each founder has its own random brain plus the starter kit (§7.7), and the ance
 standing variation: each body gene ± FOUNDER_BODY_SD, as in any natural population (Revision G.1).
 Revision H: all founders of an ancestor share its one random brain, each byte ± FOUNDER_W_SD; and an
 ancestor's non-plant diet genes start between −110 and −70 instead of at the floor, so meat or carrion
-eating can be selected. (A linear diet map was tried and withdrawn: it made every ancestor an even
-generalist, each bite yielded about a third less, and populations starved.) Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
+eating can be selected. Diet genes map linearly to digestion, normalised to unit length (L2, Revision I):
+a side food costs a specialist little, and an even generalist digests each food at about 0.41 against a
+specialist's 0.95. (A linear map with a sum-to-one budget starved every ancestor in tests: 21 organisms
+against 22,309 with L2 after 8,000 steps.) Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 

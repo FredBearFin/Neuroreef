@@ -191,7 +191,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_STRIKE_ABS | 0.15 | xbasal | basal cost per unit of weaponry | ECO: jaws, teeth and claws are costly tissue |
 | ARMOUR_MAX | 3 | - | largest armour a gene can give | - |
 | STRIKE_MAX | 2 | - | largest weaponry (strike) a gene can give | - |
-| DIET_BUDGET | 1 | - | sum of digestive efficiencies an organism can have (a generalist spreads it, a specialist concentrates it) | ECO: digestive specialisation trades off breadth against efficiency |
+| DIET_BUDGET | 1 | - | length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it | ECO: digestive specialisation trades off breadth against efficiency |
 | LITTER_MAX | 12 | young | largest litter a gene can give | - |
 | BIRTH_LO | 0.01 | - | smallest newborn mass as a share of adult mass | ECO: fish and insect eggs |
 | BIRTH_HI | 0.3 | - | largest newborn mass as a share of adult mass | ECO: precocial mammals |

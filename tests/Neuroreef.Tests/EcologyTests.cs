@@ -444,13 +444,13 @@ public class EcologyTests
         w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_WINGS] = -127;   // a land walker (legs only)
         Body.Express(w, i);
         float basal0 = w.PBasal[i], v0 = w.PVmax[i], grass0 = w.PDiet[(int)Pool.Grass], seed0 = w.PDiet[(int)Pool.Seed];
-        float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += w.PDiet[p];
-        Assert.InRange(sum0, K.DIET_BUDGET - 0.02f, K.DIET_BUDGET + 0.02f);
+        float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += w.PDiet[p] * w.PDiet[p];
+        Assert.InRange(MathF.Sqrt(sum0), K.DIET_BUDGET - 0.02f, K.DIET_BUDGET + 0.02f);   // L2 budget
         w.Genome[G.B_DIET + (int)Pool.Grass] = 127;        // specialise on grass
         w.Genome[G.B_SPEED] = 127;                         // faster
         Body.Express(w, i);
-        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += w.PDiet[p];
-        Assert.InRange(sum, K.DIET_BUDGET - 0.06f, K.DIET_BUDGET + 0.02f);
+        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += w.PDiet[p] * w.PDiet[p];
+        Assert.InRange(MathF.Sqrt(sum), K.DIET_BUDGET - 0.06f, K.DIET_BUDGET + 0.02f);
         Assert.True(w.PDiet[(int)Pool.Grass] > grass0);
         Assert.True(w.PDiet[(int)Pool.Seed] < seed0);
         Assert.True(w.PVmax[i] > v0 * 1.4f);
