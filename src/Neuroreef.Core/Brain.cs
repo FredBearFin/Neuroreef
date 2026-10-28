@@ -46,10 +46,12 @@ public static class Brain
     {
         for (int k = 0; k < G.LEN; k++)
         {
+            // body genes (each a polygenic trait) have their own rate; brain and reflex bytes MUT_RATE
+            float rate = k >= G.BODY && k < G.BODY + G.NBODY ? e.MutBody : e.MutRate;
             float u = Rng.U(seed, step, key, Rs.Mutate + (uint)k * 8u);
-            if (u >= e.MutRate) continue;
+            if (u >= rate) continue;
             float n = Rng.N(seed, step, key, Rs.Mutate + (uint)k * 8u + 1u);
-            float d = (u < e.MutRate * e.MutBigShare) ? n * e.MutBig : n * e.MutSmall;
+            float d = (u < rate * e.MutBigShare) ? n * e.MutBig : n * e.MutSmall;
             int v = g[k] + (int)MathF.Round(d);
             g[k] = (sbyte)Math.Clamp(v, -127, 127);
         }

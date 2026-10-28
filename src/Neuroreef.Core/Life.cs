@@ -117,6 +117,7 @@ public static class Life
         {
             Brain.RandomGenome(w.GenomeOf(c), w.Seed, (uint)w.Step, key);
             Clades.AncestorBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, clade % (K.ANCESTORS_LAND + K.ANCESTORS_WATER), true);
+            Clades.VaryBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, key);
         }
         else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
         Body.Express(w, c);

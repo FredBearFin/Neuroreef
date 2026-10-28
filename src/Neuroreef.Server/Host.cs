@@ -250,7 +250,7 @@ public static class Host
                 {
                     type = "prehistory", step = pre.Step, rate = pre.Rate, paused = pre.Paused, finished = pre.Finished,
                     yearsPerStep = K.YEARS_PER_STEP, view = H.ViewBranch, branches,
-                    settings = new { mutRate = e.MutRate, mutSmall = e.MutSmall, mutBigShare = e.MutBigShare, mutBig = e.MutBig, totalSteps = e.TotalSteps },
+                    settings = new { mutRate = e.MutRate, mutBody = e.MutBody, mutSmall = e.MutSmall, mutBigShare = e.MutBigShare, mutBig = e.MutBig, totalSteps = e.TotalSteps },
                 });
                 return _preJson;
             }
@@ -431,6 +431,7 @@ public static class Host
                                     switch (p.Name)
                                     {
                                         case "mutRate": s.MutRate = (float)v; break;
+                                        case "mutBody": s.MutBody = (float)v; break;
                                         case "mutSmall": s.MutSmall = (float)v; break;
                                         case "mutBigShare": s.MutBigShare = (float)v; break;
                                         case "mutBig": s.MutBig = (float)v; break;

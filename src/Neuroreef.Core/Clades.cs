@@ -124,6 +124,13 @@ public static class Clades
         foreach (int p in plants) body[G.B_DIET - B + p] = (sbyte)(U(20 + p) * 127f);
     }
 
+    /// <summary>Standing variation: each founder's body genes vary around its ancestor's by FOUNDER_BODY_SD.</summary>
+    public static void VaryBody(Span<sbyte> body, uint seed, uint key)
+    {
+        for (int k = 0; k < body.Length; k++)
+            body[k] = (sbyte)Math.Clamp((int)MathF.Round(body[k] + Rng.N(seed, 0, key, Rs.Founder + 9000u + (uint)k) * K.FOUNDER_BODY_SD), -127, 127);
+    }
+
     // ------------------------------------------------------------------ bookkeeping and speciation (serial, after LIFECYCLE)
 
     public static void Update(World w)

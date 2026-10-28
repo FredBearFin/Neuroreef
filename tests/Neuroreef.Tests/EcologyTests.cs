@@ -2,6 +2,7 @@
 // gene bank (NR-205, NR-210 ... NR-212, NR-303, NR-311, NR-315, NR-316, NR-320).
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Xunit;
@@ -31,6 +32,36 @@ public class EcologyTests
         var masses = new float[used];
         for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) masses[w.Spc[i]] = w.PM[i];
         Assert.True(masses.Distinct().Count() >= used - 1);
+    }
+
+    [Fact] // NR-320: founders vary around their ancestor (standing variation), as a natural population does
+    public void FoundersVaryAroundTheirAncestor()
+    {
+        var w = new World(512, 21);
+        Terrain.Build(w);
+        w.Sp[0].Used = true; w.Sp[0].Alive = true;
+        var v = new List<float>();
+        for (uint k = 0; k < 300; k++) { int c = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, k + 1); if (c >= 0) v.Add(w.Genome[c * G.LEN + G.B_SPEED]); }
+        Assert.True(v.Count > 200);
+        float m = v.Average(), sd = MathF.Sqrt(v.Select(x => (x - m) * (x - m)).Average());
+        Assert.InRange(sd, 6f, 20f);
+    }
+
+    [Fact] // DESIGN §7.3: body genes mutate at MUT_BODY, brain and reflex bytes at MUT_RATE
+    public void BodyGenesMutateAtTheirOwnRate()
+    {
+        var g = new sbyte[G.LEN]; var e = new EvoSettings();
+        long body = 0, brain = 0; const int N = 10000;
+        for (uint t = 0; t < N; t++)
+        {
+            Array.Clear(g);
+            Brain.Mutate(g, 5, t, 77, e);
+            for (int k = 0; k < G.LEN; k++) if (g[k] != 0) { if (k >= G.BODY && k < G.BODY + G.NBODY) body++; else brain++; }
+        }
+        // a small change of sigma MUT_SMALL rounds to 0 about 20% of the time
+        float pBody = body / (float)(N * G.NBODY), pBrain = brain / (float)(N * (G.LEN - G.NBODY));
+        Assert.InRange(pBody, 0.6f * K.MUT_BODY, 1.05f * K.MUT_BODY);
+        Assert.InRange(pBrain, 0.6f * K.MUT_RATE, 1.05f * K.MUT_RATE);
     }
 
     [Fact] // NR-320: legs, fins and wings decide locomotion and realm; organs cost energy; wings cost more on a heavy body

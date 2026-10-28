@@ -62,9 +62,10 @@ public sealed class Simulation : IDisposable
             for (int k = 0; k < K.ANCESTOR_COUNT; k++, key++)
             {
                 if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
-                // each founder: its own random brain, the ancestor's body (Found's mutation makes them vary)
+                // each founder: its own random brain, the ancestor's body with standing variation
                 Brain.RandomGenome(tmpl, seed, 0, key);
                 Clades.AncestorBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, a, land);
+                Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
                 Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
             }
         }

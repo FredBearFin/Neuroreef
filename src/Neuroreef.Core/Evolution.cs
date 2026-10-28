@@ -6,7 +6,8 @@ namespace Neuroreef;
 
 public sealed class EvoSettings
 {
-    public float MutRate = K.MUT_RATE;            // mutation probability per genome byte
+    public float MutRate = K.MUT_RATE;            // mutation probability per brain or reflex byte
+    public float MutBody = K.MUT_BODY;            // mutation probability per body gene
     public float MutSmall = K.MUT_SMALL;          // small mutation sigma (int8 units)
     public float MutBigShare = K.MUT_BIG_SHARE;   // share of mutations that are large jumps
     public float MutBig = K.MUT_BIG;              // large mutation sigma
@@ -16,13 +17,14 @@ public sealed class EvoSettings
 
     public void CopyFrom(EvoSettings o)
     {
-        MutRate = o.MutRate; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps;
+        MutRate = o.MutRate; MutBody = o.MutBody; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps;
     }
 
     /// <summary>Keep every knob inside a sensible range.</summary>
     public void Clamp()
     {
         MutRate = System.Math.Clamp(MutRate, 0.00005f, 0.05f);
+        MutBody = System.Math.Clamp(MutBody, 0f, 0.2f);
         MutSmall = System.Math.Clamp(MutSmall, 0.5f, 12f);
         MutBigShare = System.Math.Clamp(MutBigShare, 0f, 0.5f);
         MutBig = System.Math.Clamp(MutBig, 1f, 64f);

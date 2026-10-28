@@ -120,7 +120,9 @@ public static class K
     [K("Brain", "reward: per offspring produced", "-", "HT")] public const float R_BIRTH = 2.0f;
     [K("Brain", "reward: per unit damage / Emax (negative)", "-", "HT")] public const float R_PAIN = 4.0f;
     [K("Brain", "reward: per unit fear rise (negative)", "-", "HT")] public const float R_FEAR = 0.5f;
-    [K("Brain", "mutation probability per genome byte (1/LEN: about one mutation per offspring)", "-", "ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown)")] public const float MUT_RATE = 1f / G.LEN;
+    [K("Brain", "mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring)", "-", "ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown)")] public const float MUT_RATE = 1f / G.LEN;
+    [K("Brain", "mutation probability per body gene per birth (about 0.4 body changes per newborn)", "-", "ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte")] public const float MUT_BODY = 0.01f;
+    [K("Brain", "standing variation of founders' body genes around their ancestor (SD)", "int8", "ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992)")] public const float FOUNDER_BODY_SD = 12f;
     [K("Brain", "small mutation sigma", "int8", "HT")] public const float MUT_SMALL = 2f;
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;

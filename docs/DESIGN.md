@@ -3,6 +3,11 @@
 Document NR-DD-001, Revision G. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Changes in Revision G.1: variation to evolve from.** The first Revision G run showed no body change
+at all: founders were near-clones and body genes shared the brain's per-byte mutation rate (0.018
+body changes per birth). Founders now vary around their ancestor (§6.2) and body genes have their own
+rate (§7.3).
+
 **Changes in Revision G: no designed categories left in bodies, senses or breeding** (the user:
 "where else have you [hand-fixed things]")
 - Senses are raw (§4): the nearest and the largest other organism, by relative size, closing speed,
@@ -273,8 +278,8 @@ at random within the "simple" corner of the gene space (`Clades.AncestorBody`):
   exists to eat at the start.
 - **Life history:** sexual or asexual, eggs or live birth, litter, newborn size and care, all random.
 
-Each founder has its own random brain plus the starter kit (§7.7), and the ancestor's body slightly
-mutated. Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
+Each founder has its own random brain plus the starter kit (§7.7), and the ancestor's body with
+standing variation: each body gene ± FOUNDER_BODY_SD, as in any natural population (Revision G.1). Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 
@@ -367,11 +372,14 @@ learning work.
 
 - **Sexual:** row-wise uniform crossover of W1 rows and W2 rows from the two parents.
 - **Asexual:** a copy of the single parent.
-- **Mutation** (both cases): each byte changes with probability μ = 0.02 by round(2·N), or, with
-  probability μ·0.05, by round(16·N). The plasticity genes and body genes mutate by the same rule
-  (a body-gene step of 2 changes a trait by about 1%).
-- **Species identity** (locomotion, realm, reproduction mode, life stages) is fixed; body traits drift
-  within their ranges (§7.5).
+- **Mutation** (both cases): each byte changes with probability μ by round(2·N), or, with probability
+  μ·0.05, by round(16·N). There are two rates (Revision G.1):
+  - brain, plasticity and reflex bytes: μ = MUT_RATE = 1/G.LEN, about one change per newborn;
+  - body genes: μ = MUT_BODY, about 0.4 changes per newborn. Each body gene stands for a whole
+    polygenic trait, so it changes far more often than one brain byte.
+
+  A body-gene step of 2 changes a trait by about 1%.
+- Nothing about an organism is fixed by its clade: every body trait can evolve over its whole range.
 
 ### 7.4 Prehistory and the live world (NR-210, NR-212, NR-313)
 
