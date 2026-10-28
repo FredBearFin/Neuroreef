@@ -6,8 +6,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { agentAt } from './net.js';
+import { merge } from './creatures/far.js';
+import { buildSpecies } from './creatures/index.js';
+import { withAnim } from './creatures/anim.js';
 
-const RELIEF = 55;           // world units of height between lake level and the highest peak
+const RELIEF = 55;
+const NEAR_DIST = 90;        // animals closer than this to the camera are drawn with the detailed, animated model
+const NEAR_CAP = 1500;       // at most this many per species           // world units of height between lake level and the highest peak
 
 export class World3D {
   constructor(canvas, meta) {
@@ -231,13 +236,11 @@ export class World3D {
   _buildSpecies() {
     this.spMeshes = [];
     for (const sp of this.meta.species) {
-      const geo = creatureGeometry(sp.shape);
-      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(sp.color), flatShading: true,
-        transparent: sp.shape === 15, opacity: sp.shape === 15 ? 0.7 : 1, emissive: new THREE.Color(sp.color).multiplyScalar(0.18) });
-      const mesh = new THREE.InstancedMesh(geo, mat, 512);
-      mesh.count = 0; mesh.frustumCulled = false;
-      this.scene.add(mesh);
-      this.spMeshes.push({ mesh, cap: 512, geo, mat, size: sp.swarm ? 1.6 : 1.5 * Math.cbrt(sp.mass), fly: sp.loco === 'Fly', swim: sp.loco === 'Swim', juvSwim: sp.juvLoco === 'Swim' });
+      // near: detailed and animated (creatures/); far: the simple shape in one colour
+      const b = buildSpecies(sp);
+      const S = { b, size: sp.swarm ? 1.6 : 1.5 * Math.cbrt(sp.mass), fly: sp.loco === 'Fly', swim: sp.loco === 'Swim', juvSwim: sp.juvLoco === 'Swim', near: null, far: null };
+      this._alloc(S, 'near', NEAR_CAP); this._alloc(S, 'far', 512);
+      this.spMeshes.push(S);
     }
     this.eggs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 6, 4), new THREE.MeshLambertMaterial({ color: 0xffffff }), 4096);
     this.eggs.count = 0; this.eggs.frustumCulled = false;
@@ -245,12 +248,21 @@ export class World3D {
     this.scene.add(this.eggs);
   }
 
+  /** (Re)create the near or far instanced mesh of a species with room for cap animals. */
+  _alloc(S, which, cap) {
+    const old = S[which];
+    if (old) { this.scene.remove(old.mesh); old.mesh.dispose(); if (which === 'near') old.mesh.geometry.dispose(); }
+    const geo = which === 'near' ? withAnim(S.b.nearGeo, cap) : S.b.farGeo;
+    const mesh = new THREE.InstancedMesh(geo, which === 'near' ? S.b.nearMat : S.b.farMat, cap);
+    mesh.count = 0; mesh.frustumCulled = false;
+    this.scene.add(mesh);
+    S[which] = { mesh, cap, anim: which === 'near' ? geo.attributes.aAnim : null };
+  }
+
   _grow(k, need) {
-    const s = this.spMeshes[k];
-    let cap = s.cap; while (cap < need) cap *= 2;
-    this.scene.remove(s.mesh); s.mesh.dispose();
-    s.mesh = new THREE.InstancedMesh(s.geo, s.mat, cap); s.mesh.frustumCulled = false; s.cap = cap;
-    this.scene.add(s.mesh);
+    const S = this.spMeshes[k];
+    let cap = S.far.cap; while (cap < need) cap *= 2;
+    this._alloc(S, 'far', cap);
   }
 
   setAgents(a) {
@@ -391,8 +403,11 @@ export class World3D {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     const counts = new Int32Array(this.spMeshes.length);
     for (const e of this.agents.values()) if (e.stage !== 0) counts[e.sp]++;
-    for (let i = 0; i < this.spMeshes.length; i++) if (counts[i] > this.spMeshes[i].cap) this._grow(i, counts[i]);
+    for (let i = 0; i < this.spMeshes.length; i++) if (counts[i] > this.spMeshes[i].far.cap) this._grow(i, counts[i]);
     counts.fill(0);
+    const nearN = new Int32Array(this.spMeshes.length);
+    const camX = this.camera.position.x, camZ = this.camera.position.z, near2 = NEAR_DIST * NEAR_DIST;
+    for (const S of this.spMeshes) S.b.nearMat.userData.uniforms.uTime.value = now / 1000;
     let ne = 0;
     const eggCol = new THREE.Color();
     const t = now / 1000;
@@ -413,10 +428,25 @@ export class World3D {
       p.set(x, gy, y);
       q.setFromAxisAngle(up, -h);
       s.set(sc, sc * (e.rest ? 0.7 : 1), sc);
-      S.mesh.setMatrixAt(counts[e.sp]++, m.compose(p, q, s));
+      m.compose(p, q, s);
+      const ddx = x - camX, ddz = y - camZ;
+      if (ddx * ddx + ddz * ddz < near2 && nearN[e.sp] < S.near.cap) {
+        // close to the camera: the animated model; gait from the distance moved since the last frame
+        const k = nearN[e.sp]++;
+        S.near.mesh.setMatrixAt(k, m);
+        let mdx = e.x - e.px, mdy = e.y - e.py;
+        if (mdx > this.W / 2) mdx -= this.W; else if (mdx < -this.W / 2) mdx += this.W;
+        if (mdy > this.W / 2) mdy -= this.W; else if (mdy < -this.W / 2) mdy += this.W;
+        const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * S.size + 0.05));
+        e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
+        const A = S.near.anim.array;
+        A[k * 4] = e.gait; A[k * 4 + 1] = (serial % 997) / 997; A[k * 4 + 2] = e.acts; A[k * 4 + 3] = e.rest ? 1 : 0;
+      } else S.far.mesh.setMatrixAt(counts[e.sp]++, m);
     }
     for (let i = 0; i < this.spMeshes.length; i++) {
-      const M = this.spMeshes[i].mesh; M.count = counts[i]; M.instanceMatrix.needsUpdate = true;
+      const S = this.spMeshes[i];
+      S.far.mesh.count = counts[i]; S.far.mesh.instanceMatrix.needsUpdate = true;
+      S.near.mesh.count = nearN[i]; S.near.mesh.instanceMatrix.needsUpdate = true; S.near.anim.needsUpdate = true;
     }
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
 
@@ -485,25 +515,6 @@ function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= 2 * Math.P
 function hash1(x) { x = Math.imul(x ^ (x >>> 16), 0x45d9f3b); x = Math.imul(x ^ (x >>> 16), 0x45d9f3b); return (x ^ (x >>> 16)) >>> 0; }
 function hash2(x, y) { return hash1(Math.imul(x, 73856093) ^ Math.imul(y, 19349663)); }
 
-/** Merge non-indexed geometries, with an optional flat colour per part. */
-function merge(parts) {
-  let n = 0; const ps = parts.map(([g, c]) => { const ng = g.index ? g.toNonIndexed() : g; ng.computeVertexNormals(); n += ng.attributes.position.count; return [ng, c]; });
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  let o = 0;
-  for (const [g, c] of ps) {
-    const P = g.attributes.position.array, N = g.attributes.normal.array;
-    pos.set(P, o * 3); nor.set(N, o * 3);
-    const cc = new THREE.Color(c ?? 0xffffff);
-    for (let i = 0; i < g.attributes.position.count; i++) { col[(o + i) * 3] = cc.r; col[(o + i) * 3 + 1] = cc.g; col[(o + i) * 3 + 2] = cc.b; }
-    o += g.attributes.position.count;
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return out;
-}
-
 function treeGeometry() {
   const trunk = new THREE.CylinderGeometry(0.12, 0.18, 1.4, 5); trunk.translate(0, 0.7, 0);
   const crown = new THREE.ConeGeometry(0.9, 2.4, 7); crown.translate(0, 2.4, 0);
@@ -511,45 +522,3 @@ function treeGeometry() {
   return merge([[trunk, 0x5a3d26], [crown, 0x1f5a2a], [crown2, 0x2a6e32]]);
 }
 
-const E = (sx, sy, sz, x = 0, y = 0, z = 0, seg = 8) => { const g = new THREE.SphereGeometry(1, seg, Math.max(4, seg - 2)); g.scale(sx, sy, sz); g.translate(x, y, z); return g; };
-const Cy = (r, h, x, y, z, rx = 0, rz = 0) => { const g = new THREE.CylinderGeometry(r, r, h, 5); g.rotateX(rx); g.rotateZ(rz); g.translate(x, y, z); return g; };
-const Co = (r, h, x, y, z, rz = 0, rx = 0) => { const g = new THREE.ConeGeometry(r, h, 6); g.rotateZ(rz); g.rotateX(rx); g.translate(x, y, z); return g; };
-const Bx = (sx, sy, sz, x = 0, y = 0, z = 0) => { const g = new THREE.BoxGeometry(sx, sy, sz); g.translate(x, y, z); return g; };
-const legs = (len, w, x, z, r = 0.06) => [Cy(r, len, x, len / 2, z), Cy(r, len, x, len / 2, -z), Cy(r, len, -x, len / 2, z), Cy(r, len, -x, len / 2, -z)];
-function swarm(n, r, size, seed, flat = 1) {
-  const parts = []; let h = seed;
-  for (let i = 0; i < n; i++) {
-    h = hash1(h + i);
-    const a = (h & 1023) / 1024 * Math.PI * 2, d = ((h >> 10) & 1023) / 1024 * r, y = (((h >> 20) & 255) / 256) * r * flat;
-    parts.push(E(size, size * 0.8, size, Math.cos(a) * d, y + size, Math.sin(a) * d, 5));
-  }
-  return parts;
-}
-
-/** One model per species (shape id from the roster), facing +x, unit height about 1. */
-function creatureGeometry(shape) {
-  const g = (list) => merge(list.map((x) => [x, 0xffffff]));
-  switch (shape) {
-    case 0: return g([E(0.9, 0.38, 0.32, 0, 0.95), E(0.26, 0.22, 0.2, 0.95, 1.35), Cy(0.08, 0.5, 0.75, 1.15, 0, 0, -0.8), ...legs(0.8, 0.06, 0.5, 0.15), Co(0.05, 0.35, 1.0, 1.65, 0.08), Co(0.05, 0.35, 1.0, 1.65, -0.08)]);   // Drifters
-    case 1: return g([E(1.2, 0.65, 0.6, 0, 1.6), Cy(0.18, 1.3, 1.1, 2.3, 0, 0, -0.7), E(0.35, 0.25, 0.22, 1.6, 2.9), ...legs(1.2, 0.12, 0.7, 0.35, 0.13)]);  // Browsers
-    case 2: return g([E(0.9, 0.55, 0.5, 0, 0.8), Co(0.25, 0.6, 1.0, 0.75, 0, -Math.PI / 2), Co(0.05, 0.4, 1.0, 0.65, 0.2, -1.2), Co(0.05, 0.4, 1.0, 0.65, -0.2, -1.2), ...legs(0.45, 0.1, 0.5, 0.28, 0.1)]); // Tuskers
-    case 3: return g([E(0.45, 0.22, 0.22, 0, 0.3), Bx(0.4, 0.04, 2.2, -0.05, 0.38, 0), Co(0.12, 0.35, 0.55, 0.32, 0, -Math.PI / 2), Bx(0.3, 0.03, 0.6, -0.5, 0.33, 0)]);   // Gliders
-    case 4: return g([E(0.5, 0.42, 0.42, 0, 0.42), E(0.24, 0.22, 0.22, 0.45, 0.55), E(0.08, 0.16, 0.06, 0.45, 0.82, 0.12), E(0.08, 0.16, 0.06, 0.45, 0.82, -0.12)]);   // Burrowers
-    case 5: return g(swarm(9, 1.1, 0.16, 5));                       // Hummers
-    case 6: return g(swarm(12, 1.3, 0.14, 6, 0.6));                 // Chewers
-    case 7: return g(swarm(10, 1.2, 0.18, 7, 0.1));                 // Delvers
-    case 8: return g([E(1.2, 0.08, 1.2, 0, 0.05), Cy(0.07, 0.4, 0.2, 0.2, 0.1), E(0.3, 0.12, 0.3, 0.2, 0.45, 0.1), Cy(0.06, 0.3, -0.4, 0.15, -0.3), E(0.22, 0.1, 0.22, -0.4, 0.33, -0.3)]); // Rotmats
-    case 9: return g([E(0.8, 0.45, 0.4, 0, 0.85), E(0.3, 0.24, 0.24, 0.85, 0.75), ...legs(0.7, 0.08, 0.45, 0.2, 0.08)]);   // Gleaners
-    case 10: return g([E(0.35, 0.2, 0.2, 0, 0.3), Bx(0.25, 0.03, 1.2, 0, 0.36, 0), Co(0.06, 0.25, 0.42, 0.32, 0, -Math.PI / 2)]);  // Snappers
-    case 11: return g([E(0.95, 0.32, 0.3, 0, 0.6), E(0.26, 0.22, 0.22, 0.95, 0.72), Cy(0.05, 0.9, -1.2, 0.75, 0, 0, 1.1), ...legs(0.45, 0.07, 0.55, 0.18, 0.07)]);   // Prowlers
-    case 12: return g([E(0.95, 0.4, 0.34, 0, 0.8), E(0.3, 0.25, 0.24, 1.0, 0.95), Co(0.1, 0.45, 1.35, 0.9, 0, -Math.PI / 2), Cy(0.07, 0.7, -1.1, 0.8, 0, 0, 1.0), ...legs(0.6, 0.08, 0.55, 0.2, 0.08)]); // Stalkers
-    case 13: return g([E(1.3, 0.75, 0.7, 0, 1.3), E(0.55, 0.45, 0.42, 1.35, 1.35), Co(0.15, 0.6, 0, 2.2, 0), Co(0.15, 0.55, -0.5, 2.1, 0), Co(0.15, 0.55, 0.5, 2.1, 0), Cy(0.16, 1.2, -1.5, 1.2, 0, 0, 1.2), ...legs(0.9, 0.2, 0.75, 0.42, 0.2)]); // Leviathans
-    case 14: return g(swarm(10, 1.0, 0.1, 14));                     // Bloodflies
-    case 15: return g(swarm(14, 1.4, 0.16, 15, 0.15));              // Siltmites
-    case 16: { const tail = Co(0.25, 0.4, -0.75, 0.0, 0, Math.PI / 2); tail.scale(1, 1, 0.25); return g([E(0.7, 0.25, 0.16, 0, 0), tail]); }   // Minnows
-    case 17: { const tail = Co(0.3, 0.5, -1.35, 0.0, 0, Math.PI / 2); tail.scale(1, 1, 0.25); return g([E(1.2, 0.22, 0.18, 0, 0), tail, Co(0.1, 0.35, 1.25, 0, 0, -Math.PI / 2)]); } // Pikes
-    case 18: return g([E(0.5, 0.3, 0.45, 0, 0.3), E(0.12, 0.12, 0.12, 0.3, 0.55, 0.18), E(0.12, 0.12, 0.12, 0.3, 0.55, -0.18), E(0.35, 0.08, 0.12, -0.3, 0.1, 0.4), E(0.35, 0.08, 0.12, -0.3, 0.1, -0.4)]); // Croakers
-    case 19: return g([E(0.55, 0.32, 0.28, 0, 1.7), Cy(0.05, 0.9, 0.55, 2.2, 0, 0, -0.5), E(0.16, 0.13, 0.12, 0.8, 2.6), Co(0.04, 0.6, 1.15, 2.58, 0, -Math.PI / 2), Cy(0.03, 1.4, 0.05, 0.7, 0.12), Cy(0.03, 1.4, 0.05, 0.7, -0.12)]); // Herons
-    default: return g([E(0.6, 0.4, 0.4, 0, 0.5)]);
-  }
-}

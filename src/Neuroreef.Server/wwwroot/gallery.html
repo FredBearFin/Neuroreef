@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuroreef models</title>
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1622; color: #d7e3ee; font: 13px system-ui, sans-serif; overflow: hidden; }
+  #info { position: fixed; top: 8px; left: 10px; color: #8aa0b5; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .lab { position: fixed; transform: translate(-50%, 0); font-size: 11px; color: #d7e3ee; text-shadow: 0 1px 2px #000; white-space: nowrap; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="info">Neuroreef models · left: near (animated), right: far · ?shape=N one species · ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time</div>
+<canvas id="c"></canvas>
+<script type="module">
+// A model gallery for checking the species models without running the world: every species near
+// (animated) and far, with its triangle count. Reads the species list from /api/meta.
+import * as THREE from 'three';
+import { OrbitControls } from './lib/OrbitControls.js';
+import { buildSpecies } from './js/creatures/index.js';
+import { withAnim } from './js/creatures/anim.js';
+
+const q = new URLSearchParams(location.search);
+const only = q.has('shape') ? +q.get('shape') : -1, gait = q.has('gait') ? +q.get('gait') : 0.6;
+const act = { eat: 1, strike: 2 }[q.get('act')] || 0, rest = q.get('act') === 'rest' ? 1 : 0;
+const frozen = q.has('t') ? +q.get('t') : null;
+const meta = await (await fetch('api/meta')).json();
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1622);
+scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x3a2f22, 1.1));
+const sun = new THREE.DirectionalLight(0xfff1dd, 1.6); sun.position.set(0.4, 1, 0.25); scene.add(sun);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 500);
+const controls = new OrbitControls(camera, canvas);
+
+const list = meta.species.filter((s) => only < 0 || s.shape === only);
+const cols = only >= 0 ? 1 : 5, cell = 5, labels = [], mats = [];
+list.forEach((sp, i) => {
+  const b = buildSpecies(sp);
+  const cx = (i % cols) * cell * 2 - (cols - 1) * cell, cz = Math.floor(i / cols) * cell - (Math.ceil(list.length / cols) - 1) * cell / 2;
+  const geo = withAnim(b.nearGeo, 1);
+  geo.attributes.aAnim.array.set([gait, 0.3, act, rest]);
+  const near = new THREE.InstancedMesh(geo, b.nearMat, 1); near.setMatrixAt(0, new THREE.Matrix4().makeTranslation(cx - 1.4, sp.loco === 'Swim' ? 0.4 : 0, cz));
+  const far = new THREE.InstancedMesh(b.farGeo, b.farMat, 1); far.setMatrixAt(0, new THREE.Matrix4().makeTranslation(cx + 1.6, sp.loco === 'Swim' ? 0.4 : 0, cz));
+  near.frustumCulled = far.frustumCulled = false;
+  scene.add(near, far); mats.push(b.nearMat);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(cell * 2 - 0.3, cell - 0.3), new THREE.MeshLambertMaterial({ color: sp.loco === 'Swim' ? 0x1d4a66 : 0x3b4a2a }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(cx, -0.01, cz); scene.add(ground);
+  const l = document.createElement('div'); l.className = 'lab'; l.textContent = `${sp.name} · ${Math.round(b.triangles)} tris`; document.body.append(l);
+  labels.push([l, new THREE.Vector3(cx, -0.2, cz + cell / 2 - 0.6)]);
+});
+if (only >= 0) { camera.position.set(1, 2.2, 5.5); controls.target.set(0, 0.6, 0); }
+else { camera.position.set(0, 26, 26); controls.target.set(0, 0, 0); }
+controls.update();
+
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+const t0 = performance.now();
+function frame() {
+  const t = frozen ?? (performance.now() - t0) / 1000;
+  for (const m of mats) m.userData.uniforms.uTime.value = t;
+  controls.update(); renderer.render(scene, camera);
+  for (const [l, p] of labels) { const v = p.clone().project(camera); l.style.left = (v.x + 1) / 2 * innerWidth + 'px'; l.style.top = (1 - v.y) / 2 * innerHeight + 'px'; }
+  window.galleryReady = true;
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

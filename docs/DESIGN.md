@@ -768,6 +768,22 @@ following:
 
 Cameras: overview, follow-cam (lineage), ride-along.
 
+**Animal models** (`wwwroot/js/creatures/`, display only). Each species has two models:
+- **Near:** a detailed, animated model for animals within 90 units of the camera, up to 1,500 per
+  species.
+  - A model is a list of parts. Each part is tagged as body, head, a leg, a wing, the tail, the jaw or
+    a swarm member, and has a pivot and a colour role. Colours come from the species colour: the body
+    is countershaded, and eyes, horns and beaks have their own roles.
+  - The vertex shader moves the parts from three things per animal: speed (gait), a phase taken from
+    its serial, and the action bits of the AGENTS frame. Legs trot in step with speed, wings flap,
+    tails and fish bodies sway, the head dips to eat, the jaw opens and the body lunges on a strike,
+    and swarm members wander.
+  - There are no skeletons, so each species is still one instanced draw call per detail level.
+- **Far:** the simple shape, in one colour, for everything else.
+
+`gallery.html` shows every species near and far without running the world. The models read nothing
+back into the simulation.
+
 ## 14. Code organisation
 
 ```
