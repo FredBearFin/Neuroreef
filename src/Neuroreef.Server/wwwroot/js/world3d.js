@@ -13,6 +13,9 @@ import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize }
 const RELIEF = 55;
 const NEAR_DIST = 90;        // organisms closer than this to the camera are drawn with the detailed body
 const NEAR_CAP = 4096;       // at most this many detailed bodies; the rest get the low-detail one
+const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
+const TREE_CAP = 30000, SHRUB_CAP = 16000;
+const PLANT_FULL = 260;      // trees and shrubs are drawn at full density within this distance of the view centre, thinner beyond
 const NCLADES = 32;
 
 export class World3D {
@@ -174,12 +177,16 @@ export class World3D {
 
   _plants(force) {
     const f = this.fields; if (!f || !this.world) return;
-    const c = this.controls.target, R = this.mode === 'overview' ? 380 : 220;
-    if (!force && this._plantC && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < 50) return;
-    this._plantC = c.clone();
+    const c = this.controls.target;
+    // the radius follows the zoom: zoomed out, the whole visible land gets trees (thinner with distance)
+    const camD = this.camera.position.distanceTo(c);
+    const R = this.mode === 'overview' ? Math.min(this.W * 0.75, Math.max(380, camD * 1.4)) : 220;
+    if (!force && this._plantC && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < 50 && Math.abs(R - this._plantR) < this._plantR * 0.2) return;
+    this._plantC = c.clone(); this._plantR = R;
     if (!this.trees) {
-      this.trees = new THREE.InstancedMesh(treeGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), 14000);
-      this.shrubs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0x5a6e2a, flatShading: true }), 9000);
+      this.trees = new THREE.InstancedMesh(treeGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), TREE_CAP);
+      this.shrubs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0x5a6e2a, flatShading: true }), SHRUB_CAP);
+      this.trees.frustumCulled = false; this.shrubs.frustumCulled = false;
       this.flames = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 3, 5), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85 }), 1500);
       this.scene.add(this.trees, this.shrubs, this.flames);
     }
@@ -190,26 +197,32 @@ export class World3D {
     const r0 = Math.floor(R / cs);
     const ccx = Math.floor(c.x / cs), ccy = Math.floor(c.z / cs);
     for (let dy = -r0; dy <= r0; dy++) for (let dx = -r0; dx <= r0; dx++) {
-      if (dx * dx + dy * dy > r0 * r0) continue;
+      const r2 = dx * dx + dy * dy;
+      if (r2 > r0 * r0) continue;
       const gx = ccx + dx, gy = ccy + dy, fx = ((gx % d) + d) % d, fy = ((gy % d) + d) % d, fi = fy * d + fx;
-      const t = T[fi] / 255, sh = S[fi] / 255;
       let hsh = hash2(fx, fy);
+      // beyond PLANT_FULL keep a share of cells falling with distance squared, and draw those plants bigger,
+      // so a zoomed-out forest still reads as forest without exceeding the instance caps
+      const dist = Math.sqrt(r2) * cs, keep = dist <= PLANT_FULL ? 1 : (PLANT_FULL / dist) ** 2;
+      if (keep < 1 && ((hsh >>> 4) & 1023) / 1024 > keep) continue;
+      const grow = keep < 1 ? Math.min(2.5, 1 / Math.sqrt(keep)) : 1;
+      const t = T[fi] / 255, sh = S[fi] / 255;
       const ntree = Math.floor(t * 3.2 + (hsh & 255) / 256);
-      for (let k = 0; k < ntree && nt < 14000; k++) {
+      for (let k = 0; k < ntree && nt < TREE_CAP; k++) {
         hsh = hash1(hsh);
         const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
         const h = this.heightAt(x, y);
         if (this.world.cell[this._cellOf(x, y)] !== 1) continue;
-        const sc = 1.6 + ((hsh >> 20) & 15) / 8;
+        const sc = (1.6 + ((hsh >> 20) & 15) / 8) * grow;
         p.set(x, h, y); q.setFromAxisAngle(up, (hsh & 63) / 10); s.set(sc, sc * (0.9 + ((hsh >> 24) & 7) / 14), sc);
         this.trees.setMatrixAt(nt++, m.compose(p, q, s));
       }
       const nsh = Math.floor(sh * 4 + ((hsh >> 8) & 255) / 256);
-      for (let k = 0; k < nsh && ns < 9000; k++) {
+      for (let k = 0; k < nsh && ns < SHRUB_CAP; k++) {
         hsh = hash1(hsh + 17);
         const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
         if (this.world.cell[this._cellOf(x, y)] !== 1) continue;
-        const sc = 0.7 + ((hsh >> 20) & 15) / 20;
+        const sc = (0.7 + ((hsh >> 20) & 15) / 20) * grow;
         p.set(x, this.heightAt(x, y) + sc * 0.4, y); q.identity(); s.set(sc * 1.3, sc, sc * 1.3);
         this.shrubs.setMatrixAt(ns++, m.compose(p, q, s));
       }
@@ -392,6 +405,9 @@ export class World3D {
         c.x += sx; c.z += sz; this.camera.position.x += sx; this.camera.position.z += sz;
       }
       this.controls.update();
+      // fog and the terrain tiles follow the zoom, so zooming out never blanks the ground
+      const camD = this.camera.position.distanceTo(c);
+      this.scene.fog.near = Math.max(250, camD * 0.7); this.scene.fog.far = Math.max(900, camD * 2.4);
     }
     const cx = c.x, cz = c.z;
 
@@ -419,11 +435,19 @@ export class World3D {
     const camX = this.camera.position.x, camZ = this.camera.position.z, near2 = NEAR_DIST * NEAR_DIST;
     this.bodyMat.userData.uniforms.uTime.value = now / 1000;
     let nn = 0, nf = 0, ne = 0;
+    // with tens of thousands of organisms, draw every near one and a sample of the far ones (by serial, so the
+    // same ones stay drawn from frame to frame): far bodies are a few pixels, and the frame time stays bounded
+    const farStride = Math.max(1, Math.ceil(total / FAR_BUDGET));
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
     const eggCol = new THREE.Color(), white = new THREE.Color(1, 1, 1);
     const t = now / 1000, Wh = W / 2;
     for (const [serial, e] of this.agents) {
       if (this.hidden.has(e.sp)) continue;
+      if (farStride > 1 && serial % farStride !== 0 && serial !== this.selected) {
+        let qx = e.x - camX, qz = e.y - camZ;
+        qx -= Math.round(qx / W) * W; qz -= Math.round(qz / W) * W;
+        if (qx * qx + qz * qz >= near2) continue;
+      }
       const [x, y, h] = this._pos(e, alpha, cx, cz, P3);
       const ci = e.sp * 3;
       if (e.stage === 0) {
