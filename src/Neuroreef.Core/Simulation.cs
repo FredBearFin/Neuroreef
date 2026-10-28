@@ -62,8 +62,10 @@ public sealed class Simulation : IDisposable
             for (int k = 0; k < K.ANCESTOR_COUNT; k++, key++)
             {
                 if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
-                // each founder: its own random brain, the ancestor's body with standing variation
-                Brain.RandomGenome(tmpl, seed, 0, key);
+                // each founder: the ancestor's one brain and body, with standing variation (Revision H: unrelated
+                // random brains per founder made crossover scramble networks, a hidden cost only sex paid)
+                Brain.RandomGenome(tmpl, seed, 0, 0x700000u + (uint)a);
+                Brain.VaryBrain(tmpl, seed, key);
                 Clades.AncestorBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, a, land);
                 Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
                 Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
@@ -145,9 +147,11 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>BUILD: counting sort of every visible agent (not embryos) into the 16-unit hash grid.</summary>
-    void Build()
+    void Build() => BuildFor(W);
+
+    /// <summary>Rebuild the spatial hash of a world (BUILD phase).</summary>
+    public static void BuildFor(World w)
     {
-        var w = W;
         int n = K.GW * K.GW;
         Array.Clear(w.CellCount);
         for (int i = 0; i < w.Cap; i++)

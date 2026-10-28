@@ -199,7 +199,10 @@ public static class Headless
             o.AppendLine($"{w.Sp[s].Name,-12}{a0,7}{a1,10}{a2,13}{a3,13}{mean,20:F0}{w.Sp[s].Born,16:N0}");
         }
         o.AppendLine();
-        o.AppendLine($"slot shortages (births or immigrants refused because the world was full): {T.SlotShortage}");
+        o.AppendLine($"slot shortages (births or matings refused because the world was full): {T.SlotShortage}");
+        long conceived = 0; foreach (var c in T.Conceptions) conceived += c;
+        if (T.SlotShortage > 0.001 * Math.Max(1, conceived))
+            o.AppendLine($"WARNING: the slot cap, not food, limited this world ({T.SlotShortage:N0} refusals against {conceived:N0} conceptions): selection was distorted");
         return o.ToString();
     }
 

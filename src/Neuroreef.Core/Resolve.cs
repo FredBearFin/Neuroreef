@@ -90,10 +90,10 @@ public static class Resolve
         if ((acts & BIT_STRIKE) != 0 && w.PStrike[i] > 0)
         {
             int v = w.ITarget[i];
-            w.Energy[i] -= K.C_STRIKE * mass;
-            T.Strikes[s]++;
             if (v >= 0 && w.StageOf[v] != St.Dead && w.StageOf[v] != St.Embryo)
             {
+                w.Energy[i] -= K.C_STRIKE * mass;                       // no target, no strike (DESIGN §5)
+                T.Strikes[s]++;
                 float dx = World.Delta1(w.X[v] - w.X[i]), dy = World.Delta1(w.Y[v] - w.Y[i]);
                 float reachAll = w.PReach[i] + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(v));
                 if (dx * dx + dy * dy <= reachAll * reachAll) r += Strike(w, i, v, gutCap, emax);
@@ -193,10 +193,11 @@ public static class Resolve
         float ma = w.MassOf(a);
         float power = w.PStrike[a] * ma;
         bool egg = w.StageOf[v] == St.Egg;
-        float defence = egg ? 0f : w.PArmour[v] * w.ApparentMass(v) * (w.StageOf[v] == St.Juvenile ? K.JUV_DEFENCE : 1f);
-        float p = egg ? 0.9f
-            : K.P0_STRIKE * power / (power + defence + 1e-6f) * (1f + 0.8f * w.Fatigue[v]) * (1f - 0.5f * w.IScanning[v])
-              / (1f + K.C_CONF * w.IKinDensity[v]);
+        // the victim's own body resists (DEF_BASE per unit mass) and armour adds to it; an egg's shell is its
+        // inherited armour; a juvenile's tissues are softer (DESIGN §9.4, Revision H)
+        float defence = w.ApparentMass(v) * (K.DEF_BASE + w.PArmour[v]) * (w.StageOf[v] == St.Juvenile ? K.JUV_DEFENCE : 1f);
+        float p = K.P0_STRIKE * power / (power + defence + 1e-6f)
+                  * (egg ? 1f : (1f + 0.8f * w.Fatigue[v]) * (1f - 0.5f * w.IScanning[v]) / (1f + K.C_CONF * w.IKinDensity[v]));
         float rew = 0;
         int cell = World.FIdx(w.X[v], w.Y[v]);
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
@@ -212,9 +213,18 @@ public static class Resolve
             }
             return rew;
         }
+        float space = MathF.Max(0f, gutCap - w.Gut[a]);
+        if (w.PParasite[a] == 0)
+        {
+            // a hit wounds in proportion to the weapon's force; the victim dies when its reserve runs out
+            float dmg = K.C_DAMAGE * power;
+            w.Energy[v] -= dmg;
+            w.Pain[v] = MathF.Min(1f, w.Pain[v] + K.PAIN_HIT);
+            w.PendingR[v] -= K.R_PAIN * dmg / MathF.Max(w.EmaxOf(v), 1e-3f);
+            if (w.Energy[v] > 0) return rew;
+        }
         w.T.Kills[w.Spc[a]]++;
         float ev = MathF.Max(0f, w.Energy[v]);
-        float space = MathF.Max(0f, gutCap - w.Gut[a]);
         if (w.PParasite[a] != 0)
         {
             float drain = MathF.Min(K.C_DRAIN * MathK.Pow(w.PM[a], K.EXP_BASAL), ev);
@@ -248,20 +258,23 @@ public static class Resolve
         float dx = World.Delta1(w.X[j] - w.X[i]), dy = World.Delta1(w.Y[j] - w.Y[i]);
         float rr = w.PReach[i] * 2f + 0.5f;
         if (dx * dx + dy * dy > rr * rr) return 0;
+        if (w.FreeTop == 0) { w.T.SlotShortage++; return 0; }     // no room for young: nothing happens, nothing is paid
         w.Energy[i] -= K.C_MATE * w.PM[i]; w.Energy[j] -= K.C_MATE * w.PM[j];
-        w.Cooldown[i] = w.PCool[i]; w.Cooldown[j] = w.PCool[j];
         w.PendingR[j] += K.R_MATE;
         w.T.Matings[w.Spc[i]]++;
         float rew = K.R_MATE;
+        bool herm = w.PHerm[i] != 0;
+        int mother = herm || w.Sex[i] == 0 ? i : j, father = mother == i ? j : i;
+        // the father has only a short refractory period; a mother's breeding cooldown starts when she conceives (Conceive)
+        w.Cooldown[father] = K.REFRACT * w.PCool[father];
         float d = Body.Distance(w, i, j) / K.D_COMPAT;
         if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Compat) >= MathK.Exp(-d * d)) return rew;   // incompatible: no young
-        if (w.PHerm[i] != 0)
+        if (herm)
         {
             rew += Conceive(w, i, j, w.PLitter[i]);
             w.PendingR[j] += Conceive(w, j, i, w.PLitter[j]);
             return rew;
         }
-        int mother = w.Sex[i] == 0 ? i : j, father = mother == i ? j : i;
         float rb = Conceive(w, mother, father, w.PLitter[mother]);
         if (mother == i) rew += rb; else w.PendingR[j] += rb;
         return rew;

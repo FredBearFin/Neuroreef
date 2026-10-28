@@ -38,6 +38,16 @@ public static class Brain
         foreach (var (c, p) in Reflex.Kit) g[G.REFLEX + p * G.NC + c] = (sbyte)Math.Clamp(K.KIT_W + g[G.REFLEX + p * G.NC + c], -127, 127);
     }
 
+    /// <summary>Standing variation among founders of one ancestor: every brain and reflex byte ± FOUNDER_W_SD.</summary>
+    public static void VaryBrain(Span<sbyte> g, uint seed, uint key)
+    {
+        for (int k = 0; k < G.LEN; k++)
+        {
+            if (k == G.BODY) { k = G.BODY + G.NBODY - 1; continue; }
+            g[k] = (sbyte)Math.Clamp((int)MathF.Round(g[k] + Rng.N(seed, 0, key, Rs.Founder + 20000u + (uint)k) * K.FOUNDER_W_SD), -127, 127);
+        }
+    }
+
     /// <summary>Mutation (DESIGN §7.3): v1's mutateWord rule on every byte.</summary>
     public static void Mutate(Span<sbyte> g, uint seed, uint step, uint key) => Mutate(g, seed, step, key, Defaults);
     static readonly EvoSettings Defaults = new();

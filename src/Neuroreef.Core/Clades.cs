@@ -120,7 +120,9 @@ public static class Clades
         // diet: the primary producers of its realm, in random proportions; every other pool near zero
         int[] plants = land ? new[] { (int)Pool.Grass, (int)Pool.Browse, (int)Pool.Seed, (int)Pool.Root, (int)Pool.Fruit, (int)Pool.Nectar }
                             : new[] { (int)Pool.Algae, (int)Pool.Phyto };
-        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = -127;
+        // every other pool low but not at the floor (well under 1% of the diet each), so selection can act on it
+        // (Revision H: at -127 a meat or carrion gene was ~0.1%, and climbing out took ~1e5 generations)
+        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-110 + (int)(U(40 + p) * 40f));
         foreach (int p in plants) body[G.B_DIET - B + p] = (sbyte)(U(20 + p) * 127f);
     }
 

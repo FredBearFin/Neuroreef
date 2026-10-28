@@ -88,6 +88,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_RETAL | 0.06 | E | retaliation per unit of excess defence | HT |
 | C_CARC | 0.5 | M/M | edible tissue (carcass) per unit body mass; also the tissue built in growth | ECO: about half of live mass is edible tissue |
 | JUV_DEFENCE | 0.25 | - | defence multiplier for juveniles | HT |
+| DEF_BASE | 0.5 | - | defence of an unarmoured body per unit mass (skin, muscle, bone) | ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999) |
+| C_DAMAGE | 0.4 | E | energy a landed hit removes per unit of strike power (strike x attacker mass) | ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H) |
 | C_DRAIN | 0.05 | E | parasite drain per strike at M=1 | HT |
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |
@@ -102,6 +104,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUNDER_W2 | 4 | int8 | founder output-layer (W2) weight range | HT |
 | FOUNDER_BIAS | -48 | int8 | founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain) | HT |
 | FOUNDER_BIAS_NOISE | 4 | int8 | random spread of the founder output bias | HT |
+| FOUNDER_W_SD | 2 | int8 | standing variation of founders' brain and reflex bytes around their ancestor's (SD) | ECO: members of one population share an inherited nervous system with small heritable variation; half the founder output-weight range (Revision H) |
 | ETA_LO | 0.002 | - | learning rate eta range low | HT |
 | ETA_HI | 0.06 | - | learning rate eta range high | HT |
 | LAMBDA_LO | 0.5 | - | trace decay lambda range low | HT |
@@ -185,8 +188,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_HERM | 0.05 | xbasal | basal cost of being a hermaphrodite (keeping both sexes' organs) | ECO: hermaphrodites maintain male and female function |
 | COST_IMMUNE | 0.12 | xbasal | basal cost of full immune investment | ECO: immune defence is costly (Lochmiller & Deerenberg 2000) |
 | IMMUNE_PROTECT | 0.8 | - | share of infection and disease death that full immune investment prevents | ECO: partial, not total, protection |
-| D_COMPAT | 0.3 | - | genetic distance at which mating succeeds with probability 1/e (body genes / 127, Euclidean) | ECO: hybrid incompatibility rises with genetic distance (Dobzhansky-Muller; Orr 1995) |
-| KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, Euclidean) | ECO: animals recognise their kind by appearance |
+| D_COMPAT | 0.45 | - | genetic distance at which mating succeeds with probability 1/e (body genes / 127, RMS per gene) | ECO: hybrid incompatibility comes from differences fixed between populations (Dobzhansky-Muller; Orr 1995), not from variation within one: normal spread (SD ~0.09) stays fully fertile |
+| KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
 ## 9. Clades
 
@@ -209,6 +212,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | READY_ENERGY | 0.6 | xEmax | energy needed to be READY | HT |
 | F_BIRTH | 0.4 | xEmax child | newborn energy (paid by parent at conception) | V1 |
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
+| REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
 ## 11. Care
 

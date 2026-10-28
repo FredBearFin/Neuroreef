@@ -129,21 +129,21 @@ public static class Body
         _ => (realm & Realm.Land) != 0,
     };
 
-    /// <summary>Genetic distance between two organisms' body genes (/127, Euclidean): how different they are.</summary>
+    /// <summary>Genetic distance between two organisms' body genes: root-mean-square per gene (/127), so it does not grow with the number of genes.</summary>
     public static float Distance(World w, int a, int b)
     {
         int ga = a * G.LEN + G.BODY, gb = b * G.LEN + G.BODY; float s = 0;
         for (int k = 0; k < G.NBODY; k++) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
-        return MathF.Sqrt(s);
+        return MathF.Sqrt(s / G.NBODY);
     }
 
     static readonly int[] Visible = { G.B_MASS, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_ARMOUR, G.B_STRIKE, G.B_LEGN, G.B_FINN };
 
-    /// <summary>Does b look like a's kind? (visible body genes within KIN_LOOK)</summary>
+    /// <summary>Does b look like a's kind? (visible body genes within KIN_LOOK, root-mean-square per gene)</summary>
     public static bool LooksAlike(World w, int a, int b)
     {
         int ga = a * G.LEN, gb = b * G.LEN; float s = 0;
         foreach (int k in Visible) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
-        return s < K.KIN_LOOK * K.KIN_LOOK;
+        return s < K.KIN_LOOK * K.KIN_LOOK * Visible.Length;
     }
 }

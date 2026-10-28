@@ -25,7 +25,7 @@ public class EcologyTests
             bool land = s < K.ANCESTORS_LAND;
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             float plants = 0; for (int p = 0; p <= (int)Pool.Phyto; p++) plants += w.PDiet[i * Pools.N + p];
-            Assert.True(plants > 0.85f * K.DIET_BUDGET, $"clade {s} plant share {plants}");
+            Assert.True(plants > 0.75f * K.DIET_BUDGET, $"clade {s} plant share {plants}");
             Assert.True(w.PStrike[i] < 0.35f * K.STRIKE_MAX);
         }
         // the ancestors differ from each other: their bodies are random, not designed
@@ -267,7 +267,7 @@ public class EcologyTests
         for (int k = G.B_LEGS; k <= G.B_IMMUNE; k++) w.Genome[b * G.LEN + k] = (sbyte)(w.Genome[a * G.LEN + k] > 0 ? -127 : 127);
         w.Genome[b * G.LEN + G.B_SEX] = 60; w.Genome[b * G.LEN + G.B_HERM] = -60;   // still sexual, separate sexes
         Body.Express(w, b); w.Energy[b] = w.EmaxOf(b); w.Age[b] = w.PMature[b] * 2;
-        Assert.True(Body.Distance(w, a, b) > 4f * K.D_COMPAT);
+        Assert.True(Body.Distance(w, a, b) > 2f * K.D_COMPAT, $"distance {Body.Distance(w, a, b)}");
         float ea = w.Energy[a];
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
@@ -286,6 +286,85 @@ public class EcologyTests
         Resolve.Run(w, 1, 0);
         Assert.NotEqual(0, w.Flags[a] & Flag.Carrying);
         Assert.NotEqual(0, w.Flags[b] & Flag.Carrying);
+    }
+
+    [Fact] // DESIGN §9.4 (Revision H): a hit wounds in proportion to the striker's force; a tiny striker cannot kill a big adult at once
+    public void StrikeDamageScalesWithMass()
+    {
+        var (w, a, b) = Pair(true, true, cladeB: 1);
+        w.Genome[a * G.LEN + G.B_MASS] = -127; w.Genome[a * G.LEN + G.B_STRIKE] = 127; Body.Express(w, a);
+        w.Genome[b * G.LEN + G.B_MASS] = 127; w.Genome[b * G.LEN + G.B_ARMOUR] = -127; Body.Express(w, b);
+        w.Energy[a] = w.EmaxOf(a); w.Energy[b] = w.EmaxOf(b); w.StageOf[b] = St.Adult;
+        w.X[b] = w.X[a] + 0.3f; w.Y[b] = w.Y[a];
+        float eb = w.Energy[b];
+        for (int t = 0; t < 20; t++) { Act(w, a, P.STRIKE); w.ITarget[a] = b; w.IActs[b] = 0; w.Energy[a] = w.EmaxOf(a); Resolve.Run(w, 1, 0); w.Step++; }
+        Assert.NotEqual(St.Dead, w.StageOf[b]);
+        Assert.True(eb - w.Energy[b] < 0.1f * eb, "a 0.05-mass striker took more than 10% of a 40-mass body's reserve in 20 strikes");
+    }
+
+    [Fact] // DESIGN §4 (Revision H): an egg of one's own kind is kin, so it is not a strike target
+    public void OwnKindEggIsNotATarget()
+    {
+        var w = new World(256, 31); Terrain.Build(w);
+        int a = Make(w, 0, 0, sexual: false, live: false);
+        w.Genome[a * G.LEN + G.B_STRIKE] = 127; Body.Express(w, a); w.Energy[a] = w.EmaxOf(a);
+        int e = Life.NewSlot(w);
+        Life.CopyGenome(w, a, e, false);
+        Life.Place(w, e, 0, St.Egg, w.X[a] + 0.4f, w.Y[a], 1f, a);
+        Body.Express(w, e); w.Flags[e] = 0;
+        Simulation.BuildFor(w);
+        Decide.Run(w, a, new Decide.ProbeBuf());
+        Assert.NotEqual(e, w.ITarget[a]);
+    }
+
+    [Fact] // DESIGN §8 (Revision H): the father gets a short refractory period; an infertile mating leaves the female free
+    public void MaleRefractoryIsShortAndFailedMatingLeavesFemaleFree()
+    {
+        var (w, a, b) = Pair(true, true);
+        Act(w, a, P.MATE, b); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        Assert.True(Count(w, St.Embryo) >= 1);
+        Assert.InRange(w.Cooldown[b], 1f, 0.11f * w.PCool[b]);   // father
+        Assert.True(w.Cooldown[a] >= w.PCool[a] - 1);            // mother conceived
+        var (w2, a2, b2) = Pair(true, true, cladeB: 1);
+        for (int k = G.B_LEGS; k <= G.B_IMMUNE; k++) w2.Genome[b2 * G.LEN + k] = (sbyte)(w2.Genome[a2 * G.LEN + k] > 0 ? -127 : 127);
+        w2.Genome[b2 * G.LEN + G.B_SEX] = 60; w2.Genome[b2 * G.LEN + G.B_HERM] = -60;
+        Body.Express(w2, b2); w2.Energy[b2] = w2.EmaxOf(b2); w2.Age[b2] = w2.PMature[b2] * 2;
+        Act(w2, a2, P.MATE, b2); w2.IActs[b2] = 0;
+        Resolve.Run(w2, 1, 0);
+        Assert.Equal(0, Count(w2, St.Embryo));
+        Assert.Equal(0f, w2.Cooldown[a2]);
+    }
+
+    [Fact] // DESIGN §8 (Revision H): with no free slot, a mating does nothing and costs nothing
+    public void NoSlotNoMatingCost()
+    {
+        var (w, a, b) = Pair(true, true);
+        float ea = w.Energy[a];
+        int saved = w.FreeTop; w.FreeTop = 0;
+        Act(w, a, P.MATE, b); w.IActs[b] = 0;
+        Resolve.Run(w, 1, 0);
+        w.FreeTop = saved;
+        Assert.Equal(0, w.T.Matings[0]);
+        Assert.True(w.Energy[a] >= ea - 0.05f * w.EmaxOf(a));   // only basal costs
+        Assert.Equal(0f, w.Cooldown[a]);
+    }
+
+    [Fact] // DESIGN §6.2 (Revision H): founders of one ancestor share its brain, with small variation
+    public void FoundersShareTheirAncestorsBrain()
+    {
+        using var sim = new Simulation(16384, 5, 1);
+        var w = sim.W;
+        int f1 = -1, f2 = -1, other = -1;
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] == St.Dead) continue;
+            if (w.Spc[i] == 0) { if (f1 < 0) f1 = i; else if (f2 < 0) f2 = i; }
+            else if (w.Spc[i] == 1 && other < 0) other = i;
+        }
+        float D(int x, int y) { float s = 0; for (int k = 0; k < G.W2; k++) { float d = w.Genome[x * G.LEN + k] - w.Genome[y * G.LEN + k]; s += d * d; } return MathF.Sqrt(s / G.W2); }
+        Assert.True(D(f1, f2) < 5f, $"same-ancestor founders differ by {D(f1, f2)} per W1 byte");
+        Assert.True(D(f1, other) > 2f * D(f1, f2));
     }
 
     [Fact] // NR-303: thirst rises on land only

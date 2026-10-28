@@ -99,9 +99,11 @@ public static class Decide
                     byte sj = w.StageOf[j];
                     bool active = sj >= St.Juvenile;
                     // disease passes between organisms in contact that look alike (a pathogen adapted to a host kind)
-                    if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && Body.LooksAlike(w, i, j)) { infNear++; virSum += w.Virulence[j]; }
+                    bool alike = Body.LooksAlike(w, i, j);
+                    if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; }
                     if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    if (active && Body.LooksAlike(w, i, j))
+                    if (alike && !active) continue;                          // an egg of one's own kind: kin, left alone
+                    if (alike)
                     {
                         kinSum += close; kinCx += ddx; kinCy += ddy;
                         kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
@@ -109,7 +111,7 @@ public static class Decide
                         if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                         continue;
                     }
-                    // any other organism, or an egg (an egg does not look like its parent)
+                    // any other organism, or an egg of another kind
                     otherSum += close;
                     float mj = w.ApparentMass(j);
                     if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
@@ -271,6 +273,9 @@ public static class Decide
     {
         if (w.StageOf[i] != St.Adult) return false;
         if (w.Cooldown[i] > 0 || (w.Flags[i] & Flag.Carrying) != 0) return false;
+        // a male only needs to afford mating (and keep a reserve); a female (or hermaphrodite) must afford young
+        if (w.PSexual[i] != 0 && w.PHerm[i] == 0 && w.Sex[i] != 0)
+            return w.Energy[i] > K.C_MATE * w.PM[i] + 0.15f * w.EmaxOf(i);
         return w.Energy[i] > K.READY_ENERGY * w.EmaxOf(i);
     }
 

@@ -1,7 +1,20 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision G. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision H. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision H: rules an ecology review found biased** (each was pushing toward asexual
+cloners and egg-eating, or made hunting unreachable)
+- Genetic distance is root-mean-square per gene, for fertility (D_COMPAT) and kin (KIN_LOOK): normal
+  variation within a population is fully fertile and looks alike (§4, §7.9).
+- Strikes wound in proportion to force; a body's mass is its defence; an egg's shell is its armour;
+  own-kind eggs are kin (§9.4).
+- A mating costs nothing when there is no room for young. Males get a short refractory period
+  (REFRACT); a female's cooldown starts only when she conceives (§8).
+- Ancestors' non-plant diet genes start low but off the floor, so selection can act on them (§6.2).
+- One brain per ancestor; founders vary around it (FOUNDER_W_SD), so crossover recombines related
+  networks (§6.2).
+- The report warns when the slot cap, not food, limited the world.
 
 **Changes in Revision G.1: variation to evolve from.** The first Revision G run showed no body change
 at all: founders were near-clones and body genes shared the brain's per-byte mutation rate (0.018
@@ -127,13 +140,16 @@ quantities (NR-202), within the sight range R and field of view Φ. There are no
 categories such as "predator", "big" or "prey": an organism senses how large, how fast-closing,
 how armed and how meat-eating the others are, and its brain and selection decide what that
 means. SCAN widens Φ to 360° and R by 30% on the next step. "Closeness" of an organism at distance
-d is 1 − d/R. "Density" is tanh(Σ closeness). The neighbourhood examined is capped at 96 organisms
+d is 1 − d/R. "Density" is tanh(Σ closeness). The neighbourhood examined is capped at MAX_NEIGH = 64 organisms
 per step, taken in spatial-hash order.
 
 **Kin** are others that look like this organism: their visible body genes (mass, legs, fins, wings,
 armour, strike, leg and fin counts) lie within KIN_LOOK of its own (Revision G). Kinship is a
 perception, not a species label, so it can blur and split as bodies diverge. An egg never looks
 like kin.
+
+An egg is judged by its genes like anyone else: an egg of one's own kind is kin and is left alone
+(Revision H; before, eggs were never kin, so mothers struck their own clutches).
 
 **Self and drives (0–9)**
 
@@ -279,7 +295,10 @@ at random within the "simple" corner of the gene space (`Clades.AncestorBody`):
 - **Life history:** sexual or asexual, eggs or live birth, litter, newborn size and care, all random.
 
 Each founder has its own random brain plus the starter kit (§7.7), and the ancestor's body with
-standing variation: each body gene ± FOUNDER_BODY_SD, as in any natural population (Revision G.1). Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
+standing variation: each body gene ± FOUNDER_BODY_SD, as in any natural population (Revision G.1).
+Revision H: all founders of an ancestor share its one random brain, each byte ± FOUNDER_W_SD; and an
+ancestor's non-plant diet genes start at random between −110 and −70 (well under 1% of the diet each),
+not at the floor, so meat or carrion eating can be selected. Hunters, scavengers, parasites, flyers and waders can only appear by evolution.
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 
@@ -544,7 +563,9 @@ since the console frame has 5 bits for it).
 
 ## 8. Reproduction (Revision F, NR-311)
 
-- **Sexual organisms** reproduce with MATE: two ready organisms in reach, both sexual, with the same
+- **Sexual organisms** reproduce with MATE (Revision H: only if there is a free slot; the father then
+  rests REFRACT × his cooldown, the mother enters her cooldown only if she conceives; a male is ready
+  when he can afford the mating and keep 15% of his reserve): two ready organisms in reach, both sexual, with the same
   sex system, and of opposite sex unless both are hermaphrodites. Both pay the mating cost. With
   probability exp(−(d/D_COMPAT)²) (§7.9) the mother conceives a litter of crossovers; two
   hermaphrodites both conceive. A separate-sexed mother's young are daughters with the probability of
@@ -604,26 +625,26 @@ A full gut blocks EAT, so the intake rate saturates (Holling type II) from handl
 
 ### 9.4 Strikes, kills and parasitism (NR-304)
 
-**Target:** the nearest heterospecific within reach. Smaller and eggs come first; larger only if
-there is no smaller (mobbing and defence).
+**Target (Revision H):** the nearest organism or egg within reach that does not look like kin (§4); a
+blood-drinker picks the largest in reach. An egg of one's own kind is kin and is never a target.
 
-**Success probability:**
+**A hit lands with probability:**
 ```
 power   = strike_a · M_a
-defence = armour_v · M_v · (juvenile_v ? 0.25 : 1)       eggs: defence 0
-p = p0 · power/(power + defence) · (1 + 0.8·FATIGUE_v) · (1 − 0.5·SCAN_v) / (1 + c_conf·KIN_DENSITY_v)
+defence = M_v · (DEF_BASE + armour_v) · (juvenile_v ? JUV_DEFENCE : 1)    an egg's shell is its inherited armour
+p = P0_STRIKE · power/(power + defence) · (1 + 0.8·FATIGUE_v) · (1 − 0.5·SCAN_v) / (1 + c_conf·KIN_DENSITY_v)
 ```
+A body's own mass is its first defence: a small striker rarely hurts a large animal (Carbone et al. 1999).
 
-**Cost:** the attacker always pays c_strike·M_a.
+**Cost:** an attacker with a target pays c_strike·M_a. With no target, STRIKE does nothing.
 
 **Outcomes:**
 
 | Case | Result |
 |---|---|
-| Normal success | The victim dies (cause: killed-by-attacker-species). The attacker eats immediately as MEAT, up to its gut space, with efficiency eff_meat. The rest of the body becomes CARRION in the cell. |
-| Super-individual victim | It loses a chunk, min(attacker gut space, 30% of its energy), but it dies only if its energy falls below 5% of Emax. |
-| Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy), and the host takes it as damage. The host dies only if its energy reaches 0 (cause: parasitism). |
-| Failure | The victim's PAIN rises (it was attacked). If defence > power, the attacker loses c_retal·(defence − power) energy. |
+| Hit | The victim loses C_DAMAGE·power energy and feels pain. It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space; the rest becomes CARRION (DETRITUS in water). |
+| Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy). The host dies only if its energy reaches 0 (cause: parasitism). |
+| Miss | The victim's PAIN rises. If defence > power, the attacker loses c_retal·(defence − power) energy. |
 
 ### 9.6 Disease (Revision C, NR-329; Revision G)
 

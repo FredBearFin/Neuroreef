@@ -94,6 +94,8 @@ public static class K
     [K("Hunting", "retaliation per unit of excess defence", "E", "HT")] public const float C_RETAL = 0.06f;
     [K("Hunting", "edible tissue (carcass) per unit body mass; also the tissue built in growth", "M/M", "ECO: about half of live mass is edible tissue")] public const float C_CARC = 0.5f;
     [K("Hunting", "defence multiplier for juveniles", "-", "HT")] public const float JUV_DEFENCE = 0.25f;
+    [K("Hunting", "defence of an unarmoured body per unit mass (skin, muscle, bone)", "-", "ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999)")] public const float DEF_BASE = 0.5f;
+    [K("Hunting", "energy a landed hit removes per unit of strike power (strike x attacker mass)", "E", "ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H)")] public const float C_DAMAGE = 0.4f;
     [K("Hunting", "parasite drain per strike at M=1", "E", "HT")] public const float C_DRAIN = 0.05f;
     [K("Hunting", "pain added by a failed strike received", "-", "HT")] public const float PAIN_HIT = 0.6f;
     [K("Hunting", "pain decay per step", "/step", "HT")] public const float PAIN_DECAY = 0.03f;
@@ -105,6 +107,7 @@ public static class K
     [K("Brain", "founder output-layer (W2) weight range", "int8", "HT")] public const int FOUNDER_W2 = 4;
     [K("Brain", "founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain)", "int8", "HT")] public const int FOUNDER_BIAS = -48;
     [K("Brain", "random spread of the founder output bias", "int8", "HT")] public const int FOUNDER_BIAS_NOISE = 4;
+    [K("Brain", "standing variation of founders' brain and reflex bytes around their ancestor's (SD)", "int8", "ECO: members of one population share an inherited nervous system with small heritable variation; half the founder output-weight range (Revision H)")] public const float FOUNDER_W_SD = 2f;
     [K("Brain", "learning rate eta range low", "-", "HT")] public const float ETA_LO = 0.002f;
     [K("Brain", "learning rate eta range high", "-", "HT")] public const float ETA_HI = 0.06f;
     [K("Brain", "trace decay lambda range low", "-", "HT")] public const float LAMBDA_LO = 0.50f;
@@ -178,8 +181,8 @@ public static class K
     [K("Body", "basal cost of being a hermaphrodite (keeping both sexes' organs)", "xbasal", "ECO: hermaphrodites maintain male and female function")] public const float COST_HERM = 0.05f;
     [K("Body", "basal cost of full immune investment", "xbasal", "ECO: immune defence is costly (Lochmiller & Deerenberg 2000)")] public const float COST_IMMUNE = 0.12f;
     [K("Body", "share of infection and disease death that full immune investment prevents", "-", "ECO: partial, not total, protection")] public const float IMMUNE_PROTECT = 0.8f;
-    [K("Body", "genetic distance at which mating succeeds with probability 1/e (body genes / 127, Euclidean)", "-", "ECO: hybrid incompatibility rises with genetic distance (Dobzhansky-Muller; Orr 1995)")] public const float D_COMPAT = 0.3f;
-    [K("Body", "others whose visible body genes are this close look like kin (body genes / 127, Euclidean)", "-", "ECO: animals recognise their kind by appearance")] public const float KIN_LOOK = 0.25f;
+    [K("Body", "genetic distance at which mating succeeds with probability 1/e (body genes / 127, RMS per gene)", "-", "ECO: hybrid incompatibility comes from differences fixed between populations (Dobzhansky-Muller; Orr 1995), not from variation within one: normal spread (SD ~0.09) stays fully fertile")] public const float D_COMPAT = 0.45f;
+    [K("Body", "others whose visible body genes are this close look like kin (body genes / 127, RMS per gene)", "-", "ECO: animals recognise their kind by appearance")] public const float KIN_LOOK = 0.25f;
 
     // ---------------------------------------------------------------- 5d. clades and speciation (DESIGN §7.9)
     [K("Clades", "clade slots (lineages that can exist at once)", "clades", "-: limited by the console frame (5 bits)")] public const int CLADES = 32;
@@ -196,6 +199,7 @@ public static class K
     [K("Reproduction", "energy needed to be READY", "xEmax", "HT")] public const float READY_ENERGY = 0.60f;
     [K("Reproduction", "newborn energy (paid by parent at conception)", "xEmax child", "V1")] public const float F_BIRTH = 0.40f;
     [K("Reproduction", "mating cost per partner", "E/M", "HT")] public const float C_MATE = 0.02f;
+    [K("Reproduction", "a male's refractory period after mating, as a share of the breeding cooldown", "-", "ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972)")] public const float REFRACT = 0.1f;
 
     // ---------------------------------------------------------------- 6b. parental care (DESIGN §7.8)
     [K("Care", "milk or chick-feeding energy a mother can give per step, as a multiple of her basal cost (shared by all her young)", "xbasal", "ECO: peak lactation milk energy is about 1-2x maternal basal metabolic rate (Hanwell & Peaker 1977)")] public const float CARE_RATE = 1.5f;
