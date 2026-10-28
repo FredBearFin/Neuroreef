@@ -121,26 +121,20 @@ public static class K
     [K("Brain", "reward: per offspring produced", "-", "HT")] public const float R_BIRTH = 2.0f;
     [K("Brain", "reward: per unit damage / Emax (negative)", "-", "HT")] public const float R_PAIN = 4.0f;
     [K("Brain", "reward: per unit fear rise (negative)", "-", "HT")] public const float R_FEAR = 0.5f;
-    [K("Brain", "mutation probability per genome byte", "-", "V1 0.05, lowered")] public const float MUT_RATE = 0.02f;
+    [K("Brain", "mutation probability per genome byte (1/LEN: about one mutation per offspring)", "-", "ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown)")] public const float MUT_RATE = 1f / G.LEN;
     [K("Brain", "small mutation sigma", "int8", "HT")] public const float MUT_SMALL = 2f;
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
     [K("Brain", "reflex input weight scale (int8 / 16, as the output layer)", "-", "-")] public const float RSCALE = 1f / 16f;
     [K("Brain", "founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88%", "int8", "designed: the innate starter kit (DESIGN §7.7, Revision D)")] public const int KIT_W = 80;
     [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 64;
-    [K("Brain", "share of colonists bred from the archive once it holds 4 genomes (the rest are random brains)", "-", "HT")] public const float ARCHIVE_SHARE = 0.9f;
-    [K("Brain", "tournament size when choosing a colonist parent from the archive", "genomes", "HT")] public const int TOURNAMENT = 3;
     [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;
     [K("Prehistory", "length of a prehistory run", "steps", "HT")] public const int PREHISTORY_STEPS = 500000;
-    [K("Prehistory", "colonists arrive until this step (the floor ramps to 0); the rest must stand on its own", "steps", "HT")] public const int PREHISTORY_COLONISTS = 400000;
     [K("Prehistory", "number of separate branches (populations on the same land) evolving side by side", "branches", "HT")] public const int BRANCHES = 3;
-    [K("Prehistory", "steps between exchanges of the best genomes from each branch to the next", "steps", "HT")] public const int MIGRATE_EVERY = 20000;
-    [K("Prehistory", "archive genomes per species sent in one exchange", "genomes", "HT")] public const int MIGRANTS = 4;
     [K("Prehistory", "symbolic time shown in the console: years per step", "years", "-")] public const int YEARS_PER_STEP = 1000;
     [K("Prehistory", "agent slots per branch", "slots", "HT")] public const int BRANCH_CAPACITY = 24576;
-    [K("Prehistory", "colonist floor as share of initial count", "-", "HT")] public const float PREHISTORY_FLOOR = 0.25f;
-    [K("Brain", "founders and colonists arrive in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
-    [K("Brain", "radius of a founder or colonist group", "units", "HT")] public const float GROUP_SPREAD = 10f;
+    [K("Brain", "founders start in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
+    [K("Brain", "radius of a founder group", "units", "HT")] public const float GROUP_SPREAD = 10f;
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;
 
     // ---------------------------------------------------------------- 5b. evolvable bodies (DESIGN §7.5)

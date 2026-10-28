@@ -178,7 +178,7 @@ public static class Wire
                 fields = new { count = Telemetry.S_COUNT, juv = Telemetry.S_JUV, eggs = Telemetry.S_EGGS, gen = Telemetry.S_GEN, energy = Telemetry.S_ENERGY,
                     reward = Telemetry.S_REWARD, learned = Telemetry.S_LEARNED, births = Telemetry.S_BIRTHS, conc = Telemetry.S_CONC, deaths = Telemetry.S_DEATHS,
                     intake = Telemetry.S_INTAKE, spend = Telemetry.S_SPEND, strikes = Telemetry.S_STRIKES, kills = Telemetry.S_KILLS, matings = Telemetry.S_MATINGS,
-                    imm = Telemetry.S_IMM, dage = Telemetry.S_DAGE, meanAge = Telemetry.S_MEANAGE, sick = Telemetry.S_SICK, infections = Telemetry.S_INFECT, care = Telemetry.S_CARE, gains = Telemetry.S_GAINS },
+                    imm = Telemetry.S_IMM, dage = Telemetry.S_DAGE, meanAge = Telemetry.S_MEANAGE, sick = Telemetry.S_SICK, infections = Telemetry.S_INFECT, care = Telemetry.S_CARE, kit = Telemetry.S_KIT, arch = Telemetry.S_ARCH, gains = Telemetry.S_GAINS },
                 global = new { step = Telemetry.G_STEP, pools = Telemetry.G_POOLS, shrub = Telemetry.G_SHRUB, tree = Telemetry.G_TREE, sapling = Telemetry.G_SAPLING,
                     nutLand = Telemetry.G_NUT_LAND, nutWater = Telemetry.G_NUT_WATER, fire = Telemetry.G_FIRE, burning = Telemetry.G_BURNING, alive = Telemetry.G_ALIVE, season = Telemetry.G_SEASON, rain = Telemetry.G_RAIN } },
             probe = new { feat = PR_FEAT, hid = PR_HID, z = PR_Z, gain = PR_GAIN, learn = PR_LEARN, scal = PR_SCAL, scalars = ProbeScalars, phen = PR_PHEN,

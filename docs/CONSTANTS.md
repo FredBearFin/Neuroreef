@@ -118,15 +118,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.02 | - | mutation probability per genome byte | V1 0.05, lowered |
+| MUT_RATE | 0.000510725 | - | mutation probability per genome byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
 | RSCALE | 0.0625 | - | reflex input weight scale (int8 / 16, as the output layer) | - |
 | KIT_W | 80 | int8 | founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88% | designed: the innate starter kit (DESIGN §7.7, Revision D) |
 | ARCHIVE | 64 | genomes | elite archive size per species | HT |
-| ARCHIVE_SHARE | 0.9 | - | share of colonists bred from the archive once it holds 4 genomes (the rest are random brains) | HT |
-| TOURNAMENT | 3 | genomes | tournament size when choosing a colonist parent from the archive | HT |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 
 ## 6. Prehistory
@@ -134,20 +132,16 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | PREHISTORY_STEPS | 500000 | steps | length of a prehistory run | HT |
-| PREHISTORY_COLONISTS | 400000 | steps | colonists arrive until this step (the floor ramps to 0); the rest must stand on its own | HT |
 | BRANCHES | 3 | branches | number of separate branches (populations on the same land) evolving side by side | HT |
-| MIGRATE_EVERY | 20000 | steps | steps between exchanges of the best genomes from each branch to the next | HT |
-| MIGRANTS | 4 | genomes | archive genomes per species sent in one exchange | HT |
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
 | BRANCH_CAPACITY | 24576 | slots | agent slots per branch | HT |
-| PREHISTORY_FLOOR | 0.25 | - | colonist floor as share of initial count | HT |
 
 ## 7. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| GROUP_SIZE | 8 | agents | founders and colonists arrive in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
-| GROUP_SPREAD | 10 | units | radius of a founder or colonist group | HT |
+| GROUP_SIZE | 8 | agents | founders start in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
+| GROUP_SPREAD | 10 | units | radius of a founder group | HT |
 | BANK_LIVING | 96 | genomes | genomes per species stored in a gene bank (living sample) | HT |
 
 ## 8. Body

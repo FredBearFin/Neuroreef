@@ -15,13 +15,12 @@ public sealed class Options
     public long Steps = 100000;
     public int ReportEvery = 2000;
     public string? LoadBank, SaveBank, Csv;
-    public int PrehistorySteps = K.PREHISTORY_STEPS, ColonistSteps = K.PREHISTORY_COLONISTS, Branches = K.BRANCHES;
+    public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
 
     /// <summary>The prehistory's starting evolution settings from the command line.</summary>
     public EvoSettings PrehistorySettings(bool stepsAreLength)
     {
-        var e = new EvoSettings { TotalSteps = stepsAreLength && StepsSet ? (int)Steps : PrehistorySteps, ColonistSteps = ColonistSteps };
-        if (e.ColonistSteps >= e.TotalSteps) e.ColonistSteps = (int)(e.TotalSteps * 0.8);
+        var e = new EvoSettings { TotalSteps = stepsAreLength && StepsSet ? (int)Steps : PrehistorySteps };
         return e;
     }
     public string BankSource = "random";      // evolved, shipped, file, or random
@@ -32,10 +31,10 @@ public sealed class Options
   Neuroreef.exe [options]
 
   Starting the program runs the PREHISTORY first, live in the browser: several branches (separate
-  populations on the same land) evolve brains at full speed over about 500 million symbolic years,
-  with colonists keeping each species going while brains are still poor. You can watch any branch and
-  change the evolution settings while it runs. When it ends, or when you press 'Begin the world', the
-  best brains of each species seed THE WORLD: births and deaths only, nothing is ever spawned again.
+  worlds on the same land) evolve at full speed over about 500 million symbolic years. Each starts from
+  founders and is then births and deaths only; nothing is ever added, so a species that dies out is
+  gone. You can watch any branch and change the mutation settings while it runs. When it ends, or when
+  you press 'Begin the world', the best brains of each species seed THE WORLD: births and deaths only.
   The evolved brains are saved as evolved.nrbank next to the exe; the next start begins the world
   from them at once (delete or rename the file to run a new prehistory).
 
@@ -45,7 +44,6 @@ public sealed class Options
   --load-bank FILE      begin the world with the brains in this gene bank
   --branches N          prehistory branches (default 3)
   --prehistory-steps N  length of the prehistory (default 500000 steps = 500 million symbolic years)
-  --colonist-steps N    colonists arrive until this step (default 400000)
   --seed N              world and run seed (default 1)
   --capacity N          agent slots of the world (default 65536)
   --threads N           worker threads (default: cores - 1, max 8)
@@ -84,7 +82,6 @@ public sealed class Options
                 case "--load-bank": o.LoadBank = Next(); break;
                 case "--save-bank": o.SaveBank = Next(); break;
                 case "--prehistory-steps": o.PrehistorySteps = int.Parse(Next()); break;
-                case "--colonist-steps": o.ColonistSteps = int.Parse(Next()); break;
                 case "--branches": o.Branches = Math.Clamp(int.Parse(Next()), 1, 8); break;
                 case "--headless": o.Headless = true; break;
                 case "--empty": o.Empty = true; break;

@@ -1,8 +1,8 @@
-// The prehistory (DESIGN §7.6): several branches - separate populations on the same land - evolve side by
-// side at full speed. Each branch is a Simulation with colonists on (World.Prehistory). Every SYNC steps
-// all branches meet at a barrier, where the console's setting changes are applied, a pause can hold
-// them, and every MigrateEvery steps the best genomes of each species move to the next branch (an
-// island model). At the end, each species' brains are taken from the branch where it did best.
+// The prehistory (DESIGN §7.6): several branches - separate worlds on the same land - evolve side by side
+// at full speed. Each branch is seeded once with founders and is then births and deaths only, like the
+// live world: nothing is ever added to it. Every SYNC steps all branches meet at a barrier, where the
+// console's setting changes are applied and a pause can hold them. At the end, each species' brains are
+// taken from the branch where it did best.
 
 using System;
 using System.IO;
@@ -96,60 +96,26 @@ public sealed class Prehistory : IDisposable
         }
         ulong step = Step;
         var e = B[0].W.Evo;
-        if (B.Length > 1 && e.Migrants > 0 && step > 0 && step % (ulong)e.MigrateEvery < SYNC) Migrate(e.Migrants);
         long t = _sw.ElapsedMilliseconds;
         if (t - _lastT >= 1000) { Rate = (step - _lastStep) * 1000.0 / Math.Max(1, t - _lastT); _lastT = t; _lastStep = step; }
         if (step >= (ulong)e.TotalSteps) Finished = true;
         while (_paused && !_stop) Thread.Sleep(50);
     }
 
-    /// <summary>Island model: the best archive genomes of each species of branch b go to branch b+1.</summary>
-    public void Migrate(int count)
-    {
-        int n = B.Length, ns = Roster.Count;
-        var buf = new sbyte[G.LEN];
-        for (int b = 0; b < n; b++)
-        {
-            var from = B[b].W; var to = B[(b + 1) % n].W;
-            for (int s = 0; s < ns; s++)
-            {
-                int m = from.ArchiveCount[s];
-                for (int c = 0; c < Math.Min(count, m); c++)
-                {
-                    // c-th best entry
-                    int best = -1; float bs = float.MinValue;
-                    for (int k = 0; k < m; k++)
-                    {
-                        float sc = from.ArchiveScore[s * K.ARCHIVE + k];
-                        int rank = 0;
-                        for (int j = 0; j < m; j++) if (from.ArchiveScore[s * K.ARCHIVE + j] > sc) rank++;
-                        if (rank == c && sc > bs) { bs = sc; best = k; }
-                    }
-                    if (best < 0) continue;
-                    Array.Copy(from.Archive, (s * K.ARCHIVE + best) * G.LEN, buf, 0, G.LEN);
-                    Life.ArchiveInsert(to, s, buf, bs);
-                }
-            }
-        }
-        Migrations++;
-    }
-    public int Migrations;
-
     // ------------------------------------------------------------------ progress and the result
 
-    public enum Standing : byte { Gone = 0, Propped = 1, Breeding = 2, SelfSustaining = 3 }
+    public enum Standing : byte { Gone = 0, Dying = 1, Breeding = 2, SelfSustaining = 3 }
 
     /// <summary>
-    /// How a species stands in a branch over the last ~1,000 steps:
-    /// SelfSustaining = alive, births keep up with deaths (at least 90%) and outnumber colonists two to one;
-    /// Breeding = births happen but the species is not replacing itself; Propped = alive only by colonists or
-    /// by founders that have not bred; Gone = none left.
+    /// How a species stands in a branch over the last ~1,000 steps: SelfSustaining = alive and births keep up
+    /// with deaths (at least 90%); Breeding = births happen but the species is not replacing itself; Dying =
+    /// alive with no births; Gone = none left.
     /// </summary>
-    public static Standing StandingOf(Simulation sim, int s, out int alive, out float births, out float colonists)
+    public static Standing StandingOf(Simulation sim, int s, out int alive, out float births)
     {
         var w = sim.W; var T = w.T;
         alive = sim.ActiveCount[s];
-        births = 0; colonists = 0;
+        births = 0;
         float deaths = 0;
         int n = T.SampleCount, back = Math.Min(32, n);
         var a = new float[T.Len];
@@ -157,13 +123,12 @@ public sealed class Prehistory : IDisposable
         {
             T.Sample(k, a);
             births += a[T.SpeciesOffset(s, Telemetry.S_BIRTHS)];
-            colonists += a[T.SpeciesOffset(s, Telemetry.S_IMM)];
             for (int c = 0; c < Cause.N; c++) deaths += a[T.SpeciesOffset(s, Telemetry.S_DEATHS + c)];
         }
         if (alive == 0) return Standing.Gone;
-        if (births > 0 && births >= 0.9f * deaths && births >= 2f * colonists) return Standing.SelfSustaining;
+        if (births > 0 && births >= 0.9f * deaths) return Standing.SelfSustaining;
         if (births > 0) return Standing.Breeding;
-        return Standing.Propped;
+        return Standing.Dying;
     }
 
     /// <summary>For each species, the branch where it stands best (then by number alive).</summary>
@@ -176,7 +141,7 @@ public sealed class Prehistory : IDisposable
             int best = 0; long bestKey = long.MinValue;
             for (int b = 0; b < B.Length; b++)
             {
-                var st = StandingOf(B[b], s, out int alive, out float births, out _);
+                var st = StandingOf(B[b], s, out int alive, out _);
                 long key = (long)st * 10_000_000 + Math.Min(alive, 9_999_999);
                 if (key > bestKey) { bestKey = key; best = b; }
             }

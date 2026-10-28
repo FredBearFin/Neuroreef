@@ -49,9 +49,9 @@ public static class Headless
         using var pre = new Prehistory(o.Branches, K.BRANCH_CAPACITY, o.Seed, o.Threads, e);
         var s0 = pre.Pending;
         Console.WriteLine("NEUROREEF 2  PREHISTORY");
-        Console.WriteLine($"{pre.B.Length} branches evolve brains from random over {s0.TotalSteps:N0} steps ({(long)s0.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years).");
-        Console.WriteLine($"Colonists keep each species going until step {s0.ColonistSteps:N0}; after that each branch must stand on its own.");
-        Console.WriteLine("The world you watch never has colonists; it starts from the brains this saves:");
+        Console.WriteLine($"{pre.B.Length} separate worlds evolve over {s0.TotalSteps:N0} steps ({(long)s0.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years).");
+        Console.WriteLine("Each starts from founders and is then births and deaths only: nothing is ever added. A species that dies out is gone.");
+        Console.WriteLine("The world you watch starts from the brains this saves:");
         Console.WriteLine("  " + o.SaveBank);
         Console.WriteLine("Leave this window open. Ctrl+C stops early and saves.");
         Console.WriteLine();
@@ -74,7 +74,7 @@ public static class Headless
                 foreach (var b in pre.B)
                 {
                     int self = 0;
-                    for (int s = 0; s < b.W.NS; s++) if (Prehistory.StandingOf(b, s, out _, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
+                    for (int s = 0; s < b.W.NS; s++) if (Prehistory.StandingOf(b, s, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
                     sb.Append($"| {b.W.AliveCount,15:N0}  {self,2} of {b.W.NS}                ");
                 }
                 Console.WriteLine(sb.ToString());
@@ -84,8 +84,8 @@ public static class Headless
         pre.StopAndWait();
         Console.WriteLine($"done: {pre.Step:N0} steps in {sw.Elapsed.TotalMinutes:F1} min");
         var report = new StringBuilder();
-        report.AppendLine($"NEUROREEF 2 PREHISTORY REPORT: {pre.Step:N0} steps, {pre.B.Length} branches, seed {o.Seed}, {pre.Migrations} exchanges between branches");
-        report.AppendLine("Standing over the last ~1,000 steps: SELF = births at least twice the colonists; BREEDING = births but colonists dominate; PROPPED = only colonists; GONE = none left.");
+        report.AppendLine($"NEUROREEF 2 PREHISTORY REPORT: {pre.Step:N0} steps, {pre.B.Length} branches (separate births-only worlds), seed {o.Seed}");
+        report.AppendLine("Standing over the last ~1,000 steps: SELF = births keep up with deaths; BREEDING = births, but fewer than deaths; DYING = alive, no births; GONE = extinct.");
         var choice = pre.BestBranchPerSpecies();
         report.AppendLine();
         report.Append("SPECIES     ");
@@ -96,10 +96,27 @@ public static class Headless
             report.Append($"{Roster.All[s].Name,-12}");
             for (int b = 0; b < pre.B.Length; b++)
             {
-                var st = Prehistory.StandingOf(pre.B[b], s, out int alive, out _, out _);
+                var st = Prehistory.StandingOf(pre.B[b], s, out int alive, out _);
                 report.Append($"  {st.ToString().ToUpperInvariant().Replace("SELFSUSTAINING", "SELF"),-8} {alive,6}");
             }
             report.AppendLine($"  branch {choice[s]}");
+        }
+        report.AppendLine();
+        report.AppendLine("IS IT EVOLVING? Per species, in the branch its brains come from: mean starter-kit gene (founders ~80), generation reached,");
+        report.AppendLine("and best lifetime score (3 per offspring raised to maturity + 1 per offspring + age), first sample vs last sample with animals.");
+        report.AppendLine("SPECIES       KIT GENE  first -> last    GENERATION      BEST SCORE  first -> last");
+        for (int s = 0; s < Roster.Count; s++)
+        {
+            var T = pre.B[choice[s]].W.T; var row = new float[T.Len];
+            float k0 = 0, k1 = 0, g1 = 0, a0 = 0, a1 = 0; bool seen = false;
+            for (int k = 0; k < T.SampleCount; k++)
+            {
+                T.Sample(k, row);
+                if (row[T.SpeciesOffset(s, Telemetry.S_COUNT)] <= 0) continue;
+                if (!seen) { k0 = row[T.SpeciesOffset(s, Telemetry.S_KIT)]; a0 = row[T.SpeciesOffset(s, Telemetry.S_ARCH)]; seen = true; }
+                k1 = row[T.SpeciesOffset(s, Telemetry.S_KIT)]; g1 = row[T.SpeciesOffset(s, Telemetry.S_GEN)]; a1 = row[T.SpeciesOffset(s, Telemetry.S_ARCH)];
+            }
+            report.AppendLine($"{Roster.All[s].Name,-12} {k0,8:F1} -> {k1,6:F1}    {g1,10:F1}    {a0,10:F1} -> {a1,6:F1}");
         }
         for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.AppendLine($"=== BRANCH {b} ==="); report.Append(Summary(pre.B[b])); }
         Console.Write(report.ToString());

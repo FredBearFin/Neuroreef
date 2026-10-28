@@ -32,7 +32,7 @@ public sealed class Telemetry
     public const int S_COUNT = 0, S_JUV = 1, S_EGGS = 2, S_GEN = 3, S_ENERGY = 4, S_REWARD = 5, S_LEARNED = 6, S_BIRTHS = 7,
         S_CONC = 8, S_DEATHS = 9, S_INTAKE = S_DEATHS + Cause.N, S_SPEND = S_INTAKE + Pools.N, S_STRIKES = S_SPEND + 2, S_KILLS = S_STRIKES + 1,
         S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
-        S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_GAINS = S_CARE + 1, S_END = S_GAINS + P.N;
+        S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_GAINS = S_ARCH + 1, S_END = S_GAINS + P.N;
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
@@ -69,7 +69,7 @@ public sealed class Telemetry
             foreach (var p in Pools.Names) names.Add(n + "intake." + p);
             names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "strikes", n + "kills", n + "matings", n + "immigrants",
                 n + "deaths.unborn", n + "deaths.juvenile", n + "deaths.young-adult", n + "deaths.old-adult", n + "age-at-death",
-                n + "infected", n + "infections", n + "care.given" });
+                n + "infected", n + "infections", n + "care.given", n + "evo.kit-genes", n + "evo.best-score" });
             foreach (var p in P.Names) names.Add(n + "gain." + p);
         }
         OffKill = names.Count;
@@ -138,6 +138,10 @@ public sealed class Telemetry
             a[o + S_COUNT]++;
             if (st == St.Juvenile) a[o + S_JUV]++;
             if (w.Infect[i] > 0) a[o + S_SICK]++;
+            // is it evolving? mean strength of the starter-kit reflex genes (founders start near KIT_W)
+            int kb = i * G.LEN + G.REFLEX; float ks = 0;
+            foreach (var (c, p) in Reflex.Kit) ks += w.Genome[kb + p * G.NC + c];
+            a[o + S_KIT] += ks / Reflex.Kit.Length;
             a[o + S_GEN] += w.Gen[i];
             a[o + S_ENERGY] += w.Energy[i] / w.EmaxOf(i);
             a[o + S_REWARD] += w.RewardMean[i];
@@ -155,7 +159,10 @@ public sealed class Telemetry
         {
             int o = OffSpecies + s * PerSpecies;
             float n = MathF.Max(1, _cnt[s]);
-            a[o + S_GEN] /= n; a[o + S_ENERGY] /= n; a[o + S_REWARD] /= n; a[o + S_LEARNED] /= n;
+            a[o + S_GEN] /= n; a[o + S_ENERGY] /= n; a[o + S_REWARD] /= n; a[o + S_LEARNED] /= n; a[o + S_KIT] /= n;
+            float best = 0;
+            for (int k = 0; k < w.ArchiveCount[s]; k++) best = MathF.Max(best, w.ArchiveScore[s * K.ARCHIVE + k]);
+            a[o + S_ARCH] = best;
             for (int p = 0; p < P.N; p++) a[o + S_GAINS + p] /= n;
             a[o + S_BIRTHS] = Births[s] - _pBirths[s]; _pBirths[s] = Births[s];
             a[o + S_CONC] = Conceptions[s] - _pConc[s]; _pConc[s] = Conceptions[s];

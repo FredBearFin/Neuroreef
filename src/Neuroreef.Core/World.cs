@@ -79,12 +79,10 @@ public sealed class World
     public readonly sbyte[] Archive;       // NS * ARCHIVE * G.LEN
     public readonly float[] ArchiveScore;  // NS * ARCHIVE
     public readonly int[] ArchiveCount;
-    public readonly float[] KinX, KinY;    // one living adult per species, sampled each LIFECYCLE (colonists land near kin)
-    public readonly int[] KinN;
     public readonly sbyte[] Scratch;       // per-thread genome scratch: G.LEN * 2
     /// <summary>
-    /// True only in a prehistory run (--evolve), the only place colonists may appear. A live world is
-    /// births and deaths only: no animal ever appears except by birth (NR-313).
+    /// True in a prehistory branch. A label only: every world, prehistory or live, is births and deaths only
+    /// after its founders; no animal ever appears except by birth (NR-313).
     /// </summary>
     public bool Prehistory;
     public readonly EvoSettings Evo = new();   // the evolutionary search's knobs (prehistory; mutation also in a live world)
@@ -138,7 +136,6 @@ public sealed class World
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];
         ArchiveCount = new int[NS];
-        KinX = new float[NS]; KinY = new float[NS]; KinN = new int[NS];
         Scratch = new sbyte[G.LEN * 2];
 
         T = new Telemetry(this);

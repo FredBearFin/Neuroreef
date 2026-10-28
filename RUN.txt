@@ -16,8 +16,8 @@ PREHISTORY, a separate run that stands for the long evolution before the world b
 The prehistory (the first start):
   With no evolved brains yet, the console opens on the Prehistory tab. Three branches evolve at full
   speed: 500,000 steps, shown as 500 million symbolic years. Tap a branch to watch it in 3D; the
-  coloured squares are the species (green = lives on its own, yellow = breeding, orange = kept alive by
-  colonists, red = gone). The sliders change the evolution while it runs. "Begin the world now" ends it
+  coloured squares are the species (green = lives on its own, yellow = breeding, orange = dying, no births,
+  red = gone). The sliders change mutation while it runs. "Begin the world now" ends it
   early. At the end the best brains of every species are saved as evolved.nrbank and the world begins:
   births and deaths only. The next start skips the prehistory; Neuroreef.exe --prehistory runs a new one.
   Closing the window during the prehistory saves prehistory-partial.nrbank.

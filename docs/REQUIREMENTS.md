@@ -60,7 +60,7 @@ Each requirement has a number, a statement and a verification method:
 | NR-310 | Carcasses, dung and burned vegetation shall return nutrient to the soil. | T |
 | NR-311 | Each species shall reproduce by its own mode: sexual, hermaphrodite, fission, facultative parthenogenesis, cyclic parthenogenesis or spores (DESIGN §8), with live birth or eggs, and litter size from the body plan. | T |
 | NR-312 | There shall be no population cap other than capacity. Populations shall be limited by food, water, predation and disease of old age. | I |
-| NR-313 | No animal in the live world shall appear except by birth from a parent of its species. Colonists are allowed only in a prehistory run, which shall be labelled as such in its output; the console shall show that the world is births-only and mark extinct species permanently. | T |
+| NR-313 | No animal in any run, prehistory or live, shall appear except by birth from a parent of its species after the founders of step 0; an extinct species stays extinct. The console shall show that the world is births-only and mark extinct species permanently. | T |
 | NR-314 | Outcomes shall be observed, not targeted (NR-321). Every headless run shall end with an observation report per species (alive, created, immigrants, conceptions, matings, strikes, kills, deaths by cause, main food) and the run's telemetry. Extinctions and crashes are valid results and shall be reported as such. | A |
 | NR-315 | The roster shall close the energy cycle: every pool has a consumer, every species has a food pool in its realm, every dead pool returns to nutrient. The program shall check this at start-up and refuse to run if it fails. | T |
 | NR-316 | Every species shall have a reproduction mode whose preconditions it can meet in its realm. | T |
@@ -70,7 +70,7 @@ Each requirement has a number, a statement and a verification method:
 | NR-320 | Body traits (mass, speed, sight, armour, strike, litter size, diet efficiencies) shall be heritable and mutable, each with an energy or performance cost; diet changes shall trade off within a fixed digestive budget. | T |
 | NR-321 | The laws of the world shall be set once from physical plausibility and conservation of energy and mass, documented with their origin, and then frozen. No law shall be changed to produce or prevent an ecological outcome. | I |
 | NR-323 | Without evolved brains, the program shall run the prehistory live in the console at full speed, in BRANCHES separate populations on the same land, viewable one branch at a time in 3D, with progress shown in symbolic years. | T |
-| NR-324 | Every MIGRATE_EVERY steps the best archive genomes of each species shall be copied to the next branch. | T |
+| NR-324 | (Withdrawn in Revision E: no genomes pass between prehistory branches.) | — |
 | NR-325 | The evolution settings (EvoSettings) shall be changeable while the prehistory runs and shall reach every branch at the next barrier; they shall not change any law of the world. | T |
 | NR-326 | When the prehistory ends, each species' brains shall come from the branch where it stood best; the bank shall be saved, and the live world created from it shall have no colonists. | T |
 | NR-327 | Every animal shall have inherited reflex genes linking the same nine need, opportunity and danger inputs to its primitives; learning shall not change them. Founders shall carry the same innate starter kit (eat, seek food, seek water, drink, rest, flee, follow mother) as mutable genes; no other behaviour shall be designed (DESIGN §7.7). | T |

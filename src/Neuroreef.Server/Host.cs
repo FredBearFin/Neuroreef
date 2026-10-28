@@ -114,7 +114,7 @@ public static class Host
                 for (int b = 0; b < pre.B.Length; b++)
                 {
                     int self = 0;
-                    for (int sp = 0; sp < Roster.Count; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
+                    for (int sp = 0; sp < Roster.Count; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
                     parts.Add($"{(char)('A' + b)}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
                 }
                 Console.WriteLine($"prehistory {pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {pre.Step:N0})  {pre.Rate,4:F0} steps/s  " + string.Join("  |  ", parts));
@@ -178,7 +178,6 @@ public static class Host
             lock (_lock)
             {
                 CheckPhase();
-                if (H.IsPrehistory) return (long[])_extinctAt.Clone();     // in the prehistory colonists can return a species
                 var w = H.W;
                 Array.Clear(_alive);
                 for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) _alive[w.Spc[i]]++;
@@ -213,24 +212,23 @@ public static class Host
                 var branches = new List<object>();
                 foreach (var b in pre.B)
                 {
-                    var stand = new int[Roster.Count]; var count = new int[Roster.Count]; var births = new float[Roster.Count]; var col = new float[Roster.Count];
+                    var stand = new int[Roster.Count]; var count = new int[Roster.Count]; var births = new float[Roster.Count];
                     var gen = new float[Roster.Count];
                     var last = new float[b.W.T.Len];
                     bool has = b.W.T.SampleCount > 0 && b.W.T.Sample(b.W.T.SampleCount - 1, last);
                     for (int s = 0; s < Roster.Count; s++)
                     {
-                        stand[s] = (int)Prehistory.StandingOf(b, s, out count[s], out births[s], out col[s]);
+                        stand[s] = (int)Prehistory.StandingOf(b, s, out count[s], out births[s]);
                         float g = has ? last[b.W.T.SpeciesOffset(s, Neuroreef.Telemetry.S_GEN)] : 0;
                         gen[s] = float.IsFinite(g) ? g : 0;    // no animals: the mean is undefined
                     }
-                    branches.Add(new { step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, colonists = col, generation = gen });
+                    branches.Add(new { step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, generation = gen });
                 }
                 _preJson = JsonSerializer.Serialize(new
                 {
-                    type = "prehistory", step = pre.Step, rate = pre.Rate, paused = pre.Paused, finished = pre.Finished, migrations = pre.Migrations,
+                    type = "prehistory", step = pre.Step, rate = pre.Rate, paused = pre.Paused, finished = pre.Finished,
                     yearsPerStep = K.YEARS_PER_STEP, view = H.ViewBranch, branches,
-                    settings = new { mutRate = e.MutRate, mutSmall = e.MutSmall, mutBigShare = e.MutBigShare, mutBig = e.MutBig, archiveShare = e.ArchiveShare,
-                        tournament = e.Tournament, floor = e.Floor, colonistSteps = e.ColonistSteps, totalSteps = e.TotalSteps, migrateEvery = e.MigrateEvery, migrants = e.Migrants },
+                    settings = new { mutRate = e.MutRate, mutSmall = e.MutSmall, mutBigShare = e.MutBigShare, mutBig = e.MutBig, totalSteps = e.TotalSteps },
                 });
                 return _preJson;
             }
@@ -410,13 +408,7 @@ public static class Host
                                         case "mutSmall": s.MutSmall = (float)v; break;
                                         case "mutBigShare": s.MutBigShare = (float)v; break;
                                         case "mutBig": s.MutBig = (float)v; break;
-                                        case "archiveShare": s.ArchiveShare = (float)v; break;
-                                        case "tournament": s.Tournament = (int)Math.Round(v); break;
-                                        case "floor": s.Floor = (float)v; break;
-                                        case "colonistSteps": s.ColonistSteps = (int)v; break;
                                         case "totalSteps": s.TotalSteps = (int)v; break;
-                                        case "migrateEvery": s.MigrateEvery = (int)v; break;
-                                        case "migrants": s.Migrants = (int)Math.Round(v); break;
                                     }
                                 }
                             });

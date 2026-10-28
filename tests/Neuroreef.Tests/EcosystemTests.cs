@@ -54,6 +54,34 @@ public class EcosystemTests
         Assert.True(g[P.MATE] < 0.3f, "mating is not in the kit");
     }
 
+    [Fact] // NR-205: natural selection works: in a births-only world a heritable trait that helps animals eat spreads
+    public void SelectionImprovesAHeritableTrait()
+    {
+        using var sim = new Simulation(16384, 65, 1, empty: true);
+        var w = sim.W;
+        int eat = G.REFLEX + P.EAT * G.NC + Reflex.HUNGRY_FOOD;
+        // 300 Drifter founders in groups; half lose the eat-when-hungry-at-food reflex (the allele is that one gene)
+        for (int k = 0; k < 300; k++)
+        {
+            int c = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 9000u + (uint)k, (k / 8) * 37f % K.WORLD, (k / 8) * 91f % K.WORLD);
+            if (c < 0) continue;
+            if (k % 2 == 1) w.Genome[c * G.LEN + eat] = 0;
+        }
+        double Share()
+        {
+            int n = 0, strong = 0;
+            for (int i = 0; i < w.Cap; i++)
+                if (w.StageOf[i] >= St.Juvenile && w.Spc[i] == 0) { n++; if (w.Genome[i * G.LEN + eat] >= K.KIT_W / 2) strong++; }
+            return n == 0 ? double.NaN : (double)strong / n;
+        }
+        double s0 = Share();
+        for (int t = 0; t < 4000; t++) sim.Step();
+        double s1 = Share();
+        long births = w.T.Births[0];
+        Assert.True(births > 50, $"only {births} births: too few generations to test selection");
+        Assert.True(s1 > s0 + 0.15, $"the eating allele did not spread: share {s0:F2} -> {s1:F2} after {births} births");
+    }
+
     [Fact] // NR-328: a mammal mother in contact feeds her young; the energy she loses is what they gain / CARE_EFF
     public void MothersFeedTheirYoungAndEnergyIsConserved()
     {

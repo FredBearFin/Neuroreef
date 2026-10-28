@@ -83,7 +83,6 @@ table.t td:first-child, table.t th:first-child { text-align: left; }
 .dim { color: var(--faint); text-transform: none; letter-spacing: 0; font-weight: 400; }
 .pre-bar { position: relative; height: 12px; background: #16212c; border-radius: 6px; overflow: hidden; }
 #pre-fill { height: 100%; width: 0; background: linear-gradient(90deg, #6b4fd1, #a77bff); }
-#pre-col { position: absolute; top: 0; bottom: 0; width: 2px; background: #ffb547; }
 .pre-line { display: flex; flex-direction: column; margin: 6px 0 8px; font-size: 12px; }
 .pre-line b { font-size: 16px; font-family: var(--mono); }
 .pre-line span { color: var(--dim); }

@@ -26,13 +26,12 @@ species stays extinct. Its first animals need brains that can keep them alive, a
 **prehistory**: a separate run that stands for the long evolution before the world begins.
 
 **The first start is the prehistory, and you can watch it.** Without evolved brains, the console
-opens on the **Prehistory** tab. Three branches (separate populations on the same land) evolve at full
+opens on the **Prehistory** tab. Three branches (separate births-only worlds on the same land; nothing is ever added) evolve at full
 speed, 500,000 steps shown as 500 million symbolic years:
 - tap a branch card to watch that branch in 3D;
-- each square on a card is a species: green self-sustaining, yellow breeding, orange propped up by
-  colonists, red gone;
-- the sliders change the evolution itself while it runs (mutation, selection, colonists, migration,
-  length);
+- each square on a card is a species: green self-sustaining, yellow breeding, orange dying (no births),
+  red gone;
+- the sliders change mutation and the length while it runs;
 - **Begin the world now** ends it early.
 
 When it ends, each species takes its brains from the branch where it did best, they are saved as

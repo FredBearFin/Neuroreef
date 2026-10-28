@@ -134,12 +134,12 @@ public static class Life
         return c;
     }
 
-    /// <summary>LIFECYCLE phase: eggs and embryos, hatching, metamorphosis; colonists in a prehistory run only. Serial.</summary>
+    /// <summary>LIFECYCLE phase: eggs and embryos, hatching, metamorphosis, disease, parental care. Serial. Nothing is
+    /// ever added here: every run, prehistory or live, is births and deaths only after its founders (NR-313).</summary>
     public static void Run(World w, int[] activeCount)
     {
         int cap = w.Cap;
         Array.Clear(activeCount);
-        Array.Clear(w.KinN);
         for (int i = 0; i < cap; i++)
         {
             byte st = w.StageOf[i];
@@ -172,12 +172,6 @@ public static class Life
             if (Disease(w, i, si)) continue;          // died of it
             if (st == St.Juvenile) Care(w, i, si);
             activeCount[si]++;
-            if (st == St.Adult)
-            {
-                // reservoir-sample one living adult per species: colonist groups land next to kin
-                int nk = ++w.KinN[si];
-                if (Rng.U(w.Seed, (uint)w.Step, (uint)i, Rs.Place + 300u) * nk < 1f) { w.KinX[si] = w.X[i]; w.KinY[si] = w.Y[i]; }
-            }
             if (st == St.Juvenile && w.Grown[i] >= 1f)              // mature on reaching adult size
             {
                 w.StageOf[i] = St.Adult;
@@ -186,28 +180,6 @@ public static class Life
                 // metamorphosis: if the adult cannot live where the juvenile is, it moves to the nearest allowed side
                 if (sp.TwoStage && !w.CellAllows(World.FIdx(w.X[i], w.Y[i]), sp.Adult.Realm))
                     if (RandomSite(w, sp.Adult.Realm, (uint)i, out float x, out float y)) { w.X[i] = x; w.Y[i] = y; }
-            }
-        }
-
-        // colonists exist only in a prehistory run (DESIGN §7.4). A live world never reaches this point.
-        if (!w.Prehistory || w.Step >= (ulong)w.Evo.ColonistSteps) return;
-        for (int s = 0; s < w.NS; s++)
-        {
-            float floor = w.Sp[s].InitCount * w.Evo.Floor * (1f - (float)w.Step / MathF.Max(1, w.Evo.ColonistSteps));
-            if (activeCount[s] >= floor) continue;
-            // colonists arrive as one group, next to living kin if there are any (a lone colonist would never find a mate)
-            float gx, gy;
-            if (w.KinN[s] > 0) { gx = w.KinX[s]; gy = w.KinY[s]; }
-            else if (!RandomSite(w, w.Sp[s].Adult.Realm, (uint)s + 0x30000u, out gx, out gy)) continue;
-            for (int k = 0; k < K.GROUP_SIZE && activeCount[s] < floor; k++)
-            {
-                uint key = (uint)(s * 1000 + k) + 0x40000u;
-                ReadOnlySpan<sbyte> gsrc = Colonist(w, s, key);
-                int c = Found(w, s, gsrc, true, key, gx, gy);
-                if (c < 0) break;
-                w.Flags[c] |= Flag.Immigrant;
-                w.T.Immigrants[s]++;
-                activeCount[s]++;
             }
         }
     }
@@ -259,41 +231,6 @@ public static class Life
         w.T.SpendRepro[w.Spc[m]] += give / K.CARE_EFF;
         w.T.CareGiven[s] += give;
         w.PendingR[i] += K.R_INTAKE * give / emax;
-    }
-
-    /// <summary>
-    /// Genome of a colonist (DESIGN §7.4): once the archive holds 4 genomes, ARCHIVE_SHARE of colonists are bred
-    /// from it, parents chosen by tournament; sexual species get a crossover of two winners. The rest are random.
-    /// Returns empty for a random brain. Uses the world's scratch buffer.
-    /// </summary>
-    static ReadOnlySpan<sbyte> Colonist(World w, int s, uint key)
-    {
-        int n = w.ArchiveCount[s];
-        if (n < 4 || Rng.U(w.Seed, (uint)w.Step, key, Rs.Immigrant) >= w.Evo.ArchiveShare) return ReadOnlySpan<sbyte>.Empty;
-        int a = Tournament(w, s, n, key, 0);
-        var child = new Span<sbyte>(w.Scratch, 0, G.LEN);
-        var pa = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + a) * G.LEN, G.LEN);
-        bool sexual = w.Sp[s].Mode is Repro.Sexual or Repro.Hermaphrodite or Repro.Facultative or Repro.Cyclic;
-        if (sexual)
-        {
-            int b = Tournament(w, s, n, key, 1);
-            var pb = new ReadOnlySpan<sbyte>(w.Archive, (s * K.ARCHIVE + b) * G.LEN, G.LEN);
-            Brain.Crossover(child, pa, pb, w.Seed, (uint)w.Step, key + 0x60000u);
-        }
-        else pa.CopyTo(child);
-        return child;      // Found() mutates it
-    }
-
-    static int Tournament(World w, int s, int n, uint key, uint round)
-    {
-        int best = -1; float bs = float.MinValue;
-        for (int t = 0; t < w.Evo.Tournament; t++)
-        {
-            int k = (int)(Rng.U(w.Seed, (uint)w.Step, key, Rs.Archive + round * 16u + (uint)t) * n);
-            float sc = w.ArchiveScore[s * K.ARCHIVE + k];
-            if (sc > bs) { bs = sc; best = k; }
-        }
-        return best;
     }
 
     static void Hatch(World w, int i)

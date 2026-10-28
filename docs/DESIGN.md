@@ -7,7 +7,7 @@ constant named here are in `CONSTANTS.md`, which is generated from the code.
 - The laws of the world were reviewed once for physical consistency and are now frozen. No law is
   adjusted to produce an ecological outcome; outcomes are observed and reported.
 - Body traits evolve too, with costs (§7.5).
-- Founders and colonists arrive in groups (§7.4).
+- Founders start in groups (§7.4). (Revision E: there are no colonists anywhere; every run is births only.)
 - Growth and offspring cost energy; newborn size is a per-species life-history trait (§8, §9.1).
 
 **Changes from Revision A**
@@ -47,7 +47,8 @@ Behaviour is not designed.
 5. **The world you watch is births and deaths only.** No animal ever appears in it except by being
    born from a parent, so an extinct species stays extinct. Its first animals are seeded once, at step
    0, with brains from a gene bank saved by a prehistory run (`--evolve` / Evolve.bat), which stands
-   for the long evolution before the world begins. Only the prehistory uses colonists (§7.4).
+   for the long evolution before the world begins. The prehistory is births and deaths only too: no
+   run ever adds an animal after its founders (§7.4).
 
 ## 2. System overview
 
@@ -384,18 +385,19 @@ niche (a scavenger that hunts, a browser that grazes) without any species being 
 
 ### 7.4 Prehistory and the live world (NR-210, NR-212, NR-313)
 
-**Why there are two kinds of run.** A random brain cannot keep an animal alive long enough to raise
-young, so a world started from random brains with no help empties in its first generation. Real
-animals never start from random brains: their brains were shaped before any one of them was born.
-So evolution from random brains runs in a separate, labelled **prehistory** (§7.6), where
-colonists keep species going while brains evolve, and saves its result as a gene bank. The **live
-world**, the one shown in the console, is seeded once from that bank and is then births and deaths
-only. Its code path never reaches the colonist code (`World.Prehistory` is false), and a test kills a
-whole species and checks that it never returns. (An earlier version ran colonists in the console
-world too, which meant that the animals being watched were mostly spawned. That was wrong for a life
-simulation and has been removed.)
+**Births only, everywhere (Revision E).** Every world, a prehistory branch or the live world, is seeded
+once at step 0 with founders (a world has to start somewhere) and is then births and deaths only. No
+animal ever appears except by being born from a parent of its species. A species that dies out is
+gone from that world. The **prehistory** (§7.6) is a set of such worlds run at full speed before the
+world begins; it saves its best brains as a gene bank. The **live world** is seeded once from that bank.
+Tests wipe out a species in a prehistory branch and in a live world and check that it never returns,
+and that every animal created after the founders was conceived or laid.
 
-The rest of this section describes the prehistory.
+History: earlier revisions topped species up with colonists during the prehistory (bred from an elite
+archive, until step 400,000) and copied the best genomes between branches. Both put animals into a
+world that were not born there, and both were removed at the user's direction. What made a
+colonist-free run viable was fixing why animals failed: the innate starter kit (§7.7) and food-limited
+growth (§15). In a births-only test, 300 Drifter founders grew to about 1,200 in 8,000 steps.
 
 **Founders** are random, by the same rule for every species. Memory-layer weights are
 round(U(−1,1)·FOUNDER_W)/16. Output weights are small, round(U(−1,1)·FOUNDER_W2)/16, and the output
@@ -407,25 +409,13 @@ genes are drawn uniformly from their ranges; body genes start at 0, the species 
 no hand wiring, and tests assert that founder genomes depend only on the RNG and that founder gains
 start low.
 
-**Groups.** Real populations are clustered, and a lone colonist cannot find a mate (the Allee
-effect; the first prehistory runs showed every sexual species stuck at its floor while colonists were
-scattered uniformly). Founders and colonists therefore arrive in groups of GROUP_SIZE = 8 within
-GROUP_SPREAD = 10 units of one site.
+**Groups.** Real populations are clustered, and a lone animal cannot find a mate (the Allee effect).
+Founders therefore start in groups of GROUP_SIZE = 8 within GROUP_SPREAD = 10 units of one site.
 
-**Colonists (prehistory only).** During the first PREHISTORY steps (default 300,000), any species below its floor
-receives one colonist group per step on suitable cells (its realm):
-- **Breeding from the best.** Each species keeps an **elite archive** of ARCHIVE = 64 genomes. A
-  genome enters it when its owner dies, if it beats the weakest. The score counts offspring that
-  grew up most: SCORE_MATURED·(offspring that reached maturity) + offspring conceived + 0.1·(age /
-  lifespan).
-- Once the archive holds 4 genomes, ARCHIVE_SHARE = 90% of colonists are bred from it. Parents are
-  chosen by tournament (best of TOURNAMENT = 3 random entries). A colonist of a sexual species is a
-  crossover of two winners; an asexual one is a copy. Both are then mutated.
-- The other 10% are new random brains, which keeps variation.
-- A colonist group lands next to a living adult of its species if one exists (sampled each step),
-  so successful genes meet each other.
-
-The floor ramps linearly from PREHISTORY_FLOOR = 25% of the species' initial count to 0 over the prehistory. Colonists are counted separately from births. After the colonist period the prehistory continues without them.
+**Elite archive.** Each species keeps a record of the ARCHIVE = 64 best genomes of its dead. A genome
+enters it when its owner dies, if it beats the weakest. The score counts offspring that grew up most:
+SCORE_MATURED·(offspring that reached maturity) + offspring conceived + 0.1·(age / lifespan). The
+archive is only read when a gene bank is written. It never puts an animal into a world.
 
 **Gene bank.** The file holds, per species, the elite archive and up to 96 living genomes. Format
 (little-endian):
@@ -434,7 +424,7 @@ The floor ramps linearly from PREHISTORY_FLOOR = 25% of the species' initial cou
 2. Then for each species: count u16, followed by count × (score f32, genome bytes).
 
 A run started with `--load-bank` seeds each species from its bank genomes (mutated) instead of
-random ones. A live world never has colonists, with or without a bank.
+random ones.
 
 ### 7.6 The prehistory run: branches, settings, and the start of the world (NR-323 … NR-326)
 
@@ -442,31 +432,32 @@ random ones. A live world never has colonists, with or without a bank.
 bank), the console opens on the prehistory: it runs live, at full speed, and can be watched in 3D.
 `--evolve` (Evolve.bat) runs the same thing without the console. `--prehistory` forces a new one.
 
-**Branches (an island model).** BRANCHES = 3 separate populations evolve side by side on the same land
-(the same terrain seed, different run seeds), each on its own thread and each with BRANCH_CAPACITY
-slots. Separate populations explore different solutions; every MIGRATE_EVERY = 20,000 steps the
-MIGRANTS = 4 best archive genomes of each species are copied from each branch into the next one's
-archive, so a good solution found in one can spread. Branches meet at a barrier every 500 steps, so
-they stay in lockstep; settings changes, pauses and migrations happen only there, while no branch is
-stepping, which keeps every branch deterministic for a given sequence of settings.
+**Branches.** BRANCHES = 3 separate worlds evolve side by side on the same land (the same terrain seed,
+different run seeds), each on its own thread with BRANCH_CAPACITY slots. Nothing passes between them.
+Separate worlds explore different solutions, and a species that dies out in one may survive in
+another. Branches meet at a barrier every 500 steps, so they stay in lockstep; settings changes and
+pauses happen only there, while no branch is stepping.
 
 **Length.** PREHISTORY_STEPS = 500,000 steps, shown as YEARS_PER_STEP = 1,000 symbolic years per step
-(500 million years). The years are a label for the console, not a time scale of the model: one step
-is still one step of the same laws. Colonists arrive until PREHISTORY_COLONISTS = 400,000; the last
-100,000 steps are births only in every branch, so the prehistory ends with a test of whether each
-species can live without help.
+(500 million years). The years are a label for the console, not a time scale of the model: one step is
+still one step of the same laws.
 
-**Settings (EvoSettings).** The console's Prehistory tab can change, while it runs: mutation rate and
-size, share of big jumps, the share of colonists bred from the archive, the tournament size, the
-colonist floor, migration interval and count, and when colonists stop and the prehistory ends. These
-are knobs of the evolutionary search, not laws of the world (§15): they change how genomes vary and
-are selected, never what happens to a living animal. They are clamped to ranges where the search
-still works.
+**Settings (EvoSettings).** The console's Prehistory tab can change, while it runs, the mutation rate
+and size, the share of big jumps, and the length. They are clamped to sensible ranges. The default
+mutation rate is MUT_RATE = 1/G.LEN per byte, about one mutation per offspring, as in real genomes. A
+selection test (`SelectionImprovesAHeritableTrait`) shows that a gene which helps animals eat spreads
+from 50% to over 90% of a births-only population within a few thousand steps. The same happened at the
+old rate of 0.02 (~39 mutations per offspring), so that rate was unrealistic but was not what blocked
+evolution.
+
+**Is it evolving?** Telemetry tracks, per species, the mean starter-kit gene and the best archive score.
+The prehistory report shows both at the first and last sample, with the generation reached.
 
 **Standing.** For each species in each branch, over the last 32 samples (~1,000 steps):
-self-sustaining (alive; births at least 90% of deaths and at least twice the colonists), breeding
-(births, but not replacing itself), propped (alive only through colonists or unbred founders), or
-gone.
+- self-sustaining: alive, and births at least 90% of deaths;
+- breeding: births, but fewer than deaths;
+- dying: alive, with no births;
+- gone: extinct in that branch.
 
 **The start of the world.** At the end (or when "Begin the world" is pressed), the branches stop and
 each species' gene bank is taken from the branch where it stands best (then by numbers alive). The
@@ -492,7 +483,7 @@ Reflex genes R (int8, 28 × 9, appended to the genome) link each input to each p
 and mutate like every gene.
 
 **Starter kit (Revision D).** The full 500,000-step prehistory of Revision B (3 branches) ended with
-every species extinct within 100,000 steps of the last colonist. The life tables showed animals dying of
+every species extinct within 100,000 steps of the last colonist (colonists were removed later, §7.4). The life tables showed animals dying of
 thirst and starvation beside water and food: evolution from random wiring never found the basic
 survival skills in a few hundred generations, which real animals inherit from hundreds of millions of
 years of evolution. So founders now carry an innate starter kit, the same for every species: eight
@@ -793,7 +784,7 @@ it owns.
 | 1 | BUILD | — | X, Y, alive | spatial hash (counting sort) |
 | 2 | DECIDE | ∥ | world | own slot: learning update (from last reward), hidden state, gains, intents, probe |
 | 3 | RESOLVE | — | intents | kinematics, physiology, fields, deaths, conceptions, reward; counters. Visiting order is a seeded permutation that changes each step. |
-| 4 | LIFECYCLE | — | timers | hatching, metamorphosis, immigration |
+| 4 | LIFECYCLE | — | timers | hatching, metamorphosis, disease, parental care |
 | 5 | FIELDS | ∥ | old buffers | new buffers (swap) |
 | 6 | FIRE | — | fuel, moisture | fire state (serial: spread is directional) |
 | 7 | TELEMETRY | — | everything | counters; ring sample every 32 steps |
@@ -935,5 +926,5 @@ The one-time review made these changes, each for a stated physical reason:
 
 `--empty` runs the vegetation laws without animals, so they can be checked on their own.
 
-Changes to how the population is **seeded** (group colonisation, §7.4) are evolution mechanisms, not
-laws: they decide how colonists arrive, not what happens to them.
+Founders start in groups (§7.4). This is a choice about how each world begins, not a law, and no run
+adds animals after its founders.

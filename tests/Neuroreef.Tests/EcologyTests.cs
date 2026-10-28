@@ -308,35 +308,6 @@ public class EcologyTests
         Assert.True(sum / n < 0.12, $"mean founder gain {sum / n:F3}");
     }
 
-    [Fact] // DESIGN §7.4: once the archive has genomes, colonists are bred from it
-    public void ColonistsAreBredFromTheArchive()
-    {
-        using var sim = new Simulation(16384, 41, 1, prehistory: true);
-        var w = sim.W;
-        // put a recognisable genome into the Drifter archive
-        for (int k = 0; k < 8; k++)
-        {
-            var g = new Span<sbyte>(w.Archive, k * G.LEN, G.LEN);
-            g.Fill(5); g.Slice(G.BODY).Clear();
-            w.ArchiveScore[k] = 10 + k;
-        }
-        w.ArchiveCount[0] = 8;
-        // remove the living Drifters so the floor triggers immigration
-        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == 0) Resolve.DieNoBody(w, i, Cause.Starve, -1);
-        w.ArchiveCount[0] = 8;      // deaths may have added entries; keep only ours
-        sim.Step();
-        int bred = 0, total = 0;
-        for (int i = 0; i < w.Cap; i++)
-        {
-            if (w.StageOf[i] == St.Dead || w.Spc[i] != 0 || (w.Flags[i] & Flag.Immigrant) == 0) continue;
-            total++;
-            int fives = 0; for (int k = 0; k < 200; k++) if (w.Genome[i * G.LEN + G.W2 + k] == 5) fives++;
-            if (fives > 150) bred++;
-        }
-        Assert.True(total > 0);
-        Assert.True(bred >= total / 2, $"{bred} of {total} colonists bred from the archive");
-    }
-
     [Fact] // NR-313: in the live world no animal ever appears except by birth; extinction is permanent
     public void LiveWorldNeverSpawns()
     {
