@@ -55,10 +55,10 @@ public static class P
 /// genes that build the whole organism (DESIGN §6.3, Revision F), then the reflex genes.</summary>
 public static class G
 {
-    public const int NH = 12;                    // recurrent hidden units at most (a brain gene decides how many are used)
-    public const int NIN = F.N + NH;             // 46 inputs to the hidden layer and to the output layer
-    public const int W1N = NH * NIN;             // 552
-    public const int W2N = P.N * NIN;            // 1288 (plastic)
+    public const int NH = 36;                    // recurrent hidden units at most (a brain gene decides how many are used)
+    public const int NIN = F.N + NH;             // 70 inputs to the hidden layer and to the output layer
+    public const int W1N = NH * NIN;             // 2520
+    public const int W2N = P.N * NIN;            // 1960 (plastic)
     public const int W1 = 0, W2 = W1N;
     public const int ETA = W1N + W2N, LAMBDA = ETA + 1, SIGMA = ETA + 2, KAPPA = ETA + 3;
     // body genes (DESIGN §6.3): absolute values on fixed ranges; nothing is relative to a designed species
@@ -84,7 +84,7 @@ public static class G
     public const int NMHC = 4;
     public const int NBODY = B_MHC + NMHC - BODY;   // 42
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
-    public const int NC = 9;                     // reflex inputs (Reflex.Inputs)
+    public const int NC = 10;                    // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;
     public const int REFLEXN = P.N * NC;         // 252
     public const int LEN = REFLEX + REFLEXN;     // 2134 bytes

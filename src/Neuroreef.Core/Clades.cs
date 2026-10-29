@@ -88,7 +88,8 @@ public static class Clades
     /// The body genes of a random ancestor: a small, simple plant-eater of its realm (the only food that exists at the
     /// start). Every value inside those bounds is random; nothing else is decided.
     /// </summary>
-    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land)
+    /// <param name="brainUnits">0: a random brain of up to BRAIN_REF units; otherwise exactly this many (a big-brained ancestor)</param>
+    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0)
     {
         float U(int k) => Rng.U(seed, (uint)ancestor, (uint)k, Rs.Founder + 7000u);
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
@@ -113,7 +114,9 @@ public static class Clades
         body[G.B_EYEN - B] = (sbyte)((U(16) * 2f - 1f) * 127f);   // eye pairs
         body[G.B_LIFE - B] = (sbyte)((U(17) - 0.5f) * 120f);      // lifespan, development and brain size: anywhere mid-range
         body[G.B_DEVEL - B] = (sbyte)((U(18) - 0.5f) * 120f);
-        body[G.B_BRAIN - B] = (sbyte)((U(19) * 2f - 1f) * 127f);
+        // brain: a random size up to BRAIN_REF units (the old limit), or exactly brainUnits for a big-brained ancestor
+        float units = brainUnits > 0 ? brainUnits : K.BRAIN_MIN + U(19) * (K.BRAIN_REF - K.BRAIN_MIN);
+        body[G.B_BRAIN - B] = (sbyte)Math.Clamp((int)MathF.Round((units - K.BRAIN_MIN) / (G.NH - K.BRAIN_MIN) * 254f - 127f), -127, 127);
         body[G.B_HERM - B] = (sbyte)(U(35) < 0.5f ? -40 : 40);     // separate sexes or hermaphrodite
         body[G.B_SEXRATIO - B] = (sbyte)((U(36) - 0.5f) * 40f);    // about even sex ratio
         body[G.B_IMMUNE - B] = (sbyte)((U(37) * 2f - 1f) * 127f);

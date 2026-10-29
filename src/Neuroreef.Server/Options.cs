@@ -16,6 +16,7 @@ public sealed class Options
     public int ReportEvery = 2000;
     public string? LoadBank, SaveBank, Csv, CheckpointPath;
     public double CheckpointMinutes = 30;
+    public int BigBrains = -1, BigBrainUnits = 0;
     public bool NoCheckpoint, ResumePrehistory, ResumeWorld, NewWorld;
     public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
 
@@ -24,6 +25,8 @@ public sealed class Options
     {
         long n = stepsAreLength && StepsSet ? Steps : PrehistorySteps;
         var e = new EvoSettings { TotalSteps = n <= 0 || n > int.MaxValue ? int.MaxValue : (int)n };   // 0 = until stopped
+        if (BigBrains >= 0) e.BigBrains = BigBrains;
+        if (BigBrainUnits > 0) e.BigBrainUnits = BigBrainUnits;
         return e;
     }
     public string BankSource = "random";      // evolved, shipped, file, or random
@@ -63,6 +66,9 @@ public sealed class Options
   --checkpoint FILE     evolve: where to save and resume the whole state (default prehistory.nrck)
   --checkpoint-minutes N   evolve: minutes between saves (default 30)
   --no-checkpoint       evolve: never save or resume the whole state
+  --big-brains N        prehistory: how many of the 10 ancestors in each branch start big-brained (default 2:
+                        one on land, one in water; 0 = none)
+  --big-brain-units N   prehistory: memory units of a big-brained ancestor (default 36; others start with up to 12)
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
   --report N            headless: report interval in steps (default 2000)
@@ -102,6 +108,8 @@ public sealed class Options
                 case "--checkpoint-minutes": o.CheckpointMinutes = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--no-checkpoint": o.NoCheckpoint = true; break;
                 case "--new-world": o.NewWorld = true; break;
+                case "--big-brains": o.BigBrains = int.Parse(Next()); break;
+                case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");

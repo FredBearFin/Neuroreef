@@ -197,7 +197,9 @@ public static class Brain
         float* u = stackalloc float[G.NIN];
         float* c = stackalloc float[G.NC];
         for (int k = 0; k < F.N; k++) u[k] = f[k];
-        Reflex.Inputs(f, new Span<float>(c, G.NC));
+        // the mating drive: full in males, weaker in females and hermaphrodites (DESIGN §7.7)
+        float drive = w.PHerm[i] != 0 ? K.DRIVE_HERM : w.Sex[i] == 0 ? K.DRIVE_FEMALE : 1f;
+        Reflex.Inputs(f, new Span<float>(c, G.NC), drive);
         fixed (float* hid = &w.Hidden[i * G.NH])
         fixed (sbyte* gen = &w.Genome[i * G.LEN])
         fixed (float* W = &w.W2f[i * G.W2N])

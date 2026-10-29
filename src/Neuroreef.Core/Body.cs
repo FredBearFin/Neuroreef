@@ -58,7 +58,7 @@ public static class Body
         float mPow = MathK.Pow(m, K.EXP_BASAL);
         float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
                      + K.COST_LIMB * (legs * legPairs * 0.5f + fins * finPairs * 0.5f) + K.COST_WING * wings * MathK.Cbrt(m)
-                     + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f) + K.COST_BRAIN * brain / G.NH
+                     + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f) + K.COST_BRAIN * brain / K.BRAIN_REF
                      + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm;
         w.PBasal[i] = K.C_BASAL * mPow * Math.Clamp(basalF, 0.5f, 4f);
         w.PGut[i] = K.C_GUT * m;

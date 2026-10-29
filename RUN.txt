@@ -36,6 +36,13 @@ DATA EXPORT
   report.txt. The same files are also written to the exports folder beside Neuroreef.exe every 30
   minutes and when you close it. At the end of a prehistory, every branch's data is exported too.
 
+BIG-BRAINED ANCESTORS AND THE MATING INSTINCT
+  Every sexual animal is born with a mating instinct (strongest in males). In each prehistory branch,
+  2 of the 10 ancestors (one on land, one in water) start with 36 brain units, three times the others.
+  A bigger brain costs more energy; whether it pays is up to evolution. To change the experiment:
+  Neuroreef.exe --prehistory --big-brains 4 --big-brain-units 24     (or LongRun.bat: edit its line)
+  --big-brains 0 gives every ancestor an ordinary brain.
+
 BRANCHES
   At the end of a prehistory every branch's brains are saved: branch-0.nrbank, branch-1.nrbank, ...
   On the Prehistory tab, "Begin the world from branch N" picks the branch your world starts from.

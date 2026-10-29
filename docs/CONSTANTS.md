@@ -148,7 +148,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.000467727 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 0.000208073 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -212,14 +212,29 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_LONGEVITY | 0.25 | xbasal | basal cost per unit of extra lifespan (longer life needs more body repair) | ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977) |
 | DEVEL_AGING | 0.5 | - | lifespan scales with the development multiplier to this power (fast developers age sooner) | ECO: the fast-slow life-history continuum |
 | BRAIN_MIN | 2 | units | fewest memory units a brain can have | - |
-| COST_BRAIN | 0.15 | xbasal | basal cost of a full brain (all memory units), scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates |
+| COST_BRAIN | 0.15 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates |
+| BRAIN_REF | 12 | units | reference brain size for the brain cost (the largest brain before Revision J) | - |
+
+## 13. Brain
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| BIG_BRAINS | 2 | - | big-brained ancestors per branch (half on land, half in water), by default | designed: the user's experiment (2026-10-28): some lineages start with three times the brain |
+| BIG_BRAIN_UNITS | 36 | units | memory units of a big-brained ancestor, by default | designed: the user's experiment: three times BRAIN_REF |
+| DRIVE_FEMALE | 0.6 | - | strength of the mating instinct in females, against males (1) | designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972) |
+| DRIVE_HERM | 0.8 | - | strength of the mating instinct in hermaphrodites, against males (1) | designed: between the two sexes |
+
+## 14. Body
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
 | COST_HERM | 0.05 | xbasal | basal cost of being a hermaphrodite (keeping both sexes' organs) | ECO: hermaphrodites maintain male and female function |
 | COST_IMMUNE | 0.12 | xbasal | basal cost of full immune investment | ECO: immune defence is costly (Lochmiller & Deerenberg 2000) |
 | IMMUNE_PROTECT | 0.8 | - | share of infection and disease death that full immune investment prevents | ECO: partial, not total, protection |
 | D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
-## 13. Clades
+## 15. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -232,7 +247,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPLIT_MIN_D | 0.228 | - | and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2 | ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H) |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 14. Reproduction
+## 16. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -241,7 +256,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 15. Care
+## 17. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -250,7 +265,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 16. Disease
+## 18. Disease
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -263,7 +278,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
 | DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
 
-## 17. Weather
+## 19. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -271,7 +286,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 18. Vegetation
+## 20. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -322,7 +337,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 19. Fire
+## 21. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -337,6 +352,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 20. Organisms
+## 22. Organisms
 
 There are no designed species (Revision F). Life starts from 6 land and 4 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

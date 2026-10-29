@@ -157,10 +157,15 @@ public class EcologyTests
             if (v == 10) fromM++; else fromF++;
         }
         Assert.True(fromM > 5 && fromF > 5);
-        Brain.Mutate(c, 1, 2, 3);
+        // about one change per newborn on average: over 20 newborns, some changes, never a large share of the genome
         int changed = 0;
-        for (int k = 0; k < G.LEN; k++) if (c[k] != 10 && c[k] != -10) changed++;
-        Assert.InRange(changed, 1, G.LEN / 5);
+        for (uint key = 0; key < 20; key++)
+        {
+            var d = (sbyte[])c.Clone();
+            Brain.Mutate(d, 1, 2, 100 + key);
+            for (int k = 0; k < G.LEN; k++) if (d[k] != c[k]) changed++;
+        }
+        Assert.InRange(changed, 5, G.LEN / 5);
     }
 
     [Fact] // NR-212
@@ -397,6 +402,32 @@ public class EcologyTests
         w.Genome[G.B_WINGS] = -20; Body.Express(w, 0);
         Assert.NotEqual(Loco.Fly, w.LocoOf(0));
         Assert.True(w.PVLand[0] > none);
+    }
+
+    [Fact] // DESIGN §7.7 (Revision J): every founder carries the mating instinct; it is stronger in males
+    public void FoundersCarryTheMatingInstinct()
+    {
+        var g = new sbyte[G.LEN];
+        Brain.RandomGenome(g, 3, 0, 42);
+        Assert.True(g[G.REFLEX + P.MATE * G.NC + Reflex.READY_MATE] >= K.KIT_W - K.FOUNDER_W2);
+        Assert.True(g[G.REFLEX + P.SEEK_MATE * G.NC + Reflex.READY_ALONE] >= K.KIT_W - K.FOUNDER_W2);
+        Span<float> f = stackalloc float[F.N]; Span<float> male = stackalloc float[G.NC], female = stackalloc float[G.NC];
+        f[F.READY] = 1f; f[F.MATE_CLOSE] = 0.8f;
+        Reflex.Inputs(f, male, 1f); Reflex.Inputs(f, female, K.DRIVE_FEMALE);
+        Assert.True(male[Reflex.READY_MATE] > female[Reflex.READY_MATE] && female[Reflex.READY_MATE] > 0);
+    }
+
+    [Fact] // DESIGN §6.2 (Revision J): BigBrains ancestors per branch start with BigBrainUnits memory units, the rest up to BRAIN_REF (plus founder variation)
+    public void SomeAncestorsStartBigBrained()
+    {
+        using var sim = new Simulation(16384, 7, 1, evo: new EvoSettings { BigBrains = 2, BigBrainUnits = 36 });
+        var w = sim.W;
+        var maxUnits = new int[K.CLADES];
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) maxUnits[w.Spc[i]] = Math.Max(maxUnits[w.Spc[i]], w.PBrain[i]);
+        int big = 0;
+        for (int s = 0; s < K.ANCESTORS_LAND + K.ANCESTORS_WATER; s++) if (maxUnits[s] >= 33) big++; else Assert.True(maxUnits[s] <= K.BRAIN_REF + 6, $"clade {s}: {maxUnits[s]} units");
+        Assert.Equal(2, big);
+        Assert.True(maxUnits[0] >= 33 && maxUnits[K.ANCESTORS_LAND] >= 33);   // one on land, one in water
     }
 
     [Fact] // NR-303: thirst rises on land only

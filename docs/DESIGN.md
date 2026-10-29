@@ -1,7 +1,18 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision H. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision J. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision J: the mating instinct and big-brained ancestors** (designed by the user, 2026-10-28)
+- The starter kit (§7.7) gains the mating instinct: ready × a partner in reach → MATE, ready × no partner
+  near → SEEK_MATE, at KIT_W like the survival reflexes. "Any animal that is sexual, that's literally the top
+  of their goals." The drive is full in males, DRIVE_FEMALE in females and DRIVE_HERM in hermaphrodites. Before
+  this, sexual ancestors had no instinct to breed while cloners bred whenever a random brain fired LAY, and in
+  the user's run every sexual land ancestor crashed within 500 steps.
+- Brains may have up to G.NH = 36 memory units (12 before). In each prehistory branch, BigBrains = 2 of the 10
+  ancestors (one on land, one in water) start with BigBrainUnits = 36; the others start with a random size up
+  to BRAIN_REF = 12. Settable (--big-brains, --big-brain-units). Brain cost per unit is unchanged (COST_BRAIN
+  per BRAIN_REF units), so a 36-unit brain costs three times a 12-unit one; brain size is a gene and evolves.
 
 **Changes in Revision I: the ecology review's second list** (reviewed)
 - Cost of transport ∝ M^0.7·speed (Taylor et al. 1982); flight costs FLY_COST = 0.5 of running per

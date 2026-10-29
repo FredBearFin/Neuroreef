@@ -20,9 +20,10 @@ public sealed class Simulation : IDisposable
     public readonly int[] ActiveCount;
 
     /// <param name="prehistory">true for a prehistory branch (a label: every world is births and deaths only after its founders).</param>
-    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0)
+    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0, EvoSettings? evo = null)
     {
         W = new World(capacity, seed, terrainSeed);
+        if (evo != null) W.Evo.CopyFrom(evo);   // before founding: it says how many ancestors are big-brained
         Terrain.Build(W);
         _active = new int[W.NS];
         ActiveCount = _active;
@@ -53,9 +54,13 @@ public sealed class Simulation : IDisposable
         var w = W;
         var tmpl = new sbyte[G.LEN];
         uint key = 1;
+        // big-brained ancestors (the user's experiment): the first of the land ancestors and the first of the
+        // water ones, alternating, BigBrains in all; each starts with BigBrainUnits memory units
+        int nBig = w.Evo.BigBrains, bigLand = (nBig + 1) / 2, bigWater = nBig / 2;
         for (int a = 0; a < K.ANCESTORS_LAND + K.ANCESTORS_WATER; a++)
         {
             bool land = a < K.ANCESTORS_LAND;
+            bool big = land ? a < bigLand : a - K.ANCESTORS_LAND < bigWater;
             int clade = Clades.NewClade(w, -1, a);
             var realm = land ? Realm.Land : Realm.Water;
             float gx = 0, gy = 0;
@@ -66,7 +71,7 @@ public sealed class Simulation : IDisposable
                 // random brains per founder made crossover scramble networks, a hidden cost only sex paid)
                 Brain.RandomGenome(tmpl, seed, 0, 0x700000u + (uint)a);
                 Brain.VaryBrain(tmpl, seed, key);
-                Clades.AncestorBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, a, land);
+                Clades.AncestorBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0);
                 Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
                 Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
             }

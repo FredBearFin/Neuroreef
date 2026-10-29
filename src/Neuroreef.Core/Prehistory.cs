@@ -41,7 +41,7 @@ public sealed class Prehistory : IDisposable
         for (int b = 0; b < n; b++)
         {
             // every branch has its own run seed but the same land (terrain seed)
-            B[b] = new Simulation(capacity, seed + 1000u * (uint)b, per, null, prehistory: true, terrainSeed: seed);
+            B[b] = new Simulation(capacity, seed + 1000u * (uint)b, per, null, prehistory: true, terrainSeed: seed, evo: Pending);
             B[b].W.Evo.CopyFrom(Pending);
         }
         _barrier = new Barrier(n, _ => AtBarrier());

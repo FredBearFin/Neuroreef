@@ -185,7 +185,12 @@ public static class K
     [K("Body", "basal cost per unit of extra lifespan (longer life needs more body repair)", "xbasal", "ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977)")] public const float COST_LONGEVITY = 0.25f;
     [K("Body", "lifespan scales with the development multiplier to this power (fast developers age sooner)", "-", "ECO: the fast-slow life-history continuum")] public const float DEVEL_AGING = 0.5f;
     [K("Body", "fewest memory units a brain can have", "units", "-")] public const int BRAIN_MIN = 2;
-    [K("Body", "basal cost of a full brain (all memory units), scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates")] public const float COST_BRAIN = 0.15f;
+    [K("Body", "basal cost of a brain of BRAIN_REF memory units, scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates")] public const float COST_BRAIN = 0.15f;
+    [K("Body", "reference brain size for the brain cost (the largest brain before Revision J)", "units", "-")] public const int BRAIN_REF = 12;
+    [K("Brain", "big-brained ancestors per branch (half on land, half in water), by default", "-", "designed: the user's experiment (2026-10-28): some lineages start with three times the brain")] public const int BIG_BRAINS = 2;
+    [K("Brain", "memory units of a big-brained ancestor, by default", "units", "designed: the user's experiment: three times BRAIN_REF")] public const int BIG_BRAIN_UNITS = 36;
+    [K("Brain", "strength of the mating instinct in females, against males (1)", "-", "designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972)")] public const float DRIVE_FEMALE = 0.6f;
+    [K("Brain", "strength of the mating instinct in hermaphrodites, against males (1)", "-", "designed: between the two sexes")] public const float DRIVE_HERM = 0.8f;
     [K("Body", "basal cost of being a hermaphrodite (keeping both sexes' organs)", "xbasal", "ECO: hermaphrodites maintain male and female function")] public const float COST_HERM = 0.05f;
     [K("Body", "basal cost of full immune investment", "xbasal", "ECO: immune defence is costly (Lochmiller & Deerenberg 2000)")] public const float COST_IMMUNE = 0.12f;
     [K("Body", "share of infection and disease death that full immune investment prevents", "-", "ECO: partial, not total, protection")] public const float IMMUNE_PROTECT = 0.8f;
