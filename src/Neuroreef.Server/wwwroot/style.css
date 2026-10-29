@@ -33,6 +33,12 @@ button:disabled { opacity: .35; cursor: default; }
 #legend:empty { display: none; }
 #fights { right: 10px; top: 56px; width: 300px; max-width: 42%; font-size: 11px; color: var(--dim); background: #070b10b0; padding: 6px 8px; border-radius: 6px; pointer-events: auto; }
 #fights:empty { display: none; }
+#splits { left: 50%; transform: translateX(-50%); top: 56px; display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+#splits .split { background: #0d1a12e8; border: 1px solid #4fd18b; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--fg); max-width: 420px; box-shadow: 0 4px 18px #0008; animation: splitIn 0.5s ease-out; }
+#splits .sh { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: #4fd18b; margin-bottom: 2px; }
+#splits button { margin-top: 6px; }
+@keyframes splitIn { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+#legend sup { font-size: 8px; color: var(--faint); margin-left: 1px; }
 #fights .fh { font-family: var(--mono); color: var(--faint); letter-spacing: 0.06em; margin-bottom: 3px; }
 #fights .fl { cursor: pointer; padding: 1px 0; }
 #fights .fl.kill { color: #ff8a80; }

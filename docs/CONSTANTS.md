@@ -69,7 +69,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| SPLIT_GAP | 3 | - | two clusters are separate species when, along the axis between their centres, the gap is this many pooled SDs | ECO: genotypic clusters with few intermediates (Mallet 1995) |
+| SPLIT_GAP | 3 | - | two forms are separate clades when, along the axis between their centres (visible traits), the gap is this many pooled SDs | ECO: genotypic clusters with few intermediates (Mallet 1995) |
 
 ## 6. Allometry
 
@@ -269,7 +269,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ANCESTOR_COUNT | 600 | organisms | founding organisms per ancestor | HT |
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
 | MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
-| SPLIT_MIN_D | 0.228 | - | and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2 | ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H) |
+| SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
 ## 19. Reproduction

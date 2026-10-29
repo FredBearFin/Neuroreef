@@ -1,8 +1,9 @@
-// Clades and speciation (DESIGN §7.9, Revision F). Life starts from ANCESTORS_LAND + ANCESTORS_WATER random
-// ancestors, each its own clade. Organisms mate only within their clade. Every SPEC_EVERY steps each clade's
-// body genes are examined: if they have separated into two clusters with few intermediates (genotypic-cluster
-// species), the smaller cluster becomes a new clade, and from then on the two cannot interbreed. A split only
-// renames organisms that already exist; nothing is ever added. Serial; all buffers preallocated.
+// Clades and speciation (DESIGN §7.9, Revision F; visible forms, Revision L). Life starts from ANCESTORS_LAND +
+// ANCESTORS_WATER random ancestors, each its own clade. Every SPEC_EVERY steps each clade's visible traits are
+// examined: if they have separated into two clearly different-looking forms with few intermediates (genotypic
+// clusters), the smaller form becomes a new clade: a subspecies while the two are still more than half fertile
+// together, else a species. Clades are labels: who can breed with whom is decided by genes alone (Mate), never by
+// the label. A split only renames organisms that already exist; nothing is ever added. Serial; buffers preallocated.
 
 using System;
 
@@ -19,7 +20,7 @@ public static class Clades
         public readonly int[] Count = new int[K.CLADES];
         public readonly int[] Sample = new int[SAMPLE];
         public readonly float[] Vec = new float[SAMPLE * D];
-        public readonly float[] C1 = new float[D], C2 = new float[D], M = new float[D];
+        public readonly float[] C1 = new float[D], C2 = new float[D], M = new float[D], G1 = new float[D], G2 = new float[D];
         public int Version;                      // changes when the clade table changes (the console resends it)
         public int NextSerial = 1;
     }
@@ -27,7 +28,7 @@ public static class Clades
     // ------------------------------------------------------------------ clade slots
 
     /// <summary>Take a free clade slot (never used, or extinct for CLADE_RECYCLE steps). -1 if none.</summary>
-    public static int NewClade(World w, int parent, int ancestor)
+    public static int NewClade(World w, int parent, int ancestor, bool sub = false)
     {
         int slot = -1;
         for (int k = 0; k < K.CLADES && slot < 0; k++) if (!w.Sp[k].Used) slot = k;
@@ -43,8 +44,14 @@ public static class Clades
         s.Serial = w.CladeScratch.NextSerial++;
         s.Generation = parent >= 0 ? w.Sp[parent].Generation + 1 : 0;
         s.Name = Name(w.Seed, (uint)s.Serial);
-        float hue = parent >= 0 ? Hue(w.Sp[parent]) + (Rng.U(w.Seed, (uint)s.Serial, 0, Rs.Bank + 50) - 0.5f) * 70f : ancestor * 360f / Math.Max(1, w.Evo.AncestorsLand + w.Evo.AncestorsWater);
-        float light = parent >= 0 ? 0.45f + 0.2f * Rng.U(w.Seed, (uint)s.Serial, 1, Rs.Bank + 50) : 0.55f;
+        s.Sub = sub;
+        // a species takes a new hue near its parent's; a subspecies keeps the hue and flips light against dark,
+        // so the two forms side by side read as related but clearly different
+        float u0 = Rng.U(w.Seed, (uint)s.Serial, 0, Rs.Bank + 50), u1 = Rng.U(w.Seed, (uint)s.Serial, 1, Rs.Bank + 50);
+        float hue = parent < 0 ? ancestor * 360f / Math.Max(1, w.Evo.AncestorsLand + w.Evo.AncestorsWater)
+                  : Hue(w.Sp[parent]) + (u0 - 0.5f) * (sub ? 24f : 70f);
+        float pl = parent >= 0 ? Light(w.Sp[parent]) : 0.55f;
+        float light = parent < 0 ? 0.55f : sub ? (pl >= 0.5f ? 0.32f + 0.06f * u1 : 0.70f + 0.06f * u1) : 0.45f + 0.2f * u1;
         Hsl(hue, 0.75f, light, out s.R, out s.G, out s.B);
         w.CladeScratch.Version++;
         return slot;
@@ -63,6 +70,8 @@ public static class Clades
         sb[0] = char.ToUpperInvariant(sb[0]);
         return sb.ToString();
     }
+
+    static float Light(Species s) => (MathF.Max(s.R, MathF.Max(s.G, s.B)) + MathF.Min(s.R, MathF.Min(s.G, s.B))) / 510f;
 
     static float Hue(Species s)
     {
@@ -162,7 +171,22 @@ public static class Clades
 
     static float Gene(World w, int i, int k) => w.Genome[i * G.LEN + G.BODY + k] * (1f / 127f);
 
-    /// <summary>Split clade s if its body genes form two clusters with few intermediates. Returns the new clade or -1.</summary>
+    // The traits you can see on a body, each in "visible units": 1 unit is a difference you notice at a glance
+    // (Revision L, the user: "subspeciation that is very clearly visual"): half again the body mass, 0.15 of an
+    // organ's range (legs, fins, wings, armour, weapons, eyes), or one more pair of legs, fins or eyes.
+    static readonly int[] VisGene = { G.B_MASS, G.B_SIGHT, G.B_ARMOUR, G.B_STRIKE, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_LEGN, G.B_FINN, G.B_EYEN };
+    static readonly string[] VisName = { "size", "eyes", "armour", "weapons", "legs", "fins", "wings", "leg pairs", "fin pairs", "eye pairs" };
+    const int V = 10;
+    static readonly float MassUnit = MathF.Log(1.5f) / MathF.Log(K.MASS_HI / K.MASS_LO) * 254f;
+    static float VisUnit(int k) => k == 0 ? MassUnit : k >= 7 ? 254f / 4f : 0.15f * 254f;
+    static float Vis(World w, int i, int k) => w.Genome[i * G.LEN + VisGene[k]] / VisUnit(k);
+
+    /// <summary>
+    /// Split clade s if its visible traits form two clusters with few intermediates (a gap of SPLIT_GAP pooled SDs
+    /// along the axis between them, Mallet's genotypic clusters) and the two forms differ visibly (by at least
+    /// SPLIT_VIS units in some trait). The new clade is a subspecies while the two centres are still more than half
+    /// fertile together (their whole body genomes, as Mate uses), else a species. Returns the new clade or -1.
+    /// </summary>
     public static int TrySplit(World w, int s, Scratch x)
     {
         // a deterministic sample of up to SAMPLE members (every k-th by slot)
@@ -172,83 +196,98 @@ public static class Clades
             if (w.StageOf[i] == St.Dead || w.Spc[i] != s) continue;
             if (seen++ % stride != 0) continue;
             x.Sample[n] = i;
-            for (int k = 0; k < D; k++) x.Vec[n * D + k] = Gene(w, i, k);
+            for (int k = 0; k < V; k++) x.Vec[n * V + k] = Vis(w, i, k);
             n++;
         }
         if (n < 2 * K.MIN_SPLIT / Math.Max(1, stride)) return -1;
         // 2-means: start from the member farthest from the mean, and the one farthest from it
         Array.Clear(x.M);
-        for (int a = 0; a < n; a++) for (int k = 0; k < D; k++) x.M[k] += x.Vec[a * D + k] / n;
-        int f1 = Farthest(x.Vec, n, x.M);
-        Array.Copy(x.Vec, f1 * D, x.C1, 0, D);
-        int f2 = Farthest(x.Vec, n, x.C1);
-        Array.Copy(x.Vec, f2 * D, x.C2, 0, D);
-        int n1 = 0, n2 = 0; 
-        Span<float> s1 = stackalloc float[D];
+        for (int a = 0; a < n; a++) for (int k = 0; k < V; k++) x.M[k] += x.Vec[a * V + k] / n;
+        int f1 = FarthestV(x.Vec, n, x.M);
+        Array.Copy(x.Vec, f1 * V, x.C1, 0, V);
+        int f2 = FarthestV(x.Vec, n, x.C1);
+        Array.Copy(x.Vec, f2 * V, x.C2, 0, V);
+        Span<float> s1 = stackalloc float[V];
         for (int it = 0; it < 10; it++)
         {
-            Array.Clear(x.M);                     // M accumulates cluster 2, s1 cluster 1
-            s1.Clear();
-            n1 = n2 = 0;
+            Array.Clear(x.M); s1.Clear();         // M accumulates cluster 2, s1 cluster 1
+            int n1 = 0, n2 = 0;
             for (int a = 0; a < n; a++)
             {
-                float d1 = Dist2(x.Vec, a, x.C1), d2 = Dist2(x.Vec, a, x.C2);
-                if (d1 <= d2) { n1++; for (int k = 0; k < D; k++) s1[k] += x.Vec[a * D + k]; }
-                else { n2++; for (int k = 0; k < D; k++) x.M[k] += x.Vec[a * D + k]; }
+                if (D2V(x.Vec, a, x.C1) <= D2V(x.Vec, a, x.C2)) { n1++; for (int k = 0; k < V; k++) s1[k] += x.Vec[a * V + k]; }
+                else { n2++; for (int k = 0; k < V; k++) x.M[k] += x.Vec[a * V + k]; }
             }
             if (n1 == 0 || n2 == 0) return -1;
-            for (int k = 0; k < D; k++) { x.C1[k] = s1[k] / n1; x.C2[k] = x.M[k] / n2; }
+            for (int k = 0; k < V; k++) { x.C1[k] = s1[k] / n1; x.C2[k] = x.M[k] / n2; }
         }
-        float sep = MathF.Sqrt(Dist2C(x.C1, x.C2));
-        if (sep < 1e-6f || sep / MathF.Sqrt(D) < K.SPLIT_MIN_D) return -1;   // SPLIT_MIN_D is per gene (RMS)
-        // few intermediates: along the axis between the centres, the gap is SPLIT_GAP pooled SDs (Revision H; the old
-        // whole-genome spread test was ~9 sigma for a sexual population and almost never passed)
+        // the two forms must look different: some trait apart by SPLIT_VIS units
+        int most = 0; float big = 0;
+        for (int k = 0; k < V; k++) { float d = MathF.Abs(x.C2[k] - x.C1[k]); if (d > big) { big = d; most = k; } }
+        float sep = 0; for (int k = 0; k < V; k++) { float d = x.C2[k] - x.C1[k]; sep += d * d; }
+        sep = MathF.Sqrt(sep);
+        w.Sp[s].SplitDist = big / K.SPLIT_VIS; w.Sp[s].SplitGap = 0;
+        if (big < K.SPLIT_VIS) return -1;
+        // few intermediates: along the axis between the centres, the gap is SPLIT_GAP pooled SDs
         float m1 = 0, m2 = 0, q1 = 0, q2 = 0; int k1 = 0, k2 = 0;
         for (int a = 0; a < n; a++)
         {
             float t = 0;
-            for (int k = 0; k < D; k++) t += (x.Vec[a * D + k] - x.C1[k]) * (x.C2[k] - x.C1[k]);
+            for (int k = 0; k < V; k++) t += (x.Vec[a * V + k] - x.C1[k]) * (x.C2[k] - x.C1[k]);
             t /= sep;
-            if (Dist2(x.Vec, a, x.C1) <= Dist2(x.Vec, a, x.C2)) { m1 += t; q1 += t * t; k1++; } else { m2 += t; q2 += t * t; k2++; }
+            if (D2V(x.Vec, a, x.C1) <= D2V(x.Vec, a, x.C2)) { m1 += t; q1 += t * t; k1++; } else { m2 += t; q2 += t * t; k2++; }
         }
         if (k1 == 0 || k2 == 0) return -1;
         m1 /= k1; m2 /= k2;
         float pooled = MathF.Sqrt(MathF.Max(1e-8f, (q1 - k1 * m1 * m1 + q2 - k2 * m2 * m2) / n));
+        w.Sp[s].SplitGap = (m2 - m1) / pooled / K.SPLIT_GAP;
         if ((m2 - m1) / pooled < K.SPLIT_GAP) return -1;
         // count the whole clade by nearest centre; both sides must be viable populations
         int c1 = 0, c2 = 0;
+        Array.Clear(x.G1); Array.Clear(x.G2);   // whole body genomes of the two forms, for their fertility together
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] == St.Dead || w.Spc[i] != s) continue;
-            if (NearSecond(w, i, x)) c2++; else c1++;
+            bool second = NearSecondV(w, i, x);
+            var g = second ? x.G2 : x.G1;
+            for (int k = 0; k < D; k++) g[k] += Gene(w, i, k);
+            if (second) c2++; else c1++;
         }
         if (c1 < K.MIN_SPLIT || c2 < K.MIN_SPLIT) return -1;
+        float dg = 0; for (int k = 0; k < D; k++) { float d = x.G1[k] / c1 - x.G2[k] / c2; dg += d * d; }
+        dg = MathF.Sqrt(dg / D) / K.D_COMPAT;
+        bool sub = MathF.Exp(-dg * dg * dg * dg) > 0.5f;   // still more than half fertile together
         bool secondIsNew = c2 <= c1;
-        int nc = NewClade(w, s, w.Sp[s].Ancestor);
+        int nc = NewClade(w, s, w.Sp[s].Ancestor, sub);
         if (nc < 0) return -1;
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] == St.Dead || w.Spc[i] != s) continue;
-            if (NearSecond(w, i, x) == secondIsNew) w.Spc[i] = (byte)nc;
+            if (NearSecondV(w, i, x) == secondIsNew) w.Spc[i] = (byte)nc;
         }
+        // how the new form looks against the old: its two most different traits
+        var cn = secondIsNew ? x.C2 : x.C1; var co = secondIsNew ? x.C1 : x.C2;
+        int second2 = -1; float b2 = 0;
+        for (int k = 0; k < V; k++) { float d = MathF.Abs(cn[k] - co[k]); if (k != most && d > b2 && d >= 0.5f * K.SPLIT_VIS) { b2 = d; second2 = k; } }
+        string Why(int k) => k == 0 ? (cn[0] > co[0] ? $"bigger (x{MathF.Pow(1.5f, cn[0] - co[0]):0.#})" : $"smaller (x{MathF.Pow(1.5f, cn[0] - co[0]):0.##})")
+                              : (cn[k] > co[k] ? "more " : "fewer ").Replace("fewer ", k >= 7 ? "fewer " : "less ") + VisName[k];
+        w.Sp[nc].SplitWhy = second2 >= 0 ? Why(most) + ", " + Why(second2) : Why(most);
         w.T.Splits++;
         return nc;
     }
 
-    static bool NearSecond(World w, int i, Scratch x)
+    static bool NearSecondV(World w, int i, Scratch x)
     {
         float d1 = 0, d2 = 0;
-        for (int k = 0; k < D; k++) { float v = Gene(w, i, k), a = v - x.C1[k], b = v - x.C2[k]; d1 += a * a; d2 += b * b; }
+        for (int k = 0; k < V; k++) { float v = Vis(w, i, k), a = v - x.C1[k], b = v - x.C2[k]; d1 += a * a; d2 += b * b; }
         return d2 < d1;
     }
 
-    static int Farthest(float[] vec, int n, float[] c)
+    static int FarthestV(float[] vec, int n, float[] c)
     {
         int best = 0; float bd = -1;
-        for (int a = 0; a < n; a++) { float d = Dist2(vec, a, c); if (d > bd) { bd = d; best = a; } }
+        for (int a = 0; a < n; a++) { float d = D2V(vec, a, c); if (d > bd) { bd = d; best = a; } }
         return best;
     }
 
-    static float Dist2(float[] vec, int a, float[] c) { float s = 0; for (int k = 0; k < D; k++) { float d = vec[a * D + k] - c[k]; s += d * d; } return s; }
-    static float Dist2C(float[] a, float[] b) { float s = 0; for (int k = 0; k < D; k++) { float d = a[k] - b[k]; s += d * d; } return s; }
+    static float D2V(float[] vec, int a, float[] c) { float s = 0; for (int k = 0; k < V; k++) { float d = vec[a * V + k] - c[k]; s += d * d; } return s; }
 }

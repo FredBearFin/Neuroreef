@@ -212,7 +212,7 @@ public static class Wire
             list[s] = new
             {
                 id = s, name = c.Name, color = $"#{c.R:x2}{c.G:x2}{c.B:x2}", used = c.Used, alive = c.Alive, parent = c.Parent, ancestor = c.Ancestor,
-                generation = c.Generation, born = c.Born, extinct = c.Extinct, serial = c.Serial, count = n[s],
+                generation = c.Generation, sub = c.Sub, why = c.SplitWhy, splitDist = MathF.Round(c.SplitDist, 2), splitGap = MathF.Round(c.SplitGap, 2), born = c.Born, extinct = c.Extinct, serial = c.Serial, count = n[s],
                 niche, trophic = tro, mass = m, unitMass = m, swarm = false, parasite = false, loco = lc, juvLoco = lc, twoStage = false,
                 sight = (float)(sight[s] / k), fov = (float)(fov[s] / k), birth = (float)(birth[s] / k), sexual = (float)(sexual[s] / k), live = (float)(live[s] / k),
                 diet = d, juvDiet = d, shape = 0,

@@ -60,6 +60,7 @@ function frame() {
 
 function setClades(list, step) {
   if (!list) return;
+  announceSplits(list);
   clades = list;
   meta.species = list;           // everything that reads meta.species sees the live table
   if (world && typeof world.setClades === 'function') world.setClades(list);
@@ -88,9 +89,10 @@ function buildLegend() {
   for (const s of alive.concat(dead)) {
     const at = extinctAt(s), it = document.createElement('span');
     it.dataset.sp = s.id;
-    it.title = `${s.name} · ${s.niche}${s.parent >= 0 ? ` · split off at step ${s.born.toLocaleString()}` : ' · ancestor'}`;
+    const par = s.parent >= 0 && clades[s.parent] ? clades[s.parent].name : '';
+    it.title = `${s.name} · ${s.niche}${s.parent >= 0 ? ` · ${s.sub ? 'subspecies' : 'species'} split from ${par} at step ${s.born.toLocaleString()}${s.why ? ': ' + s.why : ''}` : ' · ancestor'}`;
     if (at >= 0) { it.className = 'ext'; it.innerHTML = `<i></i>${s.name} <b>extinct at ${at.toLocaleString()}</b>`; }
-    else it.innerHTML = `<i style="background:${s.color}"></i>${s.name} <em>${s.count.toLocaleString()}</em>`;
+    else it.innerHTML = `<i style="background:${s.color}"></i>${s.name}${s.parent >= 0 ? `<sup>${s.sub ? 'ssp.' : 'sp.'}</sup>` : ''} <em>${s.count.toLocaleString()}</em>`;
     if (world.hidden.has(s.id)) it.classList.add('off');
     it.onclick = () => { if (world.hidden.has(s.id)) world.hidden.delete(s.id); else world.hidden.add(s.id); it.classList.toggle('off'); legendSig = ''; };
     lg.append(it);
@@ -314,4 +316,38 @@ function fightSound(list) {
     else if (kind === 5) noise(t, 0.07, 0.5 * v, 3200, 1500, 3);
     made++;
   }
+}
+
+// splits: a banner when a clade divides into two visibly different forms, with a button that flies to the new one
+const seenSplit = new Set(); let splitsPrimed = false;
+function announceSplits(list) {
+  const fresh = [];
+  for (const c of list) {
+    if (!c || !c.used || c.parent < 0 || seenSplit.has(c.serial)) continue;
+    seenSplit.add(c.serial);
+    if (splitsPrimed) fresh.push(c);   // the clades that already existed when the page opened are not news
+  }
+  splitsPrimed = true;
+  for (const c of fresh) showSplit(c, list[c.parent]);
+}
+function showSplit(c, p) {
+  const box = $('splits'); if (!box) return;
+  const d = document.createElement('div');
+  d.className = 'split';
+  d.innerHTML = `<div class="sh">${c.sub ? 'NEW SUBSPECIES' : 'NEW SPECIES'}</div>` +
+    `<div><b style="color:${c.color}">${c.name}</b> split from <b style="color:${p ? p.color : '#aaa'}">${p ? p.name : '?'}</b>` +
+    `${c.why ? `: ${c.why}` : ''}</div><button>Show me</button>`;
+  d.querySelector('button').onclick = () => {
+    if (!world) return;
+    let sx = 0, sy = 0, n = 0, W = world.W, rx = null, ry = null;
+    for (const e of world.agents.values()) {
+      if (e.sp !== c.id) continue;
+      if (rx === null) { rx = e.x; ry = e.y; }
+      sx += e.x - W * Math.round((e.x - rx) / W); sy += e.y - W * Math.round((e.y - ry) / W); n++;   // unwrap around the first
+    }
+    if (n) world.lookAt(((sx / n) % W + W) % W, ((sy / n) % W + W) % W);
+  };
+  box.prepend(d);
+  while (box.children.length > 3) box.lastChild.remove();
+  setTimeout(() => d.remove(), 90000);
 }

@@ -66,7 +66,7 @@ public static class K
     [K("Reproduction", "cost to a hermaphrodite of siring, as a share of its own litter's cost (male function)", "-", "ECO: male function takes 10-30% of a simultaneous hermaphrodite's reproductive resources (Charnov 1982)")] public const float C_SIRE = 0.2f;
     [K("Disease", "match width: a strain infects a host whose recognition genes are within this RMS distance (/127) of its key", "-", "ECO: matching-alleles host-parasite genetics (Hamilton 1980; Lively 2010): rare host genotypes escape, which can favour sex")] public const float MHC_W = 0.35f;
     [K("Disease", "mutation of a strain's key per transmission (SD)", "int8", "ECO: pathogens evolve far faster than their hosts")] public const float MHC_MUT = 6f;
-    [K("Clades", "two clusters are separate species when, along the axis between their centres, the gap is this many pooled SDs", "-", "ECO: genotypic clusters with few intermediates (Mallet 1995)")] public const float SPLIT_GAP = 3f;
+    [K("Clades", "two forms are separate clades when, along the axis between their centres (visible traits), the gap is this many pooled SDs", "-", "ECO: genotypic clusters with few intermediates (Mallet 1995)")] public const float SPLIT_GAP = 3f;
     [K("Allometry", "thirst rise per step (death after ~830 dry steps)", "/step", "HT")] public const float C_THIRST = 0.0012f;
     [K("Allometry", "fatigue gain at full sprint", "/step", "HT")] public const float C_FATIGUE = 0.012f;
     [K("Allometry", "fatigue recovery (x3 resting)", "/step", "HT")] public const float C_RECOVER = 0.004f;
@@ -214,7 +214,7 @@ public static class K
     [K("Clades", "founding organisms per ancestor", "organisms", "HT")] public const int ANCESTOR_COUNT = 600;
     [K("Clades", "steps between speciation checks", "steps", "-")] public const int SPEC_EVERY = 2000;
     [K("Clades", "smallest cluster that can become a species", "organisms", "ECO: a viable population")] public const int MIN_SPLIT = 40;
-    [K("Clades", "and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2", "-", "ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H)")] public const float SPLIT_MIN_D = 0.228f;
+    [K("Clades", "two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes)", "-", "designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species")] public const float SPLIT_VIS = 1f;
     [K("Clades", "an extinct clade's slot is reused only after this many steps", "steps", "-")] public const int CLADE_RECYCLE = 20000;
 
     // ---------------------------------------------------------------- 6. reproduction

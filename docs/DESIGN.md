@@ -13,6 +13,12 @@ demonstrated violence ... the animals should actively be terrorizing each other 
 - Only a death counts as a kill (blood meals were counted as kills).
 - The live world mutates at WorldMut (default 3) x the prehistory's rate: time compression for a small valley,
   not ecology (setup: Evolution speed in your world). Pet valley preset: plants x0.6, seasons x1.6, droughts x2.
+- Splits are visible forms (§7.9): every SPEC_EVERY steps a clade is split when its visible traits (size, eyes,
+  armour, weapons, legs, fins, wings, and pairs of each) form two clusters with a gap of SPLIT_GAP pooled SDs and
+  some trait differs by SPLIT_VIS visible units (half again the mass, 0.15 of an organ, or a pair). The new clade is
+  a subspecies while the two forms are still more than half fertile (their mean body genomes, as Mate judges), else a
+  species; it keeps its parent's hue, light against dark. The old rule (half-infertile across all body genes) needed
+  thousands of generations and never fired. Clades are labels: breeding is decided by genes alone.
 - Display only: every strike is recorded (Telemetry.Fight: miss, wound, kill, blood bite, drained, egg) and shown
   in the console as flashes, blood stains and a fight log; the camera starts close over the biggest group.
 

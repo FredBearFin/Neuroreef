@@ -235,11 +235,43 @@ public class EcosystemTests
         int a = 0, b2 = 0;
         for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) { if (w.Spc[i] == 0) a++; else b2++; }
         Assert.Equal(120, a); Assert.Equal(120, b2);
-        // the two are now reproductively isolated
+        // two forms this far apart in their genes are a species, not a subspecies
         int x = -1, y = -1;
         for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) { if (w.Spc[i] == 0 && x < 0) x = i; if (w.Spc[i] != 0 && y < 0) y = i; }
         Assert.NotEqual(w.Spc[x], w.Spc[y]);
         Assert.Equal(0, w.Sp[w.Spc[y]].Parent);
+        Assert.False(w.Sp[w.Spc[y]].Sub);
+        Assert.False(string.IsNullOrEmpty(w.Sp[w.Spc[y]].SplitWhy));
+    }
+
+    [Fact] // Revision L: two forms that look clearly different but still breed together are a subspecies
+    public void VisibleFormsThatStillInterbreedAreASubspecies()
+    {
+        var w = CladeWorld(83, (k, b) =>
+        {
+            bool form = k % 2 == 0;
+            b[G.B_MASS - G.BODY] = (sbyte)(form ? -30 + k % 5 : 30 - k % 5);   // one form about 3x the mass of the other
+        });
+        w.Step = K.SPEC_EVERY;
+        Clades.Update(w);
+        Assert.Equal(1, w.T.Splits);
+        int nc = -1; for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] != 0) { nc = w.Spc[i]; break; }
+        Assert.True(w.Sp[nc].Sub, "should still be one species");
+        Assert.Contains("size", w.Sp[nc].SplitWhy.Replace("bigger", "size").Replace("smaller", "size"));
+    }
+
+    [Fact] // Revision L: forms that differ only in what cannot be seen (speed, diet) are not named apart
+    public void InvisibleDifferencesDoNotSplit()
+    {
+        var w = CladeWorld(84, (k, b) =>
+        {
+            bool form = k % 2 == 0;
+            b[G.B_SPEED - G.BODY] = (sbyte)(form ? 100 : -100);
+            b[G.B_DIET - G.BODY] = (sbyte)(form ? 100 : -100);
+        });
+        w.Step = K.SPEC_EVERY;
+        Clades.Update(w);
+        Assert.Equal(0, w.T.Splits);
     }
 
     [Fact]
