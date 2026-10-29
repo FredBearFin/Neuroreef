@@ -34,7 +34,7 @@ jobs:
         run: dist\Neuroreef.exe --headless --steps 300 --report 100 --capacity 16384
       - name: Smoke test (evolve, 600 steps)
         run: |
-          dist\Neuroreef.exe --evolve --steps 600 --capacity 16384
+          dist\Neuroreef.exe --evolve --no-setup --steps 600 --capacity 16384
           if (!(Test-Path dist\evolved.nrbank)) { throw 'evolved.nrbank not written' }
           Remove-Item dist\evolved.nrbank, dist\evolve-report.*
       - name: Add run instructions
