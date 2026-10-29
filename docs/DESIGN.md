@@ -64,6 +64,17 @@ those physical properties. Code: `Climate.cs` (climate and `Heat`), `Fields.Row`
   trees spread less on cold high ground when the soil is equally wet, but on the real map, over a few years, drought
   and fire dominate tree dynamics and cold ground is wetter, so tree cover follows moisture more than temperature at
   first (trees live ~5 years at D_T; a treeline takes decades).
+- Result of a short check (8,000 steps, 2 branches x 12,288 slots, region map, seed 1), same code at three climate
+  strengths. Climate 0.6 (default): land air -22 .. 25 °C (mean 6 °C; a third of the land has an annual mean below
+  0 °C, as the torus has two polar bands); branch 0 died out entirely, branch 1 ended with 243 organisms (two land
+  omnivore clades). Deaths by cold 876 and 625 in two water clades (an immersed endotherm loses heat 4x faster at
+  0.5-10 °C water) and 2-4 in others; no deaths by heat; dead clades had spent 50-245% of their basal energy on heat.
+  Climate 0.3: land -1 .. 22 °C, 670 and 944 organisms, 28 cold deaths (a water clade). Climate 0 (Revision N rules):
+  728 and 4,106. Tree cover was ~0.05-0.07 in every band below 20 °C and 0.30 above (moisture- and fire-driven over 8,000
+  steps); grass rose from 0.07 (< 0 °C) to 0.54 (15-20 °C). No clear difference yet in mass, fur or appendages between
+  the coldest and warmest third of living animals (fur 0.18-0.19 everywhere; founders 0.15, so it rose slightly).
+  At the default the climate is a strong filter on founders; whether 0.6 should stay the default, and whether
+  water-living bodies should be allowed lower body temperatures (ectothermy as a physical gene), are open questions.
 
 **Home ranges** (the user, 2026-10-30): each founding lineage starts in its own home range (radius HOME_R of the map
 side), the one of HOME_TRIES random sites farthest from the homes already taken; founding from a gene bank does the
