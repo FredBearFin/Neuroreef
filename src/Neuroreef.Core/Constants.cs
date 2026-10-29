@@ -177,6 +177,7 @@ public static class K
     [K("Body", "a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading)", "-", "ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings")] public const float WING_LIFT = 1.6f;
     [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
     [K("Body", "a legless body crawls on land at this share of its top speed", "-", "ECO: worms, snakes and stranded fish move slowly without legs")] public const float CRAWL = 0.05f;
+    [K("Food", "share of its meat-digesting skill a meat-eater brings to carrion", "-", "ECO: almost all carnivores scavenge; wolves feed on a kill for days (DeVault et al. 2003)")] public const float SCAVENGE = 0.8f;
     [K("Land", "a pond site is the lowest cell within this many cells", "cells", "ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas)")] public const int POND_R = 2;
     [K("Land", "pond sites are at least this far from a lake, sea or river", "cells", "HT: a pond beside a lake adds nothing")] public const float POND_GAP = 6f;
     [K("Land", "a pond holds water while its cell is this much wetter than its average (season x this year's rain)", "x", "ECO: ephemeral pools fill in the wet season and dry in the dry season and in drought years, in wet and dry country alike")] public const float POND_FILL = 1.0f;

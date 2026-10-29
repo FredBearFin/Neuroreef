@@ -228,6 +228,7 @@ public static class Resolve
                 w.Energy[a] -= hurt;
                 rew -= K.R_PAIN * hurt / emax;
             }
+            w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], Telemetry.F_MISS, w.Step);
             return rew;
         }
         float space = MathF.Max(0f, gutCap - w.Gut[a]);
@@ -239,9 +240,8 @@ public static class Resolve
             w.Energy[v] -= dmg;
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + K.PAIN_HIT);
             w.PendingR[v] -= K.R_PAIN * dmg / MathF.Max(w.EmaxOf(v), 1e-3f);
-            if (w.Energy[v] > 0) return rew;
+            if (w.Energy[v] > 0) { w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], Telemetry.F_WOUND, w.Step); return rew; }
         }
-        w.T.Kills[w.Spc[a]]++;
         float ev = MathF.Max(0f, w.Energy[v]);
         if (drainHit)
         {
@@ -251,14 +251,18 @@ public static class Resolve
             w.PendingR[v] -= K.R_PAIN * drain / MathF.Max(w.EmaxOf(v), 1e-3f);
             float m = MathF.Min(space, drain / K.RHO_BLOOD);
             if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell);
-            if (w.Energy[v] <= 0) { w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
+            bool dead = w.Energy[v] <= 0;
+            w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], dead ? Telemetry.F_DRAINED : Telemetry.F_BITE, w.Step);
+            if (dead) { w.T.Kills[w.Spc[a]]++; w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
             return rew;
         }
         // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
         float carcass = K.C_CARC * w.MassOf(v) + ev / K.RHO_MEAT;
         float eat = MathF.Min(space, carcass);
         if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; }
+        w.T.Kills[w.Spc[a]]++;   // only a death counts as a kill (a blood meal is not one)
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
+        w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], egg ? Telemetry.F_EGG : Telemetry.F_KILL, w.Step);
         DieNoBody(w, v, Cause.Killed, w.Spc[a]);
         w.Pool[water ? (int)Pool.Detritus : (int)Pool.Carrion][cell] += carcass;
         w.T.KillFlash(cell);

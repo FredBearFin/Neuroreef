@@ -99,6 +99,20 @@ public sealed class Telemetry
         if (KillFlashN < KillFlashCells.Length) KillFlashCells[KillFlashN++] = cell;
     }
 
+    // Fights, for the console to show (not a rule): a ring of the latest strikes, FIGHT_F floats each
+    // (x, y, attacker clade, victim clade, kind, step). FightSeq counts every fight ever recorded.
+    public const int FIGHT_N = 512, FIGHT_F = 6;
+    public const int F_MISS = 0, F_WOUND = 1, F_KILL = 2, F_BITE = 3, F_DRAINED = 4, F_EGG = 5;
+    public readonly float[] Fights = new float[FIGHT_N * FIGHT_F];
+    public long FightSeq;
+
+    public void Fight(float x, float y, int attacker, int victim, int kind, ulong step)
+    {
+        int o = (int)(FightSeq % FIGHT_N) * FIGHT_F;
+        Fights[o] = x; Fights[o + 1] = y; Fights[o + 2] = attacker; Fights[o + 3] = victim; Fights[o + 4] = kind; Fights[o + 5] = step;
+        FightSeq++;
+    }
+
     /// <summary>Copy of sample k (0 = oldest kept) into dst. Returns false if not available.</summary>
     public bool Sample(int k, Span<float> dst)
     {

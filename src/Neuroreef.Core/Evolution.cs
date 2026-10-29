@@ -1,6 +1,7 @@
 // Evolution settings (DESIGN §7.6): the mutation knobs and the length of a prehistory run. Defaults
 // come from the constants table; the console may change them while a prehistory runs. They never add an
-// animal: every run is births and deaths only after its founders. A live world uses the defaults.
+// animal: every run is births and deaths only after its founders. A live world uses them x the setup's
+// world evolution speed (Revision L: time compression for a small valley, not ecology).
 
 namespace Neuroreef;
 

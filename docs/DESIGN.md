@@ -1,7 +1,20 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision K. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision L. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision L: predators that can win** (the user, 2026-10-29: "less animals, more evolution, more
+demonstrated violence ... the animals should actively be terrorizing each other and evolving to win"; ecology review)
+- A meat-eater digests carrion at SCAVENGE = 0.8 of its meat skill, so a hunter can return to its own kill (before,
+  what did not fit in its gut went to a pool only carrion-specialists could eat). Almost all carnivores scavenge.
+- Ancestors' armour and weapons start in the same random range (armour started ahead, so strike genes drifted down).
+- Ancestor body mass is log-uniform over land 0.3-20, water 0.1-5 (was 0.3-2, 0.1-1): fewer, bigger animals can
+  be selected from the start.
+- Only a death counts as a kill (blood meals were counted as kills).
+- The live world mutates at WorldMut (default 3) x the prehistory's rate: time compression for a small valley,
+  not ecology (setup: Evolution speed in your world). Pet valley preset: plants x0.6, seasons x1.6, droughts x2.
+- Display only: every strike is recorded (Telemetry.Fight: miss, wound, kill, blood bite, drained, egg) and shown
+  in the console as flashes, blood stains and a fight log; the camera starts close over the biggest group.
 
 **Changes in Revision K: a small world you can follow, and water you can live without** (the user, 2026-10-29:
 "a personal intimate simulation, like following a wolf pack and their prey in a valley"; the water rules

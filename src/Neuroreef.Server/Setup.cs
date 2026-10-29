@@ -41,7 +41,7 @@ public static class Setup
                 plants = o.Plants, seasons = o.Seasons, seasonLength = o.SeasonLength, drought = o.Drought, fire = o.Fire, disease = o.Disease, thirst = o.Thirst,
                 ancestorsLand = o.AncestorsLand, ancestorsWater = o.AncestorsWater, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
                 bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
-                matingDrive = o.MatingDrive, mutBrain = 1f, mutBody = 1f,
+                matingDrive = o.MatingDrive, mutBrain = 1f, mutBody = 1f, worldMut = o.WorldMut,
                 branches = o.Branches, branchSlots = o.BranchSlots,
                 steps = o.Evolve && o.StepsSet ? (int)Math.Clamp(o.Steps, 0, int.MaxValue) : o.PrehistorySteps,
                 worldSlots = o.Capacity, rate = o.Rate,
@@ -60,7 +60,7 @@ public static class Setup
             o.Founders = I("founders", 20, 5000, K.ANCESTOR_COUNT);
             o.BigBrains = I("bigBrains", 0, 16, K.BIG_BRAINS); o.BigBrainUnits = I("bigBrainUnits", K.BRAIN_MIN, G.NH, K.BIG_BRAIN_UNITS);
             o.MatingDrive = F("matingDrive", 0f, 3f, o.MatingDrive);
-            o.MutBrainX = F("mutBrain", 0f, 5f, 1f); o.MutBodyX = F("mutBody", 0f, 5f, 1f);
+            o.MutBrainX = F("mutBrain", 0f, 5f, 1f); o.MutBodyX = F("mutBody", 0f, 5f, 1f); o.WorldMut = F("worldMut", 0f, 10f, o.WorldMut);
             o.Branches = I("branches", 1, 8, o.Branches); o.BranchSlots = I("branchSlots", 2048, 262144, o.BranchSlots);
             o.PrehistorySteps = I("steps", 0, int.MaxValue, o.PrehistorySteps);   // 0 = until you begin the world (or stop it)
             if (o.Evolve) { o.Steps = o.PrehistorySteps; o.StepsSet = true; }   // the headless prehistory takes its length from --steps

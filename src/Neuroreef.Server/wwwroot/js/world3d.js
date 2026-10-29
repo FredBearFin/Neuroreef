@@ -11,6 +11,7 @@ import { merge } from './creatures/kit.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize } from './creatures/body.js';
 
 const RELIEF = 55;
+const FX_MAX = 256;           // fight flashes and blood stains drawn at once
 const NEAR_DIST = 90;        // organisms closer than this to the camera are drawn with the detailed body
 const NEAR_CAP = 4096;       // at most this many detailed bodies; the rest get the low-detail one
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
@@ -303,6 +304,24 @@ export class World3D {
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;
+    if (!this._framed && a.n > 0) { this._framed = true; this.closeUp(); }
+  }
+
+  /** Put the camera close over the biggest gathering of animals, near enough to watch them (the start view). */
+  closeUp() {
+    const C = 24, W = this.W, n = Math.max(1, Math.floor(W / C)), cnt = new Map();
+    let best = -1, bk = 0;
+    for (const e of this.agents.values()) {
+      const k = Math.floor(e.y / C) % n * n + Math.floor(e.x / C) % n, c = (cnt.get(k) || 0) + 1;
+      cnt.set(k, c); if (c > best) { best = c; bk = k; }
+    }
+    if (best < 0) return;
+    let sx = 0, sy = 0, m = 0;
+    for (const e of this.agents.values()) if (Math.floor(e.y / C) % n * n + Math.floor(e.x / C) % n === bk) { sx += e.x; sy += e.y; m++; }
+    const x = sx / m, y = sy / m, g = this.world ? this.heightAt(x, y) : 0;
+    this.controls.target.set(x, g, y);
+    this.camera.position.set(x - 20, g + 14, y + 20);
+    this.controls.update();
   }
 
   /** Interpolated, camera-relative position of an agent. */
@@ -332,6 +351,69 @@ export class World3D {
     this.percMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(128 * 3), 3);
     this.percMesh.count = 0; this.percMesh.renderOrder = 6; this.percMesh.frustumCulled = false;
     this.scene.add(this.selRing, this.selBeam, this.fov, this.percMesh);
+    // fights: an expanding flash where a strike landed, and a blood stain where an animal was killed
+    const fr = new THREE.RingGeometry(0.55, 1.0, 24); fr.rotateX(-Math.PI / 2);
+    this.flashMesh = new THREE.InstancedMesh(fr, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false }), FX_MAX);
+    this.flashMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FX_MAX * 3), 3);
+    this.flashMesh.count = 0; this.flashMesh.renderOrder = 7; this.flashMesh.frustumCulled = false;
+    const st = new THREE.CircleGeometry(1, 14); st.rotateX(-Math.PI / 2);
+    this.stainMesh = new THREE.InstancedMesh(st, new THREE.MeshBasicMaterial({ color: 0x7a0d0d, transparent: true, opacity: 0.75, depthWrite: false }), FX_MAX);
+    this.stainMesh.count = 0; this.stainMesh.renderOrder = 2; this.stainMesh.frustumCulled = false;
+    this.scene.add(this.flashMesh, this.stainMesh);
+    this.fx = [];      // live flashes {x, y, t0, kind}
+    this.stains = [];  // blood where animals died {x, y, t0, r}
+  }
+
+  /** Fights from the simulation: [x, y, attacker clade, victim clade, kind, step]; kinds as Telemetry.F_*. */
+  addFights(list) {
+    const now = performance.now();
+    for (const f of list) {
+      const [x, y, , , kind] = f;
+      if (kind === 0 && this.fx.length > FX_MAX / 2) continue;   // misses are the first to go when it is busy
+      this.fx.push({ x, y, t0: now, kind });
+      if (kind === 2 || kind === 4 || kind === 5) this.stains.push({ x, y, t0: now, r: kind === 5 ? 0.5 : 1.1 });
+    }
+    if (this.fx.length > FX_MAX) this.fx.splice(0, this.fx.length - FX_MAX);
+    if (this.stains.length > FX_MAX) this.stains.splice(0, this.stains.length - FX_MAX);
+  }
+
+  /** Move the camera over a place on the map (a fight in the log). */
+  lookAt(x, y) {
+    if (this.mode !== 'overview') return;
+    const c = this.controls.target, W = this.W;
+    x += W * Math.round((c.x - x) / W); y += W * Math.round((c.z - y) / W);   // the copy nearest the view
+    const off = this.camera.position.clone().sub(c), d = off.length(), lim = 40;
+    if (d > lim) off.multiplyScalar(lim / d);
+    const g = this.heightAt(x, y);
+    c.set(x, g, y); this.camera.position.set(x + off.x, g + Math.max(8, off.y), y + off.z);
+  }
+
+  _drawFights(cx, cz) {
+    const now = performance.now(), W = this.W, m = new THREE.Matrix4(), col = new THREE.Color();
+    const near = (v, c) => v + W * Math.round((c - v) / W);
+    // kinds: 0 miss (white puff), 1 wound (orange), 2 kill (red, big), 3 blood drunk (purple), 4 drained to death, 5 egg eaten
+    const LIFE = [600, 1200, 2600, 1200, 2600, 1600], SIZE = [0.8, 1.4, 3.2, 1.2, 2.6, 1.2],
+          RGB = [[0.9, 0.9, 0.9], [1, 0.55, 0.1], [1, 0.08, 0.05], [0.75, 0.2, 0.9], [0.85, 0.05, 0.5], [1, 0.85, 0.3]];
+    let k = 0;
+    this.fx = this.fx.filter((e) => now - e.t0 < LIFE[e.kind]);
+    for (const e of this.fx) {
+      const a = (now - e.t0) / LIFE[e.kind], x = near(e.x, cx), y = near(e.y, cz), s = SIZE[e.kind] * (0.4 + 1.6 * a);
+      m.makeScale(s, 1, s); m.setPosition(x, this.heightAt(x, y) + 0.4, y);
+      this.flashMesh.setMatrixAt(k, m);
+      const f = 1 - a; col.setRGB(RGB[e.kind][0] * f, RGB[e.kind][1] * f, RGB[e.kind][2] * f);
+      this.flashMesh.setColorAt(k, col);
+      k++;
+    }
+    this.flashMesh.count = k; this.flashMesh.instanceMatrix.needsUpdate = true; if (k) this.flashMesh.instanceColor.needsUpdate = true;
+    const STAIN = 45000;   // a kill's blood stays about 45 s
+    this.stains = this.stains.filter((e) => now - e.t0 < STAIN);
+    k = 0;
+    for (const e of this.stains) {
+      const a = (now - e.t0) / STAIN, x = near(e.x, cx), y = near(e.y, cz), s = e.r * (1 - 0.6 * a);
+      m.makeScale(s, 1, s); m.setPosition(x, this.heightAt(x, y) + 0.08, y);
+      this.stainMesh.setMatrixAt(k++, m);
+    }
+    this.stainMesh.count = k; this.stainMesh.instanceMatrix.needsUpdate = true;
   }
 
   setMode(m) {
@@ -494,6 +576,7 @@ export class World3D {
       this.fov.position.set(selP[0], gh + 0.35, selP[1]); this.fov.rotation.set(0, -selP[2], 0);
       this._perceive(sel, selP, R, fov, alpha, cx, cz);
     } else { this.selRing.visible = this.selBeam.visible = this.fov.visible = false; this.percMesh.count = 0; }
+    this._drawFights(cx, cz);
 
     this.renderer.render(this.scene, this.camera);
   }

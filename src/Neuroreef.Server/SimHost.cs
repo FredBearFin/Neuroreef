@@ -79,7 +79,7 @@ public sealed class SimHost : IDisposable
             Console.WriteLine($"continuing your saved world at step {_live.W.Step:N0} ({_live.W.AliveCount:N0} alive)");
         }
         else if (bank != null || o.RandomBrains)
-            _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed);
+            _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed, evo: o.WorldSettings());
         else
         {
             Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false));
@@ -225,7 +225,7 @@ public sealed class SimHost : IDisposable
         Pre = null;
         pre.Dispose();
         if (Map.W != Nature.WorldMap) { Map.Set(Nature.WorldMap); Console.WriteLine($"the world is a {Map.Name} ({Map.W} units)"); }
-        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed);
+        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed, evo: _o.WorldSettings());
         _live = live;
         BankSource = "prehistory";
         Paused = false;

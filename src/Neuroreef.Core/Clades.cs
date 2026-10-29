@@ -95,11 +95,12 @@ public static class Clades
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
         for (int k = 0; k < G.NBODY; k++) body[k] = 0;
         int B = G.BODY;
-        body[G.B_MASS - B] = G.ToGeneLog(land ? 0.3f * MathF.Pow(2f / 0.3f, U(0)) : 0.1f * MathF.Pow(10f, U(0)), K.MASS_LO, K.MASS_HI);
+        body[G.B_MASS - B] = G.ToGeneLog(land ? 0.3f * MathF.Pow(20f / 0.3f, U(0)) : 0.1f * MathF.Pow(50f, U(0)), K.MASS_LO, K.MASS_HI);   // log-uniform: land 0.3-20, water 0.1-5 (Revision L)
         body[G.B_SPEED - B] = (sbyte)((U(1) - 0.5f) * 60f);
         body[G.B_SIGHT - B] = (sbyte)((U(2) - 0.5f) * 60f);
-        body[G.B_ARMOUR - B] = Lin(3, -1f, -0.6f);                 // little armour
-        body[G.B_STRIKE - B] = Lin(4, -1f, -0.7f);                 // almost no weapons
+        // armour and weapons from the same range, so neither side of an arms race starts ahead (Revision L, ecology review)
+        body[G.B_ARMOUR - B] = Lin(3, -1f, 0f);
+        body[G.B_STRIKE - B] = Lin(4, -1f, 0f);
         body[G.B_LITTER - B] = Lin(5, -0.8f, 0.4f);
         body[G.B_CARE - B] = Lin(6, -1f, 0.2f);
         body[G.B_LEGS - B] = land ? Lin(7, -0.2f, 0.6f) : Lin(7, -1f, -0.6f);   // land: legs above the walking threshold

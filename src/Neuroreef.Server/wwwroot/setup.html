@@ -115,6 +115,8 @@ function defs() {
         help: 'The most organisms your world can hold. A valley rarely needs more than 16,000.' },
       { key: 'rate', label: 'Speed it starts at', list: RATES, val: V.rate, fmt: (v) => v === 0 ? 'as fast as possible' : v + ' steps per second',
         help: 'The speed buttons change it any time.' },
+      { key: 'worldMut', label: 'Evolution speed in your world', min: 0, max: 6, step: 0.25, val: V.worldMut, fmt: x,
+        help: 'Mutation in the world you watch, × the prehistory\'s. A small valley has few animals, so change is slow at ×1; ×3 compresses time.' },
     ] }]),
   ];
 }
@@ -164,7 +166,7 @@ function estimate() {
 }
 
 const PRESETS = {
-  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 65536, founders: 400, worldSlots: 16384, rate: 3, plants: 1, seasons: 1.3, drought: 1.5, seasonLength: 3000 },
+  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 65536, founders: 400, worldSlots: 16384, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3 },
   light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 16384, founders: 300, bigBrains: 2, bigBrainUnits: 24, worldSlots: 8192, rate: 3 },
   normal: { preMap: 512, worldMap: 256, branches: 3, branchSlots: 65536, founders: 600, bigBrains: 2, bigBrainUnits: 36, worldSlots: 16384, rate: 3 },
   big: { preMap: 1024, worldMap: 512, branches: 4, branchSlots: 131072, founders: 900, bigBrains: 2, bigBrainUnits: 36, worldSlots: 65536, rate: 10 },

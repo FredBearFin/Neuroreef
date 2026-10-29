@@ -26,7 +26,7 @@ public class EcologyTests
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             float plants = 0; for (int p = 0; p <= (int)Pool.Phyto; p++) plants += w.PDiet[i * Pools.N + p];
             Assert.True(plants > 0.7f * K.DIET_BUDGET, $"clade {s} plant share {plants}");
-            Assert.True(w.PStrike[i] < 0.35f * K.STRIKE_MAX);
+            Assert.True(w.PStrike[i] <= 0.65f * K.STRIKE_MAX, $"clade {s} strike {w.PStrike[i]}");   // weapons and armour start in the same range (Revision L)
         }
         // the ancestors differ from each other: their bodies are random, not designed
         var masses = new float[used];

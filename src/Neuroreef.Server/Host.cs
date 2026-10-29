@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -329,7 +330,7 @@ public static class Host
         {
             var h = _s.H;
             long agentsVer = -1, fieldsVer = -1, probeVer = -1; int teleHead = -1, phaseSeen = h.PhaseVersion;
-            double nextPre = 0; int cladesSent = int.MinValue;
+            double nextPre = 0, nextFights = 0; int cladesSent = int.MinValue; long fightSeen = -1;
             var sw = Stopwatch.StartNew();
             double nextAgents = 0, nextFields = 0, nextTele = 0, nextAnalysis = 0, nextStatus = 0, nextProbe = 0;
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
@@ -373,6 +374,27 @@ public static class Host
                     nextTele = t + 500;
                     var (d, head) = _s.Telemetry();
                     if (d != null && head != teleHead) { teleHead = head; await Bin(d, ct); }
+                }
+                if (t >= nextFights)
+                {
+                    nextFights = t + 250;
+                    var T = h.W.T; long seq = T.FightSeq;
+                    if (fightSeen < 0 || seq < fightSeen) fightSeen = seq;   // a new connection or another world on view: only new fights
+                    if (seq > fightSeen)
+                    {
+                        long from = Math.Max(fightSeen, seq - 96);   // at most 96 per message: a massacre is shown by its latest
+                        var sb = new StringBuilder("{\"type\":\"fights\",\"list\":[");
+                        for (long q = from; q < seq; q++)
+                        {
+                            int o = (int)(q % Telemetry.FIGHT_N) * Telemetry.FIGHT_F;
+                            if (q > from) sb.Append(',');
+                            sb.Append('[').Append(T.Fights[o].ToString("0.0", CultureInfo.InvariantCulture)).Append(',').Append(T.Fights[o + 1].ToString("0.0", CultureInfo.InvariantCulture))
+                              .Append(',').Append((int)T.Fights[o + 2]).Append(',').Append((int)T.Fights[o + 3]).Append(',').Append((int)T.Fights[o + 4]).Append(',').Append((long)T.Fights[o + 5]).Append(']');
+                        }
+                        sb.Append("]}");
+                        fightSeen = seq;
+                        await Txt(sb.ToString(), ct);
+                    }
                 }
                 if (t >= nextStatus)
                 {

@@ -38,6 +38,15 @@ public sealed class Options
     public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
 
     /// <summary>The prehistory's starting evolution settings from the command line.</summary>
+    /// <summary>The live world's mutation: the prehistory's, x WorldMut (a small valley needs it to show change).</summary>
+    public EvoSettings WorldSettings()
+    {
+        var e = new EvoSettings { MatingDrive = MatingDrive };
+        e.MutRate *= MutBrainX * WorldMut; e.MutBody *= MutBodyX * WorldMut;
+        e.Clamp();
+        return e;
+    }
+
     public EvoSettings PrehistorySettings(bool stepsAreLength)
     {
         long n = stepsAreLength && StepsSet ? Steps : PrehistorySteps;
@@ -50,6 +59,7 @@ public sealed class Options
         return e;
     }
     public string BankSource = "random";      // evolved, shipped, file, or random
+    public float WorldMut = 3f;         // x mutation in the live world (time compression; 1 = the prehistory's rate)
     public float Rate = 3;              // the world starts at a watchable pace (the speed buttons change it)
 
     public const string Usage = @"Neuroreef 2 - an energy-cycle ecosystem of learning brains
@@ -99,6 +109,7 @@ public sealed class Options
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
   --season-length N     steps per year (default 3000)   --water X   share of the map under water (default 0.10)
   --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
+  --world-mutation X    mutation in the world you watch, x the prehistory's (default 3: faster change in a small valley)
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
   --report N            headless: report interval in steps (default 2000)
@@ -156,6 +167,7 @@ public sealed class Options
                 case "--thirst": o.Thirst = F(Next()); break;
                 case "--water": o.Water = F(Next()); break;
                 case "--ponds": o.Ponds = F(Next()); break;
+                case "--world-mutation": o.WorldMut = F(Next()); break;
                 case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); o.NoSetup = true; break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;

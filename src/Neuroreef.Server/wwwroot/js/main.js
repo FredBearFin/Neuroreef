@@ -28,6 +28,7 @@ link.listen('meta', (m) => {
 link.listen('clades', (c) => { if (!meta) { pendingClades = c.list; return; } setClades(c.list, c.step); });
 link.listen('world', (w) => world && world.setWorld(w));
 link.listen('agents', (a) => world && world.setAgents(a));
+link.listen('fights', (f) => { if (world) world.addFights(f.list); fightLog(f.list); });
 link.listen('fields', (f) => { if (world) world.setFields(f); if (panels) panels.setFields(f); });
 link.listen('history', (h) => panels && panels.setHistory(h));
 link.listen('telemetry', (t) => panels && panels.addSample(t));
@@ -251,4 +252,25 @@ function feed(e) {
     const c = it.species >= 0 && cladeOf(it.species) ? cladeOf(it.species).color : '#8aa0b5';
     return `<span class="item"><i style="background:${c}"></i>${it.text}</span>`;
   }).join('');
+}
+
+// the fight log: the latest kills and wounds in words; tap one to fly there
+const fightLines = []; let killsSeen = 0;
+function fightLog(list) {
+  const box = $('fights'); if (!box) return;
+  const name = (id) => { const c = clades.find((q) => q && q.id === id); return c ? `<b style="color:${c.color}">${c.name}</b>` : 'something'; };
+  const VERB = [null, 'wounded', 'killed', 'drank the blood of', 'bled to death', 'ate an egg of'];
+  for (const f of list) {
+    const [x, y, a, v, kind, step] = f;
+    if (kind === 2 || kind === 4) killsSeen++;
+    if (!VERB[kind]) continue;
+    const text = kind === 4 ? `${name(v)} drained to death by ${name(a)}` : `${name(a)} ${VERB[kind]} ${a === v ? 'its own kind' : (kind === 5 ? '' : 'a ') + name(v)}`;
+    fightLines.unshift({ x, y, step, text, kill: kind === 2 || kind === 4 });
+  }
+  if (fightLines.length > 40) fightLines.length = 40;
+  // kills first, then the most recent wounds
+  const show = fightLines.filter((l) => l.kill).slice(0, 5).concat(fightLines.filter((l) => !l.kill).slice(0, 2)).sort((p, q) => q.step - p.step);
+  box.innerHTML = `<div class="fh">FIGHTS · ${killsSeen} kill${killsSeen === 1 ? '' : 's'} seen</div>` +
+    show.map((l, i) => `<div class="fl${l.kill ? ' kill' : ''}" data-i="${fightLines.indexOf(l)}">${l.text} <em>step ${l.step.toLocaleString()}</em></div>`).join('');
+  for (const d of box.querySelectorAll('.fl')) d.onclick = () => { const l = fightLines[+d.dataset.i]; if (l && world) world.lookAt(l.x, l.y); };
 }

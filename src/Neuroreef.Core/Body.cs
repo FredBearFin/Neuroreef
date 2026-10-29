@@ -106,6 +106,9 @@ public static class Body
         w.PCool[i] = K.C_COOL * t;
         w.PCare[i] = Organ(gn[g + G.B_CARE]);
         ExpressDiet(w, i, realm, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
+        // a meat-eater can feed on a carcass, its own kill's included (Revision L, ecology review: wolves
+        // return to a kill for days, and almost every carnivore scavenges)
+        { int d = i * Pools.N; w.PDiet[d + (int)Pool.Carrion] = MathF.Max(w.PDiet[d + (int)Pool.Carrion], K.SCAVENGE * w.PDiet[d + (int)Pool.Meat]); }
         // a blood specialist with weapons drains its victims instead of killing them (a parasite habit)
         float blood = w.PDiet[i * Pools.N + (int)Pool.Blood], meat = w.PDiet[i * Pools.N + (int)Pool.Meat];
         // drain or kill is a matter of degree (ecology review): the share of successful strikes that drain blood
