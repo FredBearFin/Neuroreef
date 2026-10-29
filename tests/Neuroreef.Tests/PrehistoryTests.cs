@@ -39,22 +39,25 @@ public class PrehistoryTests
         pre.StopAndWait();
     }
 
+    // a save's fingerprint (a checkpoint of 256-unit brains can pass 2 GB, too big to read into one array)
+    static byte[] Hash(string p) { using var f = System.IO.File.OpenRead(p); return System.Security.Cryptography.SHA256.HashData(f); }
+
     static byte[] State(Prehistory pre)
     {
         string p = System.IO.Path.GetTempFileName();
-        try { Checkpoint.Save(pre, p); return System.IO.File.ReadAllBytes(p); } finally { System.IO.File.Delete(p); }
+        try { Checkpoint.Save(pre, p); return Hash(p); } finally { System.IO.File.Delete(p); }
     }
 
     [Fact] // DESIGN §7.6: a prehistory saved and resumed continues exactly as one that never stopped
     public void CheckpointResumesExactly()
     {
         byte[] straight;
-        using (var a = new Prehistory(2, 8192, 81, 2)) { RunTo(a, 1500); straight = State(a); }
+        using (var a = new Prehistory(2, 4096, 81, 2)) { RunTo(a, 1500); straight = State(a); }
         string path = System.IO.Path.GetTempFileName();
         try
         {
-            using (var b = new Prehistory(2, 8192, 81, 2)) { RunTo(b, 1000); Checkpoint.Save(b, path); }
-            using var c = new Prehistory(2, 8192, 81, 2);
+            using (var b = new Prehistory(2, 4096, 81, 2)) { RunTo(b, 1000); Checkpoint.Save(b, path); }
+            using var c = new Prehistory(2, 4096, 81, 2);
             c.LoadCheckpoint(path);
             Assert.Equal(1000UL, c.Step);
             RunTo(c, 1500);
@@ -62,7 +65,7 @@ public class PrehistoryTests
             Assert.Equal(straight.Length, resumed.Length);
             Assert.True(straight.AsSpan().SequenceEqual(resumed), "resumed state differs from the straight run");
             // a checkpoint for another seed is refused
-            using var d = new Prehistory(2, 8192, 82, 2);
+            using var d = new Prehistory(2, 4096, 82, 2);
             Assert.Throws<System.IO.InvalidDataException>(() => d.LoadCheckpoint(path));
         }
         finally { System.IO.File.Delete(path); }
@@ -71,7 +74,7 @@ public class PrehistoryTests
     static byte[] WorldState(World w)
     {
         string p = System.IO.Path.GetTempFileName();
-        try { Checkpoint.SaveWorld(w, p); return System.IO.File.ReadAllBytes(p); } finally { System.IO.File.Delete(p); }
+        try { Checkpoint.SaveWorld(w, p); return Hash(p); } finally { System.IO.File.Delete(p); }
     }
 
     [Fact] // a live world saved and continued is exactly the world that never stopped

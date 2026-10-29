@@ -8,6 +8,7 @@
 using System;
 using System.Numerics;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Runtime.CompilerServices;
 
 namespace Neuroreef;
@@ -39,10 +40,13 @@ public static class Brain
     }
 
     /// <summary>Standing variation among founders of one ancestor: every brain and reflex byte ± FOUNDER_W_SD.</summary>
-    public static void VaryBrain(Span<sbyte> g, uint seed, uint key)
+    public static void VaryBrain(Span<sbyte> g, uint seed, uint key, int units = G.NH)
     {
+        // the memory rows of units the brain does not use are left as the ancestor's (Revision M: with 256 units,
+        // varying every byte of every founder took most of the founding time); they vary once they are grown
         for (int k = 0; k < G.LEN; k++)
         {
+            if (k == units * G.NIN && k < G.W2) { k = G.W2 - 1; continue; }
             if (k == G.BODY) { k = G.BODY + G.NBODY - 1; continue; }
             g[k] = (sbyte)Math.Clamp((int)MathF.Round(g[k] + Rng.N(seed, 0, key, Rs.Founder + 20000u + (uint)k) * K.FOUNDER_W_SD), -127, 127);
         }
@@ -54,16 +58,28 @@ public static class Brain
 
     public static void Mutate(Span<sbyte> g, uint seed, uint step, uint key, EvoSettings e)
     {
-        for (int k = 0; k < G.LEN; k++)
+        // body genes (each a polygenic trait) have their own rate; brain and reflex bytes MUT_RATE. Each byte mutates
+        // with its rate independently; the mutated bytes are found by geometric skips (Revision M: a genome of
+        // ~90,000 bytes made one random draw per byte the cost of every birth)
+        uint j = 0;
+        Segment(g, 0, G.BODY, e.MutRate, seed, step, key, e, ref j);
+        Segment(g, G.BODY, G.BODY + G.NBODY, e.MutBody, seed, step, key, e, ref j);
+        Segment(g, G.BODY + G.NBODY, G.LEN, e.MutRate, seed, step, key, e, ref j);
+    }
+
+    static void Segment(Span<sbyte> g, int start, int end, float rate, uint seed, uint step, uint key, EvoSettings e, ref uint j)
+    {
+        if (rate <= 0f) return;
+        float lq = MathF.Log(1f - MathF.Min(rate, 0.999f));
+        int k = start - 1;
+        while (true)
         {
-            // body genes (each a polygenic trait) have their own rate; brain and reflex bytes MUT_RATE
-            float rate = k >= G.BODY && k < G.BODY + G.NBODY ? e.MutBody : e.MutRate;
-            float u = Rng.U(seed, step, key, Rs.Mutate + (uint)k * 8u);
-            if (u >= rate) continue;
-            float n = Rng.N(seed, step, key, Rs.Mutate + (uint)k * 8u + 1u);
-            float d = (u < rate * e.MutBigShare) ? n * e.MutBig : n * e.MutSmall;
-            int v = g[k] + (int)MathF.Round(d);
-            g[k] = (sbyte)Math.Clamp(v, -127, 127);
+            float u = Rng.U(seed, step, key, Rs.Mutate + 4u * j++);
+            k += 1 + (int)MathF.Min(1e9f, MathF.Floor(MathF.Log(MathF.Max(1e-12f, 1f - u)) / lq));
+            if (k >= end) return;
+            bool big = Rng.U(seed, step, key, Rs.Mutate + 4u * j++) < e.MutBigShare;
+            float d = Rng.N(seed, step, key, Rs.Mutate + 4u * j++) * (big ? e.MutBig : e.MutSmall);
+            g[k] = (sbyte)Math.Clamp(g[k] + (int)MathF.Round(d), -127, 127);
         }
     }
 
@@ -148,6 +164,7 @@ public static class Brain
             float* y0 = Y, y1 = Y + G.NIN, y2 = Y + 2 * G.NIN, y3 = Y + 3 * G.NIN;
             var hi = Vector256.Create(K.WMAX); var lo = Vector256.Create(-K.WMAX);
             var vc0 = Vector256.Create(c0); var vl4 = Vector256.Create(l4);
+            int units = w.PBrain[i];
             for (int p = 0; p < P.N; p++)
             {
                 float d0 = D[p], d1 = D[P.N + p], d2 = D[2 * P.N + p], d3 = D[3 * P.N + p];
@@ -156,8 +173,12 @@ public static class Brain
                 float* Wr = W + p * G.NIN, Er = E + p * G.NIN;
                 var vwA = Vector256.Create(wA); var vwB = Vector256.Create(wB); var vwC = Vector256.Create(wC); var vwD = Vector256.Create(wD);
                 var veA = Vector256.Create(eA); var veB = Vector256.Create(eB); var veC = Vector256.Create(eC); var veD = Vector256.Create(eD);
-                int k = 0;
-                for (; k <= G.NIN - 8; k += 8)
+                // the inputs from memory units the brain does not have are always 0: their weights and traces stay
+                // as they are, so only [0, units) and the features [NH, NIN) are updated (exactly the full rule)
+                for (int seg = 0; seg < 2; seg++)
+                {
+                int k = seg == 0 ? 0 : G.NH, kend = seg == 0 ? units : G.NIN;
+                for (; k <= kend - 8; k += 8)
                 {
                     var e = Vector256.Load(Er + k);
                     var a = Vector256.Load(y0 + k); var b = Vector256.Load(y1 + k); var c = Vector256.Load(y2 + k); var d = Vector256.Load(y3 + k);
@@ -165,12 +186,13 @@ public static class Brain
                     Vector256.Store(Vector256.Min(hi, Vector256.Max(lo, Vector256.Load(Wr + k) + dw)), Wr + k);
                     Vector256.Store(vl4 * e + veA * a + veB * b + veC * c + veD * d, Er + k);
                 }
-                for (; k < G.NIN; k++)
+                for (; k < kend; k++)
                 {
                     float e = Er[k];
                     float dw = c0 * e + wA * y0[k] + wB * y1[k] + wC * y2[k] + wD * y3[k];
                     Wr[k] = Math.Clamp(Wr[k] + dw, -K.WMAX, K.WMAX);
                     Er[k] = l4 * e + eA * y0[k] + eB * y1[k] + eC * y2[k] + eD * y3[k];
+                }
                 }
             }
         }
@@ -181,11 +203,14 @@ public static class Brain
     {
         int g0 = i * G.LEN, o = i * G.W2N;
         float kappa = 32f * G.Gene(w.Genome[g0 + G.KAPPA], 0f, K.KAPPA_HI);
-        for (int k = 0; k < G.W2N; k++)
-        {
-            float b = w.Genome[g0 + G.W2 + k] * K.WSCALE;
-            w.W2f[o + k] += kappa * (b - w.W2f[o + k]);
-        }
+        int units = w.PBrain[i];
+        for (int p = 0; p < P.N; p++)
+            for (int seg = 0; seg < 2; seg++)
+                for (int k = p * G.NIN + (seg == 0 ? 0 : G.NH), kend = p * G.NIN + (seg == 0 ? units : G.NIN); k < kend; k++)
+                {
+                    float b = w.Genome[g0 + G.W2 + k] * K.WSCALE;
+                    w.W2f[o + k] += kappa * (b - w.W2f[o + k]);
+                }
     }
 
     /// <summary>
@@ -208,19 +233,17 @@ public static class Brain
             for (int k = 0; k < G.NH; k++) u[F.N + k] = hid[k];
             int units = w.PBrain[i];                 // the brain-size gene: memory units beyond it do not exist
             for (int h = units; h < G.NH; h++) { hid[h] = 0f; yp[h] = 0f; u[F.N + h] = 0f; }
+            int nu = F.N + units;                   // inputs that exist: the features and the units in use
             for (int h = 0; h < units; h++)
             {
-                sbyte* row = gen + h * G.NIN;
-                float s0 = 0, s1 = 0;
-                for (int j = 0; j < G.NIN; j += 2) { s0 += row[j] * u[j]; s1 += row[j + 1] * u[j + 1]; }
-                float v = MathK.Tanh((s0 + s1) * K.WSCALE);
+                float v = MathK.Tanh(DotS8(gen + h * G.NIN, u, nu) * K.WSCALE);
                 hid[h] = v; yp[h] = v;
             }
             for (int k = 0; k < F.N; k++) yp[G.NH + k] = f[k];
             sbyte* rx = gen + G.REFLEX;
             for (int p = 0; p < P.N; p++)
             {
-                float sv = Dot(W + p * G.NIN, yp, G.NIN);
+                float sv = Dot(W + p * G.NIN, yp, units) + Dot(W + p * G.NIN + G.NH, yp + G.NH, F.N);
                 sbyte* rr = rx + p * G.NC;
                 float rs = 0;
                 for (int k = 0; k < G.NC; k++) rs += rr[k] * c[k];
@@ -229,6 +252,21 @@ public static class Brain
                 g[p] = 1f / (1f + MathK.Exp(-sv));
             }
         }
+    }
+
+    /// <summary>Dot product of int8 weights and float inputs (8 at a time with AVX2).</summary>
+    static unsafe float DotS8(sbyte* w, float* x, int n)
+    {
+        int k = 0; float s = 0;
+        if (Avx2.IsSupported)
+        {
+            var acc = Vector256<float>.Zero;
+            for (; k <= n - 8; k += 8)
+                acc = Avx.Add(acc, Avx.Multiply(Avx.ConvertToVector256Single(Avx2.ConvertToVector256Int32(w + k)), Avx.LoadVector256(x + k)));
+            s = Vector256.Sum(acc);
+        }
+        for (; k < n; k++) s += w[k] * x[k];
+        return s;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

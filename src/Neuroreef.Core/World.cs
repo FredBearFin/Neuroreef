@@ -107,8 +107,12 @@ public sealed class World
     // ---- telemetry
     public readonly Telemetry T;
 
+    /// <summary>The most slots a world can have: one array holds every genome (.NET arrays have at most 2^31 elements).</summary>
+    public static int MaxSlots => int.MaxValue / G.LEN / 1024 * 1024;
+
     public World(int capacity, uint seed, uint terrainSeed = 0)
     {
+        if (capacity > MaxSlots) throw new ArgumentOutOfRangeException(nameof(capacity), $"at most {MaxSlots:N0} slots per world (each holds a genome of {G.LEN:N0} bytes)");
         Cap = capacity; Seed = seed; TerrainSeed = terrainSeed == 0 ? seed : terrainSeed;
         int c = capacity;
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];

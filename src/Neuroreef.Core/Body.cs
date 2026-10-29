@@ -32,6 +32,12 @@ public static class Body
 
     /// <summary>An organ size gene, 0..1.</summary>
     public static float Organ(sbyte b) => (b + 127) / 254f;
+    /// <summary>Memory units in use from the brain-size gene: log scale BRAIN_MIN..G.NH, so a mutation changes a brain
+    /// by a share of its size, as with body mass (Revision M: on a linear scale of 256 units, ordinary founder variation
+    /// swung a 12-unit brain by tens of units).</summary>
+    public static int Units(sbyte b) => Math.Clamp((int)MathF.Round(K.BRAIN_MIN * MathF.Pow((float)G.NH / K.BRAIN_MIN, Organ(b))), K.BRAIN_MIN, G.NH);
+    /// <summary>The brain-size gene for a number of memory units (inverse of Units).</summary>
+    public static sbyte UnitsGene(float units) => (sbyte)Math.Clamp((int)MathF.Round(MathF.Log(Math.Max(units, K.BRAIN_MIN) / K.BRAIN_MIN) / MathF.Log((float)G.NH / K.BRAIN_MIN) * 254f - 127f), -127, 127);
 
     public static void Express(World w, int i)
     {
@@ -48,7 +54,7 @@ public static class Body
         float life = Mul(gn[g + G.B_LIFE], K.LIFE_RANGE), devel = Mul(gn[g + G.B_DEVEL], K.LIFE_RANGE);
         float imm = Organ(gn[g + G.B_IMMUNE]);
         float wecon = Organ(gn[g + G.B_WATER]);
-        int brain = K.BRAIN_MIN + (int)MathF.Round(Organ(gn[g + G.B_BRAIN]) * (G.NH - K.BRAIN_MIN));
+        int brain = Units(gn[g + G.B_BRAIN]);
         bool herm = gn[g + G.B_HERM] >= 0;
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
         w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)finPairs; w.PEyePairs[i] = (byte)eyePairs;
@@ -61,9 +67,11 @@ public static class Body
         float mPow = MathK.Pow(m, K.EXP_BASAL);
         float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
                      + K.COST_LIMB * (legs * legPairs * 0.5f + fins * finPairs * 0.5f) + K.COST_WING * wings * MathK.Cbrt(m)
-                     + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f) + K.COST_BRAIN * brain / K.BRAIN_REF
+                     + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
                      + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon;
-        w.PBasal[i] = K.C_BASAL * mPow * Math.Clamp(basalF, 0.5f, 4f);
+        // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
+        // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
+        w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;
         w.PGut[i] = K.C_GUT * m;
         w.PDig[i] = K.C_DIGEST * mPow;
         w.PBite[i] = K.C_BITE * mPow;
@@ -98,6 +106,7 @@ public static class Body
         w.PStrike[i] = strike;
         w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathF.Exp(Organ(gn[g + G.B_LITTER]) * MathF.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
         float birth = G.GeneLog(gn[g + G.B_BIRTH], K.BIRTH_LO, K.BIRTH_HI);
+        birth = MathF.Min(K.BIRTH_HI, MathF.Max(birth, K.NEWBORN_MIN / m));   // eggs and young have a smallest size (Revision M)
         w.PBirth[i] = birth;
         w.PSexual[i] = (byte)(gn[g + G.B_SEX] >= 0 ? 1 : 0);
         w.PLive[i] = (byte)(gn[g + G.B_LIVE] >= 0 ? 1 : 0);
@@ -130,7 +139,9 @@ public static class Body
             dst[p] = raw; sum += raw * raw;
         }
         float k = sum > 0 ? K.DIET_BUDGET / MathF.Sqrt(sum) : 0;
-        for (int p = 0; p < Pools.N; p++) dst[p] = MathF.Min(0.95f, dst[p] * k);
+        // the gene share of the digestive budget (a specialist's 0.95) times the most any animal can get from that food
+        // (Revision M, ecology review: herbivores assimilate 20-60% of plant food, carnivores ~80%; Van Soest 1994, Robbins 1993)
+        for (int p = 0; p < Pools.N; p++) dst[p] = MathF.Min(0.95f, dst[p] * k) / 0.95f * Pools.DigMax[p];
     }
 
     /// <summary>Can an organism living in this realm get at this pool?</summary>

@@ -82,7 +82,7 @@ export function agentAt(a, k, world, out) {
   out.serial = dv.getUint32(o + 8, true);
   // the organism's own body genes (bytes 12-19, int8): organ sizes are (g + 127) / 254, 0..1
   const gm = dv.getInt8(o + 12);
-  out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.01 * Math.pow(40 / 0.01, out.m01);
+  out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.1 * Math.pow(40 / 0.1, out.m01);
   out.legs = (dv.getInt8(o + 13) + 127) / 254; out.fins = (dv.getInt8(o + 14) + 127) / 254; out.wings = (dv.getInt8(o + 15) + 127) / 254;
   out.sight = (dv.getInt8(o + 16) + 127) / 254; out.armour = (dv.getInt8(o + 17) + 127) / 254; out.strike = (dv.getInt8(o + 18) + 127) / 254;
   out.meat = (dv.getInt8(o + 19) + 127) / 254;    // meat-eating efficiency, 0..0.95

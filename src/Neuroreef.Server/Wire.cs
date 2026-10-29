@@ -21,7 +21,7 @@ public static class Wire
     // probe float layout (offsets in floats after the 24-byte probe header)
     public const int PR_FEAT = 0, PR_HID = PR_FEAT + F.N, PR_Z = PR_HID + G.NH, PR_GAIN = PR_Z + P.N, PR_LEARN = PR_GAIN + P.N,
         PR_SCAL = PR_LEARN + P.N, NSCAL = 20, PR_PHEN = PR_SCAL + NSCAL, NPHEN = 7, PR_DIET = PR_PHEN + NPHEN,
-        PR_W1 = PR_DIET + Pools.N, PR_W2 = PR_W1 + G.W1N, PR_END = PR_W2 + G.W2N;
+        PR_W1 = PR_DIET + Pools.N, PR_W2 = PR_W1, PR_END = PR_W2 + G.W2N;   // the memory weights are not sent (Revision M: 256 units)
     public static readonly string[] ProbeScalars =
         { "reward", "rewardMean", "energy", "emax", "thirst", "fatigue", "full", "age", "life", "mature",
           "x", "y", "heading", "speed", "generation", "children", "species", "stage", "sex", "pain" };
@@ -115,7 +115,6 @@ public static class Wire
         float[] ph = { w.PM[i], w.PVmax[i], w.PSight[i], w.PArmour[i], w.PStrike[i], w.PLitter[i], w.PBasal[i] };
         ph.CopyTo(f.Slice(PR_PHEN));
         w.DietOf(i).CopyTo(f.Slice(PR_DIET));
-        for (int k = 0; k < G.W1N; k++) f[PR_W1 + k] = w.Genome[gb + k] * K.WSCALE;
         new ReadOnlySpan<float>(w.W2f, wb, G.W2N).CopyTo(f.Slice(PR_W2));
         for (int k = 0; k < PR_END; k++) BinaryPrimitives.WriteSingleLittleEndian(s.Slice(24 + 4 * k), f[k]);
         return 24 + 4 * PR_END;

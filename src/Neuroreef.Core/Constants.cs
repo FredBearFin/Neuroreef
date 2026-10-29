@@ -31,7 +31,7 @@ public static class K
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
     [K("World", "spatial-hash grid side", "cells", "-")] public const int GW = WORLD / HCELL;
-    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT")] public const int CAPACITY = 65536;
+    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision M, ~155 KB per slot with 256-unit brains: 8,192 is ~1.3 GB")] public const int CAPACITY = 8192;
     [K("World", "share of cells below lake level", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "catchment (cells) above which a cell is river", "cells", "HT")] public const int RIVER_ACC = 900;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
@@ -50,17 +50,17 @@ public static class K
     [K("Allometry", "lifespan and maturity exponent", "-", "ECO")] public const float EXP_LIFE = 0.25f;
     [K("Allometry", "sight range exponent", "-", "HT")] public const float EXP_SIGHT = 0.20f;
     [K("Allometry", "turn rate exponent", "-", "HT")] public const float EXP_TURN = -0.20f;
-    [K("Allometry", "basal cost at M=1", "E/step", "V1")] public const float C_BASAL = 0.0020f;
+    [K("Allometry", "basal cost at M=1", "E/step", "ECO: Revision M, ecology review: x4, so an animal burns many times its tissue energy over a life (Rubner 1908; Speakman 2005) and fasts ~1/16 of a life, not a third (Lindstedt & Boyce 1985)")] public const float C_BASAL = 0.0040f;
     [K("Allometry", "energy reserve per unit mass", "E/M", "ECO: stored reserve of the same order as tissue energy")] public const float C_EMAX = 2.0f;
     [K("Allometry", "gut capacity per unit mass", "M/M", "HT")] public const float C_GUT = 0.30f;
-    [K("Allometry", "digestion rate at M=1", "M/step", "HT")] public const float C_DIGEST = 0.005f;
-    [K("Allometry", "bite size at M=1", "M/step", "V1")] public const float C_BITE = 0.012f;
+    [K("Allometry", "digestion rate at M=1", "M/step", "ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997)")] public const float C_DIGEST = 0.025f;
+    [K("Allometry", "bite size at M=1", "M/step", "Revision M: x5 with digestion (a bite fills the gut faster than it empties)")] public const float C_BITE = 0.06f;
     [K("Allometry", "max speed at M=1 (walk)", "units/step", "V1")] public const float C_SPEED = 1.20f;
     [K("Allometry", "turn rate at M=1", "rad/step", "V1")] public const float C_TURN = 0.32f;
     [K("Allometry", "lifespan at M=1", "steps", "V1")] public const float C_LIFE = 3200f;
     [K("Allometry", "maturity age at M=1", "steps", "V1")] public const float C_MATURE = 250f;
     [K("Allometry", "sight range at M=1", "units", "V1")] public const float C_SIGHT = 16f;
-    [K("Allometry", "movement cost (x C_SPEED x M^EXP_MOVE x speed)", "E/(M^0.7*v*C_SPEED)", "V1")] public const float C_MOVE = 0.0020f;
+    [K("Allometry", "movement cost (x C_SPEED x M^EXP_MOVE x speed)", "E/(M^0.7*v*C_SPEED)", "ECO: Revision M: x4 with basal")] public const float C_MOVE = 0.0040f;
     [K("Allometry", "mass exponent of the cost of transport", "-", "ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982)")] public const float EXP_MOVE = 0.7f;
     [K("Allometry", "speed gained on land per unit of wing that cannot yet lift the body (wing-assisted running, gliding)", "-", "ECO: proto-wings aid running up slopes and gliding before powered flight (Dial 2003)")] public const float GLIDE = 0.3f;
     [K("Reproduction", "cost to a hermaphrodite of siring, as a share of its own litter's cost (male function)", "-", "ECO: male function takes 10-30% of a simultaneous hermaphrodite's reproductive resources (Charnov 1982)")] public const float C_SIRE = 0.2f;
@@ -139,15 +139,15 @@ public static class K
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
     [K("Brain", "reflex input weight scale (int8 / 16, as the output layer)", "-", "-")] public const float RSCALE = 1f / 16f;
     [K("Brain", "founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88%", "int8", "designed: the innate starter kit (DESIGN §7.7, Revision D)")] public const int KIT_W = 80;
-    [K("Brain", "elite archive size per species", "genomes", "HT")] public const int ARCHIVE = 64;
+    [K("Brain", "elite archive size per species", "genomes", "HT (Revision M: 64 before; a genome is now ~83 KB)")] public const int ARCHIVE = 16;
     [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;
     [K("Prehistory", "length of a prehistory run", "steps", "HT")] public const int PREHISTORY_STEPS = 500000;
-    [K("Prehistory", "number of separate branches (populations on the same land) evolving side by side", "branches", "HT")] public const int BRANCHES = 3;
+    [K("Prehistory", "number of separate branches (populations on the same land) evolving side by side", "branches", "HT (Revision M: 3 before; memory)")] public const int BRANCHES = 2;
     [K("Prehistory", "symbolic time shown in the console: years per step", "years", "-")] public const int YEARS_PER_STEP = 1000;
-    [K("Prehistory", "agent slots per branch", "slots", "HT: doubled in Revision H so that food, not slots, limits a branch (the report warns if the cap binds)")] public const int BRANCH_CAPACITY = 49152;
+    [K("Prehistory", "agent slots per branch", "slots", "HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds)")] public const int BRANCH_CAPACITY = 16384;
     [K("Brain", "founders start in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder group", "units", "HT")] public const float GROUP_SPREAD = 10f;
-    [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT")] public const int BANK_LIVING = 96;
+    [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT (Revision M: 96 before)")] public const int BANK_LIVING = 48;
 
     // ---------------------------------------------------------------- 5b. evolvable bodies (DESIGN §7.5)
     [K("Body", "range of the speed and sight multipliers (x/÷)", "-", "HT")] public const float BODY_RANGE_TRAIT = 1.6f;
@@ -156,7 +156,7 @@ public static class K
     [K("Body", "speed loss per unit of extra armour", "-", "HT")] public const float ARMOUR_DRAG = 0.2f;
 
     // ---------------------------------------------------------------- 5c. bodies from genes (DESIGN §6.3, Revision F)
-    [K("Body", "smallest body mass a mass gene can give", "M", "ECO: a small invertebrate-sized organism; 0.01 since Revision K (the ecology review: at 0.05 selection pressed against the floor)")] public const float MASS_LO = 0.01f;
+    [K("Body", "smallest body mass a mass gene can give", "M", "ECO: Revision M, ecology review: the agents are animals with brains; smaller consumers live in the fields (algae, decomposers). 0.01 gave tiny bodies 32x the numbers from the same food")] public const float MASS_LO = 0.1f;
     [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units)")] public const float MASS_HI = 40f;
     [K("Body", "organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth)", "-", "-")] public const float LIMB_MIN = 0.3f;
     [K("Body", "basal cost per unit of fin size, or of leg size per pair of legs", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;
@@ -167,6 +167,7 @@ public static class K
     [K("Body", "largest weaponry (strike) a gene can give", "-", "-")] public const float STRIKE_MAX = 2f;
     [K("Body", "length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it", "-", "ECO: digestive specialisation trades off breadth against efficiency")] public const float DIET_BUDGET = 1.0f;
     [K("Body", "largest litter a gene can give", "young", "-")] public const int LITTER_MAX = 12;
+    [K("Body", "smallest newborn (or egg) mass", "M", "ECO: eggs and young have a physical smallest size (Revision M)")] public const float NEWBORN_MIN = 0.01f;
     [K("Body", "smallest newborn mass as a share of adult mass", "-", "ECO: fish and insect eggs")] public const float BIRTH_LO = 0.01f;
     [K("Body", "largest newborn mass as a share of adult mass", "-", "ECO: precocial mammals")] public const float BIRTH_HI = 0.3f;
     [K("Body", "narrowest field of view a gene can give", "degrees", "ECO: forward-facing predators")] public const float FOV_LO = 120f;
@@ -194,11 +195,12 @@ public static class K
     [K("Body", "range of the lifespan and development multipliers (x/÷)", "-", "-")] public const float LIFE_RANGE = 2f;
     [K("Body", "basal cost per unit of extra lifespan (longer life needs more body repair)", "xbasal", "ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977)")] public const float COST_LONGEVITY = 0.25f;
     [K("Body", "lifespan scales with the development multiplier to this power (fast developers age sooner)", "-", "ECO: the fast-slow life-history continuum")] public const float DEVEL_AGING = 0.5f;
+    [K("Body", "ordinary ancestors start with a random brain of up to this many memory units", "units", "the old limit before Revision J was 12; Revision M: 24")] public const int BRAIN_START = 24;
     [K("Body", "fewest memory units a brain can have", "units", "-")] public const int BRAIN_MIN = 2;
-    [K("Body", "basal cost of a brain of BRAIN_REF memory units, scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates")] public const float COST_BRAIN = 0.15f;
-    [K("Body", "reference brain size for the brain cost (the largest brain before Revision J)", "units", "-")] public const int BRAIN_REF = 12;
+    [K("Body", "basal cost of a brain of BRAIN_REF memory units, scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M)")] public const float COST_BRAIN = 0.25f;
+    [K("Body", "reference brain size for the brain cost: the largest brain (G.NH)", "units", "Revision M: was 12, the old limit")] public const int BRAIN_REF = 256;
     [K("Brain", "big-brained ancestors per branch (half on land, half in water), by default", "-", "designed: the user's experiment (2026-10-28): some lineages start with three times the brain")] public const int BIG_BRAINS = 2;
-    [K("Brain", "memory units of a big-brained ancestor, by default", "units", "designed: the user's experiment: three times BRAIN_REF")] public const int BIG_BRAIN_UNITS = 36;
+    [K("Brain", "memory units of a big-brained ancestor, by default", "units", "designed: the user's experiment (Revision M: half the largest brain)")] public const int BIG_BRAIN_UNITS = 128;
     [K("Brain", "strength of the mating instinct in females, against males (1)", "-", "designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972)")] public const float DRIVE_FEMALE = 0.6f;
     [K("Brain", "strength of the mating instinct in hermaphrodites, against males (1)", "-", "designed: between the two sexes")] public const float DRIVE_HERM = 0.8f;
     [K("Body", "basal cost of being a hermaphrodite (keeping both sexes' organs)", "xbasal", "ECO: hermaphrodites maintain male and female function")] public const float COST_HERM = 0.05f;
@@ -212,6 +214,7 @@ public static class K
     [K("Clades", "ancestors that start on land", "ancestors", "user choice")] public const int ANCESTORS_LAND = 6;
     [K("Clades", "ancestors that start in water", "ancestors", "user choice")] public const int ANCESTORS_WATER = 4;
     [K("Clades", "founding organisms per ancestor", "organisms", "HT")] public const int ANCESTOR_COUNT = 600;
+    [K("Clades", "founders per ancestor are ANCESTOR_COUNT x min(1, map area / continent area x this)", "-", "HT: a valley (1/16 of a continent) is stocked with 1/4 as many founders, so it does not start overstuffed (Revision M)")] public const float FOUND_AREA = 4f;
     [K("Clades", "steps between speciation checks", "steps", "-")] public const int SPEC_EVERY = 2000;
     [K("Clades", "smallest cluster that can become a species", "organisms", "ECO: a viable population")] public const int MIN_SPLIT = 40;
     [K("Clades", "two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes)", "-", "designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species")] public const float SPLIT_VIS = 1f;

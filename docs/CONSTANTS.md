@@ -16,7 +16,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FW | 256 | cells | field grid side (WORLD/FCELL) | - |
 | HCELL | 16 | units | spatial-hash cell side | V1 |
 | GW | 64 | cells | spatial-hash grid side | - |
-| CAPACITY | 65536 | slots | default agent slots (animals, eggs, embryos) | HT |
+| CAPACITY | 8192 | slots | default agent slots (animals, eggs, embryos) | HT: Revision M, ~155 KB per slot with 256-unit brains: 8,192 is ~1.3 GB |
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
 | RIVER_ACC | 900 | cells | catchment (cells) above which a cell is river | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
@@ -38,17 +38,17 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | EXP_LIFE | 0.25 | - | lifespan and maturity exponent | ECO |
 | EXP_SIGHT | 0.2 | - | sight range exponent | HT |
 | EXP_TURN | -0.2 | - | turn rate exponent | HT |
-| C_BASAL | 0.002 | E/step | basal cost at M=1 | V1 |
+| C_BASAL | 0.004 | E/step | basal cost at M=1 | ECO: Revision M, ecology review: x4, so an animal burns many times its tissue energy over a life (Rubner 1908; Speakman 2005) and fasts ~1/16 of a life, not a third (Lindstedt & Boyce 1985) |
 | C_EMAX | 2 | E/M | energy reserve per unit mass | ECO: stored reserve of the same order as tissue energy |
 | C_GUT | 0.3 | M/M | gut capacity per unit mass | HT |
-| C_DIGEST | 0.005 | M/step | digestion rate at M=1 | HT |
-| C_BITE | 0.012 | M/step | bite size at M=1 | V1 |
+| C_DIGEST | 0.025 | M/step | digestion rate at M=1 | ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997) |
+| C_BITE | 0.06 | M/step | bite size at M=1 | Revision M: x5 with digestion (a bite fills the gut faster than it empties) |
 | C_SPEED | 1.2 | units/step | max speed at M=1 (walk) | V1 |
 | C_TURN | 0.32 | rad/step | turn rate at M=1 | V1 |
 | C_LIFE | 3200 | steps | lifespan at M=1 | V1 |
 | C_MATURE | 250 | steps | maturity age at M=1 | V1 |
 | C_SIGHT | 16 | units | sight range at M=1 | V1 |
-| C_MOVE | 0.002 | E/(M^0.7*v*C_SPEED) | movement cost (x C_SPEED x M^EXP_MOVE x speed) | V1 |
+| C_MOVE | 0.004 | E/(M^0.7*v*C_SPEED) | movement cost (x C_SPEED x M^EXP_MOVE x speed) | ECO: Revision M: x4 with basal |
 | EXP_MOVE | 0.7 | - | mass exponent of the cost of transport | ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982) |
 | GLIDE | 0.3 | - | speed gained on land per unit of wing that cannot yet lift the body (wing-assisted running, gliding) | ECO: proto-wings aid running up slopes and gliding before powered flight (Dial 2003) |
 
@@ -148,7 +148,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.000206825 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.20897E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -156,7 +156,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
 | RSCALE | 0.0625 | - | reflex input weight scale (int8 / 16, as the output layer) | - |
 | KIT_W | 80 | int8 | founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88% | designed: the innate starter kit (DESIGN §7.7, Revision D) |
-| ARCHIVE | 64 | genomes | elite archive size per species | HT |
+| ARCHIVE | 16 | genomes | elite archive size per species | HT (Revision M: 64 before; a genome is now ~83 KB) |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 
 ## 10. Prehistory
@@ -164,9 +164,9 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | PREHISTORY_STEPS | 500000 | steps | length of a prehistory run | HT |
-| BRANCHES | 3 | branches | number of separate branches (populations on the same land) evolving side by side | HT |
+| BRANCHES | 2 | branches | number of separate branches (populations on the same land) evolving side by side | HT (Revision M: 3 before; memory) |
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
-| BRANCH_CAPACITY | 49152 | slots | agent slots per branch | HT: doubled in Revision H so that food, not slots, limits a branch (the report warns if the cap binds) |
+| BRANCH_CAPACITY | 16384 | slots | agent slots per branch | HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds) |
 
 ## 11. Brain
 
@@ -174,7 +174,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | GROUP_SIZE | 8 | agents | founders start in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
 | GROUP_SPREAD | 10 | units | radius of a founder group | HT |
-| BANK_LIVING | 96 | genomes | genomes per species stored in a gene bank (living sample) | HT |
+| BANK_LIVING | 48 | genomes | genomes per species stored in a gene bank (living sample) | HT (Revision M: 96 before) |
 
 ## 12. Body
 
@@ -184,7 +184,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_SPEED | 0.4 | - | basal cost per unit of extra speed | HT |
 | COST_SIGHT | 0.15 | - | basal cost per unit of extra sight | HT |
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
-| MASS_LO | 0.01 | M | smallest body mass a mass gene can give | ECO: a small invertebrate-sized organism; 0.01 since Revision K (the ecology review: at 0.05 selection pressed against the floor) |
+| MASS_LO | 0.1 | M | smallest body mass a mass gene can give | ECO: Revision M, ecology review: the agents are animals with brains; smaller consumers live in the fields (algae, decomposers). 0.01 gave tiny bodies 32x the numbers from the same food |
 | MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
 | LIMB_MIN | 0.3 | - | organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth) | - |
 | COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size, or of leg size per pair of legs | ECO: locomotor muscle is maintained at a cost |
@@ -195,6 +195,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | STRIKE_MAX | 2 | - | largest weaponry (strike) a gene can give | - |
 | DIET_BUDGET | 1 | - | length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it | ECO: digestive specialisation trades off breadth against efficiency |
 | LITTER_MAX | 12 | young | largest litter a gene can give | - |
+| NEWBORN_MIN | 0.01 | M | smallest newborn (or egg) mass | ECO: eggs and young have a physical smallest size (Revision M) |
 | BIRTH_LO | 0.01 | - | smallest newborn mass as a share of adult mass | ECO: fish and insect eggs |
 | BIRTH_HI | 0.3 | - | largest newborn mass as a share of adult mass | ECO: precocial mammals |
 | FOV_LO | 120 | degrees | narrowest field of view a gene can give | ECO: forward-facing predators |
@@ -236,16 +237,17 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LIFE_RANGE | 2 | - | range of the lifespan and development multipliers (x/÷) | - |
 | COST_LONGEVITY | 0.25 | xbasal | basal cost per unit of extra lifespan (longer life needs more body repair) | ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977) |
 | DEVEL_AGING | 0.5 | - | lifespan scales with the development multiplier to this power (fast developers age sooner) | ECO: the fast-slow life-history continuum |
+| BRAIN_START | 24 | units | ordinary ancestors start with a random brain of up to this many memory units | the old limit before Revision J was 12; Revision M: 24 |
 | BRAIN_MIN | 2 | units | fewest memory units a brain can have | - |
-| COST_BRAIN | 0.15 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates |
-| BRAIN_REF | 12 | units | reference brain size for the brain cost (the largest brain before Revision J) | - |
+| COST_BRAIN | 0.25 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M) |
+| BRAIN_REF | 256 | units | reference brain size for the brain cost: the largest brain (G.NH) | Revision M: was 12, the old limit |
 
 ## 16. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | BIG_BRAINS | 2 | - | big-brained ancestors per branch (half on land, half in water), by default | designed: the user's experiment (2026-10-28): some lineages start with three times the brain |
-| BIG_BRAIN_UNITS | 36 | units | memory units of a big-brained ancestor, by default | designed: the user's experiment: three times BRAIN_REF |
+| BIG_BRAIN_UNITS | 128 | units | memory units of a big-brained ancestor, by default | designed: the user's experiment (Revision M: half the largest brain) |
 | DRIVE_FEMALE | 0.6 | - | strength of the mating instinct in females, against males (1) | designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972) |
 | DRIVE_HERM | 0.8 | - | strength of the mating instinct in hermaphrodites, against males (1) | designed: between the two sexes |
 
@@ -267,6 +269,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ANCESTORS_LAND | 6 | ancestors | ancestors that start on land | user choice |
 | ANCESTORS_WATER | 4 | ancestors | ancestors that start in water | user choice |
 | ANCESTOR_COUNT | 600 | organisms | founding organisms per ancestor | HT |
+| FOUND_AREA | 4 | - | founders per ancestor are ANCESTOR_COUNT x min(1, map area / continent area x this) | HT: a valley (1/16 of a continent) is stocked with 1/4 as many founders, so it does not start overstuffed (Revision M) |
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
 | MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |

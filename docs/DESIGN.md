@@ -1,7 +1,30 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision L. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision M. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision M: far bigger brains, and food that limits numbers** (the user, 2026-10-29: "bigger brains
+far bigger"; "food levels and world size should control population ... natural forces that don't let it hit max
+capacity"; the population laws reviewed by the ecologist)
+- Brains have up to G.NH = 256 memory units (36 before). The brain-size gene is on a log scale (BRAIN_MIN..256), so a
+  mutation changes a brain by a share of its size. Ordinary ancestors start with up to BRAIN_START = 24 units,
+  big-brained ones with BIG_BRAIN_UNITS = 128. Only the units in use are computed (exactly the full rule, since unused
+  units are always 0); the memory layer uses AVX2; mutation finds mutated bytes by geometric skips; the console probe no
+  longer sends the memory weights. A slot holds ~155 KB; a world holds at most World.MaxSlots (~25,000).
+- Brain tissue costs COST_BRAIN x C_BASAL x units / BRAIN_REF whatever the body (energy per neuron is about constant,
+  Herculano-Houzel 2011): a big brain needs a big body. The 4x ceiling on the basal multiplier is gone.
+- Each food has a most-digestible share (Pools.DigMax: grass and browse 0.5, root 0.6, seed 0.75, fruit 0.8, nectar 0.95,
+  meat and blood 0.9, carrion 0.85, dung 0.3, litter 0.25, wood 0.15, detritus 0.4; Van Soest 1994, Robbins 1993); a
+  diet gene share is a fraction of it. Before, almost any food could be digested at 0.95.
+- Metabolism against lifespan: C_BASAL and C_MOVE x2 (0.004), C_DIGEST 0.025 and C_BITE 0.06 (most intake ~5x basal,
+  Hammond & Diamond 1997). The ecology review asked for x4-5; at x4 every founder population starved before brains
+  could evolve (random brains eat too rarely), so x2 is the tested value.
+- MASS_LO = 0.1 (0.01 gave tiny bodies 32x the numbers from the same food; smaller consumers are the fields), and
+  newborns and eggs are at least NEWBORN_MIN = 0.01.
+- Founders per ancestor scale with map area (FOUND_AREA), as founding from a bank does.
+- Defaults for a 16 GB computer: 2 branches x 16,384 slots, a world of 8,192 slots. Archive 16 and bank 48 genomes per
+  clade. Gene bank version 3. Result: a 512-unit region settles at about 1,500-2,900 animals per branch, limited by food,
+  with most ancestor lineages lost in the first years (a founding bottleneck).
 
 **Changes in Revision L: predators that can win** (the user, 2026-10-29: "less animals, more evolution, more
 demonstrated violence ... the animals should actively be terrorizing each other and evolving to win"; ecology review)

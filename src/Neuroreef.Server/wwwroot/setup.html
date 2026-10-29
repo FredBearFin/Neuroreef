@@ -39,7 +39,7 @@
     world that grows from it. Choose the land, how harsh nature is, and how life starts. Nothing is created until you press
     Start. 1× on a nature setting is the documented law; the rest is your choice.</p>
   <div class="presets"><span class="k" style="color:var(--dim)">Presets:</span>
-    <a data-p="pet">Pet valley</a><a data-p="light">Light (laptop)</a><a data-p="normal">Normal</a><a data-p="big">Big (strong PC)</a></div>
+    <a data-p="pet">Pet valley</a><a data-p="light">Light (laptop)</a><a data-p="normal">Normal</a><a data-p="big">Big (32 GB+)</a></div>
   <div id="groups"></div>
 </main>
 <div class="est"><div class="in">
@@ -57,8 +57,8 @@ let info, rows = [];
 const MAPS = [256, 512, 1024], MAPN = { 256: 'Valley', 512: 'Region', 1024: 'Continent' };
 const mapFmt = (v) => `${MAPN[v]} (${v}×${v})`;
 const STEPS = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 0];
-const SLOTS = [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072];
-const WSLOTS = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
+const SLOTS = () => [2048, 4096, 8192, 12288, 16384, 20480, 24576].filter((v) => v <= (info.maxSlots || 1e9));
+const WSLOTS = () => [1024, 2048, 4096, 8192, 12288, 16384, 24576].filter((v) => v <= (info.maxSlots || 1e9));
 const RATES = [1, 3, 10, 30, 0];
 
 function nearestIndex(list, v) { let b = 0; for (let i = 0; i < list.length; i++) if (Math.abs(list[i] - v) < Math.abs(list[b] - v)) b = i; return b; }
@@ -105,14 +105,14 @@ function defs() {
       { key: 'mutBody', label: 'Body mutation', min: 0, max: 3, step: 0.05, val: V.mutBody, fmt: x, help: '×1 is about 0.4 body changes per newborn.' },
       { key: 'branches', label: 'Branches', min: 1, max: 6, step: 1, val: V.branches, fmt: (v) => v,
         help: 'Separate worlds evolving side by side. You pick which one your world starts from. Each costs memory and CPU.' },
-      { key: 'branchSlots', label: 'Animal slots per branch', list: SLOTS, val: V.branchSlots, fmt: (v) => v.toLocaleString(),
+      { key: 'branchSlots', label: 'Animal slots per branch', list: SLOTS(), val: V.branchSlots, fmt: (v) => v.toLocaleString(),
         help: 'The most organisms a branch can hold. If it fills, the slots, not nature, choose who is born, and the run is marked invalid.' },
       { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: V.steps,
         fmt: (v) => v === 0 ? (ev ? 'until you stop it' : 'until you begin the world') : v.toLocaleString() + ' steps', help: '' },
     ] },
     ...(ev ? [] : [{ g: 'Your world', note: '', rows: [
-      { key: 'worldSlots', label: 'Animal slots in the world', list: WSLOTS, val: V.worldSlots, fmt: (v) => v.toLocaleString(),
-        help: 'The most organisms your world can hold. A valley rarely needs more than 16,000.' },
+      { key: 'worldSlots', label: 'Animal slots in the world', list: WSLOTS(), val: V.worldSlots, fmt: (v) => v.toLocaleString(),
+        help: 'The most organisms your world can hold. Food and land should stop it long before; if it fills, the slots are choosing who is born.' },
       { key: 'rate', label: 'Speed it starts at', list: RATES, val: V.rate, fmt: (v) => v === 0 ? 'as fast as possible' : v + ' steps per second',
         help: 'The speed buttons change it any time.' },
       { key: 'worldMut', label: 'Evolution speed in your world', min: 0, max: 6, step: 0.25, val: V.worldMut, fmt: x,
@@ -166,10 +166,10 @@ function estimate() {
 }
 
 const PRESETS = {
-  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 65536, founders: 400, worldSlots: 16384, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3 },
-  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 16384, founders: 300, bigBrains: 2, bigBrainUnits: 24, worldSlots: 8192, rate: 3 },
-  normal: { preMap: 512, worldMap: 256, branches: 3, branchSlots: 65536, founders: 600, bigBrains: 2, bigBrainUnits: 36, worldSlots: 16384, rate: 3 },
-  big: { preMap: 1024, worldMap: 512, branches: 4, branchSlots: 131072, founders: 900, bigBrains: 2, bigBrainUnits: 36, worldSlots: 65536, rate: 10 },
+  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 2, bigBrainUnits: 128, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3 },
+  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 2, bigBrainUnits: 64, worldSlots: 4096, rate: 3 },
+  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 2, bigBrainUnits: 128, worldSlots: 8192, rate: 3 },
+  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 2, bigBrainUnits: 256, worldSlots: 16384, rate: 10 },
 };
 for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
   const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]);

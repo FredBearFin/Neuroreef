@@ -34,7 +34,7 @@ public static class Setup
         app.MapGet("/api/setup-info", () => Results.Json(new
         {
             bytesPerSlot = World.BytesPerSlot, ramBytes = ram, cores = Environment.ProcessorCount, evolve = o.Evolve,
-            maxUnits = G.NH, refUnits = K.BRAIN_REF, mapSizes = Map.Sizes, mapNames = Map.Names,
+            maxUnits = G.NH, maxSlots = World.MaxSlots, refUnits = K.BRAIN_START, mapSizes = Map.Sizes, mapNames = Map.Names,
             v = new
             {
                 preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds,
@@ -61,10 +61,10 @@ public static class Setup
             o.BigBrains = I("bigBrains", 0, 16, K.BIG_BRAINS); o.BigBrainUnits = I("bigBrainUnits", K.BRAIN_MIN, G.NH, K.BIG_BRAIN_UNITS);
             o.MatingDrive = F("matingDrive", 0f, 3f, o.MatingDrive);
             o.MutBrainX = F("mutBrain", 0f, 5f, 1f); o.MutBodyX = F("mutBody", 0f, 5f, 1f); o.WorldMut = F("worldMut", 0f, 10f, o.WorldMut);
-            o.Branches = I("branches", 1, 8, o.Branches); o.BranchSlots = I("branchSlots", 2048, 262144, o.BranchSlots);
+            o.Branches = I("branches", 1, 8, o.Branches); o.BranchSlots = I("branchSlots", 2048, World.MaxSlots, o.BranchSlots);
             o.PrehistorySteps = I("steps", 0, int.MaxValue, o.PrehistorySteps);   // 0 = until you begin the world (or stop it)
             if (o.Evolve) { o.Steps = o.PrehistorySteps; o.StepsSet = true; }   // the headless prehistory takes its length from --steps
-            o.Capacity = I("worldSlots", 4096, 524288, o.Capacity); o.Rate = F("rate", 0f, 120f, o.Rate);
+            o.Capacity = I("worldSlots", 1024, World.MaxSlots, o.Capacity); o.Rate = F("rate", 0f, 120f, o.Rate);
             Console.WriteLine($"setup: prehistory on a {o.PreMap}-unit map, {o.Branches} branches x {o.BranchSlots:N0} slots, " +
                 $"{o.AncestorsLand} land + {o.AncestorsWater} water ancestors x {o.Founders} founders, {o.BigBrains} big-brained ({o.BigBrainUnits} units), " +
                 $"{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}; world {o.WorldMap}-unit map, {o.Capacity:N0} slots");

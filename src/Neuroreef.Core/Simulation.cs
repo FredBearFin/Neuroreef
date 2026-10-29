@@ -65,14 +65,20 @@ public sealed class Simulation : IDisposable
             int clade = Clades.NewClade(w, -1, a);
             var realm = land ? Realm.Land : Realm.Water;
             float gx = 0, gy = 0;
-            for (int k = 0; k < w.Evo.Founders; k++, key++)
+            // the ancestor's one brain and body (Revision H: unrelated random brains per founder made crossover
+            // scramble networks, a hidden cost only sex paid); each founder varies around it
+            var anc = new sbyte[G.LEN];
+            Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)a);
+            Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0);
+            int units = Body.Units(anc[G.B_BRAIN]);
+            // founders scale with the map's area, as founding from a bank does: a valley is not stocked like a continent
+            float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);
+            int founders = Math.Max(K.MIN_SPLIT, (int)MathF.Round(w.Evo.Founders * MathF.Min(1f, area * K.FOUND_AREA)));
+            for (int k = 0; k < founders; k++, key++)
             {
                 if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
-                // each founder: the ancestor's one brain and body, with standing variation (Revision H: unrelated
-                // random brains per founder made crossover scramble networks, a hidden cost only sex paid)
-                Brain.RandomGenome(tmpl, seed, 0, 0x700000u + (uint)a);
-                Brain.VaryBrain(tmpl, seed, key);
-                Clades.AncestorBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0);
+                anc.CopyTo(tmpl, 0);
+                Brain.VaryBrain(tmpl, seed, key, units);
                 Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
                 Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
             }

@@ -417,17 +417,17 @@ public class EcologyTests
         Assert.True(male[Reflex.READY_MATE] > female[Reflex.READY_MATE] && female[Reflex.READY_MATE] > 0);
     }
 
-    [Fact] // DESIGN §6.2 (Revision J): BigBrains ancestors per branch start with BigBrainUnits memory units, the rest up to BRAIN_REF (plus founder variation)
+    [Fact] // DESIGN §6.2 (Revision J): BigBrains ancestors per branch start with BigBrainUnits memory units, the rest up to BRAIN_START (plus founder variation)
     public void SomeAncestorsStartBigBrained()
     {
-        using var sim = new Simulation(16384, 7, 1, evo: new EvoSettings { BigBrains = 2, BigBrainUnits = 36 });
+        using var sim = new Simulation(8192, 7, 1, evo: new EvoSettings { BigBrains = 2, BigBrainUnits = 128 });
         var w = sim.W;
         var maxUnits = new int[K.CLADES];
         for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) maxUnits[w.Spc[i]] = Math.Max(maxUnits[w.Spc[i]], w.PBrain[i]);
         int big = 0;
-        for (int s = 0; s < K.ANCESTORS_LAND + K.ANCESTORS_WATER; s++) if (maxUnits[s] >= 33) big++; else Assert.True(maxUnits[s] <= K.BRAIN_REF + 6, $"clade {s}: {maxUnits[s]} units");
+        for (int s = 0; s < K.ANCESTORS_LAND + K.ANCESTORS_WATER; s++) if (maxUnits[s] >= 100) big++; else Assert.True(maxUnits[s] <= 2 * K.BRAIN_START, $"clade {s}: {maxUnits[s]} units");
         Assert.Equal(2, big);
-        Assert.True(maxUnits[0] >= 33 && maxUnits[K.ANCESTORS_LAND] >= 33);   // one on land, one in water
+        Assert.True(maxUnits[0] >= 100 && maxUnits[K.ANCESTORS_LAND] >= 100);   // one on land, one in water
     }
 
     [Fact] // NR-303: thirst rises on land only
@@ -475,12 +475,14 @@ public class EcologyTests
         w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_WINGS] = -127;   // a land walker (legs only)
         Body.Express(w, i);
         float basal0 = w.PBasal[i], v0 = w.PVmax[i], grass0 = w.PDiet[(int)Pool.Grass], seed0 = w.PDiet[(int)Pool.Seed];
-        float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += w.PDiet[p] * w.PDiet[p];
+        // the budget is on gene shares; each food's assimilation is the share times its DigMax (Revision M)
+        float Sh(int p) => w.PDiet[p] / Pools.DigMax[p] * 0.95f;
+        float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += Sh(p) * Sh(p);
         Assert.InRange(MathF.Sqrt(sum0), K.DIET_BUDGET - 0.02f, K.DIET_BUDGET + 0.02f);   // L2 budget
         w.Genome[G.B_DIET + (int)Pool.Grass] = 127;        // specialise on grass
         w.Genome[G.B_SPEED] = 127;                         // faster
         Body.Express(w, i);
-        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += w.PDiet[p] * w.PDiet[p];
+        float sum = 0; for (int p = 0; p < Pools.N; p++) sum += Sh(p) * Sh(p);
         Assert.InRange(MathF.Sqrt(sum), K.DIET_BUDGET - 0.06f, K.DIET_BUDGET + 0.02f);
         Assert.True(w.PDiet[(int)Pool.Grass] > grass0);
         Assert.True(w.PDiet[(int)Pool.Seed] < seed0);
@@ -552,6 +554,7 @@ public class EcologyTests
         for (int i = 0; i < 200; i++)
         {
             Brain.RandomGenome(w.GenomeOf(i), 2, 0, (uint)i);
+            w.Genome[i * G.LEN + G.B_BRAIN] = Body.UnitsGene(12);   // an ordinary founder brain (12 units)
             for (int p = 0; p < P.N; p++) Assert.InRange(w.Genome[i * G.LEN + G.W2 + p * G.NIN + G.NH + F.BIAS], K.FOUNDER_BIAS - K.FOUNDER_BIAS_NOISE, K.FOUNDER_BIAS + K.FOUNDER_BIAS_NOISE);
             w.Spc[i] = (byte)(i % K.CLADES); w.StageOf[i] = St.Adult;
             Body.Express(w, i); Brain.InitLife(w, i);

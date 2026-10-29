@@ -78,6 +78,7 @@ public class EcosystemTests
             b[G.B_LITTER - G.BODY] = G.ToGene(MathF.Log(2f) / MathF.Log(K.LITTER_MAX) * 2f - 1f, -1f, 1f);
             b[G.B_BIRTH - G.BODY] = G.ToGeneLog(0.15f, K.BIRTH_LO, K.BIRTH_HI);
             b[G.B_CARE - G.BODY] = 0;
+            b[G.B_BRAIN - G.BODY] = Body.UnitsGene(12);   // an ordinary 12-unit brain
             Body.Express(w, c);
             w.Energy[c] = 0.7f * w.EmaxOf(c);
             if (k % 2 == 1) w.Genome[c * G.LEN + eat] = 0;

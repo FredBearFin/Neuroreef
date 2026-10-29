@@ -128,7 +128,7 @@ public sealed class Options
             switch (s)
             {
                 case "--seed": o.Seed = uint.Parse(Next()); break;
-                case "--capacity": o.Capacity = int.Parse(Next()); break;
+                case "--capacity": o.Capacity = Math.Clamp(int.Parse(Next()), 1024, World.MaxSlots); break;
                 case "--threads": o.Threads = int.Parse(Next()); break;
                 case "--port": o.Port = int.Parse(Next()); break;
                 case "--rate": o.Rate = float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
@@ -151,7 +151,7 @@ public sealed class Options
                 case "--new-world": o.NewWorld = true; break;
                 case "--big-brains": o.BigBrains = int.Parse(Next()); o.NoSetup = true; break;
                 case "--founders": o.Founders = int.Parse(Next()); o.NoSetup = true; break;
-                case "--branch-slots": o.BranchSlots = Math.Clamp(int.Parse(Next()), 2048, 262144); o.NoSetup = true; break;
+                case "--branch-slots": o.BranchSlots = Math.Clamp(int.Parse(Next()), 2048, World.MaxSlots); o.NoSetup = true; break;
                 case "--no-setup": o.NoSetup = true; break;
                 case "--map": o.PreMap = MapSide(Next()); o.NoSetup = true; break;
                 case "--world-map": o.WorldMap = MapSide(Next()); break;

@@ -14,7 +14,7 @@ namespace Neuroreef;
 
 public static class GeneBank
 {
-    public const ushort Version = 2;
+    public const ushort Version = 3;   // 3: genome length as int32 (Revision M: 256-unit brains)
 
     public sealed class CladeInfo
     {
@@ -33,7 +33,7 @@ public static class GeneBank
     {
         using var bw = new BinaryWriter(s, System.Text.Encoding.ASCII, leaveOpen: true);
         bw.Write("NRBK"u8.ToArray());
-        bw.Write(Version); bw.Write((ushort)K.CLADES); bw.Write((ushort)G.LEN); bw.Write((uint)w.Cap);
+        bw.Write(Version); bw.Write((ushort)K.CLADES); bw.Write(G.LEN); bw.Write((uint)w.Cap);
         bw.Write(w.Step); bw.Write(w.Seed);
         var alive = new int[K.CLADES];
         for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) alive[w.Spc[i]]++;
@@ -56,12 +56,12 @@ public static class GeneBank
             for (int k = 0; k < nl; k++)
             {
                 bw.Write(living[k].Item1);
-                foreach (var b in new ReadOnlySpan<sbyte>(w.Genome, living[k].Item2 * G.LEN, G.LEN)) bw.Write(b);
+                bw.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<sbyte>(w.Genome, living[k].Item2 * G.LEN, G.LEN)));
             }
             for (int k = 0; k < na; k++)
             {
                 bw.Write(w.ArchiveScore[sp * K.ARCHIVE + k]);
-                foreach (var b in new ReadOnlySpan<sbyte>(w.Archive, (sp * K.ARCHIVE + k) * G.LEN, G.LEN)) bw.Write(b);
+                bw.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<sbyte>(w.Archive, (sp * K.ARCHIVE + k) * G.LEN, G.LEN)));
             }
         }
     }
@@ -71,9 +71,10 @@ public static class GeneBank
         using var br = new BinaryReader(s, System.Text.Encoding.ASCII, leaveOpen: true);
         var magic = br.ReadBytes(4);
         if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'B' || magic[3] != 'K') throw new InvalidDataException("not a gene bank");
-        ushort ver = br.ReadUInt16(), ns = br.ReadUInt16(), len = br.ReadUInt16();
+        ushort ver = br.ReadUInt16();
         if (ver != Version)
-            throw new InvalidDataException($"gene bank version {ver}: it was made before open-ended evolution (Revision F) and holds designed species; run a new prehistory");
+            throw new InvalidDataException(ver < Version ? $"gene bank version {ver}: it was made with smaller brains (before Revision M); run a new prehistory" : $"gene bank version {ver} is from a newer program");
+        ushort ns = br.ReadUInt16(); int len = br.ReadInt32();
         if (len != G.LEN) throw new InvalidDataException($"gene bank genome length {len}, expected {G.LEN} (genome layout changed)");
         if (ns != K.CLADES) throw new InvalidDataException($"gene bank has {ns} clade slots, expected {K.CLADES}");
         br.ReadUInt32();
@@ -91,7 +92,7 @@ public static class GeneBank
             {
                 br.ReadSingle();
                 var g = new sbyte[G.LEN];
-                for (int b = 0; b < G.LEN; b++) g[b] = br.ReadSByte();
+                br.BaseStream.ReadExactly(System.Runtime.InteropServices.MemoryMarshal.AsBytes(g.AsSpan()));
                 d.Genomes[sp].Add(g);
             }
             d.Clades.Add(c);

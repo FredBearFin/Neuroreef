@@ -31,6 +31,9 @@ public static class Pools
     public static readonly float[] Rho =
         { K.RHO_GRASS, K.RHO_BROWSE, K.RHO_FRUIT, K.RHO_SEED, K.RHO_NECTAR, K.RHO_ROOT, K.RHO_ALGAE, K.RHO_PHYTO,
           K.RHO_CARRION, K.RHO_DUNG, K.RHO_LITTER, K.RHO_WOOD, K.RHO_DETRITUS, K.RHO_MEAT, K.RHO_BLOOD };
+    // the most energy an animal can get from each food, a specialist's assimilation (Revision M, ecology review:
+    // Van Soest 1994; Robbins 1993): grass browse fruit seed nectar root algae phyto carrion dung litter wood detritus meat blood
+    public static readonly float[] DigMax = { 0.5f, 0.5f, 0.8f, 0.75f, 0.95f, 0.6f, 0.6f, 0.7f, 0.85f, 0.3f, 0.25f, 0.15f, 0.4f, 0.9f, 0.9f };
     public static bool IsDead(int p) => p >= (int)Pool.Carrion && p <= (int)Pool.Detritus;
     public static bool IsWaterPool(int p) => p == (int)Pool.Algae || p == (int)Pool.Phyto || p == (int)Pool.Detritus;
 }
