@@ -402,7 +402,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| CLIMATE | 0.6 | - | default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget | HT: Revision O; 1 = Earth-like contrasts, 0.6 keeps most of a region habitable to founders |
+| CLIMATE | 0.3 | - | default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget | HT: Revision O; 1 = Earth-like contrasts. Sanity runs at 8,000 steps: 0.6 left 0 and 243 organisms in two branches, 0.3 left 670 and 944, 0 left 728 and 4,106 |
 | T_REF | 20 | °C | reference temperature (the temperature of a world with no climate; plant curves, decomposition and evaporation are 1 here) | - |
 | T_EQ | 27 | °C | annual mean sea-level temperature at the equator | ECO: observed zonal mean ~27 °C (North 1975) |
 | DT_EP | 40 | K | equator-to-pole temperature drop, x sin² latitude | ECO: the second Legendre term of North's (1975) energy-balance climate, ~40 K |

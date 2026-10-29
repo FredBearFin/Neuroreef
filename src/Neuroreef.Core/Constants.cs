@@ -321,7 +321,7 @@ public static class K
     [K("Fire", "MARK multiplier on scent deposit", "-", "HT")] public const float MARK_GAIN = 4f;
 
     // ---------------------------------------------------------------- 9. climate (Revision O): temperature from sun, height, season and water
-    [K("Climate", "default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget", "-", "HT: Revision O; 1 = Earth-like contrasts, 0.6 keeps most of a region habitable to founders")] public const float CLIMATE = 0.6f;
+    [K("Climate", "default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget", "-", "HT: Revision O; 1 = Earth-like contrasts. Sanity runs at 8,000 steps: 0.6 left 0 and 243 organisms in two branches, 0.3 left 670 and 944, 0 left 728 and 4,106")] public const float CLIMATE = 0.3f;
     [K("Climate", "reference temperature (the temperature of a world with no climate; plant curves, decomposition and evaporation are 1 here)", "°C", "-")] public const float T_REF = 20f;
     [K("Climate", "annual mean sea-level temperature at the equator", "°C", "ECO: observed zonal mean ~27 °C (North 1975)")] public const float T_EQ = 27f;
     [K("Climate", "equator-to-pole temperature drop, x sin² latitude", "K", "ECO: the second Legendre term of North's (1975) energy-balance climate, ~40 K")] public const float DT_EP = 40f;

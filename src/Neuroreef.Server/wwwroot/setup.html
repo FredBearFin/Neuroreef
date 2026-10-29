@@ -168,10 +168,10 @@ function estimate() {
 }
 
 const PRESETS = {
-  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.6 },
-  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.6 },
-  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.6 },
-  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.8 },
+  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.3 },
+  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.3 },
+  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
+  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.5 },
 };
 for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
   const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]);
