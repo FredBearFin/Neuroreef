@@ -8,7 +8,7 @@ import { PrehistoryTab } from './prehistory.js';
 const $ = (id) => document.getElementById(id);
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
-let pre = null, phase = null, phaseVersion = -1, lastPre = null;
+let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9;
 let clades = [], pendingClades = null;   // the live clade table (32 slots; unused ones have used = false)
 
 link.listen('meta', (m) => {
@@ -44,7 +44,7 @@ link.listen('probe', (p) => {
   if (now - lastProbeT > 250) { lastProbeT = now; panels.renderProbe(p, world); hud(); }
 });
 link.listen('status', (s) => status(s));
-link.listen('prehistory', (p) => { lastPre = p; if (pre) pre.update(p); });
+link.listen('prehistory', (p) => { lastPre = p; if (pre) pre.update(p); if (performance.now() - rateClicked > 2000 && p.rateSet !== undefined && window.showRate) window.showRate(p.rateSet); });
 link.listen('close', () => $('connect').classList.remove('hidden'));
 link.connect();
 
@@ -139,12 +139,15 @@ function buildControls() {
     world.selected = 0;
     if (world.mode === 'overview') { world.setMode('follow'); for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === 'follow'); }
   };
+  // the speed buttons show the speed that is set (the server's), so the right one is lit in the prehistory too
+  window.showRate = (r) => { for (const o of document.querySelectorAll('#speed button[data-rate]')) o.classList.toggle('on', +o.dataset.rate === Math.round(r)); };
   for (const b of document.querySelectorAll('#speed button')) {
     b.onclick = () => {
       if (b.dataset.cmd === 'pause') { const p = b.classList.toggle('on'); link.send({ cmd: p ? 'pause' : 'resume' }); return; }
       if (b.dataset.cmd === 'step') { link.send({ cmd: 'step' }); return; }
       link.send({ cmd: 'rate', value: +b.dataset.rate });
-      for (const o of document.querySelectorAll('#speed button[data-rate]')) o.classList.toggle('on', o === b);
+      rateClicked = performance.now();
+      showRate(+b.dataset.rate);
     };
   }
   // tap to select (ignore drags)
@@ -204,12 +207,14 @@ function status(s) {
     if (world) { world.selected = 0; probe = null; if (panels) panels.renderProbe(null); hud(); }
   }
   if (s.phase === 'prehistory' && lastPre) {
-    $('s-pre').textContent = `PREHISTORY · ${Math.round(lastPre.step * lastPre.yearsPerStep / 1e6)} of ${Math.round(lastPre.settings.totalSteps * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
+    const tot = lastPre.settings.totalSteps, my = Math.round(lastPre.step * lastPre.yearsPerStep / 1e6);
+    $('s-pre').textContent = tot >= 2147483647 ? `PREHISTORY · ${my} Myr · branch ${s.view}` : `PREHISTORY · ${my} of ${Math.round(tot * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
   }
   $('s-step').textContent = s.step.toLocaleString();
   if (panels) panels.setStep(s.step);
   $('s-alive').textContent = s.alive.toLocaleString();
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
+  if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +
     (s.rain < -0.15 ? ' · drought year' : s.rain > 0.15 ? ' · wet year' : '');
   $('s-random').classList.toggle('hidden', s.bankSource !== 'random' || s.phase !== 'live');

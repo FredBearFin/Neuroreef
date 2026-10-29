@@ -46,7 +46,11 @@ public static class Headless
     public static int Evolve(Options o)
     {
         var e = o.PrehistorySettings(stepsAreLength: true);
-        using var pre = new Prehistory(o.Branches, K.BRANCH_CAPACITY, o.Seed, o.Threads, e);
+        // resuming: the prehistory is rebuilt with the sizes it was started with
+        if (o.CheckpointPath != null && File.Exists(o.CheckpointPath))
+            try { var (nb, cap, sd) = Checkpoint.PrehistoryHeader(o.CheckpointPath); o.Branches = nb; o.BranchSlots = cap; o.Seed = sd; }
+            catch (Exception ex) { Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}"); return 2; }
+        using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e);
         var s0 = pre.Pending;
         if (o.CheckpointPath != null)
         {

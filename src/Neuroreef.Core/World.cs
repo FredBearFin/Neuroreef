@@ -93,6 +93,8 @@ public sealed class World
     /// </summary>
     public bool Prehistory;
     public readonly EvoSettings Evo = new();   // the evolutionary search's knobs (prehistory; mutation also in a live world)
+    /// <summary>Approximate memory per agent slot (bytes), for the setup screen's estimate.</summary>
+    public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (1 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 420;
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry

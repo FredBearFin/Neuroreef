@@ -64,7 +64,7 @@ public sealed class Simulation : IDisposable
             int clade = Clades.NewClade(w, -1, a);
             var realm = land ? Realm.Land : Realm.Water;
             float gx = 0, gy = 0;
-            for (int k = 0; k < K.ANCESTOR_COUNT; k++, key++)
+            for (int k = 0; k < w.Evo.Founders; k++, key++)
             {
                 if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
                 // each founder: the ancestor's one brain and body, with standing variation (Revision H: unrelated

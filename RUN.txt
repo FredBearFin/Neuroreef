@@ -30,6 +30,17 @@ YOUR WORLD IS SAVED
   Starting Neuroreef.exe again continues it exactly where it was. To start a new world instead:
   Neuroreef.exe --new-world (the old one is kept as world.nrck.old).
 
+SETUP BEFORE A NEW PREHISTORY
+  When a new prehistory is about to start, the browser first shows a setup page: how many branches,
+  animal slots per branch, founders per ancestor, its length, the big-brained ancestors, and the world's
+  slots. It shows how much memory that takes against what your computer has. Presets: Light (laptop),
+  Normal, Big. Nothing is created until you press Start. (Skip it with --no-setup; any of --branches,
+  --branch-slots, --founders, --big-brains on the command line also skip it.)
+
+SPEED
+  The speed buttons are steps per second: 1/s, 3/s, 10/s, 30/s and max. They work in the prehistory and in
+  the world. If the computer cannot keep up, it runs as fast as it can (the "steps/s" box shows the real speed).
+
 DATA EXPORT
   The "Export data" button (top bar) downloads everything recorded so far as a zip: population.csv
   (alive per clade over time), traits.csv, deaths.csv, clades.csv, telemetry.csv (every number) and

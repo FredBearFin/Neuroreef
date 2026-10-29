@@ -23,7 +23,7 @@ namespace Neuroreef.Server;
 
 public static class Host
 {
-    static readonly Dictionary<string, string> Mime = new()
+    internal static readonly Dictionary<string, string> Mime = new()
     {
         [".html"] = "text/html; charset=utf-8", [".js"] = "text/javascript; charset=utf-8", [".css"] = "text/css; charset=utf-8",
         [".json"] = "application/json", [".svg"] = "image/svg+xml", [".png"] = "image/png", [".txt"] = "text/plain; charset=utf-8",
@@ -36,7 +36,8 @@ public static class Host
         using var host = new SimHost(o, bank);
         if (host.Pre != null)
             Console.WriteLine($"No evolved brains yet, so the PREHISTORY runs first: {host.Pre.B.Length} branches evolve at full speed " +
-                $"({host.Pre.Pending.TotalSteps:N0} steps = {(long)host.Pre.Pending.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years). " +
+                (host.Pre.Pending.TotalSteps == int.MaxValue ? "(until you begin the world). "
+                    : $"({host.Pre.Pending.TotalSteps:N0} steps = {(long)host.Pre.Pending.TotalSteps * K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years). ") +
                 "Watch it in the console; the world begins when it ends, or when you press Begin the world.");
         var state = new Shared(host);
 
@@ -137,7 +138,7 @@ public static class Host
         }
     }
 
-    static IEnumerable<string> LanAddresses()
+    internal static IEnumerable<string> LanAddresses()
     {
         try
         {
@@ -150,7 +151,7 @@ public static class Host
         catch { return Array.Empty<string>(); }
     }
 
-    static void OpenBrowser(string url)
+    internal static void OpenBrowser(string url)
     {
         try
         {
@@ -260,7 +261,7 @@ public static class Host
                 }
                 _preJson = JsonSerializer.Serialize(new
                 {
-                    type = "prehistory", step = pre.Step, rate = pre.Rate, paused = pre.Paused, finished = pre.Finished,
+                    type = "prehistory", step = pre.Step, rate = pre.Rate, rateSet = pre.RateLimit, paused = pre.Paused, finished = pre.Finished,
                     yearsPerStep = K.YEARS_PER_STEP, view = H.ViewBranch, branches,
                     settings = new { mutRate = e.MutRate, mutBody = e.MutBody, mutSmall = e.MutSmall, mutBigShare = e.MutBigShare, mutBig = e.MutBig, totalSteps = e.TotalSteps },
                 });
@@ -424,7 +425,7 @@ public static class Host
                             break;
                         }
                         case "follow": { bool on = e.GetProperty("on").GetBoolean(); h.Post(s => s.ProbeFollow = on); break; }
-                        case "rate": h.Rate = (float)e.GetProperty("value").GetDouble(); break;
+                        case "rate": h.SetRate((float)e.GetProperty("value").GetDouble()); break;
                         case "pause": h.SetPaused(true); break;
                         case "resume": h.SetPaused(false); break;
                         case "branch": h.View(e.GetProperty("index").GetInt32()); break;

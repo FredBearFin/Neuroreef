@@ -23,6 +23,7 @@ public sealed class Prehistory : IDisposable
     public volatile bool Finished;
     public ulong Step => B[0].W.Step;
     public double Rate;                          // steps per second (per branch, all in lockstep)
+    public volatile float RateLimit;             // the console's speed: steps per second per branch, 0 = as fast as possible
     public string? CheckpointPath;               // when set, the whole state is saved here every CheckpointMinutes (at a barrier)
     public double CheckpointMinutes = 30;
     public string? LastCheckpointError;
@@ -76,6 +77,8 @@ public sealed class Prehistory : IDisposable
     void Loop(int b)
     {
         var sim = B[b];
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        double due = 0;
         try
         {
             while (!_stop && !Finished)
@@ -83,6 +86,16 @@ public sealed class Prehistory : IDisposable
                 for (int k = 0; k < SYNC && !_stop; k++)
                 {
                     if (sim.W.Step >= (ulong)sim.W.Evo.TotalSteps) break;
+                    // pause and speed act at once, not only at the next barrier
+                    while (_paused && !_stop) { Thread.Sleep(20); due = clock.Elapsed.TotalSeconds; }
+                    float rate = RateLimit;
+                    if (rate > 0)
+                    {
+                        double now = clock.Elapsed.TotalSeconds;
+                        if (due < now - 0.25) due = now - 0.25;
+                        while (now < due && !_stop && !_paused) { Thread.Sleep(Math.Max(1, (int)((due - now) * 1000))); now = clock.Elapsed.TotalSeconds; }
+                        due += 1.0 / rate;
+                    }
                     sim.Step();
                 }
                 _barrier.SignalAndWait();

@@ -70,8 +70,9 @@ public sealed class SimHost : IDisposable
             _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed);
         else
         {
-            Pre = new Prehistory(o.Branches, K.BRANCH_CAPACITY, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false));
+            Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false));
             BankSource = "prehistory";
+            Rate = 0;   // a prehistory runs as fast as possible until the console asks for a speed
             if (o.CheckpointPath != null)
             {
                 Pre.CheckpointPath = o.CheckpointPath; Pre.CheckpointMinutes = o.CheckpointMinutes;
@@ -130,6 +131,9 @@ public sealed class SimHost : IDisposable
     }
 
     public void SetPaused(bool p) { Paused = p; if (Pre != null) Pre.Paused = p; }
+
+    /// <summary>The console's speed (steps per second, 0 = as fast as possible), for the world and the prehistory alike.</summary>
+    public void SetRate(float r) { Rate = r; var pre = Pre; if (pre != null) pre.RateLimit = r; }
 
     public void View(int branch)
     {

@@ -65,10 +65,11 @@ export class PrehistoryTab {
   update(p) {
     this.last = p; yps = p.yearsPerStep;
     const e = p.settings, total = e.totalSteps;
-    $('pre-fill').style.width = Math.min(100, 100 * p.step / total) + '%';
+    const open = total >= 2147483647;   // runs until you begin the world
+    $('pre-fill').style.width = open ? '100%' : Math.min(100, 100 * p.step / total) + '%';
     const left = (total - p.step) / Math.max(1, p.rate);
-    $('pre-years').textContent = `${myr(p.step)} of ${myr(total)}`;
-    $('pre-eta').textContent = p.paused ? 'paused' : p.finished ? 'finished' :
+    $('pre-years').textContent = open ? `${myr(p.step)} · until you begin the world` : `${myr(p.step)} of ${myr(total)}`;
+    $('pre-eta').textContent = p.paused ? 'paused' : p.finished ? 'finished' : open ? `${Math.round(p.rate).toLocaleString()} steps/s per branch · births only` :
       `${Math.round(p.rate).toLocaleString()} steps/s per branch · about ${left > 5400 ? (left / 3600).toFixed(1) + ' h' : Math.ceil(left / 60) + ' min'} left · births only`;
     $('pre-pause').textContent = p.paused ? 'Resume' : 'Pause';
     $('pre-pause').classList.toggle('on', p.paused);

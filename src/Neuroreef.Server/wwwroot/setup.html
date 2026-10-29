@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuroreef setup</title>
+<style>
+  :root { --bg: #0b1622; --panel: #111f2d; --line: #22344a; --fg: #d8e2ec; --dim: #8296aa; --go: #2fbf71; --warn: #ffb347; --bad: #ff5d73; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; letter-spacing: 0.08em; margin: 0 0 4px; }
+  p.lead { color: var(--dim); margin: 0 0 20px; }
+  .row { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  .row label { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+  .row label b { font-variant-numeric: tabular-nums; color: #9fd3ff; }
+  .row .help { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+  input[type=range] { width: 100%; margin-top: 8px; accent-color: #4aa3ff; }
+  .est { position: sticky; bottom: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+  .est .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .est .k { color: var(--dim); font-size: 12px; }
+  .ok { color: var(--go); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  button { margin-left: auto; background: var(--go); color: #062012; border: 0; border-radius: 6px; padding: 10px 20px; font-weight: 700; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .presets a { color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; text-decoration: none; cursor: pointer; }
+  .presets a:hover { background: #16212c; }
+  #msg { width: 100%; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>NEUROREEF · NEW PREHISTORY</h1>
+  <p class="lead">Choose how big this run is before anything is created. Smaller runs use less memory and
+    run faster; bigger ones give evolution more animals to work with. The map and the largest possible brain are
+    fixed in this build.</p>
+  <div class="presets"><span class="k" style="color:var(--dim);align-self:center">Presets:</span>
+    <a data-p="light">Light (laptop)</a><a data-p="normal">Normal</a><a data-p="big">Big (strong PC)</a></div>
+  <div id="rows"></div>
+  <div class="est">
+    <div><div class="v" id="mem">–</div><div class="k">memory needed (about)</div></div>
+    <div><div class="v" id="ram">–</div><div class="k">this computer can give it</div></div>
+    <div><div class="v" id="cores">–</div><div class="k">processor cores</div></div>
+    <button id="go">Start the prehistory</button>
+    <div id="msg"></div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const gb = (b) => (b / 1e9).toFixed(1) + ' GB';
+const STEPS = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 0];
+const SLOTS = [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072];
+const WSLOTS = [16384, 32768, 65536, 98304, 131072, 196608, 262144];
+let info, rows = [];
+
+function nearestIndex(list, v) { let b = 0; for (let i = 0; i < list.length; i++) if (Math.abs(list[i] - v) < Math.abs(list[b] - v)) b = i; return b; }
+
+function build() {
+  const R = [
+    { key: 'branches', label: 'Branches', min: 1, max: 6, step: 1, val: info.branches, fmt: (v) => v,
+      help: 'Separate worlds evolving side by side from different random ancestors. Each one costs a full set of slots and a share of the CPU. At the end you pick which branch your world starts from.' },
+    { key: 'branchSlots', label: 'Animal slots per branch', list: SLOTS, val: info.branchSlots, fmt: (v) => v.toLocaleString(),
+      help: 'The most organisms (eggs included) one branch can hold. This is the main memory cost. Too few and the slot limit, not food, decides who gets born.' },
+    { key: 'founders', label: 'Founders per ancestor', min: 100, max: 1500, step: 50, val: info.founders, fmt: (v) => v,
+      help: `How many animals each of the ${info.ancestors} ancestors starts with. Fewer founders start faster but risk early extinctions by chance.` },
+    { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: info.steps, fmt: (v) => v === 0 ? 'until you begin the world' : v.toLocaleString() + ' steps',
+      help: 'When the world begins on its own. You can always press "Begin the world" earlier.' },
+    { key: 'bigBrains', label: 'Big-brained ancestors per branch', min: 0, max: info.ancestors, step: 1, val: info.bigBrains, fmt: (v) => v === 0 ? 'none' : v,
+      help: `Half on land, half in water. Every other ancestor starts with a random brain of up to ${info.refUnits} units.` },
+    { key: 'bigBrainUnits', label: 'Brain size of a big-brained ancestor', min: info.refUnits, max: info.maxUnits, step: 2, val: info.bigBrainUnits, fmt: (v) => v + ' units',
+      help: 'Memory units. A bigger brain costs proportionally more energy every step; whether it pays for itself is up to evolution.' },
+    { key: 'worldSlots', label: 'Animal slots in the world (after the prehistory)', list: WSLOTS, val: info.worldSlots, fmt: (v) => v.toLocaleString(),
+      help: 'The most organisms the world you watch can hold. When it is full, births are refused.' },
+  ];
+  const box = $('rows'); box.innerHTML = '';
+  rows = R.map((r) => {
+    const d = document.createElement('div'); d.className = 'row';
+    const n = r.list ? r.list.length - 1 : r.max, mn = r.list ? 0 : r.min, st = r.list ? 1 : r.step;
+    d.innerHTML = `<label><span>${r.label}</span><b></b></label><input type="range" min="${mn}" max="${n}" step="${st}"><div class="help">${r.help}</div>`;
+    box.append(d);
+    const inp = d.querySelector('input'), out = d.querySelector('b');
+    r.get = () => r.list ? r.list[+inp.value] : +inp.value;
+    r.set = (v) => { inp.value = r.list ? nearestIndex(r.list, v) : v; out.textContent = r.fmt(r.get()); };
+    inp.oninput = () => { out.textContent = r.fmt(r.get()); estimate(); };
+    r.set(r.val);
+    return r;
+  });
+  estimate();
+}
+
+function val(k) { return rows.find((r) => r.key === k).get(); }
+function setv(k, v) { rows.find((r) => r.key === k).set(v); }
+
+function estimate() {
+  // the prehistory and the world are never both in memory: the larger of the two counts
+  const pre = val('branches') * val('branchSlots') * info.bytesPerSlot, world = val('worldSlots') * info.bytesPerSlot;
+  const need = Math.max(pre, world) + 0.4e9;
+  $('mem').textContent = gb(need);
+  $('ram').textContent = gb(info.ramBytes);
+  $('cores').textContent = info.cores;
+  const r = need / info.ramBytes;
+  $('mem').className = 'v ' + (r < 0.6 ? 'ok' : r < 0.85 ? 'warn' : 'bad');
+  $('msg').textContent = r < 0.6 ? '' : r < 0.85 ? 'This will use most of the memory; the computer may slow down.' : 'This needs more memory than the computer has. Lower the branches or the slots.';
+  $('go').disabled = r >= 1.0;
+}
+
+const PRESETS = {
+  light: { branches: 1, branchSlots: 16384, founders: 300, bigBrains: 2, bigBrainUnits: 24, worldSlots: 32768 },
+  normal: { branches: 3, branchSlots: 49152, founders: 600, bigBrains: 2, bigBrainUnits: 36, worldSlots: 65536 },
+  big: { branches: 4, branchSlots: 98304, founders: 900, bigBrains: 2, bigBrainUnits: 36, worldSlots: 131072 },
+};
+for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => { const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]); estimate(); };
+
+$('go').onclick = async () => {
+  $('go').disabled = true; $('msg').textContent = 'Creating the prehistory…';
+  const body = {}; for (const r of rows) body[r.key] = r.get();
+  await fetch('api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  // the program now builds the branches and opens the console on the same address: wait for it
+  const t0 = Date.now();
+  const poll = async () => {
+    try { const r = await fetch('api/meta', { cache: 'no-store' }); if (r.ok) { location.href = './'; return; } } catch (e) { /* not up yet */ }
+    $('msg').textContent = `Creating the prehistory… ${Math.round((Date.now() - t0) / 1000)} s`;
+    setTimeout(poll, 1000);
+  };
+  setTimeout(poll, 1500);
+};
+
+fetch('api/setup-info').then((r) => r.json()).then((j) => { info = j; build(); });
+</script>
+</body>
+</html>

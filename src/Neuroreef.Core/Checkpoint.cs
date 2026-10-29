@@ -52,6 +52,19 @@ public static class Checkpoint
         File.Move(tmp, path, overwrite: true);
     }
 
+    /// <summary>Branches, slots per branch and seed of a prehistory checkpoint, to rebuild a prehistory it fits.</summary>
+    public static (int branches, int cap, uint seed) PrehistoryHeader(string path)
+    {
+        using var fs = File.OpenRead(path);
+        using var br = new BinaryReader(fs);
+        var magic = br.ReadBytes(4);
+        if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'C' || magic[3] != 'K') throw new InvalidDataException("not a prehistory checkpoint");
+        if (br.ReadUInt16() != Version) throw new InvalidDataException("checkpoint from another version of the program");
+        int len = br.ReadInt32();
+        if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
+        return (br.ReadInt32(), br.ReadInt32(), br.ReadUInt32());
+    }
+
     /// <summary>Restore a prehistory built with the same branches, capacity and seed. Throws if the checkpoint does not fit.</summary>
     public static void Load(Prehistory pre, string path)
     {

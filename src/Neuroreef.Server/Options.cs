@@ -16,7 +16,8 @@ public sealed class Options
     public int ReportEvery = 2000;
     public string? LoadBank, SaveBank, Csv, CheckpointPath;
     public double CheckpointMinutes = 30;
-    public int BigBrains = -1, BigBrainUnits = 0;
+    public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots = K.BRANCH_CAPACITY;
+    public bool NoSetup, SetupDone;
     public bool NoCheckpoint, ResumePrehistory, ResumeWorld, NewWorld;
     public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
 
@@ -27,6 +28,7 @@ public sealed class Options
         var e = new EvoSettings { TotalSteps = n <= 0 || n > int.MaxValue ? int.MaxValue : (int)n };   // 0 = until stopped
         if (BigBrains >= 0) e.BigBrains = BigBrains;
         if (BigBrainUnits > 0) e.BigBrainUnits = BigBrainUnits;
+        if (Founders > 0) e.Founders = Founders;
         return e;
     }
     public string BankSource = "random";      // evolved, shipped, file, or random
@@ -69,6 +71,9 @@ public sealed class Options
   --big-brains N        prehistory: how many of the 10 ancestors in each branch start big-brained (default 2:
                         one on land, one in water; 0 = none)
   --big-brain-units N   prehistory: memory units of a big-brained ancestor (default 36; others start with up to 12)
+  --founders N          prehistory: founders per ancestor (default 600)
+  --branch-slots N      prehistory: animal slots per branch (default 49152; memory grows with it)
+  --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
   --report N            headless: report interval in steps (default 2000)
@@ -97,7 +102,7 @@ public sealed class Options
                 case "--load-bank": o.LoadBank = Next(); break;
                 case "--save-bank": o.SaveBank = Next(); break;
                 case "--prehistory-steps": o.PrehistorySteps = int.Parse(Next()); break;
-                case "--branches": o.Branches = Math.Clamp(int.Parse(Next()), 1, 8); break;
+                case "--branches": o.Branches = Math.Clamp(int.Parse(Next()), 1, 8); o.NoSetup = true; break;
                 case "--headless": o.Headless = true; break;
                 case "--empty": o.Empty = true; break;
                 case "--steps": o.Steps = long.Parse(Next()); o.StepsSet = true; break;
@@ -108,8 +113,11 @@ public sealed class Options
                 case "--checkpoint-minutes": o.CheckpointMinutes = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--no-checkpoint": o.NoCheckpoint = true; break;
                 case "--new-world": o.NewWorld = true; break;
-                case "--big-brains": o.BigBrains = int.Parse(Next()); break;
-                case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); break;
+                case "--big-brains": o.BigBrains = int.Parse(Next()); o.NoSetup = true; break;
+                case "--founders": o.Founders = int.Parse(Next()); o.NoSetup = true; break;
+                case "--branch-slots": o.BranchSlots = Math.Clamp(int.Parse(Next()), 2048, 262144); o.NoSetup = true; break;
+                case "--no-setup": o.NoSetup = true; break;
+                case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); o.NoSetup = true; break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");

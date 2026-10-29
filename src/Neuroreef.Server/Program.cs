@@ -39,6 +39,8 @@ public static class Program
             {
                 Console.WriteLine("a prehistory is in progress: resuming it from " + o.CheckpointPath);
                 o.NewPrehistory = true; o.ResumePrehistory = true;
+                try { var (nb, cap, sd) = Checkpoint.PrehistoryHeader(o.CheckpointPath); o.Branches = nb; o.BranchSlots = cap; o.Seed = sd; }
+                catch (Exception e) { Console.Error.WriteLine("cannot resume it: " + e.Message + " (move prehistory.nrck away to start a new one)"); return 2; }
             }
         }
         if (!o.Evolve && !o.RandomBrains && !o.NewPrehistory)
@@ -58,6 +60,8 @@ public static class Program
         }
         if (o.Evolve) return Headless.Evolve(o);
         if (o.Headless) return Headless.Run(o, bank);
+        // a new prehistory: let the person choose its size first, so nothing is allocated that the machine cannot hold
+        if (bank == null && !o.RandomBrains && !o.ResumePrehistory && !o.NoSetup && !o.SetupDone) Setup.Run(o);
         return Host.Run(o, bank);
     }
 
