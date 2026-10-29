@@ -284,7 +284,7 @@ public class ClimateTests
             }
             finally { Nature.Fire = fire; Nature.Drought = drought; }
         });
-        double flat = Treeline(0f), line = Treeline(K.CLIMATE);
+        double flat = Treeline(0f), line = Treeline(1f);   // Earth-like strength: the physics, not the default setting
         Assert.InRange(flat, 0.9, 1.1);
         Assert.True(line < 0.7, $"high/low tree cover with a climate {line:F3} (without {flat:F3})");
     }
