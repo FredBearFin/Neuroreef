@@ -38,10 +38,13 @@ button:disabled { opacity: .35; cursor: default; }
 #splits .sh { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: #4fd18b; margin-bottom: 2px; }
 #splits button { margin-top: 6px; }
 @keyframes splitIn { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
-#translator { left: 10px; top: 56px; width: 360px; max-width: calc(100% - 20px); max-height: 70%; overflow-y: auto; font-size: 12px; color: var(--fg); background: #070b10e8; padding: 8px 10px; border-radius: 8px; pointer-events: auto; }
+#translator { left: 10px; top: 56px; width: 420px; max-width: calc(100% - 20px); max-height: 70%; overflow-y: auto; font-size: 12px; color: var(--fg); background: #070b10e8; padding: 8px 10px; border-radius: 8px; pointer-events: auto; }
 #translator .th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--faint); display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 #translator table { width: 100%; border-collapse: collapse; margin: 6px 0; }
 #translator td { padding: 2px 3px; vertical-align: top; }
+#translator td.snd { white-space: nowrap; width: 1%; padding-right: 8px; }
+#translator td .then { margin-top: 1px; }
+#translator tr + tr td { border-top: 1px solid #ffffff0d; }
 #translator .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
 #translator .mean { color: #fff; } #translator .dim { color: var(--faint); }
 #translator .speak { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

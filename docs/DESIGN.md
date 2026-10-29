@@ -27,10 +27,16 @@ capacity"; the population laws reviewed by the ecologist)
   call. No sound has a built-in meaning, and nothing rewards calling: a call costs C_CALL x basal and is heard by
   everyone, predators included. Only the most intended call is made in a step. Founders' call outputs start at
   FOUNDER_BIAS_CALL so that calling as a whole is as rare as one primitive.
-- The translator (console, display only): per clade and sound, the caller's context (danger, food here, mate near,
-  hungry, alone, thirsty, young lost) against the clade's usual context, and how members of the clade answered
-  (came, fled, froze, called back, ignored). A sound "means" a context when it is made 1.5x more often in it than
-  usual. The person can type a word; the translator picks the sound with the highest lift for it in the chosen
+- The translator (console, display only; Meaning.cs): per clade and sound, the sum and sum of squares of each of
+  the caller's 42 senses when it is made, against the same over the clade's usual sample (every 4th step per
+  organism), and of each primitive's gain in listeners of the caller's clade on the step they hear it, against the
+  clade's usual gains. A sound "means" the senses that differ most from usual: standardised difference
+  d = (call mean - usual mean) / pooled spread (spread floored at 0.03), reported when at least 25 calls, |d| >= 0.25
+  and |difference| / standard error >= 3, each sense and direction in plain words ("food here", "alone", "something
+  is coming closer"). Listeners' answers are the gains that rise most, as plain verbs, beside 5 coarse categories
+  (came, fled, froze, called back, ignored). The 7 fixed contexts of the first translator (danger, food here, mate
+  near, hungry, alone, thirsty, young lost; 1.5x lift) are kept only as a fallback. The person can type a word; it is
+  matched by keyword to a sense direction, the translator picks the sound with the highest d on it in the chosen
   clade, and the person clicks where to send it. The call is heard like any other on the next step; it is not an
   organism, and no audio is recorded.
 - Defaults for a 16 GB computer: 2 branches x 16,384 slots, a world of 8,192 slots. Archive 16 and bank 48 genomes per

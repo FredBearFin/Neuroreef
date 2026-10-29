@@ -354,12 +354,14 @@ function showSplit(c, p) {
   setTimeout(() => d.remove(), 90000);
 }
 
-// ---- the translator (Revision M): each clade's sounds have no built-in meaning. What one seems to mean is what is
-// more often going on around the caller when it is made than usual (the context's lift), and what members of its
-// clade do when they hear it. You type a word; the translator picks the sound that best carries it for a clade, and
-// you click where to send it. Your call is not an animal: nothing is added to the world, and no audio is recorded.
-let lexicon = null, xClade = -1, speakArmed = null, xMeaning = -1, xRaw = -1, myCallId = -1, xText = '';
-// a typed word -> one of the contexts the translator knows (or a raw sound: "sound 3"). No audio is ever recorded.
+// ---- the translator (Revision M): each clade's sounds have no built-in meaning. What one seems to mean is read from
+// all 42 senses: those that differ most around a caller from the clade's usual (in the clade's own spread of each sense,
+// Meaning.cs on the server), and the behaviours its clade turns to on hearing it. Any meaning that evolves can show,
+// not only ones designed in advance; the 7 fixed contexts are kept only as a fallback. You type a word; it is matched to
+// a sense (by the plain words for it), the translator picks the sound most made when that sense stands out, and you
+// click where to send it. Your call is not an animal: nothing is added to the world, and no audio is recorded.
+let lexicon = null, xClade = -1, speakArmed = null, xMeaning = -1, xRaw = -1, myCallId = -1, xText = '', xTargets = [];
+// fallback: a typed word -> one of the 7 fixed contexts, when no sense phrase matches
 const WORDS = [
   ['danger', 'run', 'flee', 'predator', 'help', 'enemy', 'attack', 'hide', 'watch out', 'scary'],
   ['food', 'eat', 'grass', 'fruit', 'meat', 'dinner'],
@@ -369,14 +371,40 @@ const WORDS = [
   ['thirsty', 'water', 'drink', 'thirst'],
   ['baby', 'child', 'young', 'lost', 'mother', 'mom', 'kid'],
 ];
+// words of a phrase that say nothing on their own
+const XSTOP = new Set(['a', 'an', 'the', 'is', 'in', 'of', 'its', 'it', 'to', 'by', 'from', 'one', 'no', 'not', 'none', 'only', 'other', 'another',
+  'animal', 'animals', 'nearest', 'biggest', 'view', 'kind', 'kinds', 'caller', 'up', 'something', 'more', 'than', 'usual', 'sound', 'hearing', 'there',
+  'nearby', 'close', 'near', 'far', 'big', 'direction', 'inside', 'all', 'around', 'very', 'grown', 'or', 'and', 'way', 'same', 'good', 'here']);
+const xWordRe = (w) => new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`);
+// a typed text -> the sense directions it may name, best matches first: [{ f, hi, score }]
+function senseTargets(t) {
+  const m = meta.meaning; if (!m) return [];
+  const out = [];
+  for (let f = 0; f < m.high.length; f++) for (const hi of [true, false]) {
+    const phrase = hi ? m.high[f] : m.low[f]; if (!phrase) continue;
+    // a negated phrase ("no food here") is for a negated text ("no food"), and the other way round: a text that
+    // does not agree in negation still matches, but only after every text that does
+    const neg = /^(no|not|none|only|far)\b/.test(phrase), tneg = /(^|\W)(no|not|none|never|far)\b/.test(t), agree = neg === tneg;
+    let score = 0;
+    if (t === phrase.toLowerCase()) score = 10;
+    for (const k of (hi ? m.keysHigh[f] : m.keysLow[f])) if (k && xWordRe(k).test(t)) score = Math.max(score, agree ? 3 : 0.5);
+    // a word of the phrase itself
+    if (score < 1 && agree) for (const w of phrase.toLowerCase().split(/[^a-z0-9-]+/)) if (w && !XSTOP.has(w) && xWordRe(w).test(t)) score = Math.max(score, 1);
+    if (score) out.push({ f, hi, score });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
 function readWord() {
-  const t = xText.trim().toLowerCase(); xRaw = -1; xMeaning = -1;
+  const t = xText.trim().toLowerCase(); xRaw = -1; xMeaning = -1; xTargets = [];
   const m = t.match(/^sound\s*([1-8])$/); if (m) { xRaw = +m[1] - 1; return; }
   if (!t) return;
-  for (let c = 0; c < WORDS.length; c++) if (WORDS[c].some((w) => t === w || t.includes(w))) { xMeaning = c; return; }
+  xTargets = senseTargets(t);
+  if (!xTargets.length) for (let c = 0; c < WORDS.length; c++) if (WORDS[c].some((w) => t === w || t.includes(w))) { xMeaning = c; return; }
 }
-const XMIN = 25;   // calls before a guess is shown
+const XMIN = 25;   // calls before a guess is shown (Meaning.MIN_N on the server)
 const soundCss = (k) => { const c = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]][k]; return `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`; };
+const phraseOf = (f, hi) => (meta.meaning && (hi ? meta.meaning.high[f] : meta.meaning.low[f])) || meta.features[f];
+// fallback: the old 7 fixed contexts (how much more common around a caller than usual)
 function guess(cl, k) {
   const s = cl.sounds[k];
   if (s.n < XMIN) return null;
@@ -389,45 +417,82 @@ function answer(s) {
   let b = 0; for (let r = 1; r < s.resp.length; r++) if (s.resp[r] > s.resp[b]) b = r;
   return `${meta.respNames[b]} ${Math.round(100 * s.resp[b] / tot)}%`;
 }
-function bestSound(cl, c) {
+function bestSoundCtx(cl, c) {
   let best = -1, lift = 0;
   for (let k = 0; k < cl.sounds.length; k++) { const s = cl.sounds[k]; if (s.n < XMIN) continue; const l = s.ctx[c] / Math.max(0.01, cl.bases[c]); if (l > lift) { lift = l; best = k; } }
   return best >= 0 && lift >= 1.2 ? { k: best, lift } : null;
 }
+// the sound whose callers most stand out on the typed sense (highest standardised difference in that direction);
+// the best-matching words are tried first, then weaker matches; the fixed contexts only when no sense matched
+function bestSound(cl) {
+  if (!cl) return null;
+  if (xTargets.length) {
+    let i = 0;
+    while (i < xTargets.length) {
+      const tier = xTargets[i].score; let pick = null;
+      for (; i < xTargets.length && xTargets[i].score === tier; i++) {
+        const t = xTargets[i];
+        for (let k = 0; k < cl.sounds.length; k++) {
+          const s = cl.sounds[k]; if (s.n < XMIN || !s.z) continue;
+          const d = (t.hi ? 1 : -1) * s.z[t.f];
+          if (d > 0 && (!pick || d > pick.d)) pick = { k, d, f: t.f, hi: t.hi };
+        }
+      }
+      if (pick) return pick;
+    }
+    return null;
+  }
+  if (xMeaning >= 0) { const p = bestSoundCtx(cl, xMeaning); return p ? { k: p.k, lift: p.lift, c: xMeaning } : null; }
+  return null;
+}
+const strength = (d) => `<span class="dim" title="how far from usual, in the clade's own spread of it">${Math.abs(d).toFixed(1)}</span>`;
 let xBuiltFor = '';
 function drawTranslator() {
   const box = $('translator'); if (!box || box.classList.contains('hidden') || !lexicon || !meta) return;
   const live = lexicon.clades.filter((c) => clades[c.id] && clades[c.id].used);
   if (!live.length) { box.innerHTML = '<div class="th">TRANSLATOR</div><div class="dim">No living clades.</div>'; xBuiltFor = ''; return; }
-  if (!live.find((c) => c.id === xClade)) xClade = live.slice().sort((a, b) => (clades[b.id].count || 0) - (clades[a.id].count || 0))[0].id;
+  // by default, the clade that calls the most; a mute clade only when none calls
+  if (!live.find((c) => c.id === xClade)) xClade = live.slice().sort((a, b) => (b.calls || 0) - (a.calls || 0) || (clades[b.id].count || 0) - (clades[a.id].count || 0))[0].id;
   const cl = live.find((c) => c.id === xClade), name = clades[xClade].name;
   // the controls are built once per set of clades, so a menu you are using is never rebuilt under you
-  const sig = live.map((c) => c.id + clades[c.id].name).join() + '|' + xClade;
+  const sig = live.map((c) => c.id + clades[c.id].name + (c.mute ? 'm' : '')).join() + '|' + xClade;
   if (sig !== xBuiltFor) {
     xBuiltFor = sig;
-    const opts = live.map((c) => `<option value="${c.id}"${c.id === xClade ? ' selected' : ''}>${clades[c.id].name}</option>`).join('');
+    const order = live.slice().sort((a, b) => (a.mute ? 1 : 0) - (b.mute ? 1 : 0));
+    const opts = order.map((c) => `<option value="${c.id}"${c.id === xClade ? ' selected' : ''}>${clades[c.id].name}${c.mute ? ' (mute)' : ''}</option>`).join('');
     box.innerHTML = `<div class="th"><span>TRANSLATOR</span><select id="x-clade">${opts}</select></div>` +
       `<div class="dim" id="x-desc"></div><table id="x-table"></table>` +
-      `<div class="speak"><span id="x-to"></span><input id="x-text" type="text" placeholder="type a word: danger, food, water, come…" autocomplete="off"><span id="x-say"></span><button id="x-go">Send</button></div><div id="x-reply" class="reply"></div>`;
+      `<div class="speak"><span id="x-to"></span><input id="x-text" type="text" placeholder="type a word: food, danger, alone, hungry, coming…" autocomplete="off"><span id="x-say"></span><button id="x-go">Send</button></div><div id="x-reply" class="reply"></div>`;
     $('x-text').value = xText;
     $('x-clade').onchange = (e) => { xClade = +e.target.value; drawTranslator(); };
     $('x-text').oninput = (e) => { xText = e.target.value; readWord(); drawTranslator(); };
     $('x-text').onkeydown = (e) => { if (e.key === 'Enter') $('x-go').click(); };
-    $('x-go').onclick = () => { const pk = xRaw >= 0 ? { k: xRaw } : xMeaning >= 0 ? bestSound(lexicon.clades.find((c) => c.id === xClade), xMeaning) : null; speakArmed = pk ? pk.k : null; drawTranslator(); };
+    $('x-go').onclick = () => { const pk = xRaw >= 0 ? { k: xRaw } : bestSound(lexicon.clades.find((c) => c.id === xClade)); speakArmed = pk ? pk.k : null; drawTranslator(); };
   }
-  $('x-desc').textContent = `What ${name}'s sounds seem to mean: what is more common around a caller than usual, and what ${name} do on hearing it. Nothing was given a meaning; it has to evolve.`;
-  let rows = '';
-  for (let k = 0; k < meta.nSound; k++) {
-    const s = cl.sounds[k], g = guess(cl, k), a = answer(s);
-    rows += `<tr><td><i class="sw" style="background:${soundCss(k)}"></i>sound ${k + 1}</td><td class="dim">${s.n.toLocaleString()}×</td>` +
-      `<td>${g ? `<span class="mean">≈ ${meta.ctxNames[g.c]}</span> <span class="dim">×${g.lift.toFixed(1)}</span>` : `<span class="dim">${s.n < XMIN ? 'too rare to tell' : 'no clear meaning'}</span>`}</td>` +
-      `<td class="dim">${a ? 'listeners: ' + a : ''}</td></tr>`;
+  if (cl.mute) {
+    $('x-desc').textContent = `${name} are mute: none of them has made a sound, so there is nothing to translate. Pick a clade that calls.`;
+    $('x-table').innerHTML = '';
+  } else {
+    $('x-desc').textContent = `What ${name}'s sounds seem to mean: what stands out most around a caller compared with usual (any of its 42 senses), and what ${name} turn to on hearing it. Nothing was given a meaning; it has to evolve. The number is how far from usual, in the clade's own spread.`;
+    let rows = '';
+    for (let k = 0; k < meta.nSound; k++) {
+      const s = cl.sounds[k], when = (s.when || []).slice(0, 2), then = (s.then || []).slice(0, 2);
+      let w;
+      if (when.length) w = when.map((m) => `<span class="mean">${m.text || phraseOf(m.f, m.hi)}</span> ${strength(m.d)}`).join(', ');
+      else { const g = guess(cl, k); w = g ? `<span class="mean">≈ ${meta.ctxNames[g.c]}</span> <span class="dim">×${g.lift.toFixed(1)} (rough)</span>` : `<span class="dim">${s.n < XMIN ? (s.n ? 'too rare to tell' : 'never made') : 'no clear meaning'}</span>`; }
+      const a = answer(s);
+      const t = then.length ? then.map((m) => `${m.text} ${strength(m.d)}`).join(', ') + (a ? ` <span class="dim">· ${a}</span>` : '') : a ? `<span class="dim">${a}</span>` : '';
+      rows += `<tr><td class="snd"><i class="sw" style="background:${soundCss(k)}"></i>sound ${k + 1}<div class="dim">${s.n.toLocaleString()}×</div></td>` +
+        `<td><div><span class="dim">when </span>${w}</div>${t ? `<div class="then"><span class="dim">listeners then </span>${t}</div>` : ''}</td></tr>`;
+    }
+    $('x-table').innerHTML = rows;
   }
-  $('x-table').innerHTML = rows;
-  const pick = xRaw >= 0 ? { k: xRaw, lift: 0 } : xMeaning >= 0 ? bestSound(cl, xMeaning) : null;
+  const pick = xRaw >= 0 ? { k: xRaw } : bestSound(cl);
+  const want = xTargets.length ? phraseOf(xTargets[0].f, xTargets[0].hi) : xMeaning >= 0 ? meta.ctxNames[xMeaning] : '';
   $('x-to').textContent = `Tell ${name}:`;
-  $('x-say').innerHTML = !xText.trim() ? '' : xMeaning < 0 && xRaw < 0 ? '<span class="dim">no word for that; try danger, food, mate, hungry, come, water, baby, or “sound 3”</span>'
-    : pick ? `→ <b style="color:${soundCss(pick.k)}">sound ${pick.k + 1}</b>${pick.lift ? ` <span class="dim">(×${pick.lift.toFixed(1)} with “${meta.ctxNames[xMeaning]}”)</span>` : ''}` : `<span class="dim">${name} have no sound for “${meta.ctxNames[xMeaning]}” yet; try “sound 1”…“sound 8”</span>`;
+  $('x-say').innerHTML = !xText.trim() ? '' : !xTargets.length && xMeaning < 0 && xRaw < 0 ? '<span class="dim">no word for that; try food, danger, hungry, alone, water, mate, coming, or “sound 3”</span>'
+    : pick ? `→ <b style="color:${soundCss(pick.k)}">sound ${pick.k + 1}</b>${pick.d ? ` <span class="dim">(made when “${phraseOf(pick.f, pick.hi)}”, ${pick.d.toFixed(1)})</span>` : pick.lift ? ` <span class="dim">(×${pick.lift.toFixed(1)} with “${meta.ctxNames[pick.c]}”, rough)</span>` : ''}`
+    : `<span class="dim">${name} have no sound for “${want}” yet; try “sound 1”…“sound 8”</span>`;
   const go = $('x-go'); go.disabled = !pick; go.textContent = speakArmed !== null ? 'click the map…' : 'Send';
   const u = lexicon.user, heard = u && u.id === myCallId ? u.resp.reduce((a, b) => a + b, 0) : 0;
   $('x-reply').textContent = myCallId >= 0 && u && u.id === myCallId ? (heard ? `${heard} heard you: ` + u.resp.map((v, r) => v ? `${meta.respNames[r]} ${v}` : '').filter(Boolean).join(', ') : 'nobody heard you yet (speak near animals)') : '';
