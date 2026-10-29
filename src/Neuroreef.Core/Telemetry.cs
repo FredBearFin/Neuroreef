@@ -13,7 +13,7 @@ public sealed class Telemetry
     public readonly int NS;
     // ---- running counters (cumulative)
     public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants, Infections;
-    public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, RewardSum, CareGiven;
+    public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, SpendHeat, RewardSum, CareGiven;
     public long SlotShortage, FullSteps;
     public ulong LastFullStep = ulong.MaxValue;
     public long Splits;                     // speciation events (DESIGN §7.9)
@@ -22,7 +22,7 @@ public sealed class Telemetry
     public readonly double[] AgeAtDeath;    // sum of age at death of hatched animals
     // ---- previous cumulative values, to form per-window deltas
     readonly long[] _pBirths, _pDeaths, _pKill, _pStrikes, _pKills, _pMatings, _pImm, _pConc;
-    readonly double[] _pIntake, _pBasal, _pMove, _pReward;
+    readonly double[] _pIntake, _pBasal, _pMove, _pHeat, _pReward;
     long _pFire;
     readonly long[] _pDAge; readonly double[] _pAge;
     readonly long[] _pInf; readonly double[] _pCare;
@@ -32,19 +32,22 @@ public sealed class Telemetry
     public readonly int Len;
     public readonly int OffGlobal, OffSpecies, PerSpecies, OffKill;
     public const int S_COUNT = 0, S_JUV = 1, S_EGGS = 2, S_GEN = 3, S_ENERGY = 4, S_REWARD = 5, S_LEARNED = 6, S_BIRTHS = 7,
-        S_CONC = 8, S_DEATHS = 9, S_INTAKE = S_DEATHS + Cause.N, S_SPEND = S_INTAKE + Pools.N, S_STRIKES = S_SPEND + 2, S_KILLS = S_STRIKES + 1,
+        S_CONC = 8, S_DEATHS = 9, S_INTAKE = S_DEATHS + Cause.N, S_SPEND = S_INTAKE + Pools.N, S_STRIKES = S_SPEND + 3, S_KILLS = S_STRIKES + 1,
         S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
         S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_TRAITS = S_ARCH + 1, S_GAINS = S_TRAITS + NTRAITS, S_END = S_GAINS + P.N;
     /// <summary>Evolving traits recorded per species (mean over living animals): body multipliers (1 = founder) and diet.</summary>
-    public const int NTRAITS = 26, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
+    public const int NTRAITS = 29, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
         T_LITTER = 8, T_CARE = 9, T_MEAT = 10, T_SEXUAL = 11, T_LIVE = 12, T_LEGN = 13, T_LIFE = 14, T_MATURE = 15, T_BRAIN = 16,
-        T_HERM = 17, T_FEMALE = 18, T_IMMUNE = 19, T_FINN = 20, T_EYEN = 21, T_VIR = 22, T_WATER = 23, T_VOICE = 24, T_IMIT = 25;
+        T_HERM = 17, T_FEMALE = 18, T_IMMUNE = 19, T_FINN = 20, T_EYEN = 21, T_VIR = 22, T_WATER = 23, T_VOICE = 24, T_IMIT = 25,
+        T_INSUL = 26, T_APPEND = 27, T_TOP = 28;   // fur, appendages, and the operative temperature its animals are in (Revision O)
     public static readonly string[] TraitNames = { "mass", "legs", "fins", "wings", "speed", "sight", "armour", "strike", "litter", "care",
         "meat-eating", "sexual share", "live-birth share", "legs (count)", "lifespan", "age at maturity", "brain units",
-        "hermaphrodite share", "daughter share", "immunity", "fin pairs", "eye pairs", "pathogen virulence", "water economy", "voice", "vocal learning" };
+        "hermaphrodite share", "daughter share", "immunity", "fin pairs", "eye pairs", "pathogen virulence", "water economy", "voice", "vocal learning",
+        "fur", "appendages", "operative temperature" };
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
-        G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
+        G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1,
+        G_TEMP = G_RAIN + 1, G_TMIN = G_TEMP + 1, G_TMAX = G_TMIN + 1, G_FROZEN = G_TMAX + 1, G_END = G_FROZEN + 1;   // land temperature: mean, lowest, highest, share frozen (Revision O)
 
     public readonly float[] Ring;          // RING * Len
     public readonly float[] LongRing;      // LONG_RING * Len: one sample in LONG_EVERY, for runs of weeks
@@ -96,15 +99,16 @@ public sealed class Telemetry
         UttFeatN = new long[NTRACK * Voice.NTYPE]; UttGainN = new long[NTRACK * Voice.NTYPE];
         Created = new long[ns]; Births = new long[ns]; Conceptions = new long[ns]; Deaths = new long[ns * Cause.N];
         KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; Infections = new long[ns]; CareGiven = new double[ns]; _pInf = new long[ns]; _pCare = new double[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
-        Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; RewardSum = new double[ns];
+        Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; SpendHeat = new double[ns]; RewardSum = new double[ns];
         _pBirths = new long[ns]; _pDeaths = new long[ns * Cause.N]; _pKill = new long[ns * ns]; _pStrikes = new long[ns]; _pKills = new long[ns];
         _pMatings = new long[ns]; _pImm = new long[ns]; _pConc = new long[ns];
-        _pIntake = new double[ns * Pools.N]; _pBasal = new double[ns]; _pMove = new double[ns]; _pReward = new double[ns];
+        _pIntake = new double[ns * Pools.N]; _pBasal = new double[ns]; _pMove = new double[ns]; _pHeat = new double[ns]; _pReward = new double[ns];
 
         var names = new List<string>();
         names.Add("step");
         for (int p = 0; p < Pools.NFIELD; p++) names.Add("pool." + Pools.Names[p]);
-        names.AddRange(new[] { "cover.shrub", "cover.tree", "cover.sapling", "nutrient.land", "nutrient.water", "fire.ignited", "fire.burning", "agents.alive", "season", "rain.anomaly" });
+        names.AddRange(new[] { "cover.shrub", "cover.tree", "cover.sapling", "nutrient.land", "nutrient.water", "fire.ignited", "fire.burning", "agents.alive", "season", "rain.anomaly",
+            "temp.land", "temp.min", "temp.max", "frozen.land" });
         OffGlobal = 0;
         OffSpecies = names.Count;
         PerSpecies = S_END;
@@ -114,7 +118,7 @@ public sealed class Telemetry
             names.AddRange(new[] { n + "count", n + "juveniles", n + "eggs", n + "generation", n + "energy", n + "reward", n + "learned", n + "births", n + "conceptions" });
             foreach (var c in Cause.Names) names.Add(n + "death." + c);
             foreach (var p in Pools.Names) names.Add(n + "intake." + p);
-            names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "strikes", n + "kills", n + "matings", n + "immigrants",
+            names.AddRange(new[] { n + "spend.basal", n + "spend.move", n + "spend.heat", n + "strikes", n + "kills", n + "matings", n + "immigrants",
                 n + "deaths.unborn", n + "deaths.juvenile", n + "deaths.young-adult", n + "deaths.old-adult", n + "age-at-death",
                 n + "infected", n + "infections", n + "care.given", n + "evo.kit-genes", n + "evo.best-score" });
             foreach (var t in TraitNames) names.Add(n + "trait." + t);
@@ -215,13 +219,15 @@ public sealed class Telemetry
         Array.Clear(_cnt);
         int FW2 = Map.FW * Map.FW;
         a[G_STEP] = w.Step;
-        double nl = 0, nw = 0; int land = 0, water = 0, burning = 0;
+        double nl = 0, nw = 0, tl = 0; int land = 0, water = 0, burning = 0, frozen = 0;
+        float tmn = float.MaxValue, tmx = float.MinValue;
         for (int i = 0; i < FW2; i++)
         {
             for (int p = 0; p < Pools.NFIELD; p++) a[G_POOLS + p] += w.Pool[p][i];
             if (w.Cell[i] == (byte)Realm.Land)
             {
                 land++; nl += w.Nutrient[i];
+                float t = w.Temp[i]; tl += t; if (t < tmn) tmn = t; if (t > tmx) tmx = t; if (t < 0f) frozen++;
                 a[G_SHRUB] += w.Shrub[i]; a[G_TREE] += w.Tree[i]; a[G_SAPLING] += w.Sapling[i];
             }
             else { water++; nw += w.Nutrient[i]; }
@@ -234,6 +240,8 @@ public sealed class Telemetry
         a[G_ALIVE] = w.AliveCount;
         a[G_SEASON] = w.SeasonAt(Map.W * 0.5f);
         a[G_RAIN] = w.RainAnom;
+        a[G_TEMP] = (float)(tl / Math.Max(1, land)); a[G_TMIN] = land > 0 ? tmn : 0f; a[G_TMAX] = land > 0 ? tmx : 0f;
+        a[G_FROZEN] = frozen / (float)Math.Max(1, land);
 
         // per-animal statistics
         for (int i = 0; i < w.Cap; i++)
@@ -274,6 +282,9 @@ public sealed class Telemetry
             a[o + S_TRAITS + T_WATER] += w.PWaterEcon[i];
             a[o + S_TRAITS + T_VOICE] += w.PVoice[i];
             a[o + S_TRAITS + T_IMIT] += w.PImit[i];
+            a[o + S_TRAITS + T_INSUL] += w.PInsul[i];
+            a[o + S_TRAITS + T_APPEND] += w.PAppend[i];
+            a[o + S_TRAITS + T_TOP] += w.TOp[i];
             a[o + S_TRAITS + T_FINN] += w.PFinPairs[i];
             a[o + S_TRAITS + T_EYEN] += w.PEyePairs[i];
             a[o + S_TRAITS + T_VIR] += w.Virulence[i];                // summed over the infected (others are 0)
@@ -307,6 +318,7 @@ public sealed class Telemetry
             for (int p = 0; p < Pools.N; p++) { int k = s * Pools.N + p; a[o + S_INTAKE + p] = (float)(Intake[k] - _pIntake[k]); _pIntake[k] = Intake[k]; }
             a[o + S_SPEND] = (float)(SpendBasal[s] - _pBasal[s]); _pBasal[s] = SpendBasal[s];
             a[o + S_SPEND + 1] = (float)(SpendMove[s] - _pMove[s]); _pMove[s] = SpendMove[s];
+            a[o + S_SPEND + 2] = (float)(SpendHeat[s] - _pHeat[s]); _pHeat[s] = SpendHeat[s];
             a[o + S_STRIKES] = Strikes[s] - _pStrikes[s]; _pStrikes[s] = Strikes[s];
             a[o + S_KILLS] = Kills[s] - _pKills[s]; _pKills[s] = Kills[s];
             a[o + S_MATINGS] = Matings[s] - _pMatings[s]; _pMatings[s] = Matings[s];

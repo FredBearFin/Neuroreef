@@ -13,6 +13,8 @@
 //   life history   lifespan (longer life costs body repair), development time (fast developers age sooner),
 //              brain size (memory units cost energy), sexual or asexual, separate sexes or hermaphrodite and
 //              the sex ratio, eggs or live birth, litter, newborn size, care, immune investment
+//   fur, appendages   insulation and radiators (Revision O): what a body costs to keep at T_BODY follows from its
+//              size, its fur and its appendages against the temperature around it (Heat); each costs upkeep
 
 using System;
 
@@ -55,6 +57,9 @@ public static class Body
         float imm = Organ(gn[g + G.B_IMMUNE]);
         float wecon = Organ(gn[g + G.B_WATER]);
         float voice = Organ(gn[g + G.B_VOICE]);
+        // body heat (Revision O): fur keeps heat in; appendages (ears, limbs, tail) shed it when the body is warm
+        float ins = Organ(gn[g + G.B_INSUL]), app = Organ(gn[g + G.B_APPEND]);
+        w.PInsul[i] = ins; w.PAppend[i] = app;
         w.PVoice[i] = voice;
         // vocal learning (Revision N): how strongly matching a remembered tutor reinforces its own calls, and for how
         // much of its life it memorises tutors (Doupe & Kuhl 1999; Brainard & Doupe 2002). No upkeep cost of its own:
@@ -75,7 +80,8 @@ public static class Body
         float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
                      + K.COST_LIMB * (legs * legPairs * 0.5f + fins * finPairs * 0.5f) + K.COST_WING * wings * MathK.Cbrt(m)
                      + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
-                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice;
+                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice
+                     + K.COST_INS * ins + K.COST_APP * app;
         // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
         w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;

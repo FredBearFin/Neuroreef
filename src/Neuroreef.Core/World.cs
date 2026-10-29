@@ -34,6 +34,11 @@ public sealed class World
     public readonly float[] PVoice;            // voice organ (0..1): loudness of its calls; mute below VOICE_MIN
     public readonly float[] PImit, PImitAge;  // vocal learning (0..1) and its sensitive period (share of lifespan) (Revision N)
     public readonly float[] PWaterEcon;       // water-economy gene expressed (0..1)
+    public readonly float[] PInsul, PAppend;  // fur (insulation) and appendages (0..1), for the heat budget (Revision O)
+    // ---- agents: body heat (Revision O), written by RESOLVE (own slot)
+    public readonly float[] ThermStrain;      // heat strain from shortfalls beyond what the body can make or lose (1 = death by cold or heat)
+    public readonly float[] HeatNeed;         // last step's heat need (HEAT_NEED sense): tanh(made - evaporated, in basal units)
+    public readonly float[] TOp;              // last step's operative temperature (°C), for telemetry
     public readonly float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
     public readonly float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
     public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PBrain, PHerm;
@@ -92,6 +97,7 @@ public sealed class World
     public float[] Shrub, Tree, Sapling, Nutrient, Scent;
     public float[] ShrubN, TreeN, SaplingN, NutrientN, ScentN, GrassN;   // double buffers
     public readonly float[] Moisture, Poll;
+    public readonly float[] Temp;          // air temperature (°C), written by FIELDS every step (Revision O); water is at least T_WATER_MIN under it
     public float[] Fire, FireN;
     // ---- static terrain
     public readonly float[] Elev, Depth, MoistBase, Fert;
@@ -100,6 +106,9 @@ public sealed class World
     public readonly byte[] PondSite;               // 1 = a basin that can hold a seasonal pond (Revision K)
     public readonly byte[] Wet;                    // drinkable water now: 1 = lake, sea or river, 2 = a full pond
     public readonly float[] DistDrink;             // cells to the nearest drinkable water (lakes and full ponds)
+    // climate (Revision O), fixed at Terrain.Build: cooling by height x climate strength (K), continentality (0..1)
+    public readonly float[] TLapse, Cont;
+    public float ClimateZ = 1f;                    // normaliser of the evaporation factor: the land as moist over a year as with no climate
     public float SeaLevel;
     // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
     public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
@@ -120,7 +129,8 @@ public sealed class World
     public readonly EvoSettings Evo = new();   // the evolutionary search's knobs (prehistory; mutation also in a live world)
     /// <summary>Approximate memory per agent slot (bytes), for the setup screen's estimate.</summary>
     public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (2 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 432
-        + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4;   // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
+        + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4    // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
+        + 5 * 4;                                 // Revision O: fur, appendages, heat strain, heat need, operative temperature
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
@@ -150,6 +160,7 @@ public sealed class World
         PVLand = new float[c]; PVWater = new float[c]; PVAir = new float[c]; PSexRatio = new float[c]; PImmune = new float[c];
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
         PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
+        PInsul = new float[c]; PAppend = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];
@@ -175,6 +186,7 @@ public sealed class World
         Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; Nutrient = new float[n]; Scent = new float[n];
         ShrubN = new float[n]; TreeN = new float[n]; SaplingN = new float[n]; NutrientN = new float[n]; ScentN = new float[n];
         Moisture = new float[n]; Poll = new float[n]; Fire = new float[n]; FireN = new float[n];
+        Temp = new float[n]; Array.Fill(Temp, K.T_REF); TLapse = new float[n]; Cont = new float[n];
         Elev = new float[n]; Depth = new float[n]; MoistBase = new float[n]; Fert = new float[n]; Cell = new byte[n];
         DistWater = new float[n]; DistLand = new float[n]; PondSite = new byte[n]; Wet = new byte[n]; DistDrink = new float[n];
 

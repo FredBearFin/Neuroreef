@@ -594,6 +594,14 @@ public class EcologyTests
     [Fact] // Revision K: seasonal ponds fill when the ground is wet and dry when it is dry; drinking water is measured to them
     public void PondsFillInTheWetAndDryInTheDry()
     {
+        // the law of season and rain alone (Revision O: with a climate, warm ponds also evaporate and cold ones freeze;
+        // ClimateTests covers that)
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try { PondsFillCore(); } finally { Nature.Climate = climate; }
+    }
+
+    static void PondsFillCore()
+    {
         using var sim = new Simulation(1024, 4, 1, empty: true);
         var w = sim.W; int n = Map.FW * Map.FW;
         int sites = 0; for (int c = 0; c < n; c++) sites += w.PondSite[c];

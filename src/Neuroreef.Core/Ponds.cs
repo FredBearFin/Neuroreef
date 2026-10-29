@@ -16,9 +16,19 @@ public static class Ponds
         {
             // how much wetter than its average the ground is now (as Fields: season by latitude, x this year's rain)
             float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / FW);
-            bool full = (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom) >= K.POND_FILL;
-            for (int i = y * FW; i < (y + 1) * FW; i++)
-                w.Wet[i] = (byte)((w.Cell[i] & (byte)Realm.Water) != 0 ? 1 : full && w.PondSite[i] != 0 ? 2 : 0);
+            float wet = (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom);
+            bool full = wet >= K.POND_FILL;
+            if (!Climate.On)
+                for (int i = y * FW; i < (y + 1) * FW; i++)
+                    w.Wet[i] = (byte)((w.Cell[i] & (byte)Realm.Water) != 0 ? 1 : full && w.PondSite[i] != 0 ? 2 : 0);
+            else
+                // with a climate (Revision O): evaporation dries a warm pond sooner, and a frozen pond cannot be drunk
+                for (int i = y * FW; i < (y + 1) * FW; i++)
+                {
+                    float t = w.Temp[i];
+                    bool f = w.PondSite[i] != 0 && t >= 0f && wet * Climate.Evap[Climate.Idx(t)] / w.ClimateZ >= K.POND_FILL;
+                    w.Wet[i] = (byte)((w.Cell[i] & (byte)Realm.Water) != 0 ? 1 : f ? 2 : 0);
+                }
         }
         Terrain.Distance(w.Wet, 3, w.DistDrink);
     }

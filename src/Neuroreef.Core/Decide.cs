@@ -179,6 +179,11 @@ public static class Decide
         f[F.FEAR] = MathF.Min(1f, MathK.Tanh(w.Scent[cell] * 4f) + fireNear);
         f[F.CROWD] = MathK.Tanh(crowd * 0.5f);
         f[F.SEASON] = w.SeasonAt(y);
+        // body heat (Revision O): its own heat need last step (> 0 cold, < 0 hot), and how warm it is here against its body
+        bool flier = w.LocoOf(i) == Loco.Fly;
+        float ins = w.PInsul[i];
+        f[F.HEAT_NEED] = w.HeatNeed[i];
+        f[F.AIR_T] = Math.Clamp((Heat.Operative(w, cell, ins, inWater && !flier) - K.T_BODY) / K.AIR_T_SCALE, -1f, 1f);
         // ---- hearing (Revision M, N): every utterance made last step within the caller's range (a louder, bigger caller
         // carries further), from any direction, louder the closer; each sound as loud as its loudest caller
         Span<float> hear = stackalloc float[F.NSOUND];
@@ -372,6 +377,13 @@ public static class Decide
         Add(g[P.WANDER], MathK.Cos(wa), MathK.Sin(wa));
         if (loud > 0) { Add(g[P.TOWARD_CALL], callDx, callDy); Add(g[P.AWAY_CALL], -callDx, -callDy); }
         if (foc >= 0) Add(g[P.FOLLOW_GAZE], gzx, gzy);   // turn the way the focal caller is facing (gaze following)
+        if (Climate.On)
+        {
+            // up and down the operative temperature around it: air, the sun on open ground, shade, water (Revision O)
+            int cl = CellAt(cell, -1, 0), cr = CellAt(cell, 1, 0), cu = CellAt(cell, 0, -1), cd = CellAt(cell, 0, 1);
+            float tgx = Operative(w, cr, ins, flier) - Operative(w, cl, ins, flier), tgy = Operative(w, cd, ins, flier) - Operative(w, cu, ins, flier);
+            Add(g[P.WARMER], tgx, tgy); Add(g[P.COOLER], -tgx, -tgy);
+        }
 
         float newH = hd;
         if (sx * sx + sy * sy > 0.0025f)
@@ -413,6 +425,10 @@ public static class Decide
             z.CopyTo(probe.Z); probe.Acts = acts; probe.Reward = w.Reward[i]; probe.RewardMean = w.RewardMean[i];
         }
     }
+
+    /// <summary>Operative temperature an animal would be in at a cell (in the water if the cell is water and it does not fly).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static float Operative(World w, int c, float ins, bool flier) => Heat.Operative(w, c, ins, !flier && (w.Cell[c] & (byte)Realm.Water) != 0);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static void Bump(byte[] t, int k) { if (t[k] < 255) t[k]++; }

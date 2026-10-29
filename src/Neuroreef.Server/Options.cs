@@ -22,14 +22,14 @@ public sealed class Options
     public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;
     public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
-    public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f;
+    public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f, Climate = K.CLIMATE;
     public int SeasonLength = K.T_SEASON;
 
     /// <summary>Apply the nature settings and the map for what is about to be built (not when resuming a save).</summary>
     public void ApplyNature(bool prehistory)
     {
         Nature.Plants = Plants; Nature.Seasons = Seasons; Nature.SeasonLength = SeasonLength; Nature.Drought = Drought;
-        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.WorldMap = WorldMap;
+        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap;
         Nature.Clamp();
         Map.Set(prehistory ? PreMap : WorldMap);
     }
@@ -109,6 +109,8 @@ public sealed class Options
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
   --season-length N     steps per year (default 3000)   --water X   share of the map under water (default 0.10)
   --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
+  --climate X           climate strength 0..2: how strongly sun, height and seasons change temperature
+                        (default 0.6; 0 = everywhere 20 °C and no body-heat budget)
   --world-mutation X    mutation in the world you watch, x the prehistory's (default 3: faster change in a small valley)
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
@@ -167,6 +169,7 @@ public sealed class Options
                 case "--thirst": o.Thirst = F(Next()); break;
                 case "--water": o.Water = F(Next()); break;
                 case "--ponds": o.Ponds = F(Next()); break;
+                case "--climate": o.Climate = F(Next()); break;
                 case "--world-mutation": o.WorldMut = F(Next()); break;
                 case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); o.NoSetup = true; break;
                 case "--print-constants": o.PrintConstants = true; break;

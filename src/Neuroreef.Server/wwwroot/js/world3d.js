@@ -145,7 +145,8 @@ export class World3D {
     const fw = w.fw, N = this.N, C = this.tColor, WC = this.wColor;
     const d = f ? f.d : 0, L = f ? (n) => f.data.subarray(this._layer(n) * d * d, (this._layer(n) + 1) * d * d) : null;
     const grass = f && L('grass'), shrub = f && L('shrub'), tree = f && L('tree'), fire = f && L('fire'), moist = f && L('moisture'),
-          carrion = f && L('carrion'), algae = f && L('algae'), phyto = f && L('phyto'), nectar = f && L('nectar'), pond = f && L('pond');
+          carrion = f && L('carrion'), algae = f && L('algae'), phyto = f && L('phyto'), nectar = f && L('nectar'), pond = f && L('pond'),
+          frozen = f && this._layer('frozen') >= 0 && L('frozen'), temp = f && this._layer('temp') >= 0 && L('temp');
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const cx = x % fw, cy = y % fw, i = cy * fw + cx, k = y * N + x;
       const fi = f ? (cy >> 1) * d + (cx >> 1) : 0;
@@ -165,7 +166,14 @@ export class World3D {
         const nc = nectar[fi] / 255; r += nc * 0.25; b += nc * 0.18;          // flowers
         const ca = carrion[fi] / 255; r += (0.35 - r) * ca * 0.5; g *= 1 - ca * 0.4; b *= 1 - ca * 0.4;
         if (pond && pond[fi]) { const p = pond[fi] / 255; r += (0.16 - r) * p; g += (0.34 - g) * p; b += (0.46 - b) * p; }   // a seasonal pond
+        if (frozen && frozen[fi]) { const fr = 0.75 * frozen[fi] / 255; r += (0.92 - r) * fr; g += (0.94 - g) * fr; b += (0.97 - b) * fr; }   // frost and snow (Revision O)
         if (fire[fi]) { r = 1.0; g = 0.42; b = 0.08; }
+        if (this.tempOverlay && temp) {
+          // air temperature: -40 °C deep blue, 5 °C white, 50 °C red
+          const t = temp[fi] / 255, u = Math.min(1, Math.abs(t - 0.5) * 2);
+          const tr = t < 0.5 ? 1 - 0.85 * u : 1, tg = 1 - 0.8 * u, tb = t < 0.5 ? 1 : 1 - 0.85 * u;
+          r += (tr - r) * 0.7; g += (tg - g) * 0.7; b += (tb - b) * 0.7;
+        }
       }
       C[k * 3] = r; C[k * 3 + 1] = g; C[k * 3 + 2] = b;
       const water = w.cell[i] !== 1;
@@ -175,6 +183,7 @@ export class World3D {
       const dd = Math.min(1, depth * 1.5);
       WC[k * 4] = 0.10 - 0.07 * dd + 0.06 * al; WC[k * 4 + 1] = 0.38 - 0.24 * dd + 0.18 * al + 0.10 * ph; WC[k * 4 + 2] = 0.44 - 0.16 * dd + 0.02 * ph;
       WC[k * 4 + 3] = water ? 0.72 + 0.2 * dd : 0;
+      if (water && frozen && frozen[fi]) { WC[k * 4] = 0.80; WC[k * 4 + 1] = 0.88; WC[k * 4 + 2] = 0.94; WC[k * 4 + 3] = 0.95; }   // pale ice (Revision O)
     }
     this.tiles[0][0].geometry.attributes.color.needsUpdate = true;
     this.tiles[0][1].geometry.attributes.color.needsUpdate = true;

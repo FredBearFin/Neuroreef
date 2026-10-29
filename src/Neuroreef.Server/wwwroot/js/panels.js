@@ -381,11 +381,11 @@ export class Panels {
     for (const s of spOrder) out += `<rect x="${x1}" y="${Rr[s].y}" width="${nodeW}" height="${Math.max(1, Rr[s].h)}" fill="${this.color(s)}"/><text x="${x1 + nodeW + 4}" y="${Rr[s].y + Rr[s].h / 2 + 3}" fill="#a9bccd" font-size="10">${esc(this.name(s))}</text>`;
     svg.innerHTML = out || `<text x="10" y="20" fill="${GREY}" font-size="11">nothing eaten in the last ~1,000 steps</text>`;
     // budget table: living clades, and any that ate in the window
-    let rows = '<tr><th>clade</th><th>intake</th><th>basal</th><th>movement</th><th>alive</th></tr>';
+    let rows = '<tr><th>clade</th><th>intake</th><th>basal</th><th>movement</th><th>body heat</th><th>alive</th></tr>';
     for (const s of used) {
       if (this.isExtinct(s) && !(spTot[s.id] > 0)) continue;
-      const inT = spTot[s.id], b = this.recentC(s.id, T.fields.spend), m = this.recentC(s.id, T.fields.spend + 1);
-      rows += `<tr><td><span style="color:${s.color}">●</span> ${esc(s.name)}</td><td>${fmt(inT)}</td><td>${fmt(b)}</td><td>${fmt(m)}</td><td>${fmt(this.cv(this.rows[this.rows.length - 1], s.id, T.fields.count))}</td></tr>`;
+      const inT = spTot[s.id], b = this.recentC(s.id, T.fields.spend), m = this.recentC(s.id, T.fields.spend + 1), hh = this.recentC(s.id, T.fields.spend + 2);
+      rows += `<tr><td><span style="color:${s.color}">●</span> ${esc(s.name)}</td><td>${fmt(inT)}</td><td>${fmt(b)}</td><td>${fmt(m)}</td><td>${fmt(hh)}</td><td>${fmt(this.cv(this.rows[this.rows.length - 1], s.id, T.fields.count))}</td></tr>`;
     }
     $('budget').innerHTML = rows;
   }
@@ -440,7 +440,7 @@ export class Panels {
     const n = Math.max(1, list.length), h = Math.max(160, Math.min(420, 40 + n * 22));
     const w = cv.clientWidth || 420; cv.style.height = h + 'px'; cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
     const g = cv.getContext('2d'); g.scale(devicePixelRatio, devicePixelRatio);
-    const cols = ['#e6c35a', '#5ab0ff', '#ff5d73', '#c02040', '#8aa0b5', '#ff8a2a', '#6a5a8a', '#7bd46b', '#4fd1c5', '#ff8fd0'];
+    const cols = ['#e6c35a', '#5ab0ff', '#ff5d73', '#c02040', '#8aa0b5', '#ff8a2a', '#6a5a8a', '#7bd46b', '#a8d8ff', '#ffb0d0'];   // ... disease, cold, heat (Revision O)
     const lw = 74, bh = (h - 44) / n;
     g.font = '9px sans-serif';
     list.forEach((s, k) => {

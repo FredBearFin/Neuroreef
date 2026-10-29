@@ -319,4 +319,55 @@ public static class K
     [K("Fire", "scent deposit per unit carnivory", "/step", "HT")] public const float C_SCENT = 0.02f;
     [K("Fire", "scent decay", "/step", "HT")] public const float D_SCENT = 0.01f;
     [K("Fire", "MARK multiplier on scent deposit", "-", "HT")] public const float MARK_GAIN = 4f;
+
+    // ---------------------------------------------------------------- 9. climate (Revision O): temperature from sun, height, season and water
+    [K("Climate", "default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget", "-", "HT: Revision O; 1 = Earth-like contrasts, 0.6 keeps most of a region habitable to founders")] public const float CLIMATE = 0.6f;
+    [K("Climate", "reference temperature (the temperature of a world with no climate; plant curves, decomposition and evaporation are 1 here)", "°C", "-")] public const float T_REF = 20f;
+    [K("Climate", "annual mean sea-level temperature at the equator", "°C", "ECO: observed zonal mean ~27 °C (North 1975)")] public const float T_EQ = 27f;
+    [K("Climate", "equator-to-pole temperature drop, x sin² latitude", "K", "ECO: the second Legendre term of North's (1975) energy-balance climate, ~40 K")] public const float DT_EP = 40f;
+    [K("Climate", "seasonal amplitude at the pole in the middle of a continent, x sin latitude x continentality", "K", "ECO: continental interiors swing ~40 K winter to summer at high latitude (Conrad 1946)")] public const float A_SEAS = 20f;
+    [K("Climate", "lapse rate: cooling with height", "K/km", "ECO: ICAO standard atmosphere, 6.5 K per km")] public const float LAPSE = 6.5f;
+    [K("Climate", "height of the highest ground above the lakes", "m", "HT: rolling hills to low mountains")] public const float H_RELIEF = 3000f;
+    [K("Climate", "share of the seasonal swing that open water takes away at the shore (continentality 1 - WATER_DAMP x exp(-distance / L_MAR))", "-", "ECO: maritime climates swing a quarter of continental ones (Conrad 1946 continentality index)")] public const float WATER_DAMP = 0.75f;
+    [K("Climate", "distance over which the sea's damping of the seasons fades inland", "cells", "HT: ~25 units, a few hours' walk")] public const float L_MAR = 6f;
+    [K("Climate", "water under ice stays at least this warm", "°C", "ECO: lakes freeze from the top; the water below stays at 0-4 °C")] public const float T_WATER_MIN = 0.5f;
+    [K("Climate", "Budyko-style exponent of how evaporation dries soil: moisture x (e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens)", "-", "ECO: evaporative demand rises with saturation vapour pressure (Budyko 1974; Tetens 1930)")] public const float EVAP_BETA = 0.5f;
+    [K("Climate", "grass: lowest, best and highest temperature of growth (Yan & Hunt beta curve, x 1 at T_REF, at most PLANT_CAP)", "°C", "ECO: Yan & Hunt (1999); C4/C3 grasses grow from ~0 to ~45 °C")] public const float GRASS_TMIN = 0f;
+    [K("Climate", "grass: best temperature of growth", "°C", "ECO: Yan & Hunt (1999)")] public const float GRASS_TOPT = 25f;
+    [K("Climate", "grass: highest temperature of growth", "°C", "ECO: Yan & Hunt (1999)")] public const float GRASS_TMAX = 45f;
+    [K("Climate", "shrubs: lowest temperature of growth", "°C", "ECO: dwarf shrubs grow above the treeline (Körner 2003)")] public const float SHRUB_TMIN = 2f;
+    [K("Climate", "shrubs: best temperature of growth", "°C", "ECO")] public const float SHRUB_TOPT = 24f;
+    [K("Climate", "shrubs: highest temperature of growth", "°C", "ECO")] public const float SHRUB_TMAX = 45f;
+    [K("Climate", "trees: lowest temperature of growth", "°C", "ECO: tree growth stops below ~5 °C, which sets the treeline (Körner & Paulsen 2004)")] public const float TREE_TMIN = 5f;
+    [K("Climate", "trees: best temperature of growth", "°C", "ECO")] public const float TREE_TOPT = 22f;
+    [K("Climate", "trees: highest temperature of growth", "°C", "ECO")] public const float TREE_TMAX = 40f;
+    [K("Climate", "largest plant growth multiplier from temperature", "-", "HT: the beta curves peak a few % above their value at T_REF")] public const float PLANT_CAP = 1.1f;
+    [K("Climate", "algae and plankton growth multiplier per K (no growth under ice)", "/K", "ECO: Eppley (1972): phytoplankton growth x1.066 per K")] public const float EPPLEY = 1.066f;
+    [K("Climate", "decomposition multiplier per 10 K", "-", "ECO: soil respiration Q10 ~2 (Lloyd & Taylor 1994)")] public const float Q10_ROT = 2f;
+    [K("Climate", "lowest temperature of the response tables (TT_N entries of TT_STEP)", "°C", "-")] public const float TT_LO = -60f;
+    [K("Climate", "temperature step of the response tables", "K", "-")] public const float TT_STEP = 0.25f;
+    [K("Climate", "entries of each response table", "-", "-")] public const int TT_N = 512;
+
+    // ---------------------------------------------------------------- 10. body heat (Revision O): an endotherm's heat budget from its body's physics
+    [K("Heat", "body temperature of every animal (an endotherm; no heat is stored from step to step)", "°C", "ECO: mammals 36-39 °C, birds ~40 °C; a step is hours, longer than the thermal time constant of bodies up to tens of kg (Bakken 1976)")] public const float T_BODY = 38f;
+    [K("Heat", "dry conductance of a bare body of M=1, per unit core area M^(2/3), in units of C_BASAL per K", "xC_BASAL/K", "HT: a bare M=1 body is thermoneutral down to 38 - 16 = 22 °C (a naked mammal's lower critical temperature, Scholander et al. 1950)")] public const float K_COND = 0.0625f;
+    [K("Heat", "insulation: fur of thickness i divides the core's conductance by 1 + R_INS x i", "-", "ECO: arctic fur cuts conductance ~5x against tropical mammals (Scholander et al. 1950)")] public const float R_INS = 4f;
+    [K("Heat", "vasodilation: largest rise of the core's conductance when warm", "x", "ECO: peripheral blood flow raises conductance ~3x (Bakken 1976)")] public const float VASO = 3f;
+    [K("Heat", "share of an appendage's conductance that leaks when it is cold (vasoconstricted)", "-", "ECO: countercurrent exchange in limbs and ears keeps most heat in (Scholander & Krog 1957)")] public const float APP_LEAK = 0.15f;
+    [K("Heat", "conductance in water against air", "x", "ECO: water conducts heat ~25x air; convective loss of an immersed body ~4x (Nadel 1977)")] public const float K_WATER = 4f;
+    [K("Heat", "share of its insulation fur keeps when wet", "-", "ECO: wet fur loses about half its insulation (Scholander et al. 1950)")] public const float FUR_WET = 0.5f;
+    [K("Heat", "sun on open ground: rise of the operative temperature (x climate strength, x (1 - SHADE_TREE x tree - SHADE_SHRUB x shrub) / (1 + 0.5 R_INS x fur))", "K", "ECO: a day-averaged solar load raises operative temperature several K over air temperature (Bakken 1976; Campbell & Norman 1998); size-independent, as absorbed and lost heat both scale with area")] public const float SOLAR = 6f;
+    [K("Heat", "share of the sun that tree cover blocks", "-", "ECO: canopy shade")] public const float SHADE_TREE = 0.8f;
+    [K("Heat", "share of the sun that shrub cover blocks", "-", "ECO")] public const float SHADE_SHRUB = 0.4f;
+    [K("Heat", "most heat an animal can make by shivering and burning fat, x its basal", "xbasal", "ECO: summit metabolism ~5x basal (Hinds et al. 1993)")] public const float SUMMIT = 5f;
+    [K("Heat", "most heat an animal can lose by evaporation (sweating, panting), x its basal", "xbasal", "ECO: evaporative heat loss can reach a few times basal in heat (Schmidt-Nielsen 1997)")] public const float EVAP_MAX = 3f;
+    [K("Heat", "thirst per unit of evaporated heat (in basal units per unit body mass), against C_THIRST", "xC_THIRST", "HT: sweating a basal's worth doubles the drying rate (calibrated against C_THIRST, not latent heat)")] public const float EVAP_REL = 2f;
+    [K("Heat", "heat strain gained per unit of heat shortfall beyond the caps (in basal units)", "/basal", "HT: a full basal's shortfall kills in ~7 steps")] public const float STRAIN_GAIN = 0.2f;
+    [K("Heat", "heat strain recovered per step", "/step", "HT: a shortfall below a quarter of basal is survived")] public const float STRAIN_REC = 0.05f;
+    [K("Heat", "basal cost of full fur (insulation gene 1)", "xbasal", "ECO: growing and moulting fur and feathers costs a few % of energy (Lindström et al. 1993)")] public const float COST_INS = 0.06f;
+    [K("Heat", "extra cost of moving with full fur", "xmove", "ECO: a heavy coat adds to the cost of transport")] public const float INS_MOVE = 0.1f;
+    [K("Heat", "basal cost of full appendages (ears, limbs, tail as radiators; appendage gene 1)", "xbasal", "ECO")] public const float COST_APP = 0.03f;
+    [K("Heat", "founders' fur (insulation gene)", "0..1", "HT: with FOUND_APP and M=1 thermoneutral ~15-32 °C around T_REF")] public const float FOUND_INS = 0.15f;
+    [K("Heat", "founders' appendages (appendage gene)", "0..1", "HT")] public const float FOUND_APP = 0.3f;
+    [K("Heat", "AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1", "K", "-")] public const float AIR_T_SCALE = 30f;
 }

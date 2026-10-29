@@ -150,6 +150,7 @@ public static class Headless
             }
         }
         for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.Append(VoiceReport(pre.B[b].W, b)); }
+        for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.Append(ClimateReport(pre.B[b].W, b)); }
         for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.AppendLine($"=== BRANCH {b} ==="); report.Append(Summary(pre.B[b])); }
         Console.Write(report.ToString());
         if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, report.ToString()); Console.WriteLine("report written: " + o.ReportTxt); }
@@ -222,6 +223,69 @@ public static class Headless
         }
     }
 
+    /// <summary>Climate and body heat of a world (Revision O; reporting only): the land's temperature now and over the
+    /// samples kept, plant cover by annual mean temperature, per clade its bodies against the operative temperature its
+    /// animals are in, deaths by cold and heat and the energy spent on keeping warm, and all living animals' bodies in the
+    /// coldest, middle and warmest third of operative temperatures.</summary>
+    public static string ClimateReport(World w, int branch)
+    {
+        var sb = new StringBuilder(); var T = w.T;
+        var (tn, tx, tm) = Climate.LandRange(w);
+        float rmin = float.MaxValue, rmax = float.MinValue; var row = new float[T.Len];
+        for (int k = 0; k < T.SampleCount; k++) { T.Sample(k, row); rmin = MathF.Min(rmin, row[Telemetry.G_TMIN]); rmax = MathF.Max(rmax, row[Telemetry.G_TMAX]); }
+        sb.AppendLine($"CLIMATE in branch {branch} (climate x{Nature.Climate:0.##}): land air temperature now {tn:F1} .. {tx:F1} °C (mean {tm:F1}); over the samples kept {rmin:F1} .. {rmax:F1} °C");
+        if (!Climate.On) return sb.ToString();
+        // plant cover by annual mean temperature
+        float[] edges = { -100f, 0f, 5f, 10f, 15f, 20f, 25f, 100f };
+        int nb = edges.Length - 1; var cnt = new int[nb]; var tr = new double[nb]; var sh = new double[nb]; var gr = new double[nb]; var mo = new double[nb];
+        for (int i = 0; i < Map.FW * Map.FW; i++)
+        {
+            if (w.Cell[i] != (byte)Realm.Land) continue;
+            float t = Climate.AnnualMean(w, i); int k = 0; while (k < nb - 1 && t >= edges[k + 1]) k++;
+            cnt[k]++; tr[k] += w.Tree[i]; sh[k] += w.Shrub[i]; gr[k] += w.Pool[(int)Pool.Grass][i]; mo[k] += w.Moisture[i];
+        }
+        sb.AppendLine("  plant cover by annual mean temperature: band, land cells, tree, shrub, grass, soil moisture");
+        for (int k = 0; k < nb; k++)
+        {
+            if (cnt[k] == 0) continue;
+            string band = k == 0 ? $"< {edges[1]:F0} °C" : k == nb - 1 ? $">= {edges[k]:F0} °C" : $"{edges[k]:F0}..{edges[k + 1]:F0} °C";
+            sb.AppendLine($"    {band,-12} {cnt[k],7}  tree {tr[k] / cnt[k]:F3}  shrub {sh[k] / cnt[k]:F3}  grass {gr[k] / cnt[k]:F3}  moisture {mo[k] / cnt[k]:F2}");
+        }
+        sb.AppendLine("  per clade (living): alive, mean mass, fur, appendages, mean operative temperature, deaths by cold / heat (whole run), energy on heat / on basal");
+        for (int s = 0; s < w.NS; s++)
+        {
+            if (!w.Sp[s].Used) continue;
+            int n = 0; double m = 0, f = 0, a = 0, to = 0;
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile && w.Spc[i] == s) { n++; m += w.PM[i]; f += w.PInsul[i]; a += w.PAppend[i]; to += w.TOp[i]; }
+            long dc = T.Deaths[s * Cause.N + Cause.Cold], dh = T.Deaths[s * Cause.N + Cause.Heat];
+            if (n == 0 && dc + dh == 0) continue;
+            double share = T.SpendBasal[s] > 0 ? T.SpendHeat[s] / T.SpendBasal[s] : 0;
+            sb.AppendLine(n > 0
+                ? $"    {w.Sp[s].Name,-12} {n,6}  mass {m / n:F2}  fur {f / n:F2}  appendages {a / n:F2}  T_op {to / n:F1} °C  cold {dc,6} heat {dh,6}  heat/basal {share:P1}"
+                : $"    {w.Sp[s].Name,-12} {0,6}  (extinct)  cold {dc,6} heat {dh,6}  heat/basal {share:P1}");
+        }
+        // bodies against the operative temperature they are in, over all living animals
+        int na = 0; for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) na++;
+        if (na >= 30)
+        {
+            var tops = new float[na]; int q = 0;
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) tops[q++] = w.TOp[i];
+            Array.Sort(tops);
+            float c1 = tops[na / 3], c2 = tops[2 * na / 3];
+            var bn = new int[3]; var bm = new double[3]; var bf = new double[3]; var ba = new double[3]; var bt = new double[3];
+            for (int i = 0; i < w.Cap; i++)
+            {
+                if (w.StageOf[i] < St.Juvenile) continue;
+                int k = w.TOp[i] < c1 ? 0 : w.TOp[i] < c2 ? 1 : 2;
+                bn[k]++; bm[k] += w.PM[i]; bf[k] += w.PInsul[i]; ba[k] += w.PAppend[i]; bt[k] += w.TOp[i];
+            }
+            string[] nm = { "coldest third", "middle third", "warmest third" };
+            sb.AppendLine("  all living animals by the operative temperature they are in: mean T_op, mass, fur, appendages");
+            for (int k = 0; k < 3; k++) if (bn[k] > 0) sb.AppendLine($"    {nm[k],-14} {bn[k],6}  T_op {bt[k] / bn[k]:F1} °C  mass {bm[k] / bn[k]:F2}  fur {bf[k] / bn[k]:F3}  appendages {ba[k] / bn[k]:F3}");
+        }
+        return sb.ToString();
+    }
+
     /// <summary>End-of-run observation table from the cumulative counters (what happened, not what should).</summary>
     public static string Summary(Simulation sim)
     {
@@ -229,7 +293,7 @@ public static class Headless
         var o = new StringBuilder();
         o.AppendLine();
         o.AppendLine($"OBSERVATION REPORT at step {w.Step:N0} (seed {w.Seed}). Counts are totals for the whole run.");
-        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease  TOP FOOD (energy)");
+        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease cold heat  TOP FOOD (energy)");
         for (int s = 0; s < w.NS; s++)
         {
             if (!w.Sp[s].Used) continue;

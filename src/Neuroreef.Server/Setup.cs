@@ -37,7 +37,7 @@ public static class Setup
             maxUnits = G.NH, maxSlots = World.MaxSlots, refUnits = K.BRAIN_START, mapSizes = Map.Sizes, mapNames = Map.Names,
             v = new
             {
-                preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds,
+                preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds, climate = o.Climate,
                 plants = o.Plants, seasons = o.Seasons, seasonLength = o.SeasonLength, drought = o.Drought, fire = o.Fire, disease = o.Disease, thirst = o.Thirst,
                 ancestorsLand = o.AncestorsLand, ancestorsWater = o.AncestorsWater, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
                 bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
@@ -53,7 +53,7 @@ public static class Setup
             var e = doc.RootElement;
             int I(string k, int lo, int hi, int dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (int)Math.Clamp(Math.Round(x), lo, hi) : dflt;
             float F(string k, float lo, float hi, float dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (float)Math.Clamp(x, lo, hi) : dflt;
-            o.PreMap = I("preMap", 256, 1024, o.PreMap); o.WorldMap = I("worldMap", 256, 1024, o.WorldMap); o.Water = F("water", 0.02f, 0.6f, o.Water); o.Ponds = F("ponds", 0f, 1f, o.Ponds);
+            o.PreMap = I("preMap", 256, 1024, o.PreMap); o.WorldMap = I("worldMap", 256, 1024, o.WorldMap); o.Water = F("water", 0.02f, 0.6f, o.Water); o.Ponds = F("ponds", 0f, 1f, o.Ponds); o.Climate = F("climate", 0f, 2f, o.Climate);
             o.Plants = F("plants", 0.1f, 4f, o.Plants); o.Seasons = F("seasons", 0f, 2.2f, o.Seasons); o.SeasonLength = I("seasonLength", 1000, 100000, o.SeasonLength);
             o.Drought = F("drought", 0f, 4f, o.Drought); o.Fire = F("fire", 0f, 10f, o.Fire); o.Disease = F("disease", 0f, 5f, o.Disease); o.Thirst = F("thirst", 0.1f, 4f, o.Thirst);
             o.AncestorsLand = I("ancestorsLand", 0, 16, o.AncestorsLand); o.AncestorsWater = I("ancestorsWater", 0, 16, o.AncestorsWater);

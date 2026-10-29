@@ -548,6 +548,7 @@ function speakAt(cx, cy) {
   }
   drawTranslator();
 }
+$('tempmap')?.addEventListener('click', (ev) => { world.tempOverlay = !world.tempOverlay; ev.currentTarget.classList.toggle('on', world.tempOverlay); if (world.fields) world._paint(world.fields); });
 $('xlate')?.addEventListener('click', (ev) => { const b = $('translator'); b.classList.toggle('hidden'); ev.currentTarget.classList.toggle('on', !b.classList.contains('hidden')); drawTranslator(); });
 // each sound has its own pitch when sound is on
 function tone(k, v) {

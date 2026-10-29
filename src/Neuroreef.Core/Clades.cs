@@ -137,6 +137,10 @@ public static class Clades
         // the others start without it (genes: either can evolve)
         body[G.B_IMIT - B] = (sbyte)(voiced ? 0 : -127);
         body[G.B_IMIT_AGE - B] = (sbyte)(voiced ? 127 : -127);
+        // body heat (Revision O): every ancestor starts with a thin coat and middling appendages, thermoneutral at about
+        // 15-32 °C near T_REF at M = 1; founder variation and evolution do the rest (no tolerance is given)
+        body[G.B_INSUL - B] = (sbyte)MathF.Round(K.FOUND_INS * 254f - 127f);
+        body[G.B_APPEND - B] = (sbyte)MathF.Round(K.FOUND_APP * 254f - 127f);
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them
         // (plants, algae, meat, carrion, blood, dung...), mediocre at the rest, never at the floor (ecology review:

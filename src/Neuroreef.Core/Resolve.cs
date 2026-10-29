@@ -125,9 +125,11 @@ public static class Resolve
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
         // cost of transport: ~M^0.7 x speed (Taylor et al. 1982); equal to the old M*v^2 rule at M=1 and full walking speed
-        float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f);
+        // (a heavy coat adds to it, Revision O)
+        float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f) * (1f + K.INS_MOVE * w.PInsul[i]);
         bool sick = w.Infect[i] > 0;
-        float basal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL) * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
+        float fullBasal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL);
+        float basal = fullBasal * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
         // growth: a juvenile builds tissue from its spare energy (no free mass, DESIGN §9.1). It grows at most at
         // the rate that would reach adult size at PMature, and only from energy above GROW_RESERVE of its reserve:
         // a well-fed youngster grows fast, a hungry one slowly, a starving one not at all
@@ -138,7 +140,21 @@ public static class Resolve
             grow = Math.Clamp(w.Energy[i] - K.GROW_RESERVE * emax, 0f, tissue / w.PMature[i]);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
         }
-        w.Energy[i] -= basal + moveCost + grow;
+        // body heat (Revision O): the heat it makes (basal and movement) against what its body loses at the operative
+        // temperature around it; it shivers when it loses too much and sweats or pants when it loses too little
+        float thermo = 0f, evap = 0f, shortCold = 0f, shortHot = 0f;
+        if (Climate.On)
+        {
+            bool immersed = waterCell && loco != Loco.Fly;
+            float top = Heat.Operative(w, cell, w.PInsul[i], immersed);
+            Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot);
+            w.TOp[i] = top;
+            w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
+            // what it cannot cover strains it; a body recovers from a little strain each step
+            w.ThermStrain[i] = MathF.Max(0f, w.ThermStrain[i] + K.STRAIN_GAIN * (shortCold + shortHot) / fullBasal - K.STRAIN_REC);
+            T.SpendHeat[s] += thermo;
+        }
+        w.Energy[i] -= basal + moveCost + grow + thermo;
         T.SpendBasal[s] += basal; T.SpendMove[s] += moveCost; T.SpendGrowth[s] += grow;
         float fat0 = w.Fatigue[i];
         float sprint = w.Gain[i * P.N + P.SPRINT];
@@ -163,6 +179,8 @@ public static class Resolve
 
         // an organism dries out on land, less on moist ground; in water it does not (DESIGN §9.4)
         if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * Nature.Thirst * w.PThirstK[i] * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
+        // cooling by evaporation costs water, whatever the kidneys save (Revision O)
+        if (evap > 0f && !waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.EVAP_REL * K.C_THIRST * Nature.Thirst * evap / (K.C_BASAL * mass));
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
         w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
@@ -175,6 +193,7 @@ public static class Resolve
         // ---- 8. death
         if (w.Energy[i] <= 0) { Die(w, i, Cause.Starve, -1); return; }
         if (w.Thirst[i] >= 1f) { Die(w, i, Cause.Thirst, -1); return; }
+        if (w.ThermStrain[i] >= 1f) { Die(w, i, shortCold > 0f ? Cause.Cold : Cause.Heat, -1); return; }
         float life = w.PLife[i];
         if (w.Age[i] > life)
         {

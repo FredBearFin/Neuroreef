@@ -1,5 +1,5 @@
 // The translator's open-ended reading of the voices (Revision M). Not a rule: nothing here is read by the simulation.
-// A sound's (or a whole utterance's, Revision N) meaning is not chosen from designed categories. It is whichever of the caller's 64 senses differ most
+// A sound's (or a whole utterance's, Revision N) meaning is not chosen from designed categories. It is whichever of the caller's 66 senses differ most
 // from the clade's usual senses when the sound is made, and whichever behaviours the caller's clade turns to on
 // hearing it. Each sense and each behaviour has a plain-language phrase so the console can say what it found.
 
@@ -84,6 +84,8 @@ public static class Meaning
         S(F.FOC_SIZE, "listening to a bigger one", "listening to a smaller one", "boss", "");
         S(F.FOC_FACING, "the one it listens to faces it", "the one it listens to faces away", "look at me,you there,hey", "look,over there,that way");
         S(F.FOC_LIKE_ME, "hearing what it says itself", "hearing something it does not say", "same,copy,yes,agree", "different,no");
+        S(F.HEAT_NEED, "cold (shivering)", "hot (panting)", "cold,freezing,shiver,chilly,brr", "hot,sweating,panting,overheated");
+        S(F.AIR_T, "warm here", "cold here", "warm,sun,sunny,heat,summer", "cold,ice,snow,frost,winter,shade");
 
         string[] v =
         {
@@ -91,7 +93,7 @@ public static class Meaning
             "flee the nearest animal", "cut off the nearest animal", "circle the nearest animal",
             "gather together", "spread apart", "move the same way", "follow mother", "look for a mate", "head for food",
             "head for water", "head for land", "move away from the danger smell", "wander", "go toward the caller", "move away from the caller",
-            "look where the caller looks", "stand still", "look around", "sprint", "eat", "attack", "drink", "mate", "rest", "mark the ground", "lay eggs", "bury seed",
+            "look where the caller looks", "go somewhere warmer", "go somewhere cooler", "stand still", "look around", "sprint", "eat", "attack", "drink", "mate", "rest", "mark the ground", "lay eggs", "bury seed",
         };
         for (int p = 0; p < v.Length; p++) Verbs[p] = v[p];
         for (int k = 0; k < F.NSOUND; k++) Verbs[P.CALL_0 + k] = $"call sound {k + 1}";

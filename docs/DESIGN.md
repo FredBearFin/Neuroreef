@@ -1,7 +1,69 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision N. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision O: climate and body heat** (the user, 2026-10-30: "I don't want you to specifically create
+biozones ... come up with a logical system for how the world works ... simulate some physics ... and then this should
+get created by itself ... heat tolerance genes, those should theoretically evolve through the simulation ... It's not
+supposed to be predetermined." Designed with the physics designer. There are no biome types and no tolerance genes:
+temperature follows from geometry and physics, plants, soil and ponds answer to it through response curves from the
+literature, and an animal's cost of living in it follows from its body's size, fur and appendages; evolution varies only
+those physical properties. Code: `Climate.cs` (climate and `Heat`), `Fields.Row`, `Ponds.Update`, `Resolve` step 7.)
+- Temperature per cell (°C), written by FIELDS every step: latitude on the torus θ = 2πy/FW, sin(lat) = sin θ (equator,
+  north pole, equator, south pole; the hemispheres' seasons are opposite by the sign of sin θ);
+  T_phys = T_EQ − DT_EP·sin²θ + A_SEAS·sinθ·sin(2πt/year)·Cont − LAPSE·h; T = T_REF + Climate·(T_phys − T_REF).
+  T_EQ 27 °C, DT_EP 40 K (North 1975), A_SEAS 20 K, LAPSE 6.5 K/km (ICAO), h = height above the lakes x H_RELIEF
+  (3,000 m), continentality Cont = 1 − 0.75·exp(−distance to water / 6 cells) (Conrad 1946). Height and Cont are fixed at
+  Terrain.Build (`World.TLapse` holds Climate x LAPSE x h); a row costs two sines, a cell one FMA. `World.Temp` holds the
+  air temperature everywhere; water under it is at least T_WATER_MIN = 0.5 °C (deviation: the designer floored water
+  cells' temperature itself, which would leave no frozen water to show; the floor is applied where water temperature is
+  used). No daily cycle: a step is hours, and the day-averaged sun is in SOLAR. Temp is state walked by the checkpoint
+  (and rewritten every step), so a resumed run is exact.
+- Soil moisture: W = clamp(MoistBase·(1 + A_SEASON·season)·(1 + rain)·E(T)^−0.5 / Z), E = e_s(T)/e_s(T_REF) (Tetens;
+  Budyko-style). Deviation: Z is not the land mean of E^−β but the value (by bisection at Build, over 8 phases of the
+  year) that makes the land's mean clamped moisture equal to that with no climate; with the plain mean the land was 2.2%
+  drier (the clamp at 1 loses the cold side's surplus). In a fields-only test the land is within 2% of Climate = 0.
+  Ponds use the same factor in their 'full' test; a pond whose air is below 0 °C is frozen and cannot be drunk (lakes
+  and rivers can still be drunk under ice: animals break ice or eat snow).
+- Plants: grass, shrub and tree growth x Yan & Hunt (1999) beta curves (0, 25, 45), (2, 24, 45), (5, 22, 40) °C, 1 at
+  T_REF, at most 1.1 (the tree minimum is the Körner & Paulsen 2004 treeline); algae and plankton x 1.066^(T − T_REF)
+  at the water's temperature (Eppley 1972), nothing under ice; decomposition x 2^((T − T_REF)/10) (Lloyd & Taylor 1994).
+  512-entry tables of 0.25 K from −60 °C. Initial vegetation is still from moisture only: it re-sorts itself.
+- Nature.Climate (0..2, default 0.6): setup page (Nature, "Climate strength"), `--climate`, presets (0.6; Big 0.8),
+  saved in checkpoints and world saves. Climate = 0 skips every rule above and the heat budget: a fields-only year is bit
+  for bit Revision N's (tested against the hash of Revision N's code).
+- Body heat (`Heat`, RESOLVE step 7): an endotherm at T_BODY = 38 °C with no heat stored from step to step (a step is
+  longer than the thermal time constant of bodies up to tens of kg, Bakken 1976). Core area A = M^(2/3); fur i (gene
+  B_INSUL) works at i·min(1, M^(1/3)); appendages a (gene B_APPEND). C_min = K_COND·C_BASAL·[A/(1+R_INS·i) + 0.15·a·A],
+  C_max = K_COND·C_BASAL·[3·A/(1+R_INS·i) + a·A], K_COND = 1/16 per K (a bare M = 1 body is neutral down to 22 °C), R_INS
+  4; in water x4 and fur keeps half. Operative temperature: the air (or the water) plus, out of water, Climate x SOLAR x
+  (1 − 0.8·tree − 0.4·shrub) / (1 + 0.5·R_INS·i). Deviation: the designer's solar term had a factor A_c, which would
+  make a big body hotter in the sun by many K; absorbed and lost heat both scale with area, so the rise of operative
+  temperature is size-independent; SOLAR (unvalued in the design) = 6 K, a day-averaged load (Campbell & Norman 1998).
+  Heat made H = basal + movement. If C_min·ΔT > H it makes the difference, up to SUMMIT = 5 x basal (Hinds et al. 1993),
+  paid from energy; if C_max·ΔT < H it evaporates the difference, up to EVAP_MAX = 3 x basal (none under water), which
+  adds thirst EVAP_REL x C_THIRST x Thirst x X / (C_BASAL x M) on land, not reduced by the water-economy gene. What the
+  caps cannot cover builds heat strain (0.2 x shortfall in basal units, less 0.05 a step); at 1 the animal dies of cold
+  or heat (new causes; Cause.N 10). Fur costs COST_INS = 0.06 x basal and 10% more movement cost; appendages 0.03.
+  Founders start with i = 0.15, a = 0.3 (thermoneutral ~14-31 °C at M = 1) plus founder variation.
+- Senses and steering (F.N 64 -> 66, P.N 39 -> 41, NSTEER 22, FIRST_ACTION 25): HEAT_NEED = tanh(net heat need /
+  basal), last step's (deviation: the shortfalls beyond the caps are included, so an animal past its limits feels it
+  more), AIR_T = clamp((T_op − 38)/30, −1, 1); WARMER and COOLER steer along the raw gradient of the operative
+  temperature over the 4 neighbour cells (shade and water included). No reflex links them: using them is learned or
+  evolved. The translator has phrases for both senses and both verbs.
+- Display: field layers `temp` ((T + 40)/90) and `frozen`; frost on frozen land and pale ice on frozen water, and a
+  "temperature" button that colours the ground by air temperature. AGENTS record byte 25 carries fur and appendages
+  (4 bits each). Telemetry: traits fur, appendages, operative temperature (NTRAITS 29); spend.heat; deaths by cold and
+  heat; land temperature mean, min, max and frozen share. The prehistory report has a CLIMATE section per branch.
+- A slot holds 209,675 bytes (World.BytesPerSlot; 202,541 in Revision N): the bigger brain layout (2 senses, 2
+  primitives) and 5 floats. Gene bank version 5, checkpoint version 5, AGENTS format 5 (byte 25 used).
+- What it means for the physics as calibrated: with A = M^(2/3) against basal M^0.75, the lower critical temperature
+  hardly depends on size (bare: ~25 °C at M = 0.1, ~18 °C at M = 20); fur is the main lever, and a summit of 5 x basal
+  covers air far below freezing, so cold costs energy (and starvation) long before strain kills. In a fields-only run,
+  trees spread less on cold high ground when the soil is equally wet, but on the real map, over a few years, drought
+  and fire dominate tree dynamics and cold ground is wetter, so tree cover follows moisture more than temperature at
+  first (trees live ~5 years at D_T; a treeline takes decades).
 
 **Home ranges** (the user, 2026-10-30): each founding lineage starts in its own home range (radius HOME_R of the map
 side), the one of HOME_TRIES random sites farthest from the homes already taken; founding from a gene bank does the

@@ -89,6 +89,7 @@ public static class Terrain
 
         Distance(w.Cell, (byte)Realm.Water, w.DistWater);
         Distance(w.Cell, (byte)Realm.Land, w.DistLand);
+        Climate.Build(w);   // height, continentality and the temperature now (Revision O); draws no random numbers
 
         // Pond sites (Revision K, ecology review): land basins, the lowest point in their neighbourhood, away from
         // standing water; each holds rain in the wet season and dries out in the dry one (Ponds.Update).
@@ -120,6 +121,7 @@ public static class Terrain
                 w.Fert[i] = Math.Clamp(0.3f + 0.7f * (m - 0.25f) * 1.6f, 0.1f, 1f);
                 w.Moisture[i] = w.MoistBase[i];
             }
+        if (Climate.On) { Climate.Normalise(w); Ponds.Update(w); }   // evaporation normalised to the moisture base; ponds refilled with it
 
         // Initial vegetation: a mosaic of grassland, shrubland and woodland, and plankton in the water.
         var P = w.Pool;

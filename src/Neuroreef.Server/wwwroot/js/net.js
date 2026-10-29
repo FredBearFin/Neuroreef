@@ -92,6 +92,7 @@ export function agentAt(a, k, world, out) {
   out.locoCode = b[o + 21] & 15;                         // computed by the sim: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
   out.call = b[o + 21] >> 4;                             // the first sound of its utterance this step: 0 none, 1..8
   out.call2 = b[o + 24] & 15; out.call3 = b[o + 24] >> 4; // its second and third sounds (Revision N), 0 none
+  out.fur = (b[o + 25] >> 4) / 15; out.append = (b[o + 25] & 15) / 15;   // fur and appendages, 0..1 (Revision O)
   out.loco = LOCO[out.locoCode] || locoOf(out.legs, out.fins, out.wings);
   return out;
 }

@@ -149,7 +149,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.05397E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.04018E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -398,6 +398,63 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 26. Organisms
+## 26. Climate
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| CLIMATE | 0.6 | - | default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget | HT: Revision O; 1 = Earth-like contrasts, 0.6 keeps most of a region habitable to founders |
+| T_REF | 20 | °C | reference temperature (the temperature of a world with no climate; plant curves, decomposition and evaporation are 1 here) | - |
+| T_EQ | 27 | °C | annual mean sea-level temperature at the equator | ECO: observed zonal mean ~27 °C (North 1975) |
+| DT_EP | 40 | K | equator-to-pole temperature drop, x sin² latitude | ECO: the second Legendre term of North's (1975) energy-balance climate, ~40 K |
+| A_SEAS | 20 | K | seasonal amplitude at the pole in the middle of a continent, x sin latitude x continentality | ECO: continental interiors swing ~40 K winter to summer at high latitude (Conrad 1946) |
+| LAPSE | 6.5 | K/km | lapse rate: cooling with height | ECO: ICAO standard atmosphere, 6.5 K per km |
+| H_RELIEF | 3000 | m | height of the highest ground above the lakes | HT: rolling hills to low mountains |
+| WATER_DAMP | 0.75 | - | share of the seasonal swing that open water takes away at the shore (continentality 1 - WATER_DAMP x exp(-distance / L_MAR)) | ECO: maritime climates swing a quarter of continental ones (Conrad 1946 continentality index) |
+| L_MAR | 6 | cells | distance over which the sea's damping of the seasons fades inland | HT: ~25 units, a few hours' walk |
+| T_WATER_MIN | 0.5 | °C | water under ice stays at least this warm | ECO: lakes freeze from the top; the water below stays at 0-4 °C |
+| EVAP_BETA | 0.5 | - | Budyko-style exponent of how evaporation dries soil: moisture x (e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens) | ECO: evaporative demand rises with saturation vapour pressure (Budyko 1974; Tetens 1930) |
+| GRASS_TMIN | 0 | °C | grass: lowest, best and highest temperature of growth (Yan & Hunt beta curve, x 1 at T_REF, at most PLANT_CAP) | ECO: Yan & Hunt (1999); C4/C3 grasses grow from ~0 to ~45 °C |
+| GRASS_TOPT | 25 | °C | grass: best temperature of growth | ECO: Yan & Hunt (1999) |
+| GRASS_TMAX | 45 | °C | grass: highest temperature of growth | ECO: Yan & Hunt (1999) |
+| SHRUB_TMIN | 2 | °C | shrubs: lowest temperature of growth | ECO: dwarf shrubs grow above the treeline (Körner 2003) |
+| SHRUB_TOPT | 24 | °C | shrubs: best temperature of growth | ECO |
+| SHRUB_TMAX | 45 | °C | shrubs: highest temperature of growth | ECO |
+| TREE_TMIN | 5 | °C | trees: lowest temperature of growth | ECO: tree growth stops below ~5 °C, which sets the treeline (Körner & Paulsen 2004) |
+| TREE_TOPT | 22 | °C | trees: best temperature of growth | ECO |
+| TREE_TMAX | 40 | °C | trees: highest temperature of growth | ECO |
+| PLANT_CAP | 1.1 | - | largest plant growth multiplier from temperature | HT: the beta curves peak a few % above their value at T_REF |
+| EPPLEY | 1.066 | /K | algae and plankton growth multiplier per K (no growth under ice) | ECO: Eppley (1972): phytoplankton growth x1.066 per K |
+| Q10_ROT | 2 | - | decomposition multiplier per 10 K | ECO: soil respiration Q10 ~2 (Lloyd & Taylor 1994) |
+| TT_LO | -60 | °C | lowest temperature of the response tables (TT_N entries of TT_STEP) | - |
+| TT_STEP | 0.25 | K | temperature step of the response tables | - |
+| TT_N | 512 | - | entries of each response table | - |
+
+## 27. Heat
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| T_BODY | 38 | °C | body temperature of every animal (an endotherm; no heat is stored from step to step) | ECO: mammals 36-39 °C, birds ~40 °C; a step is hours, longer than the thermal time constant of bodies up to tens of kg (Bakken 1976) |
+| K_COND | 0.0625 | xC_BASAL/K | dry conductance of a bare body of M=1, per unit core area M^(2/3), in units of C_BASAL per K | HT: a bare M=1 body is thermoneutral down to 38 - 16 = 22 °C (a naked mammal's lower critical temperature, Scholander et al. 1950) |
+| R_INS | 4 | - | insulation: fur of thickness i divides the core's conductance by 1 + R_INS x i | ECO: arctic fur cuts conductance ~5x against tropical mammals (Scholander et al. 1950) |
+| VASO | 3 | x | vasodilation: largest rise of the core's conductance when warm | ECO: peripheral blood flow raises conductance ~3x (Bakken 1976) |
+| APP_LEAK | 0.15 | - | share of an appendage's conductance that leaks when it is cold (vasoconstricted) | ECO: countercurrent exchange in limbs and ears keeps most heat in (Scholander & Krog 1957) |
+| K_WATER | 4 | x | conductance in water against air | ECO: water conducts heat ~25x air; convective loss of an immersed body ~4x (Nadel 1977) |
+| FUR_WET | 0.5 | - | share of its insulation fur keeps when wet | ECO: wet fur loses about half its insulation (Scholander et al. 1950) |
+| SOLAR | 6 | K | sun on open ground: rise of the operative temperature (x climate strength, x (1 - SHADE_TREE x tree - SHADE_SHRUB x shrub) / (1 + 0.5 R_INS x fur)) | ECO: a day-averaged solar load raises operative temperature several K over air temperature (Bakken 1976; Campbell & Norman 1998); size-independent, as absorbed and lost heat both scale with area |
+| SHADE_TREE | 0.8 | - | share of the sun that tree cover blocks | ECO: canopy shade |
+| SHADE_SHRUB | 0.4 | - | share of the sun that shrub cover blocks | ECO |
+| SUMMIT | 5 | xbasal | most heat an animal can make by shivering and burning fat, x its basal | ECO: summit metabolism ~5x basal (Hinds et al. 1993) |
+| EVAP_MAX | 3 | xbasal | most heat an animal can lose by evaporation (sweating, panting), x its basal | ECO: evaporative heat loss can reach a few times basal in heat (Schmidt-Nielsen 1997) |
+| EVAP_REL | 2 | xC_THIRST | thirst per unit of evaporated heat (in basal units per unit body mass), against C_THIRST | HT: sweating a basal's worth doubles the drying rate (calibrated against C_THIRST, not latent heat) |
+| STRAIN_GAIN | 0.2 | /basal | heat strain gained per unit of heat shortfall beyond the caps (in basal units) | HT: a full basal's shortfall kills in ~7 steps |
+| STRAIN_REC | 0.05 | /step | heat strain recovered per step | HT: a shortfall below a quarter of basal is survived |
+| COST_INS | 0.06 | xbasal | basal cost of full fur (insulation gene 1) | ECO: growing and moulting fur and feathers costs a few % of energy (Lindström et al. 1993) |
+| INS_MOVE | 0.1 | xmove | extra cost of moving with full fur | ECO: a heavy coat adds to the cost of transport |
+| COST_APP | 0.03 | xbasal | basal cost of full appendages (ears, limbs, tail as radiators; appendage gene 1) | ECO |
+| FOUND_INS | 0.15 | 0..1 | founders' fur (insulation gene) | HT: with FOUND_APP and M=1 thermoneutral ~15-32 °C around T_REF |
+| FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
+| AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
+
+## 28. Organisms
 
 There are no designed species (Revision F). Life starts from 6 land and 4 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

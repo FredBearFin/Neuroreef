@@ -15,7 +15,7 @@ public static class Wire
     public static int FD => Map.FW / 2;              // field frame side (2x2 averaged)
     public static readonly string[] FieldLayers =
         { "grass", "shrub", "tree", "browse", "fruit", "seed", "nectar", "root", "carrion", "dung+litter", "wood",
-          "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond" };
+          "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen" };
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -81,6 +81,7 @@ public static class Wire
             8 => MathF.Tanh(P[(int)Pool.Carrion][i]), 9 => MathF.Tanh(P[(int)Pool.Dung][i] + P[(int)Pool.Litter][i]), 10 => MathF.Tanh(P[(int)Pool.Wood][i]),
             11 => P[(int)Pool.Algae][i], 12 => P[(int)Pool.Phyto][i], 13 => MathF.Tanh(P[(int)Pool.Detritus][i]),
             14 => w.Fire[i] > 0 ? 1f : 0f, 15 => MathF.Tanh(w.Scent[i] * 4f), 16 => w.Moisture[i], 17 => w.Nutrient[i] / K.N_MAX, 18 => w.Poll[i], 19 => w.Wet[i] == 2 ? 1f : 0f,
+            20 => (w.Temp[i] + 40f) / 90f, 21 => w.Temp[i] < 0f ? 1f : 0f,   // air temperature (-40..50 °C) and frost or ice (Revision O)
             _ => 0f,
         };
     }
@@ -172,7 +173,7 @@ public static class Wire
                     intake = Telemetry.S_INTAKE, spend = Telemetry.S_SPEND, strikes = Telemetry.S_STRIKES, kills = Telemetry.S_KILLS, matings = Telemetry.S_MATINGS,
                     imm = Telemetry.S_IMM, dage = Telemetry.S_DAGE, meanAge = Telemetry.S_MEANAGE, sick = Telemetry.S_SICK, infections = Telemetry.S_INFECT, care = Telemetry.S_CARE, kit = Telemetry.S_KIT, arch = Telemetry.S_ARCH, traits = Telemetry.S_TRAITS, gains = Telemetry.S_GAINS },
                 global = new { step = Telemetry.G_STEP, pools = Telemetry.G_POOLS, shrub = Telemetry.G_SHRUB, tree = Telemetry.G_TREE, sapling = Telemetry.G_SAPLING,
-                    nutLand = Telemetry.G_NUT_LAND, nutWater = Telemetry.G_NUT_WATER, fire = Telemetry.G_FIRE, burning = Telemetry.G_BURNING, alive = Telemetry.G_ALIVE, season = Telemetry.G_SEASON, rain = Telemetry.G_RAIN } },
+                    nutLand = Telemetry.G_NUT_LAND, nutWater = Telemetry.G_NUT_WATER, fire = Telemetry.G_FIRE, burning = Telemetry.G_BURNING, alive = Telemetry.G_ALIVE, season = Telemetry.G_SEASON, rain = Telemetry.G_RAIN, temp = Telemetry.G_TEMP, tmin = Telemetry.G_TMIN, tmax = Telemetry.G_TMAX, frozen = Telemetry.G_FROZEN } },
             probe = new { feat = PR_FEAT, hid = PR_HID, z = PR_Z, gain = PR_GAIN, learn = PR_LEARN, scal = PR_SCAL, scalars = ProbeScalars, phen = PR_PHEN,
                 phenotype = ProbePhenotype, diet = PR_DIET, w1 = PR_W1, w2 = PR_W2, end = PR_END, nh = G.NH, nin = G.NIN },
             landCells = Enumerable.Range(0, Map.FW * Map.FW).Count(i => w.Cell[i] == (byte)Realm.Land),

@@ -19,9 +19,26 @@ public static class Fields
         float[] Ca = Pl[(int)Pool.Carrion], Du = Pl[(int)Pool.Dung], Li = Pl[(int)Pool.Litter], Wo = Pl[(int)Pool.Wood], De = Pl[(int)Pool.Detritus];
         float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / FW);
         int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW, row = y * FW;
+        // climate (Revision O): this row's temperature for this step; with Climate = 0 every factor below is skipped
+        bool clim = Climate.On;
+        float ta = 0f, tb = 0f, invZ = 1f;
+        if (clim) { Climate.RowParams(w, y, out ta, out tb); invZ = 1f / w.ClimateZ; }
+        float[] Tmp = w.Temp;
         for (int x = 0; x < FW; x++)
         {
             int i = row + x;
+            float rC = K.ROT_CARRION, rD = K.ROT_DUNG, rL = K.ROT_LITTER, rW = K.ROT_WOOD, rT = K.ROT_DETRITUS;
+            int ti = 0; float temp = K.T_REF;
+            if (clim)
+            {
+                temp = MathF.FusedMultiplyAdd(tb, w.Cont[i], ta) - w.TLapse[i];
+                Tmp[i] = temp;
+                bool water = w.Cell[i] != (byte)Realm.Land;
+                ti = Climate.Idx(water ? Climate.Water(temp) : temp);
+                // decomposition speeds up with warmth (Q10 = 2, Lloyd & Taylor 1994)
+                float q = Climate.Rot[ti];
+                rC *= q; rD *= q; rL *= q; rW *= q; rT *= q;
+            }
             int xl = row + (x == 0 ? FW - 1 : x - 1), xr = row + (x == FW - 1 ? 0 : x + 1), up = yu + x, dn = yd + x;
             float N = w.Nutrient[i];
 
@@ -34,8 +51,8 @@ public static class Fields
             w.ScentN[i] = MathF.Max(0f, (sc + 0.1f * (sb - sc)) * (1f - K.D_SCENT));
 
             // decomposition by bacteria: every dead pool rots into nutrient
-            float rot = Ca[i] * K.ROT_CARRION + Du[i] * K.ROT_DUNG + Li[i] * K.ROT_LITTER + Wo[i] * K.ROT_WOOD + De[i] * K.ROT_DETRITUS;
-            Ca[i] -= Ca[i] * K.ROT_CARRION; Du[i] -= Du[i] * K.ROT_DUNG; Li[i] -= Li[i] * K.ROT_LITTER; Wo[i] -= Wo[i] * K.ROT_WOOD; De[i] -= De[i] * K.ROT_DETRITUS;
+            float rot = Ca[i] * rC + Du[i] * rD + Li[i] * rL + Wo[i] * rW + De[i] * rT;
+            Ca[i] -= Ca[i] * rC; Du[i] -= Du[i] * rD; Li[i] -= Li[i] * rL; Wo[i] -= Wo[i] * rW; De[i] -= De[i] * rT;
             Nn += rot * K.C_NUTGAIN + K.WEATHER * w.Fert[i] * 0.1f;
             w.Poll[i] *= 1f - K.D_POLL;
 
@@ -45,6 +62,12 @@ public static class Fields
                 float lim = N / (N + K.K_N);
                 float ga = (w.Cell[i] == (byte)Realm.Shallow) ? K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim : 0f;
                 float gp = K.R_PH * Nature.Plants * lim * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
+                if (clim)
+                {
+                    // warmer water grows plankton faster (Eppley 1972); under ice nothing grows
+                    float fe = temp < 0f ? 0f : Climate.Algae[ti];
+                    ga *= fe; gp *= fe;
+                }
                 float da = K.M_A * Al[i], dp = K.M_PH * Ph[i];
                 Al[i] = Math.Clamp(Al[i] + ga - da, 0f, 1f);
                 Ph[i] = Math.Clamp(Ph[i] + gp - dp, 0f, 1f);
@@ -56,13 +79,23 @@ public static class Fields
             }
 
             // land producers (DESIGN §10.2)
-            float W = Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom), 0f, 1f);
+            float W = clim
+                // warm air dries the soil, cold air keeps it moist (Budyko-style, Tetens vapour pressure), normalised so
+                // the land as a whole is as wet as without a climate
+                ? Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom) * (Climate.Evap[ti] * invZ), 0f, 1f)
+                : Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom), 0f, 1f);
             w.Moisture[i] = W;
             float nut = N / (N + K.K_N);
             float grow = W * nut;
             // water limits each layer differently: grass grows at any moisture, shrubs above W_SHRUB, trees above W_TREE
             float growS = MathF.Max(0f, (W - K.W_SHRUB) / (1f - K.W_SHRUB)) * nut;
             float growT = MathF.Max(0f, (W - K.W_TREE) / (1f - K.W_TREE)) * nut;
+            if (clim)
+            {
+                // each layer grows between its lowest and highest temperature, best near its optimum (Yan & Hunt 1999);
+                // trees need the most warmth, which sets a treeline (Körner & Paulsen 2004)
+                grow *= Climate.FGrass[ti]; growS *= Climate.FShrub[ti]; growT *= Climate.FTree[ti];
+            }
             float g = G[i], s = w.Shrub[i], t = w.Tree[i], p = w.Sapling[i];
             float lightG = 1f - 0.85f * t - 0.35f * s, lightS = 1f - 0.70f * t;
             float free = MathF.Max(0f, 1f - g - s - t);

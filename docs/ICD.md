@@ -1,6 +1,6 @@
 # NEUROREEF 2 — INTERFACE CONTROL DOCUMENT
 
-Document NR-ICD-001, Revision E (AGENTS format 5). This is the link between the simulation server and the browser
+Document NR-ICD-001, Revision F (AGENTS format 5; Revision O fills record byte 25 and adds field layers). This is the link between the simulation server and the browser
 console. Encoders: `src/Neuroreef.Core/Snapshot.cs` (AGENTS) and `src/Neuroreef.Server/Wire.cs`
 (all others). Decoder: `src/Neuroreef.Server/wwwroot/js/net.js`. Test: `tests/Neuroreef.Tests/WireTests.cs`.
 
@@ -65,7 +65,7 @@ Each record:
 | 22 | u8 | fin pairs (1..4) |
 | 23 | u8 | eye pairs (1..4) |
 | 24 | u8 | bits 0–3 the second sound of its utterance, bits 4–7 the third (0 none; Revision N) |
-| 25 | u8 | reserved (0) |
+| 25 | u8 | bits 4–7 fur (insulation gene × 15), bits 0–3 appendages (× 15) (Revision O; reserved 0 before) |
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 
@@ -73,10 +73,12 @@ Each record:
 |---|---|---|
 | 8 | u16 | side D = FW / 2 (2×2 cells averaged) |
 | 10 | u16 | layer count L |
-| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination |
+| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen |
 
 Layer values are 0..255 for 0..1. Pools that can exceed 1 are sent as tanh(amount) (carrion,
-dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)).
+dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)). `pond` is 1 where a seasonal
+pond holds water; `temp` is the air temperature as (T + 40) / 90 (−40..50 °C; Revision O); `frozen` is 1 where the air
+is below 0 °C (frost on land, ice on water).
 
 ### 0x04 TELEMETRY (when a new sample exists, checked every 0.5 s)
 

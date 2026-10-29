@@ -86,6 +86,8 @@ function defs() {
       { key: 'fire', label: 'Wildfire', min: 0, max: 5, step: 0.1, val: V.fire, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How often fires start in dry vegetation.' },
       { key: 'disease', label: 'Disease', min: 0, max: 3, step: 0.05, val: V.disease, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How easily pathogens spread between animals.' },
       { key: 'thirst', label: 'Thirst', min: 0.25, max: 3, step: 0.05, val: V.thirst, fmt: x, help: 'How fast animals dry out away from water.' },
+      { key: 'climate', label: 'Climate strength', min: 0, max: 2, step: 0.05, val: V.climate, fmt: (v) => v == 0 ? 'none (20 °C)' : x(v),
+        help: 'How strongly sun, height and seasons change temperature; 0 = everywhere 20 °C. Plants, soil and every body answer to it: nothing says where forest, tundra or desert is, or what body lives there.' },
     ] },
     { g: 'Life', note: 'how it starts; everything after is evolution', rows: [
       { key: 'ancestorsLand', label: 'Ancestors on land', min: 0, max: 12, step: 1, val: V.ancestorsLand, fmt: (v) => v,
@@ -166,10 +168,10 @@ function estimate() {
 }
 
 const PRESETS = {
-  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3 },
-  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3 },
-  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3 },
-  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10 },
+  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.6 },
+  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.6 },
+  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.6 },
+  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.8 },
 };
 for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
   const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]);
