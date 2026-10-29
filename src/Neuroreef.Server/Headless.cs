@@ -184,7 +184,7 @@ public static class Headless
         {
             var a = new float[w.T.Len];
             w.T.Sample(w.T.SampleCount - 1, a);
-            int land = 0; for (int i = 0; i < K.FW * K.FW; i++) if (w.Cell[i] == (byte)Realm.Land) land++;
+            int land = 0; for (int i = 0; i < Map.FW * Map.FW; i++) if (w.Cell[i] == (byte)Realm.Land) land++;
             Console.WriteLine($"         grass {a[Telemetry.G_POOLS + 0] / land:F2} shrub {a[Telemetry.G_SHRUB]:F2} tree {a[Telemetry.G_TREE]:F2} " +
                 $"fruit {a[Telemetry.G_POOLS + 2] / land:F3} seed {a[Telemetry.G_POOLS + 3] / land:F3} nectar {a[Telemetry.G_POOLS + 4] / land:F3} " +
                 $"carrion {a[Telemetry.G_POOLS + 8]:F0} N {a[Telemetry.G_NUT_LAND]:F2}/{a[Telemetry.G_NUT_WATER]:F2} burning {a[Telemetry.G_BURNING]:F0} season {a[Telemetry.G_SEASON]:F2}");
@@ -226,7 +226,7 @@ public static class Headless
         o.AppendLine($"slot shortages (births or matings refused because the world was full): {T.SlotShortage}");
         o.AppendLine($"steps on which the world was full: {T.FullSteps:N0} of {sim.W.Step:N0}");
         if (T.FullSteps > 0.01 * Math.Max(1UL, sim.W.Step))
-            o.AppendLine("WARNING: the slot cap, not food, limited this world on more than 1% of steps: selection was distorted");
+            o.AppendLine("INVALID: the slot cap, not food, limited this world on more than 1% of steps, so the cap chose who was born. Give it more slots or a smaller map.");
         return o.ToString();
     }
 

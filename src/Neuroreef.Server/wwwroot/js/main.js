@@ -193,6 +193,8 @@ function count(k) { return world.perceived.filter((p) => p.kind === k).length; }
 // ------------------------------------------------------------------ top bar and feed
 
 function status(s) {
+  // the world after a prehistory can be on another map (a valley): start the console afresh on it
+  if (s.mapSide && meta && s.mapSide !== meta.world) { location.reload(); return; }
   if (s.phase !== phase) enterPhase(s.phase);
   if (s.phaseVersion !== phaseVersion) {
     // another simulation is on view (a branch, or the world after the prehistory): drop what we drew

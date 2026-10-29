@@ -22,7 +22,7 @@ public class EngineeringTests
             Mix(w.X[i]); Mix(w.Y[i]); Mix(w.Energy[i]); Mix(w.Heading[i]); h ^= w.Serial[i]; h *= 1099511628211UL;
             Mix(w.W2f[(long)i * G.W2N + 7]);
         }
-        for (int c = 0; c < K.FW * K.FW; c += 7) { Mix(w.Pool[0][c]); Mix(w.Nutrient[c]); }
+        for (int c = 0; c < Map.FW * Map.FW; c += 7) { Mix(w.Pool[0][c]); Mix(w.Nutrient[c]); }
         return h;
     }
 

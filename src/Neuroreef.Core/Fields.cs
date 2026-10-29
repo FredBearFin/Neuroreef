@@ -11,13 +11,13 @@ public static class Fields
 {
     public static void Row(World w, int y)
     {
-        int FW = K.FW;
+        int FW = Map.FW;
         var Pl = w.Pool;
         float[] G = Pl[(int)Pool.Grass], GN = w.GrassN;
         float[] Br = Pl[(int)Pool.Browse], Fr = Pl[(int)Pool.Fruit], Sd = Pl[(int)Pool.Seed], Nc = Pl[(int)Pool.Nectar], Rt = Pl[(int)Pool.Root];
         float[] Al = Pl[(int)Pool.Algae], Ph = Pl[(int)Pool.Phyto];
         float[] Ca = Pl[(int)Pool.Carrion], Du = Pl[(int)Pool.Dung], Li = Pl[(int)Pool.Litter], Wo = Pl[(int)Pool.Wood], De = Pl[(int)Pool.Detritus];
-        float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % K.T_SEASON) / K.T_SEASON - 2f * MathF.PI * y / FW);
+        float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / FW);
         int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW, row = y * FW;
         for (int x = 0; x < FW; x++)
         {
@@ -43,8 +43,8 @@ public static class Fields
             {
                 // water producers (DESIGN §10.3)
                 float lim = N / (N + K.K_N);
-                float ga = (w.Cell[i] == (byte)Realm.Shallow) ? K.R_A * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim : 0f;
-                float gp = K.R_PH * lim * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
+                float ga = (w.Cell[i] == (byte)Realm.Shallow) ? K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim : 0f;
+                float gp = K.R_PH * Nature.Plants * lim * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
                 float da = K.M_A * Al[i], dp = K.M_PH * Ph[i];
                 Al[i] = Math.Clamp(Al[i] + ga - da, 0f, 1f);
                 Ph[i] = Math.Clamp(Ph[i] + gp - dp, 0f, 1f);
@@ -56,7 +56,7 @@ public static class Fields
             }
 
             // land producers (DESIGN §10.2)
-            float W = Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * season) * (1f + w.RainAnom), 0f, 1f);
+            float W = Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom), 0f, 1f);
             w.Moisture[i] = W;
             float nut = N / (N + K.K_N);
             float grow = W * nut;
@@ -68,14 +68,14 @@ public static class Fields
             float free = MathF.Max(0f, 1f - g - s - t);
             float gbar = 0.25f * (G[xl] + G[xr] + G[up] + G[dn]);
             float tbar = 0.25f * (w.Tree[xl] + w.Tree[xr] + w.Tree[up] + w.Tree[dn]);
-            float dG = K.R_G * grow * lightG * (g + K.S_G * Sd[i] + K.G_RAIN + K.SIGMA_G * MathF.Max(0f, gbar - g)) * free;
-            float dS = K.R_S * growS * lightS * (s + K.S_S * g) * MathF.Max(0f, 1f - s - t);   // shrubs overtop grass
+            float dG = K.R_G * Nature.Plants * grow * lightG * (g + K.S_G * Sd[i] + K.G_RAIN + K.SIGMA_G * MathF.Max(0f, gbar - g)) * free;
+            float dS = K.R_S * Nature.Plants * growS * lightS * (s + K.S_S * g) * MathF.Max(0f, 1f - s - t);   // shrubs overtop grass
             // saplings: seed from nearby trees and, rarely, from far away by wind; grass roots take their water
             float seedSrc = (tbar + t) * (0.2f + s) + K.WIND_SEED / K.R_P * w.TreeMean;
-            float dP = K.R_P * growT * (1f - K.GRASS_COMP * g) * seedSrc * MathF.Max(0f, 1f - p - t) - K.M_P * p;
+            float dP = K.R_P * Nature.Plants * growT * (1f - K.GRASS_COMP * g) * seedSrc * MathF.Max(0f, 1f - p - t) - K.M_P * p;
             float mature = K.M_P * p * (1f - t);
             float drought = 1f + K.DROUGHT_T * MathF.Max(0f, K.W_TREE - W) / K.W_TREE;
-            float dT = mature + K.R_T * growT * t * (1f - t) - K.D_T * drought * t;
+            float dT = mature + K.R_T * Nature.Plants * growT * t * (1f - t) - K.D_T * drought * t;
             float shadeG = K.SH_G * t * g, shadeS = K.SH_S * t * s;
             float gn = Math.Clamp(g + dG - shadeG - K.C_LIT * g, 0f, 1f);
             float sn = Math.Clamp(s + dS - shadeS - K.C_LIT * 0.5f * s, 0f, 1f);
@@ -92,13 +92,13 @@ public static class Fields
             // food pools produced by the vegetation
             float wetS = MathF.Max(season, 0f), dry = MathF.Max(-season, 0f), poll = w.Poll[i];
             float bcap = s + K.B_TREE * t;
-            Br[i] = MathF.Max(0f, Br[i] + K.R_B * grow * (bcap - Br[i]));
-            float fr = K.R_F * t * wetS * (1f + poll) * grow;
+            Br[i] = MathF.Max(0f, Br[i] + K.R_B * Nature.Plants * grow * (bcap - Br[i]));
+            float fr = K.R_F * Nature.Plants * t * wetS * (1f + poll) * grow;
             Fr[i] += fr - K.D_F * Fr[i]; Li[i] += K.D_F * Fr[i];
-            float sd = K.R_SD * (g + 0.5f * t) * dry * (1f + poll) * (0.3f + grow);
+            float sd = K.R_SD * Nature.Plants * (g + 0.5f * t) * dry * (1f + poll) * (0.3f + grow);
             Sd[i] = MathF.Max(0f, Sd[i] + sd - K.D_SD * Sd[i]);
-            Nc[i] = MathF.Max(0f, Nc[i] + K.R_NC * (0.5f * g + s) * wetS * grow - K.D_NC * Nc[i]);
-            Rt[i] = Math.Clamp(Rt[i] + K.R_R * (g + s) * grow * (1f - Rt[i]), 0f, 1f);
+            Nc[i] = MathF.Max(0f, Nc[i] + K.R_NC * Nature.Plants * (0.5f * g + s) * wetS * grow - K.D_NC * Nc[i]);
+            Rt[i] = Math.Clamp(Rt[i] + K.R_R * Nature.Plants * (g + s) * grow * (1f - Rt[i]), 0f, 1f);
 
             Nn -= (MathF.Max(0f, dG) + MathF.Max(0f, dS) + MathF.Max(0f, dT) + fr + sd) * K.C_NUTUSE;
             w.NutrientN[i] = Math.Clamp(Nn, 0f, K.N_MAX);
@@ -129,7 +129,7 @@ public static class Fields
     /// <summary>FIRE phase (DESIGN §10.5). Serial; reads Fire, writes FireN, then swaps.</summary>
     public static void Fire(World w)
     {
-        int FW = K.FW, n = FW * FW;
+        int FW = Map.FW, n = FW * FW;
         uint seed = w.Seed, step = (uint)w.Step;
         var Pl = w.Pool;
         float[] F0 = w.Fire, F1 = w.FireN;
@@ -159,7 +159,7 @@ public static class Fields
             }
             if (fuel < K.FUEL_MIN) continue;
             float dryness = 1f - w.Moisture[i];
-            if (Rng.U(seed, step, (uint)i, Rs.Fire) < K.LAMBDA_FIRE * fuel * dryness * dryness) Ignite(w, i, F1);
+            if (Rng.U(seed, step, (uint)i, Rs.Fire) < K.LAMBDA_FIRE * Nature.Fire * (9000f / Nature.SeasonLength) * fuel * dryness * dryness) Ignite(w, i, F1);
         }
         w.FireSwap();
     }

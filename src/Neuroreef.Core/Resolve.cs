@@ -54,7 +54,7 @@ public static class Resolve
         if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < K.FIRE_KILL) { Die(w, i, Cause.Fire, -1); return; }
 
         // ---- 2. drink
-        if ((acts & BIT_DRINK) != 0 && w.DistWater[cell] <= 1.5f)
+        if ((acts & BIT_DRINK) != 0 && w.DistDrink[cell] <= 1.5f)
         {
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
@@ -62,7 +62,10 @@ public static class Resolve
 
         // ---- 3. eat (DESIGN §9.3)
         float gutCap = w.PGut[i] * mf;
-        if ((acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
+        // eating another organism is attacking it (DESIGN §9.3, Revision K): the same strike, chosen by hunger
+        bool preyEat = (acts & BIT_EAT) != 0 && w.IEatPrey[i] != 0 && (acts & BIT_STRIKE) == 0 && w.PStrike[i] > 0;
+        if (preyEat) acts |= BIT_STRIKE;
+        if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
         {
             int best = -1; float bv = 0;
             for (int p = 0; p < Pools.NFIELD; p++)
@@ -81,7 +84,7 @@ public static class Resolve
                     if (best == (int)Pool.Browse) w.Sapling[cell] = MathF.Max(0, w.Sapling[cell] - 0.5f * bite);
                     else if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
-                    r += Ingest(w, i, best, bite, diet[best], emax);
+                    r += Ingest(w, i, best, bite, diet[best], emax, cell);
                 }
             }
         }
@@ -156,7 +159,7 @@ public static class Resolve
         if (w.Energy[i] > emax) w.Energy[i] = emax;
 
         // an organism dries out on land, less on moist ground; in water it does not (DESIGN §9.4)
-        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
+        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * Nature.Thirst * w.PThirstK[i] * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
         w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
@@ -178,13 +181,24 @@ public static class Resolve
     }
 
     /// <summary>Put food into the gut. Returns the reward for it (taste of energy).</summary>
-    static float Ingest(World w, int i, int pool, float mass, float eff, float emax)
+    // water in each food, per unit eaten, when fully moist (DESIGN §9.4, Revision K, ecology review): live plants hold
+    // less as the soil dries (green grass ~75% water, dry-season grass ~10%), prey and fruit are wet, seed and wood dry
+    static readonly float[] FoodWater = { 0.75f, 0.65f, 0.85f, 0.1f, 0.8f, 0.6f, 0.8f, 0.8f, 0.5f, 0.3f, 0.1f, 0.1f, 0.5f, 0.7f, 0.8f };
+    static bool LivePlant(int p) => p <= (int)Pool.Root;
+
+    /// <summary>Eat mass of a pool: energy, water from the food and from digesting it, and the reward for both.</summary>
+    public static float Ingest(World w, int i, int pool, float mass, float eff, float emax, int cell)
     {
         float e = mass * Pools.Rho[pool] * eff;
+        // water from food and from digesting it (metabolic water: how seed-eating desert rodents live without drinking)
+        float content = FoodWater[pool] * (LivePlant(pool) ? MathF.Min(1f, w.Moisture[cell] * 1.4f) : 1f);
+        float wet = K.K_FOODWATER * (mass * content + K.MET_WATER * e / K.RHO_MEAT) / MathF.Max(w.MassOf(i), 1e-3f);
+        float rel = MathF.Min(w.Thirst[i], wet);
+        w.Thirst[i] -= rel;
         w.Gut[i] += mass; w.GutEnergy[i] += e; w.GutWaste[i] += mass * (1f - eff);
         if (pool == (int)Pool.Fruit || pool == (int)Pool.Seed) w.GutSeedy[i] += mass * (1f - eff);
         w.T.Intake[w.Spc[i] * Pools.N + pool] += e;
-        return K.R_INTAKE * e / emax;
+        return K.R_INTAKE * e / emax + K.R_DRINK * rel;
     }
 
     static float Strike(World w, int a, int v, float gutCap, float emax)
@@ -217,7 +231,8 @@ public static class Resolve
             return rew;
         }
         float space = MathF.Max(0f, gutCap - w.Gut[a]);
-        if (w.PParasite[a] == 0)
+        bool drainHit = w.PDrain[a] > 0f && Rng.U(seed, step, (uint)a, Rs.Strike + 5u) < w.PDrain[a];
+        if (!drainHit)
         {
             // a hit wounds in proportion to the weapon's force; the victim dies when its reserve runs out
             float dmg = K.C_DAMAGE * power;
@@ -228,21 +243,21 @@ public static class Resolve
         }
         w.T.Kills[w.Spc[a]]++;
         float ev = MathF.Max(0f, w.Energy[v]);
-        if (w.PParasite[a] != 0)
+        if (drainHit)
         {
             float drain = MathF.Min(K.C_DRAIN * MathK.Pow(w.PM[a], K.EXP_BASAL), ev);
             w.Energy[v] -= drain;
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + 0.3f);
             w.PendingR[v] -= K.R_PAIN * drain / MathF.Max(w.EmaxOf(v), 1e-3f);
             float m = MathF.Min(space, drain / K.RHO_BLOOD);
-            if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax);
+            if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell);
             if (w.Energy[v] <= 0) { w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
             return rew;
         }
         // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
         float carcass = K.C_CARC * w.MassOf(v) + ev / K.RHO_MEAT;
         float eat = MathF.Min(space, carcass);
-        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax); carcass -= eat; }
+        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; }
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
         DieNoBody(w, v, Cause.Killed, w.Spc[a]);
         w.Pool[water ? (int)Pool.Detritus : (int)Pool.Carrion][cell] += carcass;

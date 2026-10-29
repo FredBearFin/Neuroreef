@@ -63,11 +63,15 @@ public static class Program
             // Evolve.bat / LongRun.bat: a NEW prehistory gets the setup page too (a resumed one keeps its sizes)
             bool resuming = o.CheckpointPath != null && File.Exists(o.CheckpointPath);
             if (!resuming && !o.NoSetup) Setup.Run(o);
+            if (!resuming) o.ApplyNature(prehistory: true);   // a resumed one takes its map and nature from its checkpoint
             return Headless.Evolve(o);
         }
-        if (o.Headless) return Headless.Run(o, bank);
+        if (o.Headless) { o.ApplyNature(prehistory: false); return Headless.Run(o, bank); }
         // a new prehistory: let the person choose its size first, so nothing is allocated that the machine cannot hold
-        if (bank == null && !o.RandomBrains && !o.ResumePrehistory && !o.NoSetup && !o.SetupDone) Setup.Run(o);
+        bool newPrehistory = bank == null && !o.RandomBrains && !o.ResumePrehistory;
+        if (newPrehistory && !o.NoSetup && !o.SetupDone) Setup.Run(o);
+        if (!o.ResumePrehistory) o.ApplyNature(prehistory: newPrehistory);   // a resumed one already took its own
+        Console.WriteLine("nature: " + Nature.Describe());
         return Host.Run(o, bank);
     }
 

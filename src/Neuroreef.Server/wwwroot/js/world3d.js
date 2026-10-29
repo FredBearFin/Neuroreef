@@ -139,7 +139,7 @@ export class World3D {
     const fw = w.fw, N = this.N, C = this.tColor, WC = this.wColor;
     const d = f ? f.d : 0, L = f ? (n) => f.data.subarray(this._layer(n) * d * d, (this._layer(n) + 1) * d * d) : null;
     const grass = f && L('grass'), shrub = f && L('shrub'), tree = f && L('tree'), fire = f && L('fire'), moist = f && L('moisture'),
-          carrion = f && L('carrion'), algae = f && L('algae'), phyto = f && L('phyto'), nectar = f && L('nectar');
+          carrion = f && L('carrion'), algae = f && L('algae'), phyto = f && L('phyto'), nectar = f && L('nectar'), pond = f && L('pond');
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const cx = x % fw, cy = y % fw, i = cy * fw + cx, k = y * N + x;
       const fi = f ? (cy >> 1) * d + (cx >> 1) : 0;
@@ -158,6 +158,7 @@ export class World3D {
         r += (0.10 - r) * T * 0.85; g += (0.26 - g) * T * 0.85; b += (0.12 - b) * T * 0.85;
         const nc = nectar[fi] / 255; r += nc * 0.25; b += nc * 0.18;          // flowers
         const ca = carrion[fi] / 255; r += (0.35 - r) * ca * 0.5; g *= 1 - ca * 0.4; b *= 1 - ca * 0.4;
+        if (pond && pond[fi]) { const p = pond[fi] / 255; r += (0.16 - r) * p; g += (0.34 - g) * p; b += (0.46 - b) * p; }   // a seasonal pond
         if (fire[fi]) { r = 1.0; g = 0.42; b = 0.08; }
       }
       C[k * 3] = r; C[k * 3 + 1] = g; C[k * 3 + 2] = b;

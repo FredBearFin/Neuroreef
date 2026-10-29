@@ -166,13 +166,16 @@ public static class Host
     sealed class Shared
     {
         public readonly SimHost H;
-        public readonly string MetaJson;
-        public readonly byte[] World;
+        // the metadata and the terrain frame, rebuilt when the map changes (the world after a prehistory may be smaller)
+        string _meta; byte[] _world; int _mapW;
+        void Fresh() { if (_mapW != Map.W) lock (_lock) if (_mapW != Map.W) { _meta = Wire.Meta(H); _world = Wire.EncodeWorld(H.W); _mapW = Map.W; } }
+        public string MetaJson { get { Fresh(); return _meta; } }
+        public byte[] World { get { Fresh(); return _world; } }
         readonly object _lock = new();
         byte[]? _tele; int _teleHead = -1;
         string _explain = "[]"; string _prints = "[]"; DateTime _explainT;
 
-        public Shared(SimHost h) { H = h; MetaJson = Wire.Meta(h); World = Wire.EncodeWorld(h.W); _extinctAt = new long[h.W.NS]; Array.Fill(_extinctAt, -1L); }
+        public Shared(SimHost h) { H = h; _meta = Wire.Meta(h); _world = Wire.EncodeWorld(h.W); _mapW = Map.W; _extinctAt = new long[h.W.NS]; Array.Fill(_extinctAt, -1L); }
 
         // the step at which each species was first seen with no living member (no adults, juveniles, eggs or embryos)
         readonly long[] _extinctAt;
@@ -380,7 +383,7 @@ public static class Host
                         type = "status", step = w.Step, rate = h.Rate, measured = h.MeasuredRate, paused = h.Paused, alive = w.AliveCount,
                         free = w.FreeTop, capacity = w.Cap, bankSource = h.BankSource, extinct = _s.Extinct(),
                         slotShortage = w.T.SlotShortage, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
-                        season = w.SeasonAt(K.WORLD * 0.5f), rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
+                        season = w.SeasonAt(Map.W * 0.5f), mapSide = Map.W, rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                     }), ct);
                 }

@@ -17,7 +17,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 1;
+    public const ushort Version = 3;   // 2: the map size and nature settings follow the header; 3: ponds, water in food, water-economy gene
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     // classes whose state is saved by walking their fields; any other reference field is not state (links, buffers rebuilt each step)
@@ -45,7 +45,7 @@ public static class Checkpoint
         using (var bw = new BinaryWriter(fs))
         {
             bw.Write("NRCK"u8.ToArray()); bw.Write(Version);
-            bw.Write(G.LEN); bw.Write(pre.B.Length); bw.Write(pre.B[0].W.Cap); bw.Write(pre.B[0].W.Seed);
+            bw.Write(G.LEN); bw.Write(pre.B.Length); bw.Write(pre.B[0].W.Cap); bw.Write(pre.B[0].W.Seed); Nature.Write(bw);
             foreach (var s in pre.B) Write(bw, s.W);
             fs.Flush(true);
         }
@@ -62,7 +62,9 @@ public static class Checkpoint
         if (br.ReadUInt16() != Version) throw new InvalidDataException("checkpoint from another version of the program");
         int len = br.ReadInt32();
         if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
-        return (br.ReadInt32(), br.ReadInt32(), br.ReadUInt32());
+        var h = (br.ReadInt32(), br.ReadInt32(), br.ReadUInt32());
+        Nature.Read(br);   // the map and nature it was made with: applied, so the prehistory is rebuilt to fit
+        return h;
     }
 
     /// <summary>Restore a prehistory built with the same branches, capacity and seed. Throws if the checkpoint does not fit.</summary>
@@ -74,6 +76,9 @@ public static class Checkpoint
         if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'C' || magic[3] != 'K') throw new InvalidDataException("not a prehistory checkpoint");
         if (br.ReadUInt16() != Version) throw new InvalidDataException("checkpoint from another version of the program");
         int len = br.ReadInt32(), n = br.ReadInt32(), cap = br.ReadInt32(); uint seed = br.ReadUInt32();
+        int side = br.ReadInt32(); br.BaseStream.Seek(-4, SeekOrigin.Current);
+        if (side != Map.W) throw new InvalidDataException($"checkpoint map is {side} units, this run's is {Map.W}");
+        Nature.Read(br);
         if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
         if (n != pre.B.Length || cap != pre.B[0].W.Cap || seed != pre.B[0].W.Seed)
             throw new InvalidDataException($"checkpoint has {n} branches, {cap} slots, seed {seed}; start with the same --branches and --seed");
@@ -90,7 +95,7 @@ public static class Checkpoint
         using (var bw = new BinaryWriter(fs))
         {
             bw.Write("NRWK"u8.ToArray()); bw.Write(Version);
-            bw.Write(G.LEN); bw.Write(w.Cap); bw.Write(w.Seed); bw.Write(w.TerrainSeed);
+            bw.Write(G.LEN); bw.Write(w.Cap); bw.Write(w.Seed); bw.Write(w.TerrainSeed); Nature.Write(bw);
             Write(bw, w);
             fs.Flush(true);
         }
@@ -107,7 +112,9 @@ public static class Checkpoint
         if (br.ReadUInt16() != Version) throw new InvalidDataException("saved world from another version of the program");
         int len = br.ReadInt32();
         if (len != G.LEN) throw new InvalidDataException($"saved world genome length {len}, this program uses {G.LEN} (the rules changed)");
-        return (br.ReadInt32(), br.ReadUInt32(), br.ReadUInt32());
+        var h = (br.ReadInt32(), br.ReadUInt32(), br.ReadUInt32());
+        Nature.Read(br);   // the map and nature it was made with: applied, so the world is rebuilt to fit
+        return h;
     }
 
     public static void LoadWorld(World w, string path)
@@ -117,6 +124,7 @@ public static class Checkpoint
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
         using var br = new BinaryReader(fs);
         br.ReadBytes(4); br.ReadUInt16(); br.ReadInt32(); br.ReadInt32(); br.ReadUInt32(); br.ReadUInt32();
+        Nature.Read(br);
         Read(br, w);
     }
 

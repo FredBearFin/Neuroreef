@@ -17,9 +17,9 @@ namespace Neuroreef;
 public static class Reflex
 {
     public const int HUNGRY_FOOD = 0, HUNGRY = 1, THIRSTY = 2, THIRSTY_AT_WATER = 3, TIRED_SAFE = 4, DANGER = 5, LOST = 6,
-        READY_MATE = 7, HUNGRY_PREY = 8, READY_ALONE = 9;
+        READY_MATE = 7, HUNGRY_PREY = 8, READY_ALONE = 9, READY_ANY = 10;
     public static readonly string[] Names = { "hungry and food here", "hungry", "thirsty", "thirsty and at water", "tired and safe",
-        "armed larger meat-eater near", "young and far from mother", "ready and a mate near", "hungry and weak prey near", "ready and no mate near" };
+        "armed larger meat-eater near", "young and far from mother", "ready and a mate near", "hungry and weak prey near", "ready and no mate near", "ready to breed" };
 
     /// <summary>The starter kit: (input, primitive) pairs set to KIT_W in every founder.</summary>
     public static readonly (int c, int p)[] Kit =
@@ -30,6 +30,7 @@ public static class Reflex
         (DANGER, P.FLEE_1), (DANGER, P.FLEE_2),                        // flee an armed, larger meat-eater
         (LOST, P.FOLLOW_MOTHER),                                      // a young animal follows its mother
         (READY_MATE, P.MATE), (READY_ALONE, P.SEEK_MATE),            // mate when ready and a partner is near; else look for one
+        (READY_ANY, P.LAY),                                           // breed alone when ready (does nothing for a sexual organism)
     };
 
     /// <summary>The reflex inputs from the features.</summary>
@@ -44,6 +45,7 @@ public static class Reflex
         c[LOST] = f[F.JUVENILE] * f[F.MOTHER_FAR];
         c[READY_MATE] = drive * f[F.READY] * f[F.MATE_CLOSE];
         c[READY_ALONE] = drive * f[F.READY] * (1f - f[F.MATE_CLOSE]);
+        c[READY_ANY] = drive * f[F.READY];   // the same drive for cloners as for maters (ecology review)
         c[HUNGRY_PREY] = f[F.HUNGER] * f[F.O1_CLOSE] * f[F.O1_WEAK];
     }
 

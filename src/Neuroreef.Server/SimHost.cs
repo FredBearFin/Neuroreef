@@ -37,11 +37,23 @@ public sealed class SimHost : IDisposable
     public string BankSource { get; private set; }
     public string? BankPath { get; private set; }
     public int PhaseVersion;                 // increments when the viewed simulation changes (phase or branch)
-    public bool IsPrehistory => _live == null;
+    public bool IsPrehistory => _live == null && Pre != null;
     public string Phase => IsPrehistory ? "prehistory" : "live";
 
     /// <summary>The simulation the console shows: the live world, or the viewed prehistory branch.</summary>
-    public Simulation Sim => _live ?? Pre!.B[Math.Clamp(ViewBranch, 0, Pre.B.Length - 1)];
+    public Simulation Sim
+    {
+        get
+        {
+            // while the prehistory turns into the world (both briefly absent), readers wait for the world
+            for (int t = 0; ; t++)
+            {
+                var live = _live; if (live != null) return live;
+                var pre = Pre; if (pre != null) return pre.B[Math.Clamp(ViewBranch, 0, pre.B.Length - 1)];
+                Thread.Sleep(10);
+            }
+        }
+    }
     public World W => Sim.W;
 
     // ---- frames (latest wins)
@@ -133,7 +145,8 @@ public sealed class SimHost : IDisposable
     public void SetPaused(bool p) { Paused = p; if (Pre != null) Pre.Paused = p; }
 
     /// <summary>The console's speed (steps per second, 0 = as fast as possible), for the world and the prehistory alike.</summary>
-    public void SetRate(float r) { Rate = r; var pre = Pre; if (pre != null) pre.RateLimit = r; }
+    bool _rateChosen;   // the console set a speed (kept when the world begins)
+    public void SetRate(float r) { Rate = r; _rateChosen = true; var pre = Pre; if (pre != null) pre.RateLimit = r; }
 
     public void View(int branch)
     {
@@ -189,6 +202,7 @@ public sealed class SimHost : IDisposable
     {
         var pre = Pre!;
         pre.StopAndWait();
+        if (!_rateChosen) Rate = _o.Rate;   // the prehistory ran flat out; the world runs at the speed chosen in setup
         Console.WriteLine($"prehistory ended at step {pre.Step:N0} ({pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000:N0} million symbolic years)");
         // every branch is kept: its brains (branch-N.nrbank) and its data (exports/prehistory-branch-N)
         for (int b = 0; b < pre.B.Length; b++)
@@ -204,12 +218,14 @@ public sealed class SimHost : IDisposable
         string path = _o.SaveBank ?? Path.Combine(AppContext.BaseDirectory, "evolved.nrbank");
         try { GeneBank.Save(pre.B[chosen].W, path); BankPath = path; Console.WriteLine("evolved brains saved: " + path + " (the next start uses them)"); }
         catch (Exception e) { Console.Error.WriteLine("could not save the evolved brains: " + e.Message); }
-        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed);
         // the prehistory is over: its state is kept, but the next start will not resume it
         if (pre.CheckpointPath != null && File.Exists(pre.CheckpointPath))
             try { File.Move(pre.CheckpointPath, pre.CheckpointPath + ".done", overwrite: true); } catch (Exception e) { Console.Error.WriteLine(e.Message); }
-        pre.Dispose();
+        // the world gets its own map (a valley after a big prehistory): free the branches first, then build it
         Pre = null;
+        pre.Dispose();
+        if (Map.W != Nature.WorldMap) { Map.Set(Nature.WorldMap); Console.WriteLine($"the world is a {Map.Name} ({Map.W} units)"); }
+        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed);
         _live = live;
         BankSource = "prehistory";
         Paused = false;

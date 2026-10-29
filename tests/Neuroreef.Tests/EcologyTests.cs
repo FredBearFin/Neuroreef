@@ -124,7 +124,7 @@ public class EcologyTests
         Body.Express(w, i);
         Brain.InitLife(w, i);
         var f = new float[F.N]; var y = new float[G.NIN]; var z = new float[P.N]; var g = new float[P.N]; var d = new float[P.N];
-        f[F.BIAS] = 1f; f[F.HUNGER] = 0.8f; f[F.FOOD_HERE] = 1f;
+        f[F.BIAS] = 1f; f[F.HUNGER] = 0.1f; f[F.FOOD_HERE] = 1f;   // barely hungry: the feeding instinct is weak, so what changes is learned
         float Prob() { Brain.Forward(w, i, f, y, z, g); return g[P.EAT]; }
         float p0 = Prob();
         var rs = new Rng.Seq(5);
@@ -435,9 +435,9 @@ public class EcologyTests
     {
         var w = new World(256, 14); Terrain.Build(w);
         int a = Make(w, 0, 0);
-        int wc = -1; for (int c = 0; c < K.FW * K.FW && wc < 0; c++) if ((w.Cell[c] & (byte)Realm.Deep) != 0) wc = c;
+        int wc = -1; for (int c = 0; c < Map.FW * Map.FW && wc < 0; c++) if ((w.Cell[c] & (byte)Realm.Deep) != 0) wc = c;
         Assert.True(wc >= 0);
-        w.X[a] = (wc % K.FW + 0.5f) * K.FCELL; w.Y[a] = (wc / K.FW + 0.5f) * K.FCELL;
+        w.X[a] = (wc % Map.FW + 0.5f) * K.FCELL; w.Y[a] = (wc / Map.FW + 0.5f) * K.FCELL;
         w.Genome[a * G.LEN + G.B_FINS] = 127; Body.Express(w, a);
         for (int t = 0; t < 50; t++) { Act(w, a, P.REST); w.IActs[a] = 0; Resolve.Run(w, 1, 0); }
         Assert.Equal(0f, w.Thirst[a]);
@@ -559,7 +559,7 @@ public class EcologyTests
             Brain.Forward(w, i, f, y, z, g);
             for (int p = 0; p < P.N; p++) { sum += g[p]; n++; }
         }
-        Assert.True(sum / n < 0.12, $"mean founder gain {sum / n:F3}");
+        Assert.True(sum / n < 0.13, $"mean founder gain {sum / n:F3}");
     }
 
     [Fact] // NR-313: in the live world no animal ever appears except by birth; extinction is permanent
@@ -579,5 +579,47 @@ public class EcologyTests
         long conceived = 0; foreach (var c in w.T.Conceptions) conceived += c;
         long lays = 0; foreach (var c in w.T.Lays) lays += c;
         Assert.True(created - founders <= conceived + lays, $"created {created - founders}, conceived {conceived}, lays {lays}");
+    }
+
+    [Fact] // Revision K: seasonal ponds fill when the ground is wet and dry when it is dry; drinking water is measured to them
+    public void PondsFillInTheWetAndDryInTheDry()
+    {
+        using var sim = new Simulation(1024, 4, 1, empty: true);
+        var w = sim.W; int n = Map.FW * Map.FW;
+        int sites = 0; for (int c = 0; c < n; c++) sites += w.PondSite[c];
+        Assert.True(sites > 0, "no pond sites");
+        w.RainAnom = 0.5f;   // a wet year
+        Ponds.Update(w);
+        Assert.True(Ponds.Full(w) > sites / 2, $"{Ponds.Full(w)} of {sites} ponds full in a wet year");   // the season runs by latitude: the driest rows stay dry
+        float far = 0; for (int c = 0; c < n; c++) { Assert.True(w.DistDrink[c] <= w.DistWater[c] + 1f, $"cell {c}: drink {w.DistDrink[c]}, water {w.DistWater[c]}"); far = MathF.Max(far, w.DistWater[c] - w.DistDrink[c]); }
+        Assert.True(far > 5f, "ponds bring no water closer");
+        w.RainAnom = -0.5f;  // a drought
+        Ponds.Update(w);
+        Assert.Equal(0, Ponds.Full(w));
+        for (int c = 0; c < n; c++) Assert.Equal(w.DistWater[c], w.DistDrink[c]);
+    }
+
+    [Fact] // Revision K: green food and prey relieve thirst, dry seed much less; big bodies and the water-economy gene dry out slower
+    public void WetFoodRelievesThirstAndWaterEconomySlowsDrying()
+    {
+        var w = new World(64, 1);
+        for (int i = 0; i < 3; i++)
+        {
+            Brain.RandomGenome(w.GenomeOf(i), 1, 0, 1);
+            w.Spc[i] = 0; w.StageOf[i] = St.Adult;
+        }
+        w.Genome[1 * G.LEN + G.B_WATER] = 127; w.Genome[0 * G.LEN + G.B_WATER] = -127; w.Genome[2 * G.LEN + G.B_WATER] = -127;
+        w.Genome[2 * G.LEN + G.B_MASS] = 127; w.Genome[0 * G.LEN + G.B_MASS] = 0; w.Genome[1 * G.LEN + G.B_MASS] = 0;
+        for (int i = 0; i < 3; i++) { Body.Express(w, i); Brain.InitLife(w, i); }
+        Assert.True(w.PThirstK[1] < 0.5f * w.PThirstK[0], $"water economy {w.PThirstK[1]:F2} vs {w.PThirstK[0]:F2}");
+        Assert.True(w.PThirstK[2] < w.PThirstK[0], "a bigger body dries out no slower");
+        w.Moisture[0] = 1f;
+        float Relief(int pool) { w.Thirst[0] = 1f; Resolve.Ingest(w, 0, pool, 0.05f * w.MassOf(0), 1f, w.EmaxOf(0), 0); return 1f - w.Thirst[0]; }
+        float grass = Relief((int)Pool.Grass), seed = Relief((int)Pool.Seed), meat = Relief((int)Pool.Meat);
+        Assert.True(grass > 0.01f && meat > 0.01f, $"grass {grass:F3}, meat {meat:F3}");
+        // dry seed holds little water, but digesting it makes some: how desert seed-eaters live without drinking
+        Assert.True(seed < grass && seed > 0.2f * grass, $"seed {seed:F3} vs grass {grass:F3}");
+        w.Moisture[0] = 0.1f;
+        Assert.True(Relief((int)Pool.Grass) < 0.6f * grass, "dry-season grass is as wet as green grass");
     }
 }

@@ -44,7 +44,7 @@ public static class Decide
     }
 
     static int CellAt(int c, int dx, int dy)
-        => World.WrapI(c / K.FW + dy, K.FW) * K.FW + World.WrapI(c % K.FW + dx, K.FW);
+        => World.WrapI(c / Map.FW + dy, Map.FW) * Map.FW + World.WrapI(c % Map.FW + dx, Map.FW);
 
     public static void Run(World w, int i, ProbeBuf probe)
     {
@@ -83,7 +83,7 @@ public static class Decide
         int seen = 0, infNear = 0, strainSrc = -1;
         for (int o = 0; o < nOff && seen < K.MAX_NEIGH; o++)
             {
-                int hc = World.WrapI(hcy + Ring[o].dy, K.GW) * K.GW + World.WrapI(hcx + Ring[o].dx, K.GW);
+                int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
                 int a = w.CellStart[hc], b = w.CellStart[hc + 1];
                 for (int q = a; q < b && seen < K.MAX_NEIGH; q++)
                 {
@@ -152,16 +152,28 @@ public static class Decide
         if (o1.J >= 0) f[F.O1_WEAK] = Weakness(w, o1.J);
         f[F.OTHERS] = MathK.Tanh(otherSum);
 
-        float bestFood = 1e-6f;
+        // hunger is diet-neutral (Revision K): the food an organism senses is whatever its gut digests, plants on the
+        // ground or another organism nearby (worth its tissue at this organism's meat efficiency)
+        float meatEff = diet[(int)Pool.Meat];
+        float bestFood = MathF.Max(1e-6f, meatEff * K.RHO_MEAT);
         for (int p = 0; p < Pools.NFIELD; p++) bestFood = MathF.Max(bestFood, diet[p] * Pools.Rho[p]);
         float fh = FoodValue(w, diet, bestFood, cell);
         float fgx = FoodValue(w, diet, bestFood, CellAt(cell, 2, 0)) - FoodValue(w, diet, bestFood, CellAt(cell, -2, 0));
         float fgy = FoodValue(w, diet, bestFood, CellAt(cell, 0, 2)) - FoodValue(w, diet, bestFood, CellAt(cell, 0, -2));
+        byte eatPrey = 0;
+        if (o1.J >= 0 && meatEff > 0)
+        {
+            float prey = meatEff * K.RHO_MEAT * MathF.Min(1f, w.ApparentMass(o1.J)) / bestFood;   // value of eating it
+            float close = 1f - o1.D / R;
+            fgx += prey * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += prey * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
+            if (o1.J == strike.J && prey > fh) { fh = prey; eatPrey = 1; }                         // in reach and worth more than the plants
+        }
+        w.IEatPrey[i] = eatPrey;
         f[F.FOOD_HERE] = fh;
         f[F.FOOD_GRAD] = MathK.Tanh(MathF.Sqrt(fgx * fgx + fgy * fgy) * 3f);
         bool inWater = (w.Cell[cell] & (byte)Realm.Water) != 0;
         f[F.IN_WATER] = inWater ? 1f : 0f;
-        f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistWater[cell] / 8f);
+        f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / 8f);   // drinkable water: lakes and full ponds
         f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / 8f);
         float fireNear = (w.Fire[cell] > 0 || w.Fire[CellAt(cell, 2, 0)] > 0 || w.Fire[CellAt(cell, -2, 0)] > 0 || w.Fire[CellAt(cell, 0, 2)] > 0 || w.Fire[CellAt(cell, 0, -2)] > 0) ? 1f : 0f;
         f[F.FEAR] = MathF.Min(1f, MathK.Tanh(w.Scent[cell] * 4f) + fireNear);
@@ -232,7 +244,7 @@ public static class Decide
         if (mom >= 0) Add(g[P.FOLLOW_MOTHER], mdx, mdy);
         if (mate.J >= 0) Add(g[P.SEEK_MATE], mate.Dx, mate.Dy);
         Add(g[P.CLIMB_FOOD], fgx, fgy);
-        Add(g[P.SEEK_WATER], w.DistWater[CellAt(cell, -1, 0)] - w.DistWater[CellAt(cell, 1, 0)], w.DistWater[CellAt(cell, 0, -1)] - w.DistWater[CellAt(cell, 0, 1)]);
+        Add(g[P.SEEK_WATER], w.DistDrink[CellAt(cell, -1, 0)] - w.DistDrink[CellAt(cell, 1, 0)], w.DistDrink[CellAt(cell, 0, -1)] - w.DistDrink[CellAt(cell, 0, 1)]);
         Add(g[P.SEEK_LAND], w.DistLand[CellAt(cell, -1, 0)] - w.DistLand[CellAt(cell, 1, 0)], w.DistLand[CellAt(cell, 0, -1)] - w.DistLand[CellAt(cell, 0, 1)]);
         Add(g[P.AVOID_FEAR], w.Scent[CellAt(cell, -1, 0)] - w.Scent[CellAt(cell, 1, 0)], w.Scent[CellAt(cell, 0, -1)] - w.Scent[CellAt(cell, 0, 1)]);
         float wa = hd + (Rng.U(seed, step / 16u, (uint)i, Rs.Wander) - 0.5f) * 2.0f;   // slowly changing direction

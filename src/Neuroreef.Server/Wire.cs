@@ -12,10 +12,10 @@ namespace Neuroreef.Server;
 public static class Wire
 {
     public const byte T_WORLD = 0x01, T_AGENTS = 0x02, T_FIELDS = 0x03, T_TELEMETRY = 0x04, T_HISTORY = 0x05, T_PROBE = 0x06;
-    public const int FD = K.FW / 2;                 // field frame side (2x2 averaged)
+    public static int FD => Map.FW / 2;              // field frame side (2x2 averaged)
     public static readonly string[] FieldLayers =
         { "grass", "shrub", "tree", "browse", "fruit", "seed", "nectar", "root", "carrion", "dung+litter", "wood",
-          "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination" };
+          "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond" };
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -37,10 +37,10 @@ public static class Wire
     /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth.</summary>
     public static byte[] EncodeWorld(World w)
     {
-        int n = K.FW * K.FW;
+        int n = Map.FW * Map.FW;
         var b = new byte[16 + 3 * n];
         Header(b, T_WORLD, w.Step);
-        BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)K.FW);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
         for (int i = 0; i < n; i++)
         {
@@ -57,7 +57,7 @@ public static class Wire
         Header(b, T_FIELDS, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)FD);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(10), (ushort)FieldLayers.Length);
-        int o = 12, FW = K.FW;
+        int o = 12, FW = Map.FW;
         for (int l = 0; l < FieldLayers.Length; l++)
         {
             for (int y = 0; y < FD; y++)
@@ -80,7 +80,7 @@ public static class Wire
             5 => MathF.Min(1, P[(int)Pool.Seed][i] * 4), 6 => MathF.Min(1, P[(int)Pool.Nectar][i] * 8), 7 => P[(int)Pool.Root][i],
             8 => MathF.Tanh(P[(int)Pool.Carrion][i]), 9 => MathF.Tanh(P[(int)Pool.Dung][i] + P[(int)Pool.Litter][i]), 10 => MathF.Tanh(P[(int)Pool.Wood][i]),
             11 => P[(int)Pool.Algae][i], 12 => P[(int)Pool.Phyto][i], 13 => MathF.Tanh(P[(int)Pool.Detritus][i]),
-            14 => w.Fire[i] > 0 ? 1f : 0f, 15 => MathF.Tanh(w.Scent[i] * 4f), 16 => w.Moisture[i], 17 => w.Nutrient[i] / K.N_MAX, 18 => w.Poll[i],
+            14 => w.Fire[i] > 0 ? 1f : 0f, 15 => MathF.Tanh(w.Scent[i] * 4f), 16 => w.Moisture[i], 17 => w.Nutrient[i] / K.N_MAX, 18 => w.Poll[i], 19 => w.Wet[i] == 2 ? 1f : 0f,
             _ => 0f,
         };
     }
@@ -164,7 +164,7 @@ public static class Wire
         var species = Clades(w);
         var o = new
         {
-            type = "meta", version = 1, world = K.WORLD, fw = K.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
+            type = "meta", version = 1, world = Map.W, fw = Map.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
             sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
             fieldLayers = FieldLayers, telemetry = new { names = w.T.Names, offSpecies = w.T.OffSpecies, perSpecies = w.T.PerSpecies, offKill = w.T.OffKill,
                 fields = new { count = Telemetry.S_COUNT, juv = Telemetry.S_JUV, eggs = Telemetry.S_EGGS, gen = Telemetry.S_GEN, energy = Telemetry.S_ENERGY,
@@ -175,7 +175,7 @@ public static class Wire
                     nutLand = Telemetry.G_NUT_LAND, nutWater = Telemetry.G_NUT_WATER, fire = Telemetry.G_FIRE, burning = Telemetry.G_BURNING, alive = Telemetry.G_ALIVE, season = Telemetry.G_SEASON, rain = Telemetry.G_RAIN } },
             probe = new { feat = PR_FEAT, hid = PR_HID, z = PR_Z, gain = PR_GAIN, learn = PR_LEARN, scal = PR_SCAL, scalars = ProbeScalars, phen = PR_PHEN,
                 phenotype = ProbePhenotype, diet = PR_DIET, w1 = PR_W1, w2 = PR_W2, end = PR_END, nh = G.NH, nin = G.NIN },
-            landCells = Enumerable.Range(0, K.FW * K.FW).Count(i => w.Cell[i] == (byte)Realm.Land),
+            landCells = Enumerable.Range(0, Map.FW * Map.FW).Count(i => w.Cell[i] == (byte)Realm.Land),
         };
         return JsonSerializer.Serialize(o);
     }

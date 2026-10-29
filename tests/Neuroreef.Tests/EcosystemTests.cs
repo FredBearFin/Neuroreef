@@ -63,7 +63,7 @@ public class EcosystemTests
         // 300 Drifter founders in groups; half lose the eat-when-hungry-at-food reflex (the allele is that one gene)
         for (int k = 0; k < 300; k++)
         {
-            int c = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 9000u + (uint)k, (k / 8) * 37f % K.WORLD, (k / 8) * 91f % K.WORLD);
+            int c = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 9000u + (uint)k, (k / 8) * 37f % Map.W, (k / 8) * 91f % Map.W);
             if (c < 0) continue;
             // a fixed ordinary grazer body for every founder (the test is about selection, not about a random body's luck):
             // mass 1, walking legs, grass and seeds, sexual live birth, two young of 15% adult mass

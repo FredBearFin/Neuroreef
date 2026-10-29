@@ -38,7 +38,7 @@ public static class Terrain
 
     public static void Build(World w)
     {
-        int FW = K.FW, n = FW * FW;
+        int FW = Map.FW, n = FW * FW;
         var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
         var elevN = Fbm(ref r, 3, 6);
         var moistN = Fbm(ref r, 4, 4);
@@ -56,7 +56,7 @@ public static class Terrain
         // Lake level: the LAKE_SHARE quantile of elevation.
         var sorted = (float[])w.Elev.Clone();
         Array.Sort(sorted);
-        w.SeaLevel = sorted[(int)(K.LAKE_SHARE * n)];
+        w.SeaLevel = sorted[(int)(Nature.Water * n)];
 
         // Rivers: D8 flow accumulation, processed from the highest cell down.
         var idx = new int[n];
@@ -82,13 +82,31 @@ public static class Terrain
         {
             float e = w.Elev[i];
             if (e < w.SeaLevel) w.Depth[i] = w.SeaLevel - e;
-            else if (acc[i] > K.RIVER_ACC) w.Depth[i] = K.SHALLOW * 0.5f;
+            else if (acc[i] > K.RIVER_ACC * (n / 65536f)) w.Depth[i] = K.SHALLOW * 0.5f;
             else w.Depth[i] = 0;
             w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] < K.SHALLOW ? Realm.Shallow : Realm.Deep);
         }
 
         Distance(w.Cell, (byte)Realm.Water, w.DistWater);
         Distance(w.Cell, (byte)Realm.Land, w.DistLand);
+
+        // Pond sites (Revision K, ecology review): land basins, the lowest point in their neighbourhood, away from
+        // standing water; each holds rain in the wet season and dries out in the dry one (Ponds.Update).
+        uint ps = Rng.Hash(w.Seed, 0, 0, Rs.Pond);
+        for (int y = 0; y < FW; y++)
+            for (int x = 0; x < FW; x++)
+            {
+                int i = y * FW + x;
+                if (w.Cell[i] != (byte)Realm.Land || w.DistWater[i] < K.POND_GAP) continue;
+                bool low = true;
+                for (int dy = -K.POND_R; dy <= K.POND_R && low; dy++)
+                    for (int dx = -K.POND_R; dx <= K.POND_R; dx++)
+                        if ((dx != 0 || dy != 0) && w.Elev[World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW)] <= w.Elev[i]) { low = false; break; }
+                if (!low || Rng.U(ps, 0, (uint)i, 0) >= MathF.Min(1f, Nature.Ponds)) continue;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++) w.PondSite[World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW)] = 1;
+            }
+        Ponds.Update(w);
 
         // Moisture base and fertility.
         for (int y = 0; y < FW; y++)
@@ -133,31 +151,37 @@ public static class Terrain
             }
     }
 
-    /// <summary>Multi-source BFS distance (in cells, 8-connected chamfer) on the torus to the nearest cell with any bit of mask.</summary>
-    static void Distance(byte[] cell, byte mask, float[] dist)
+    /// <summary>Multi-source distance (in cells, 8-connected chamfer) on the torus to the nearest cell with any bit of mask.</summary>
+    [ThreadStatic] static int[]? _q;
+    [ThreadStatic] static bool[]? _inQ;
+
+    internal static void Distance(byte[] cell, byte mask, float[] dist)
     {
-        int FW = K.FW, n = FW * FW;
-        var q = new int[n]; int h = 0, t = 0;
+        int FW = Map.FW, n = FW * FW;
+        if (_q == null || _q.Length < n) { _q = new int[n]; _inQ = new bool[n]; }   // reused: ponds remeasure this during the run
+        var q = _q; var inQ = _inQ!; int h = 0, cnt = 0;
         for (int i = 0; i < n; i++)
         {
-            if ((cell[i] & mask) != 0) { dist[i] = 0; q[t++] = i; }
+            inQ[i] = false;
+            if ((cell[i] & mask) != 0) { dist[i] = 0; q[cnt++] = i; inQ[i] = true; }
             else dist[i] = float.MaxValue;
         }
-        // Two passes of relaxation over the BFS order approximate Euclidean distance well enough.
-        while (h < t)
+        // label-correcting search on a ring queue: a cell goes back in the queue whenever its distance improves
+        int t = cnt % n;
+        while (cnt > 0)
         {
-            int i = q[h++]; int x = i % FW, y = i / FW;
+            int i = q[h]; h = (h + 1) % n; cnt--; inQ[i] = false;
+            int x = i % FW, y = i / FW;
             for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                 {
                     if (dx == 0 && dy == 0) continue;
                     int j = World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
                     float nd = dist[i] + ((dx != 0 && dy != 0) ? 1.4142f : 1f);
-                    if (nd < dist[j])
+                    if (nd < dist[j] - 1e-4f)
                     {
-                        bool first = dist[j] == float.MaxValue;
                         dist[j] = nd;
-                        if (first) q[t++] = j;
+                        if (!inQ[j]) { inQ[j] = true; q[t] = j; t = (t + 1) % n; cnt++; }
                     }
                 }
         }

@@ -48,7 +48,7 @@ public sealed class Simulation : IDisposable
         _pool = new Workers(Math.Max(1, threads));
     }
 
-    /// <summary>ANCESTORS_LAND + ANCESTORS_WATER random ancestors, each its own clade, ANCESTOR_COUNT organisms in groups.</summary>
+    /// <summary>AncestorsLand + AncestorsWater random ancestors, each its own clade, ANCESTOR_COUNT organisms in groups.</summary>
     void FoundAncestors(uint seed)
     {
         var w = W;
@@ -57,10 +57,11 @@ public sealed class Simulation : IDisposable
         // big-brained ancestors (the user's experiment): the first of the land ancestors and the first of the
         // water ones, alternating, BigBrains in all; each starts with BigBrainUnits memory units
         int nBig = w.Evo.BigBrains, bigLand = (nBig + 1) / 2, bigWater = nBig / 2;
-        for (int a = 0; a < K.ANCESTORS_LAND + K.ANCESTORS_WATER; a++)
+        int nLand = w.Evo.AncestorsLand, nAll = nLand + w.Evo.AncestorsWater;
+        for (int a = 0; a < nAll; a++)
         {
-            bool land = a < K.ANCESTORS_LAND;
-            bool big = land ? a < bigLand : a - K.ANCESTORS_LAND < bigWater;
+            bool land = a < nLand;
+            bool big = land ? a < bigLand : a - nLand < bigWater;
             int clade = Clades.NewClade(w, -1, a);
             var realm = land ? Realm.Land : Realm.Water;
             float gx = 0, gy = 0;
@@ -92,7 +93,9 @@ public sealed class Simulation : IDisposable
             s.Serial = w.CladeScratch.NextSerial++;
             var src = bank.Genomes[c.Slot];
             if (src.Count == 0) continue;
-            int n = Math.Min(c.Count, K.ANCESTOR_COUNT * 2);
+            // a smaller map holds fewer: founders scale with its area (a valley gets 1/16 of a continent's)
+            float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);
+            int n = Math.Min(c.Count, Math.Max(20, (int)(K.ANCESTOR_COUNT * 2 * area)));
             float gx = 0, gy = 0;
             for (int k = 0; k < n; k++, key++)
             {
@@ -140,10 +143,11 @@ public sealed class Simulation : IDisposable
         Clades.Update(w);
         Lap(3);
         Weather.Update(w);
-        _pool.Run(_fieldsJob, K.FW);
+        _pool.Run(_fieldsJob, Map.FW);
         Fields.Swap(w);
         Lap(4);
         Fields.Fire(w);
+        if (w.Step % K.POND_EVERY == 0) Ponds.Update(w);
         Lap(5);
         w.Step++;
         if (w.Step % K.SAMPLE_EVERY == 0) w.T.Take();
@@ -157,16 +161,16 @@ public sealed class Simulation : IDisposable
     /// <summary>Rebuild the spatial hash of a world (BUILD phase).</summary>
     public static void BuildFor(World w)
     {
-        int n = K.GW * K.GW;
+        int n = Map.GW * Map.GW;
         Array.Clear(w.CellCount);
         for (int i = 0; i < w.Cap; i++)
         {
             byte st = w.StageOf[i];
             if (st == St.Dead || st == St.Embryo) { w.CellOf[i] = -1; continue; }
             int cx = (int)(w.X[i] / K.HCELL), cy = (int)(w.Y[i] / K.HCELL);
-            if ((uint)cx >= K.GW) cx = World.WrapI(cx, K.GW);
-            if ((uint)cy >= K.GW) cy = World.WrapI(cy, K.GW);
-            int c = cy * K.GW + cx;
+            if ((uint)cx >= Map.GW) cx = World.WrapI(cx, Map.GW);
+            if ((uint)cy >= Map.GW) cy = World.WrapI(cy, Map.GW);
+            int c = cy * Map.GW + cx;
             w.CellOf[i] = c; w.CellCount[c]++;
         }
         int acc = 0;

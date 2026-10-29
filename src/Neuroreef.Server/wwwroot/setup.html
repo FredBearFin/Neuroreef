@@ -5,113 +5,175 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Neuroreef setup</title>
 <style>
-  :root { --bg: #0b1622; --panel: #111f2d; --line: #22344a; --fg: #d8e2ec; --dim: #8296aa; --go: #2fbf71; --warn: #ffb347; --bad: #ff5d73; }
+  :root { --bg: #0b1622; --panel: #111f2d; --line: #22344a; --fg: #d8e2ec; --dim: #8296aa; --go: #2fbf71; --warn: #ffb347; --bad: #ff5d73; --acc: #9fd3ff; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 120px; }
   h1 { font-size: 20px; letter-spacing: 0.08em; margin: 0 0 4px; }
-  p.lead { color: var(--dim); margin: 0 0 20px; }
-  .row { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  h2 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--acc); margin: 22px 0 8px; }
+  h2 small { color: var(--dim); text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+  p.lead { color: var(--dim); margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 8px; }
+  .row { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
   .row label { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
-  .row label b { font-variant-numeric: tabular-nums; color: #9fd3ff; }
-  .row .help { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
-  input[type=range] { width: 100%; margin-top: 8px; accent-color: #4aa3ff; }
-  .est { position: sticky; bottom: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
-  .est .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .row label b { font-variant-numeric: tabular-nums; color: var(--acc); white-space: nowrap; }
+  .row .help { color: var(--dim); font-size: 12px; margin-top: 3px; }
+  input[type=range] { width: 100%; margin-top: 6px; accent-color: #4aa3ff; }
+  .est { position: fixed; left: 0; right: 0; bottom: 0; background: #0e1b28ee; border-top: 1px solid var(--line); padding: 10px 16px; }
+  .est .in { max-width: 820px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center; }
+  .est .v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .est .k { color: var(--dim); font-size: 12px; }
   .ok { color: var(--go); } .warn { color: var(--warn); } .bad { color: var(--bad); }
   button { margin-left: auto; background: var(--go); color: #062012; border: 0; border-radius: 6px; padding: 10px 20px; font-weight: 700; font-size: 15px; cursor: pointer; }
   button:disabled { opacity: 0.5; cursor: default; }
-  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .presets a { color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; text-decoration: none; cursor: pointer; }
-  .presets a:hover { background: #16212c; }
-  #msg { width: 100%; color: var(--dim); }
+  .presets a:hover, .presets a.on { background: #16212c; border-color: #4aa3ff; }
+  #msg { width: 100%; color: var(--dim); font-size: 13px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>NEUROREEF · NEW PREHISTORY</h1>
-  <p class="lead">Choose how big this run is before anything is created. Smaller runs use less memory and
-    run faster; bigger ones give evolution more animals to work with. The map and the largest possible brain are
-    fixed in this build.</p>
-  <div class="presets"><span class="k" style="color:var(--dim);align-self:center">Presets:</span>
-    <a data-p="light">Light (laptop)</a><a data-p="normal">Normal</a><a data-p="big">Big (strong PC)</a></div>
-  <div id="rows"></div>
-  <div class="est">
-    <div><div class="v" id="mem">–</div><div class="k">memory needed (about)</div></div>
-    <div><div class="v" id="ram">–</div><div class="k">this computer can give it</div></div>
-    <div><div class="v" id="cores">–</div><div class="k">processor cores</div></div>
-    <button id="go">Start the prehistory</button>
-    <div id="msg"></div>
-  </div>
+  <h1 id="title">NEUROREEF · NEW PREHISTORY</h1>
+  <p class="lead">Life first evolves in the prehistory (separate branches, from random ancestors), then you watch the
+    world that grows from it. Choose the land, how harsh nature is, and how life starts. Nothing is created until you press
+    Start. 1× on a nature setting is the documented law; the rest is your choice.</p>
+  <div class="presets"><span class="k" style="color:var(--dim)">Presets:</span>
+    <a data-p="pet">Pet valley</a><a data-p="light">Light (laptop)</a><a data-p="normal">Normal</a><a data-p="big">Big (strong PC)</a></div>
+  <div id="groups"></div>
 </main>
+<div class="est"><div class="in">
+  <div><div class="v" id="mem">–</div><div class="k">memory needed (about)</div></div>
+  <div><div class="v" id="ram">–</div><div class="k">this computer can give it</div></div>
+  <div><div class="v" id="pop">–</div><div class="k">animals your world may hold (rough)</div></div>
+  <button id="go">Start the prehistory</button>
+  <div id="msg"></div>
+</div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const gb = (b) => (b / 1e9).toFixed(1) + ' GB';
+const x = (v) => '×' + (+v).toFixed(2).replace(/0$/, '').replace(/\.0$/, '');
+let info, rows = [];
+const MAPS = [256, 512, 1024], MAPN = { 256: 'Valley', 512: 'Region', 1024: 'Continent' };
+const mapFmt = (v) => `${MAPN[v]} (${v}×${v})`;
 const STEPS = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 0];
 const SLOTS = [8192, 16384, 24576, 32768, 49152, 65536, 98304, 131072];
-const WSLOTS = [16384, 32768, 65536, 98304, 131072, 196608, 262144];
-let info, rows = [];
+const WSLOTS = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
+const RATES = [1, 3, 10, 30, 0];
 
 function nearestIndex(list, v) { let b = 0; for (let i = 0; i < list.length; i++) if (Math.abs(list[i] - v) < Math.abs(list[b] - v)) b = i; return b; }
 
+function defs() {
+  const V = info.v, ev = info.evolve;
+  return [
+    { g: 'Land', note: 'the prehistory evolves on a bigger map; the world you watch can be smaller', rows: [
+      { key: 'preMap', label: 'Map of the prehistory', list: MAPS, val: V.preMap, fmt: mapFmt,
+        help: 'Where life evolves. Bigger holds more animals, so predators can afford to exist (a valley alone feeds only a handful).' },
+      ...(ev ? [] : [{ key: 'worldMap', label: 'Map of your world', list: MAPS, val: V.worldMap, fmt: mapFmt,
+        help: 'Where you watch. A valley is about 1/16 of a continent: hundreds of animals you can follow.' }]),
+      { key: 'water', label: 'Water', min: 0.03, max: 0.4, step: 0.01, val: V.water, fmt: (v) => Math.round(v * 100) + '% of the land',
+        help: 'How much of the map is lakes and sea.' },
+      { key: 'ponds', label: 'Ponds', min: 0, max: 1, step: 0.05, val: V.ponds, fmt: (v) => Math.round(v * 100) + '% of basins',
+        help: 'Seasonal ponds in low ground away from the lakes. They fill in the wet season and dry out in the dry one and in droughts.' },
+    ] },
+    { g: 'Nature', note: 'how hard the world is on life', rows: [
+      { key: 'plants', label: 'Plant growth', min: 0.3, max: 3, step: 0.05, val: V.plants, fmt: x, help: 'How fast every plant and alga grows. Lush ×2–3, harsh ×0.3–0.5.' },
+      { key: 'seasons', label: 'Seasons', min: 0, max: 2, step: 0.05, val: V.seasons, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How much wetter the wet season and drier the dry season are.' },
+      { key: 'seasonLength', label: 'Length of a year', min: 1000, max: 20000, step: 500, val: V.seasonLength, fmt: (v) => v.toLocaleString() + ' steps',
+        help: 'About one lifespan (3,000) lets breeding seasons and migration evolve; much longer and seasons feel like climate eras.' },
+      { key: 'drought', label: 'Droughts and wet years', min: 0, max: 3, step: 0.05, val: V.drought, fmt: (v) => v == 0 ? 'every year the same' : x(v),
+        help: 'How far a year\'s rain can swing. The biggest lever on how much nature matters.' },
+      { key: 'fire', label: 'Wildfire', min: 0, max: 5, step: 0.1, val: V.fire, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How often fires start in dry vegetation.' },
+      { key: 'disease', label: 'Disease', min: 0, max: 3, step: 0.05, val: V.disease, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How easily pathogens spread between animals.' },
+      { key: 'thirst', label: 'Thirst', min: 0.25, max: 3, step: 0.05, val: V.thirst, fmt: x, help: 'How fast animals dry out away from water.' },
+    ] },
+    { g: 'Life', note: 'how it starts; everything after is evolution', rows: [
+      { key: 'ancestorsLand', label: 'Ancestors on land', min: 0, max: 12, step: 1, val: V.ancestorsLand, fmt: (v) => v,
+        help: 'Random first species. Each is born with the drives (hunger, thirst, fatigue, fear, breeding) and is good at 1–3 random foods: any food, plants or meat.' },
+      { key: 'ancestorsWater', label: 'Ancestors in water', min: 0, max: 12, step: 1, val: V.ancestorsWater, fmt: (v) => v, help: 'At most 16 ancestors in all.' },
+      { key: 'founders', label: 'Founders per ancestor', min: 100, max: 1500, step: 50, val: V.founders, fmt: (v) => v,
+        help: 'Animals each ancestor starts with. Fewer start faster but risk dying out by chance.' },
+      { key: 'bigBrains', label: 'Big-brained ancestors', min: 0, max: 8, step: 1, val: V.bigBrains, fmt: (v) => v == 0 ? 'none' : v,
+        help: `Half on land, half in water. The others start with up to ${info.refUnits} brain units.` },
+      { key: 'bigBrainUnits', label: 'Their brain size', min: info.refUnits, max: info.maxUnits, step: 2, val: V.bigBrainUnits, fmt: (v) => v + ' units',
+        help: 'A bigger brain costs more energy every step; whether it pays is up to evolution.' },
+      { key: 'matingDrive', label: 'Breeding drive', min: 0.25, max: 2, step: 0.05, val: V.matingDrive, fmt: x,
+        help: 'Strength of the inborn urge to breed, mating or laying alike (males strongest).' },
+    ] },
+    { g: 'Evolution', note: 'how fast genes change, and how big the run is', rows: [
+      { key: 'mutBrain', label: 'Brain mutation', min: 0, max: 3, step: 0.05, val: V.mutBrain, fmt: x, help: '×1 is about one brain change per newborn.' },
+      { key: 'mutBody', label: 'Body mutation', min: 0, max: 3, step: 0.05, val: V.mutBody, fmt: x, help: '×1 is about 0.4 body changes per newborn.' },
+      { key: 'branches', label: 'Branches', min: 1, max: 6, step: 1, val: V.branches, fmt: (v) => v,
+        help: 'Separate worlds evolving side by side. You pick which one your world starts from. Each costs memory and CPU.' },
+      { key: 'branchSlots', label: 'Animal slots per branch', list: SLOTS, val: V.branchSlots, fmt: (v) => v.toLocaleString(),
+        help: 'The most organisms a branch can hold. If it fills, the slots, not nature, choose who is born, and the run is marked invalid.' },
+      { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: V.steps,
+        fmt: (v) => v === 0 ? (ev ? 'until you stop it' : 'until you begin the world') : v.toLocaleString() + ' steps', help: '' },
+    ] },
+    ...(ev ? [] : [{ g: 'Your world', note: '', rows: [
+      { key: 'worldSlots', label: 'Animal slots in the world', list: WSLOTS, val: V.worldSlots, fmt: (v) => v.toLocaleString(),
+        help: 'The most organisms your world can hold. A valley rarely needs more than 16,000.' },
+      { key: 'rate', label: 'Speed it starts at', list: RATES, val: V.rate, fmt: (v) => v === 0 ? 'as fast as possible' : v + ' steps per second',
+        help: 'The speed buttons change it any time.' },
+    ] }]),
+  ];
+}
+
 function build() {
-  const R = [
-    { key: 'branches', label: 'Branches', min: 1, max: 6, step: 1, val: info.branches, fmt: (v) => v,
-      help: 'Separate worlds evolving side by side from different random ancestors. Each one costs a full set of slots and a share of the CPU. At the end you pick which branch your world starts from.' },
-    { key: 'branchSlots', label: 'Animal slots per branch', list: SLOTS, val: info.branchSlots, fmt: (v) => v.toLocaleString(),
-      help: 'The most organisms (eggs included) one branch can hold. This is the main memory cost. Too few and the slot limit, not food, decides who gets born.' },
-    { key: 'founders', label: 'Founders per ancestor', min: 100, max: 1500, step: 50, val: info.founders, fmt: (v) => v,
-      help: `How many animals each of the ${info.ancestors} ancestors starts with. Fewer founders start faster but risk early extinctions by chance.` },
-    { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: info.steps,
-      fmt: (v) => v === 0 ? (info.evolve ? 'until you stop it (Ctrl+C)' : 'until you begin the world') : v.toLocaleString() + ' steps',
-      help: info.evolve ? 'When the run stops on its own. Ctrl+C in its window stops it early and saves everything.'
-                        : 'When the world begins on its own. You can always press "Begin the world" earlier.' },
-    { key: 'bigBrains', label: 'Big-brained ancestors per branch', min: 0, max: info.ancestors, step: 1, val: info.bigBrains, fmt: (v) => v === 0 ? 'none' : v,
-      help: `Half on land, half in water. Every other ancestor starts with a random brain of up to ${info.refUnits} units.` },
-    { key: 'bigBrainUnits', label: 'Brain size of a big-brained ancestor', min: info.refUnits, max: info.maxUnits, step: 2, val: info.bigBrainUnits, fmt: (v) => v + ' units',
-      help: 'Memory units. A bigger brain costs proportionally more energy every step; whether it pays for itself is up to evolution.' },
-    { key: 'worldSlots', label: 'Animal slots in the world (after the prehistory)', list: WSLOTS, val: info.worldSlots, fmt: (v) => v.toLocaleString(),
-      help: 'The most organisms the world you watch can hold. When it is full, births are refused.' },
-  ].filter((r) => !(info.evolve && r.key === 'worldSlots'));   // Evolve.bat / LongRun.bat make no world
-  const box = $('rows'); box.innerHTML = '';
-  rows = R.map((r) => {
-    const d = document.createElement('div'); d.className = 'row';
-    const n = r.list ? r.list.length - 1 : r.max, mn = r.list ? 0 : r.min, st = r.list ? 1 : r.step;
-    d.innerHTML = `<label><span>${r.label}</span><b></b></label><input type="range" min="${mn}" max="${n}" step="${st}"><div class="help">${r.help}</div>`;
-    box.append(d);
-    const inp = d.querySelector('input'), out = d.querySelector('b');
-    r.get = () => r.list ? r.list[+inp.value] : +inp.value;
-    r.set = (v) => { inp.value = r.list ? nearestIndex(r.list, v) : v; out.textContent = r.fmt(r.get()); };
-    inp.oninput = () => { out.textContent = r.fmt(r.get()); estimate(); };
-    r.set(r.val);
-    return r;
-  });
+  const box = $('groups'); box.innerHTML = ''; rows = [];
+  for (const grp of defs()) {
+    const h = document.createElement('h2'); h.innerHTML = `${grp.g}${grp.note ? `<small>${grp.note}</small>` : ''}`; box.append(h);
+    const grid = document.createElement('div'); grid.className = 'grid'; box.append(grid);
+    for (const r of grp.rows) {
+      const d = document.createElement('div'); d.className = 'row';
+      const n = r.list ? r.list.length - 1 : r.max, mn = r.list ? 0 : r.min, st = r.list ? 1 : r.step;
+      d.innerHTML = `<label><span>${r.label}</span><b></b></label><input type="range" min="${mn}" max="${n}" step="${st}">${r.help ? `<div class="help">${r.help}</div>` : ''}`;
+      grid.append(d);
+      const inp = d.querySelector('input'), out = d.querySelector('b');
+      r.get = () => r.list ? r.list[+inp.value] : +inp.value;
+      r.set = (v) => { inp.value = r.list ? nearestIndex(r.list, v) : v; out.textContent = r.fmt(r.get()); };
+      inp.oninput = () => { out.textContent = r.fmt(r.get()); for (const a of document.querySelectorAll('[data-p]')) a.classList.remove('on'); estimate(); };
+      r.set(r.val);
+      rows.push(r);
+    }
+  }
   estimate();
 }
 
-function val(k) { return rows.find((r) => r.key === k).get(); }
-function setv(k, v) { rows.find((r) => r.key === k).set(v); }
+const has = (k) => rows.some((r) => r.key === k);
+function val(k) { const r = rows.find((q) => q.key === k); return r ? r.get() : undefined; }
+function setv(k, v) { const r = rows.find((q) => q.key === k); if (r) r.set(v); }
 
 function estimate() {
   // the prehistory and the world are never both in memory: the larger of the two counts
-  const pre = val('branches') * val('branchSlots') * info.bytesPerSlot, world = info.evolve ? 0 : val('worldSlots') * info.bytesPerSlot;
+  const pre = val('branches') * val('branchSlots') * info.bytesPerSlot, world = has('worldSlots') ? val('worldSlots') * info.bytesPerSlot : 0;
   const need = Math.max(pre, world) + 0.4e9;
-  $('mem').textContent = gb(need);
-  $('ram').textContent = gb(info.ramBytes);
-  $('cores').textContent = info.cores;
+  $('mem').textContent = gb(need); $('ram').textContent = gb(info.ramBytes);
+  // rough: a continent fed about 40,000-250,000 animals in past runs; food scales with land area and plant growth
+  const wm = has('worldMap') ? val('worldMap') : val('preMap'), area = (wm / 1024) ** 2, land = (1 - val('water')) / 0.9;
+  const lo = Math.round(20000 * area * land * val('plants') / 100) * 100, hi = Math.round(120000 * area * land * val('plants') / 100) * 100;
+  $('pop').textContent = `${lo.toLocaleString()}–${hi.toLocaleString()}`;
   const r = need / info.ramBytes;
   $('mem').className = 'v ' + (r < 0.6 ? 'ok' : r < 0.85 ? 'warn' : 'bad');
-  $('msg').textContent = r < 0.6 ? '' : r < 0.85 ? 'This will use most of the memory; the computer may slow down.' : 'This needs more memory than the computer has. Lower the branches or the slots.';
-  $('go').disabled = r >= 1.0;
+  let m = r < 0.6 ? '' : r < 0.85 ? 'This will use most of the memory; the computer may slow down. ' : 'This needs more memory than the computer has: lower the branches or the slots. ';
+  if (val('ancestorsLand') + val('ancestorsWater') === 0) m += 'There must be at least one ancestor. ';
+  if (val('ancestorsLand') + val('ancestorsWater') > 16) m += 'At most 16 ancestors in all. ';
+  if (has('worldSlots') && val('worldSlots') < hi) m += 'Your world may fill its slots; then the slots, not nature, decide who is born. ';
+  $('msg').textContent = m;
+  $('go').disabled = r >= 1.0 || val('ancestorsLand') + val('ancestorsWater') === 0 || val('ancestorsLand') + val('ancestorsWater') > 16;
 }
 
 const PRESETS = {
-  light: { branches: 1, branchSlots: 16384, founders: 300, bigBrains: 2, bigBrainUnits: 24, worldSlots: 32768 },
-  normal: { branches: 3, branchSlots: 49152, founders: 600, bigBrains: 2, bigBrainUnits: 36, worldSlots: 65536 },
-  big: { branches: 4, branchSlots: 98304, founders: 900, bigBrains: 2, bigBrainUnits: 36, worldSlots: 131072 },
+  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 65536, founders: 400, worldSlots: 16384, rate: 3, plants: 1, seasons: 1.3, drought: 1.5, seasonLength: 3000 },
+  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 16384, founders: 300, bigBrains: 2, bigBrainUnits: 24, worldSlots: 8192, rate: 3 },
+  normal: { preMap: 512, worldMap: 256, branches: 3, branchSlots: 65536, founders: 600, bigBrains: 2, bigBrainUnits: 36, worldSlots: 16384, rate: 3 },
+  big: { preMap: 1024, worldMap: 512, branches: 4, branchSlots: 131072, founders: 900, bigBrains: 2, bigBrainUnits: 36, worldSlots: 65536, rate: 10 },
 };
-for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => { const p = PRESETS[a.dataset.p]; for (const k in p) if (rows.some((r) => r.key === k)) setv(k, p[k]); estimate(); };
+for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
+  const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]);
+  for (const b of document.querySelectorAll('[data-p]')) b.classList.toggle('on', b === a);
+  estimate();
+};
 
 $('go').onclick = async () => {
   $('go').disabled = true; $('msg').textContent = 'Creating the prehistory…';
@@ -119,7 +181,7 @@ $('go').onclick = async () => {
   await fetch('api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (info.evolve) {
     // Evolve.bat / LongRun.bat: no console follows; the run reports in its own window
-    $('msg').innerHTML = '<b class="ok">Started.</b> The prehistory is running in the command window (it prints a line every 10,000 steps). You can close this page.';
+    $('msg').innerHTML = '<b class="ok">Started.</b> The prehistory is running in the command window (a line every 10,000 steps). You can close this page.';
     return;
   }
   // the program now builds the branches and opens the console on the same address: wait for it
@@ -134,7 +196,7 @@ $('go').onclick = async () => {
 
 fetch('api/setup-info').then((r) => r.json()).then((j) => {
   info = j; build();
-  if (info.evolve) { document.querySelector('h1').textContent = 'NEUROREEF · NEW PREHISTORY (NO GRAPHICS)'; $('go').textContent = 'Start'; }
+  if (info.evolve) { $('title').textContent = 'NEUROREEF · NEW PREHISTORY (NO GRAPHICS)'; $('go').textContent = 'Start'; }
 });
 </script>
 </body>

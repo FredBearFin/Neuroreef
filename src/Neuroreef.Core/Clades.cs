@@ -43,7 +43,7 @@ public static class Clades
         s.Serial = w.CladeScratch.NextSerial++;
         s.Generation = parent >= 0 ? w.Sp[parent].Generation + 1 : 0;
         s.Name = Name(w.Seed, (uint)s.Serial);
-        float hue = parent >= 0 ? Hue(w.Sp[parent]) + (Rng.U(w.Seed, (uint)s.Serial, 0, Rs.Bank + 50) - 0.5f) * 70f : ancestor * 360f / (K.ANCESTORS_LAND + K.ANCESTORS_WATER);
+        float hue = parent >= 0 ? Hue(w.Sp[parent]) + (Rng.U(w.Seed, (uint)s.Serial, 0, Rs.Bank + 50) - 0.5f) * 70f : ancestor * 360f / Math.Max(1, w.Evo.AncestorsLand + w.Evo.AncestorsWater);
         float light = parent >= 0 ? 0.45f + 0.2f * Rng.U(w.Seed, (uint)s.Serial, 1, Rs.Bank + 50) : 0.55f;
         Hsl(hue, 0.75f, light, out s.R, out s.G, out s.B);
         w.CladeScratch.Version++;
@@ -120,13 +120,14 @@ public static class Clades
         body[G.B_HERM - B] = (sbyte)(U(35) < 0.5f ? -40 : 40);     // separate sexes or hermaphrodite
         body[G.B_SEXRATIO - B] = (sbyte)((U(36) - 0.5f) * 40f);    // about even sex ratio
         body[G.B_IMMUNE - B] = (sbyte)((U(37) * 2f - 1f) * 127f);
+        body[G.B_WATER - B] = (sbyte)((U(38) * 2f - 1f) * 127f);   // water economy: anything
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
-        // diet: the primary producers of its realm, in random proportions; every other pool near zero
-        int[] plants = land ? new[] { (int)Pool.Grass, (int)Pool.Browse, (int)Pool.Seed, (int)Pool.Root, (int)Pool.Fruit, (int)Pool.Nectar }
-                            : new[] { (int)Pool.Algae, (int)Pool.Phyto };
-        // every other pool low but off the floor (about 0.1-0.4% of the diet each), so selection can act on it
-        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-110 + (int)(U(40 + p) * 40f));
-        foreach (int p in plants) body[G.B_DIET - B + p] = (sbyte)(U(20 + p) * 127f);
+        // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them
+        // (plants, algae, meat, carrion, blood, dung...), mediocre at the rest, never at the floor (ecology review:
+        // an even generalist digests every food at ~0.2 and starves; a random sparse diet is still undesigned)
+        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-90 + (int)(U(40 + p) * 40f));
+        int good = 1 + (int)(U(70) * 3f);
+        for (int k = 0; k < good; k++) body[G.B_DIET - B + (int)(U(71 + k) * Pools.N) % Pools.N] = (sbyte)(40 + (int)(U(74 + k) * 87f));
     }
 
     /// <summary>Standing variation: each founder's body genes vary around its ancestor's by FOUNDER_BODY_SD.</summary>

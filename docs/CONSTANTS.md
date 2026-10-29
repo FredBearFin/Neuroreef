@@ -20,7 +20,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
 | RIVER_ACC | 900 | cells | catchment (cells) above which a cell is river | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
-| T_SEASON | 9000 | steps | season period | V1 |
+| T_SEASON | 3000 | steps | season period (one year), by default | ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K) |
 | A_SEASON | 0.45 | - | season amplitude on moisture | V1 |
 | SAMPLE_EVERY | 32 | steps | telemetry sample interval | HT |
 | RING | 4096 | samples | telemetry ring length | HT |
@@ -148,7 +148,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 0.000208073 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 0.000206825 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -184,7 +184,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_SPEED | 0.4 | - | basal cost per unit of extra speed | HT |
 | COST_SIGHT | 0.15 | - | basal cost per unit of extra sight | HT |
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
-| MASS_LO | 0.05 | M | smallest body mass a mass gene can give | ECO: a small invertebrate-sized organism |
+| MASS_LO | 0.01 | M | smallest body mass a mass gene can give | ECO: a small invertebrate-sized organism; 0.01 since Revision K (the ecology review: at 0.05 selection pressed against the floor) |
 | MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
 | LIMB_MIN | 0.3 | - | organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth) | - |
 | COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size, or of leg size per pair of legs | ECO: locomotor muscle is maintained at a cost |
@@ -204,7 +204,26 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WING_LIFT | 1.6 | - | a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading) | ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings |
 | DEEP_SWIM | 0.3 | - | swimming power (share of the body's top speed in water) needed to stay in deep water | ECO: staying up in open water needs swimming power |
 | CRAWL | 0.05 | - | a legless body crawls on land at this share of its top speed | ECO: worms, snakes and stranded fish move slowly without legs |
-| SOIL_WATER | 0.8 | - | share of thirst a land organism avoids by taking water from wet soil and moist food | ECO: many animals and all settled organisms take water from their surroundings |
+
+## 13. Land
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| POND_R | 2 | cells | a pond site is the lowest cell within this many cells | ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas) |
+| POND_GAP | 6 | cells | pond sites are at least this far from a lake, sea or river | HT: a pond beside a lake adds nothing |
+| POND_FILL | 1 | x | a pond holds water while its cell is this much wetter than its average (season x this year's rain) | ECO: ephemeral pools fill in the wet season and dry in the dry season and in drought years, in wet and dry country alike |
+| POND_EVERY | 100 | steps | steps between pond updates | HT: ponds change over a season, so a few times a season is enough |
+
+## 14. Body
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| SOIL_WATER | 0.5 | - | share of thirst a land organism avoids on wet soil (dew, damp ground); water in food is counted separately (K_FOODWATER) | ECO: 0.8 before Revision K counted moist food too (ecology review: no double counting) |
+| K_FOODWATER | 0.35 | /M | thirst relieved per unit of food eaten, per unit of water in it, per unit body mass | ECO: continuous eating of fully green forage about balances drying on dry ground (C_THIRST / (digestion x 0.75)); preformed water in forage and prey (ecology review) |
+| MET_WATER | 0.5 | - | metabolic water: water made per unit of food energy digested, as mass of tissue burned | ECO: about 0.5 g of water per g of fat oxidised; how desert seed-eaters live without drinking |
+| WATER_ECON | 0.7 | - | largest cut in water loss from the water-economy gene | ECO: kangaroo rats turn over about a quarter of the water of other rodents (Schmidt-Nielsen) |
+| COST_WATERECON | 0.09 | xbasal | basal cost of full water economy (kidney and nasal water recovery) | ECO: kidneys use a few to 10% of basal metabolism |
+| EXP_THIRST | -0.2 | - | mass exponent of thirst (water turnover per unit mass) | ECO: mass-specific water turnover scales about as M^-0.2 |
 | COST_EYE | 0.04 | xbasal | basal cost per eye pair | ECO: eyes and visual brain are costly tissue |
 | EYE_FOV | 0.3 | - | field of view added by each extra eye pair (share of the base field) | ECO: more eyes cover more directions |
 | FIN_TURN | 0.2 | - | turning added per extra fin pair (times fin size) | ECO: paired fins steer and brake |
@@ -215,7 +234,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_BRAIN | 0.15 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates |
 | BRAIN_REF | 12 | units | reference brain size for the brain cost (the largest brain before Revision J) | - |
 
-## 13. Brain
+## 15. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -224,7 +243,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DRIVE_FEMALE | 0.6 | - | strength of the mating instinct in females, against males (1) | designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972) |
 | DRIVE_HERM | 0.8 | - | strength of the mating instinct in hermaphrodites, against males (1) | designed: between the two sexes |
 
-## 14. Body
+## 16. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -234,7 +253,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
-## 15. Clades
+## 17. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -247,7 +266,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPLIT_MIN_D | 0.228 | - | and at least this far apart (body genes / 127, RMS per gene): where fertility between the centres falls below 1/2 | ECO: D_COMPAT x ln(2)^(1/4); a named species should be partly isolated (Revision H) |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 16. Reproduction
+## 18. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -256,7 +275,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 17. Care
+## 19. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -265,7 +284,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 18. Disease
+## 20. Disease
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -278,7 +297,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
 | DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
 
-## 19. Weather
+## 21. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -286,7 +305,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 20. Vegetation
+## 22. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -337,7 +356,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 21. Fire
+## 23. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -352,6 +371,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 22. Organisms
+## 24. Organisms
 
 There are no designed species (Revision F). Life starts from 6 land and 4 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

@@ -57,7 +57,7 @@ public sealed class Snapshot
         b[0] = 0x02; b[1] = 4; b[2] = 0; b[3] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(4), (uint)w.Step);
         int n = 0, o = 12;
-        float sx = 65536f / K.WORLD;
+        float sx = 65536f / Map.W;
         for (int i = 0; i < w.Cap; i++)
         {
             byte st = w.StageOf[i];

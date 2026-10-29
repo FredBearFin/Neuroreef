@@ -27,8 +27,8 @@ public class WireTests
             uint serial = BinaryPrimitives.ReadUInt32LittleEndian(r.Slice(8));
             int i = sim.FindSerial(serial);
             Assert.True(i >= 0);
-            float x = BinaryPrimitives.ReadUInt16LittleEndian(r) * K.WORLD / 65536f;
-            float y = BinaryPrimitives.ReadUInt16LittleEndian(r.Slice(2)) * K.WORLD / 65536f;
+            float x = BinaryPrimitives.ReadUInt16LittleEndian(r) * Map.W / 65536f;
+            float y = BinaryPrimitives.ReadUInt16LittleEndian(r.Slice(2)) * Map.W / 65536f;
             Assert.InRange(MathF.Abs(x - w.X[i]), 0f, 0.02f);
             Assert.InRange(MathF.Abs(y - w.Y[i]), 0f, 0.02f);
             Assert.Equal(w.Spc[i], r[5] & 31);

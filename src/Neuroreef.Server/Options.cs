@@ -17,6 +17,22 @@ public sealed class Options
     public string? LoadBank, SaveBank, Csv, CheckpointPath;
     public double CheckpointMinutes = 30;
     public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots = K.BRANCH_CAPACITY;
+    // the map of a prehistory and of the world (a prehistory evolves in a region; the world you watch is a valley)
+    public int PreMap = 512, WorldMap = 256;
+    public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;
+    public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;
+    // nature (Nature.cs): multipliers on the laws, 1 = as documented
+    public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f;
+    public int SeasonLength = K.T_SEASON;
+
+    /// <summary>Apply the nature settings and the map for what is about to be built (not when resuming a save).</summary>
+    public void ApplyNature(bool prehistory)
+    {
+        Nature.Plants = Plants; Nature.Seasons = Seasons; Nature.SeasonLength = SeasonLength; Nature.Drought = Drought;
+        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.WorldMap = WorldMap;
+        Nature.Clamp();
+        Map.Set(prehistory ? PreMap : WorldMap);
+    }
     public bool NoSetup, SetupDone;
     public bool NoCheckpoint, ResumePrehistory, ResumeWorld, NewWorld;
     public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
@@ -29,10 +45,12 @@ public sealed class Options
         if (BigBrains >= 0) e.BigBrains = BigBrains;
         if (BigBrainUnits > 0) e.BigBrainUnits = BigBrainUnits;
         if (Founders > 0) e.Founders = Founders;
+        e.AncestorsLand = AncestorsLand; e.AncestorsWater = AncestorsWater; e.MatingDrive = MatingDrive;
+        e.MutRate *= MutBrainX; e.MutBody *= MutBodyX;
         return e;
     }
     public string BankSource = "random";      // evolved, shipped, file, or random
-    public float Rate = 30;
+    public float Rate = 3;              // the world starts at a watchable pace (the speed buttons change it)
 
     public const string Usage = @"Neuroreef 2 - an energy-cycle ecosystem of learning brains
 
@@ -56,7 +74,7 @@ public sealed class Options
   --capacity N          agent slots of the world (default 65536)
   --threads N           worker threads (default: cores - 1, max 8)
   --port N              web console port (default 5800)
-  --rate N              steps per second of the world (default 30, 0 = as fast as possible)
+  --rate N              steps per second of the world (default 3, 0 = as fast as possible)
   --no-browser          do not open the browser
   --save-bank FILE      where to save evolved brains (default evolved.nrbank next to the exe)
 
@@ -74,6 +92,13 @@ public sealed class Options
   --founders N          prehistory: founders per ancestor (default 600)
   --branch-slots N      prehistory: animal slots per branch (default 49152; memory grows with it)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
+  --map valley|region|continent        map of the prehistory (default region)
+  --world-map valley|region|continent  map of the world you watch (default valley)
+  --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
+  --mating-drive X      strength of the breeding instinct (default 1)
+  Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
+  --season-length N     steps per year (default 3000)   --water X   share of the map under water (default 0.10)
+  --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
   --report N            headless: report interval in steps (default 2000)
@@ -117,6 +142,20 @@ public sealed class Options
                 case "--founders": o.Founders = int.Parse(Next()); o.NoSetup = true; break;
                 case "--branch-slots": o.BranchSlots = Math.Clamp(int.Parse(Next()), 2048, 262144); o.NoSetup = true; break;
                 case "--no-setup": o.NoSetup = true; break;
+                case "--map": o.PreMap = MapSide(Next()); o.NoSetup = true; break;
+                case "--world-map": o.WorldMap = MapSide(Next()); break;
+                case "--ancestors-land": o.AncestorsLand = int.Parse(Next()); o.NoSetup = true; break;
+                case "--ancestors-water": o.AncestorsWater = int.Parse(Next()); o.NoSetup = true; break;
+                case "--mating-drive": o.MatingDrive = F(Next()); break;
+                case "--plants": o.Plants = F(Next()); break;
+                case "--seasons": o.Seasons = F(Next()); break;
+                case "--season-length": o.SeasonLength = int.Parse(Next()); break;
+                case "--drought": o.Drought = F(Next()); break;
+                case "--fire": o.Fire = F(Next()); break;
+                case "--disease": o.Disease = F(Next()); break;
+                case "--thirst": o.Thirst = F(Next()); break;
+                case "--water": o.Water = F(Next()); break;
+                case "--ponds": o.Ponds = F(Next()); break;
                 case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); o.NoSetup = true; break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
@@ -134,5 +173,12 @@ public sealed class Options
             if (!o.NoCheckpoint) o.CheckpointPath ??= System.IO.Path.Combine(dir, "prehistory.nrck");
         }
         return o;
+    }
+
+    static float F(string v) => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
+    static int MapSide(string v)
+    {
+        int k = Array.IndexOf(Map.Names, v.ToLowerInvariant());
+        return k >= 0 ? Map.Sizes[k] : int.Parse(v);
     }
 }

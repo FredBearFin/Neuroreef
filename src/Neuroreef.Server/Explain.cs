@@ -73,7 +73,7 @@ public static class Explain
     static int _land = -1;
     static int CountLand(World w)
     {
-        if (_land < 0) { int c = 0; for (int i = 0; i < K.FW * K.FW; i++) if (w.Cell[i] == (byte)Realm.Land) c++; _land = c; }
+        if (_land < 0) { int c = 0; for (int i = 0; i < Map.FW * Map.FW; i++) if (w.Cell[i] == (byte)Realm.Land) c++; _land = c; }
         return _land;
     }
 }

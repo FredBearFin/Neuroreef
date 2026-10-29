@@ -47,6 +47,7 @@ public static class Body
         float fov = MathF.Min(360f, G.Gene(gn[g + G.B_FOV], K.FOV_LO, K.FOV_HI) * (1f + K.EYE_FOV * (eyePairs - 1)));
         float life = Mul(gn[g + G.B_LIFE], K.LIFE_RANGE), devel = Mul(gn[g + G.B_DEVEL], K.LIFE_RANGE);
         float imm = Organ(gn[g + G.B_IMMUNE]);
+        float wecon = Organ(gn[g + G.B_WATER]);
         int brain = K.BRAIN_MIN + (int)MathF.Round(Organ(gn[g + G.B_BRAIN]) * (G.NH - K.BRAIN_MIN));
         bool herm = gn[g + G.B_HERM] >= 0;
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
@@ -55,11 +56,13 @@ public static class Body
         w.PSexRatio[i] = Organ(gn[g + G.B_SEXRATIO]);
 
         w.PM[i] = m;
+        w.PWaterEcon[i] = wecon;
+        w.PThirstK[i] = MathK.Pow(m, K.EXP_THIRST) * (1f - K.WATER_ECON * wecon);
         float mPow = MathK.Pow(m, K.EXP_BASAL);
         float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
                      + K.COST_LIMB * (legs * legPairs * 0.5f + fins * finPairs * 0.5f) + K.COST_WING * wings * MathK.Cbrt(m)
                      + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f) + K.COST_BRAIN * brain / K.BRAIN_REF
-                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm;
+                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon;
         w.PBasal[i] = K.C_BASAL * mPow * Math.Clamp(basalF, 0.5f, 4f);
         w.PGut[i] = K.C_GUT * m;
         w.PDig[i] = K.C_DIGEST * mPow;
@@ -105,7 +108,9 @@ public static class Body
         ExpressDiet(w, i, realm, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
         // a blood specialist with weapons drains its victims instead of killing them (a parasite habit)
         float blood = w.PDiet[i * Pools.N + (int)Pool.Blood], meat = w.PDiet[i * Pools.N + (int)Pool.Meat];
-        w.PParasite[i] = (byte)(blood > 0.2f && blood > meat ? 1 : 0);
+        // drain or kill is a matter of degree (ecology review): the share of successful strikes that drain blood
+        w.PDrain[i] = blood + meat > 1e-4f ? blood / (blood + meat) : 0f;
+        w.PParasite[i] = (byte)(w.PDrain[i] >= 0.5f ? 1 : 0);   // a label (and whom it targets): mostly a blood-drinker
     }
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)

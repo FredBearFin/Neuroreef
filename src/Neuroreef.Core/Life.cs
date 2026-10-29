@@ -97,8 +97,8 @@ public static class Life
     {
         for (int t = 0; t < 64; t++)
         {
-            x = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 100u + (uint)t * 2) * K.WORLD;
-            y = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 101u + (uint)t * 2) * K.WORLD;
+            x = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 100u + (uint)t * 2) * Map.W;
+            y = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 101u + (uint)t * 2) * Map.W;
             if (w.CellAllows(World.FIdx(x, y), realm)) return true;
         }
         x = y = 0; return false;
@@ -211,10 +211,10 @@ public static class Life
         int src = w.IStrainSrc[i];
         bool fromContact = n > 0 && src >= 0 && w.Infect[src] > 0;
         float match = fromContact ? Match(w, src, i) : 1f;
-        float beta = K.DIS_BETA * 1.5f * v / (0.5f + v) * protect * match;     // transmission saturates with virulence
+        float beta = K.DIS_BETA * Nature.Disease * 1.5f * v / (0.5f + v) * protect * match;     // transmission saturates with virulence
         float escape = 1f;
         for (; n > 0; n--) escape *= 1f - beta;
-        float pContact = 1f - escape, pSpill = K.DIS_SPILL * protect;
+        float pContact = 1f - escape, pSpill = K.DIS_SPILL * Nature.Disease * protect;
         float u = Rng.U(seed, step, (uint)i, Rs.Disease);
         if (u < pContact + pSpill)
         {

@@ -1,7 +1,28 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision J. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision K. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision K: a small world you can follow, and water you can live without** (the user, 2026-10-29:
+"a personal intimate simulation, like following a wolf pack and their prey in a valley"; the water rules
+reviewed by the ecologist)
+- The map size is a setting (Map: valley 256, region 512, continent 1024 units), and the world may be smaller
+  than its prehistory: evolve on a region, then watch a valley. Founding a world from a bank scales with the
+  map's area. The world runs at 3 steps/s unless you choose otherwise, and a year is T_SEASON = 3,000 steps.
+- The strength of nature is a setting (Nature: plants, seasons, season length, droughts, fire, disease,
+  thirst, water, ponds), multipliers on the documented constants; 1 = the law. Saved in every checkpoint.
+- Hunger senses prey: an animal that can digest meat or blood sees the value of the animal in reach as food
+  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants.
+- Ancestors' diets are sparse and random: good at 1-3 of all 15 foods, poor at the rest (they could all
+  eat plants before). Drain or kill is a share (PDrain), not a switch.
+- The laying instinct: ready to breed → LAY, for cloners and egg-layers as the mating instinct is for the sexual.
+- Water (§6.3, ecology review). Food holds water (FoodWater per pool; live plants as wet as their ground),
+  and digestion makes metabolic water (MET_WATER); both relieve thirst by K_FOODWATER per unit body mass.
+  SOIL_WATER now counts only damp ground. Thirst scales as M^-0.2. A new body gene, water economy (B_WATER),
+  cuts water loss by up to WATER_ECON at COST_WATERECON of basal metabolism. Seasonal ponds (§10): land
+  basins away from lakes hold water when the season and the year's rain are wet enough (POND_FILL) and dry
+  out in the dry season and in droughts; drinking and SEEK_WATER use the distance to lakes or full ponds.
+  Before this every land animal had to stay near the lakes, and the land between was empty.
 
 **Changes in Revision J: the mating instinct and big-brained ancestors** (designed by the user, 2026-10-28)
 - The starter kit (§7.7) gains the mating instinct: ready × a partner in reach → MATE, ready × no partner
@@ -357,8 +378,11 @@ cost:
 | newborn share | log BIRTH_LO..BIRTH_HI | big young cost more and grow up sooner |
 | care | 0..1 | §7.8 |
 
-Thirst rises only on land cells, by C_THIRST·(1 − SOIL_WATER·moisture): any organism in water draws
-water from it, and moist ground dries an organism out more slowly (Revision G). Gestation and breeding cooldown scale as C_GEST·M^0.25 and C_COOL·M^0.25.
+Thirst rises only on land cells, by C_THIRST·M^EXP_THIRST·(1 − WATER_ECON·g)·(1 − SOIL_WATER·moisture),
+where g is the water-economy gene: any organism in water draws water from it, and damp ground dries an
+organism out more slowly (Revision G). Eating relieves thirst by K_FOODWATER·(bite·water content + MET_WATER·
+energy digested/RHO_MEAT)/M (Revision K): green plants, fruit and prey are wet, seed and wood dry, and live
+plants dry out with their ground. An animal drinks within 1.5 cells of a lake, river or full seasonal pond. Gestation and breeding cooldown scale as C_GEST·M^0.25 and C_COOL·M^0.25.
 
 ### 6.4 Energy-cycle closure
 
@@ -719,13 +743,18 @@ Energy/ρ_meat. Eggs and embryos of a dead mother die.
 
 **Terrain**
 - **Elevation:** periodic fBm noise, the v1 method.
-- **Lakes:** cells below the sea level (12% of cells).
+- **Lakes:** cells below the sea level (Nature.Water of the cells, LAKE_SHARE by default).
 - **Rivers:** D8 flow accumulation over the elevation; cells whose accumulated catchment is above
   a threshold become river.
 - **Depth:** lake depth is (sea − elevation). River depth is shallow.
-- **Distance maps:** distance-to-water and distance-to-land come from two chamfer passes on the
-  torus.
+- **Distance maps:** distance-to-water and distance-to-land are exact 8-connected chamfer distances on
+  the torus (a label-correcting search, Revision K).
 - **Moisture:** base moisture is high near water and in valleys.
+- **Seasonal ponds (Revision K):** a land cell that is the lowest within POND_R cells and at least
+  POND_GAP cells from a lake or river is a pond basin (with its 8 neighbours), kept with probability
+  Nature.Ponds. Every POND_EVERY steps a basin is full when (1 + a_s·SEASON)·(1 + rain anomaly) ≥ POND_FILL,
+  and the distance to drinkable water (lakes, rivers, full ponds) is remeasured. Ponds are for drinking
+  only; their cells stay land.
 
 **Season.** Each cell's moisture follows the base moisture modulated by a travelling sine wave:
 ```

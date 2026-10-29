@@ -33,27 +33,41 @@ public static class Setup
         long ram = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         app.MapGet("/api/setup-info", () => Results.Json(new
         {
-            bytesPerSlot = World.BytesPerSlot, ramBytes = ram, cores = Environment.ProcessorCount,
-            branches = o.Branches, branchSlots = o.BranchSlots, worldSlots = o.Capacity, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
-            steps = o.Evolve && o.StepsSet ? (int)Math.Clamp(o.Steps, 0, int.MaxValue) : o.PrehistorySteps, evolve = o.Evolve, bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
-            maxUnits = G.NH, refUnits = K.BRAIN_REF, ancestors = K.ANCESTORS_LAND + K.ANCESTORS_WATER,
+            bytesPerSlot = World.BytesPerSlot, ramBytes = ram, cores = Environment.ProcessorCount, evolve = o.Evolve,
+            maxUnits = G.NH, refUnits = K.BRAIN_REF, mapSizes = Map.Sizes, mapNames = Map.Names,
+            v = new
+            {
+                preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds,
+                plants = o.Plants, seasons = o.Seasons, seasonLength = o.SeasonLength, drought = o.Drought, fire = o.Fire, disease = o.Disease, thirst = o.Thirst,
+                ancestorsLand = o.AncestorsLand, ancestorsWater = o.AncestorsWater, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
+                bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
+                matingDrive = o.MatingDrive, mutBrain = 1f, mutBody = 1f,
+                branches = o.Branches, branchSlots = o.BranchSlots,
+                steps = o.Evolve && o.StepsSet ? (int)Math.Clamp(o.Steps, 0, int.MaxValue) : o.PrehistorySteps,
+                worldSlots = o.Capacity, rate = o.Rate,
+            },
         }));
         app.MapPost("/api/setup", async (HttpContext ctx) =>
         {
             using var doc = await JsonDocument.ParseAsync(ctx.Request.Body);
             var e = doc.RootElement;
-            int I(string k, int lo, int hi, int dflt) => e.TryGetProperty(k, out var v) && v.TryGetInt64(out long x) ? (int)Math.Clamp(x, lo, hi) : dflt;
-            o.Branches = I("branches", 1, 8, o.Branches);
-            o.BranchSlots = I("branchSlots", 2048, 262144, o.BranchSlots);
-            o.Capacity = I("worldSlots", 4096, 524288, o.Capacity);
+            int I(string k, int lo, int hi, int dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (int)Math.Clamp(Math.Round(x), lo, hi) : dflt;
+            float F(string k, float lo, float hi, float dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (float)Math.Clamp(x, lo, hi) : dflt;
+            o.PreMap = I("preMap", 256, 1024, o.PreMap); o.WorldMap = I("worldMap", 256, 1024, o.WorldMap); o.Water = F("water", 0.02f, 0.6f, o.Water); o.Ponds = F("ponds", 0f, 1f, o.Ponds);
+            o.Plants = F("plants", 0.1f, 4f, o.Plants); o.Seasons = F("seasons", 0f, 2.2f, o.Seasons); o.SeasonLength = I("seasonLength", 1000, 100000, o.SeasonLength);
+            o.Drought = F("drought", 0f, 4f, o.Drought); o.Fire = F("fire", 0f, 10f, o.Fire); o.Disease = F("disease", 0f, 5f, o.Disease); o.Thirst = F("thirst", 0.1f, 4f, o.Thirst);
+            o.AncestorsLand = I("ancestorsLand", 0, 16, o.AncestorsLand); o.AncestorsWater = I("ancestorsWater", 0, 16, o.AncestorsWater);
             o.Founders = I("founders", 20, 5000, K.ANCESTOR_COUNT);
+            o.BigBrains = I("bigBrains", 0, 16, K.BIG_BRAINS); o.BigBrainUnits = I("bigBrainUnits", K.BRAIN_MIN, G.NH, K.BIG_BRAIN_UNITS);
+            o.MatingDrive = F("matingDrive", 0f, 3f, o.MatingDrive);
+            o.MutBrainX = F("mutBrain", 0f, 5f, 1f); o.MutBodyX = F("mutBody", 0f, 5f, 1f);
+            o.Branches = I("branches", 1, 8, o.Branches); o.BranchSlots = I("branchSlots", 2048, 262144, o.BranchSlots);
             o.PrehistorySteps = I("steps", 0, int.MaxValue, o.PrehistorySteps);   // 0 = until you begin the world (or stop it)
             if (o.Evolve) { o.Steps = o.PrehistorySteps; o.StepsSet = true; }   // the headless prehistory takes its length from --steps
-            o.BigBrains = I("bigBrains", 0, K.ANCESTORS_LAND + K.ANCESTORS_WATER, K.BIG_BRAINS);
-            o.BigBrainUnits = I("bigBrainUnits", K.BRAIN_MIN, G.NH, K.BIG_BRAIN_UNITS);
-            Console.WriteLine($"setup: {o.Branches} branches x {o.BranchSlots:N0} slots, {o.Founders} founders per ancestor, " +
-                $"{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}, " +
-                $"{o.BigBrains} big-brained ancestors of {o.BigBrainUnits} units, world {o.Capacity:N0} slots");
+            o.Capacity = I("worldSlots", 4096, 524288, o.Capacity); o.Rate = F("rate", 0f, 120f, o.Rate);
+            Console.WriteLine($"setup: prehistory on a {o.PreMap}-unit map, {o.Branches} branches x {o.BranchSlots:N0} slots, " +
+                $"{o.AncestorsLand} land + {o.AncestorsWater} water ancestors x {o.Founders} founders, {o.BigBrains} big-brained ({o.BigBrainUnits} units), " +
+                $"{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}; world {o.WorldMap}-unit map, {o.Capacity:N0} slots");
             done.Set();
             return Results.Json(new { ok = true });
         });

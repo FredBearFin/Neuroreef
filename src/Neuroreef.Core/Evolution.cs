@@ -15,12 +15,14 @@ public sealed class EvoSettings
     public int BigBrains = K.BIG_BRAINS;          // big-brained ancestors per branch (founding only)
     public int BigBrainUnits = K.BIG_BRAIN_UNITS; // their memory units
     public int Founders = K.ANCESTOR_COUNT;       // founders per ancestor (founding only)
+    public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;   // random ancestors (founding only)
+    public float MatingDrive = 1f;                // x the breeding instinct (mating and laying alike)
 
     public EvoSettings Clone() => (EvoSettings)MemberwiseClone();
 
     public void CopyFrom(EvoSettings o)
     {
-        MutRate = o.MutRate; MutBody = o.MutBody; BigBrains = o.BigBrains; BigBrainUnits = o.BigBrainUnits; Founders = o.Founders; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps;
+        MutRate = o.MutRate; MutBody = o.MutBody; BigBrains = o.BigBrains; BigBrainUnits = o.BigBrainUnits; Founders = o.Founders; AncestorsLand = o.AncestorsLand; AncestorsWater = o.AncestorsWater; MatingDrive = o.MatingDrive; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps;
     }
 
     /// <summary>Keep every knob inside a sensible range.</summary>
@@ -28,7 +30,10 @@ public sealed class EvoSettings
     {
         MutRate = System.Math.Clamp(MutRate, 0.00005f, 0.05f);
         MutBody = System.Math.Clamp(MutBody, 0f, 0.2f);
-        BigBrains = System.Math.Clamp(BigBrains, 0, K.ANCESTORS_LAND + K.ANCESTORS_WATER);
+        AncestorsLand = System.Math.Clamp(AncestorsLand, 0, 16); AncestorsWater = System.Math.Clamp(AncestorsWater, 0, 16 - AncestorsLand);
+        if (AncestorsLand + AncestorsWater == 0) AncestorsLand = 1;
+        MatingDrive = System.Math.Clamp(MatingDrive, 0f, 3f);
+        BigBrains = System.Math.Clamp(BigBrains, 0, AncestorsLand + AncestorsWater);
         BigBrainUnits = System.Math.Clamp(BigBrainUnits, K.BRAIN_MIN, G.NH);
         Founders = System.Math.Clamp(Founders, 20, 5000);
         MutSmall = System.Math.Clamp(MutSmall, 0.5f, 12f);

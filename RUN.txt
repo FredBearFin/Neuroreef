@@ -33,13 +33,15 @@ YOUR WORLD IS SAVED
 SETUP BEFORE A NEW PREHISTORY
   When a new prehistory is about to start, the browser first shows a setup page: how many branches,
   animal slots per branch, founders per ancestor, its length, the big-brained ancestors, and the world's
-  slots. It shows how much memory that takes against what your computer has. Presets: Light (laptop),
-  Normal, Big. Nothing is created until you press Start. (Skip it with --no-setup; any of --branches,
+  slots; the map (valley, region or continent; the world you watch can be a smaller valley than the
+  prehistory's map); and how hard nature is (plants, seasons, droughts, fire, disease, thirst, water and
+  seasonal ponds; 1x is the documented law). It shows how much memory that takes against what your computer
+  has. Presets: Pet valley, Light (laptop), Normal, Big. Nothing is created until you press Start. (Skip it with --no-setup; any of --branches,
   --branch-slots, --founders, --big-brains on the command line also skip it.)
 
 SPEED
   The speed buttons are steps per second: 1/s, 3/s, 10/s, 30/s and max. They work in the prehistory and in
-  the world. If the computer cannot keep up, it runs as fast as it can (the "steps/s" box shows the real speed).
+  the world. The prehistory runs flat out; the world starts at the speed set in setup (3/s). If the computer cannot keep up, it runs as fast as it can (the "steps/s" box shows the real speed).
 
 DATA EXPORT
   The "Export data" button (top bar) downloads everything recorded so far as a zip: population.csv

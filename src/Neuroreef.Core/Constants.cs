@@ -35,7 +35,7 @@ public static class K
     [K("World", "share of cells below lake level", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "catchment (cells) above which a cell is river", "cells", "HT")] public const int RIVER_ACC = 900;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
-    [K("World", "season period", "steps", "V1")] public const int T_SEASON = 9000;
+    [K("World", "season period (one year), by default", "steps", "ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K)")] public const int T_SEASON = 3000;
     [K("World", "season amplitude on moisture", "-", "V1")] public const float A_SEASON = 0.45f;
     [K("World", "telemetry sample interval", "steps", "HT")] public const int SAMPLE_EVERY = 32;
     [K("World", "telemetry ring length", "samples", "HT")] public const int RING = 4096;
@@ -156,7 +156,7 @@ public static class K
     [K("Body", "speed loss per unit of extra armour", "-", "HT")] public const float ARMOUR_DRAG = 0.2f;
 
     // ---------------------------------------------------------------- 5c. bodies from genes (DESIGN §6.3, Revision F)
-    [K("Body", "smallest body mass a mass gene can give", "M", "ECO: a small invertebrate-sized organism")] public const float MASS_LO = 0.05f;
+    [K("Body", "smallest body mass a mass gene can give", "M", "ECO: a small invertebrate-sized organism; 0.01 since Revision K (the ecology review: at 0.05 selection pressed against the floor)")] public const float MASS_LO = 0.01f;
     [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units)")] public const float MASS_HI = 40f;
     [K("Body", "organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth)", "-", "-")] public const float LIMB_MIN = 0.3f;
     [K("Body", "basal cost per unit of fin size, or of leg size per pair of legs", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;
@@ -177,7 +177,16 @@ public static class K
     [K("Body", "a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading)", "-", "ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings")] public const float WING_LIFT = 1.6f;
     [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
     [K("Body", "a legless body crawls on land at this share of its top speed", "-", "ECO: worms, snakes and stranded fish move slowly without legs")] public const float CRAWL = 0.05f;
-    [K("Body", "share of thirst a land organism avoids by taking water from wet soil and moist food", "-", "ECO: many animals and all settled organisms take water from their surroundings")] public const float SOIL_WATER = 0.8f;
+    [K("Land", "a pond site is the lowest cell within this many cells", "cells", "ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas)")] public const int POND_R = 2;
+    [K("Land", "pond sites are at least this far from a lake, sea or river", "cells", "HT: a pond beside a lake adds nothing")] public const float POND_GAP = 6f;
+    [K("Land", "a pond holds water while its cell is this much wetter than its average (season x this year's rain)", "x", "ECO: ephemeral pools fill in the wet season and dry in the dry season and in drought years, in wet and dry country alike")] public const float POND_FILL = 1.0f;
+    [K("Land", "steps between pond updates", "steps", "HT: ponds change over a season, so a few times a season is enough")] public const int POND_EVERY = 100;
+    [K("Body", "share of thirst a land organism avoids on wet soil (dew, damp ground); water in food is counted separately (K_FOODWATER)", "-", "ECO: 0.8 before Revision K counted moist food too (ecology review: no double counting)")] public const float SOIL_WATER = 0.5f;
+    [K("Body", "thirst relieved per unit of food eaten, per unit of water in it, per unit body mass", "/M", "ECO: continuous eating of fully green forage about balances drying on dry ground (C_THIRST / (digestion x 0.75)); preformed water in forage and prey (ecology review)")] public const float K_FOODWATER = 0.35f;
+    [K("Body", "metabolic water: water made per unit of food energy digested, as mass of tissue burned", "-", "ECO: about 0.5 g of water per g of fat oxidised; how desert seed-eaters live without drinking")] public const float MET_WATER = 0.5f;
+    [K("Body", "largest cut in water loss from the water-economy gene", "-", "ECO: kangaroo rats turn over about a quarter of the water of other rodents (Schmidt-Nielsen)")] public const float WATER_ECON = 0.7f;
+    [K("Body", "basal cost of full water economy (kidney and nasal water recovery)", "xbasal", "ECO: kidneys use a few to 10% of basal metabolism")] public const float COST_WATERECON = 0.09f;
+    [K("Body", "mass exponent of thirst (water turnover per unit mass)", "-", "ECO: mass-specific water turnover scales about as M^-0.2")] public const float EXP_THIRST = -0.2f;
     [K("Body", "basal cost per eye pair", "xbasal", "ECO: eyes and visual brain are costly tissue")] public const float COST_EYE = 0.04f;
     [K("Body", "field of view added by each extra eye pair (share of the base field)", "-", "ECO: more eyes cover more directions")] public const float EYE_FOV = 0.3f;
     [K("Body", "turning added per extra fin pair (times fin size)", "-", "ECO: paired fins steer and brake")] public const float FIN_TURN = 0.2f;

@@ -177,7 +177,9 @@ public sealed class Prehistory : IDisposable
         {
             int self = 0;
             for (int s = 0; s < K.CLADES; s++) if (B[b].W.Sp[s].Alive && StandingOf(B[b], s, out _, out _) == Standing.SelfSustaining) self++;
-            long key = (long)self * 10_000_000 + Math.Min(B[b].W.AliveCount, 9_999_999);
+            // a branch whose slot cap bound on more than 1% of steps is not valid evolution (the cap, not nature, chose)
+            bool valid = B[b].W.T.FullSteps <= 0.01 * Math.Max(1UL, B[b].W.Step);
+            long key = (valid ? 1_000_000_000_000L : 0L) + (long)self * 10_000_000 + Math.Min(B[b].W.AliveCount, 9_999_999);
             if (key > bestKey) { bestKey = key; best = b; }
         }
         return best;
