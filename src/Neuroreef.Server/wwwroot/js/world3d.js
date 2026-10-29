@@ -12,6 +12,9 @@ import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize }
 
 const RELIEF = 55;
 const FX_MAX = 256;           // fight flashes and blood stains drawn at once
+const STAIN_MAX = 1024;       // blood stains on the ground
+const BLOOD_MAX = 2500;       // blood droplets in the air at once
+const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sinking for the last quarter
 const NEAR_DIST = 90;        // organisms closer than this to the camera are drawn with the detailed body
 const NEAR_CAP = 4096;       // at most this many detailed bodies; the rest get the low-detail one
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
@@ -357,24 +360,69 @@ export class World3D {
     this.flashMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FX_MAX * 3), 3);
     this.flashMesh.count = 0; this.flashMesh.renderOrder = 7; this.flashMesh.frustumCulled = false;
     const st = new THREE.CircleGeometry(1, 14); st.rotateX(-Math.PI / 2);
-    this.stainMesh = new THREE.InstancedMesh(st, new THREE.MeshBasicMaterial({ color: 0x7a0d0d, transparent: true, opacity: 0.75, depthWrite: false }), FX_MAX);
+    this.stainMesh = new THREE.InstancedMesh(st, new THREE.MeshBasicMaterial({ color: 0x7a0d0d, transparent: true, opacity: 0.75, depthWrite: false }), STAIN_MAX);
     this.stainMesh.count = 0; this.stainMesh.renderOrder = 2; this.stainMesh.frustumCulled = false;
-    this.scene.add(this.flashMesh, this.stainMesh);
+    const drop = new THREE.IcosahedronGeometry(0.09, 0);
+    this.bloodMesh = new THREE.InstancedMesh(drop, new THREE.MeshBasicMaterial({ color: 0xa10b0b }), BLOOD_MAX);
+    this.bloodMesh.count = 0; this.bloodMesh.frustumCulled = false;
+    this.scene.add(this.flashMesh, this.stainMesh, this.bloodMesh);
     this.fx = [];      // live flashes {x, y, t0, kind}
     this.stains = [];  // blood where animals died {x, y, t0, r}
+    this.blood = [];   // droplets {x, y, z, vx, vy, vz, s}
+    this.corpses = []; // the killed, lying where they fell {e, x, y, h, t0}
+    this.dead = new Set();   // serials already drawn as corpses
+    this.shake = 0; this._lastFx = performance.now();
+  }
+
+  _spray(x, y, z, n, speed, dx, dy) {
+    for (let i = 0; i < n && this.blood.length < BLOOD_MAX; i++) {
+      const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random());
+      // most of it flies away from the blow
+      this.blood.push({ x, y, z, vx: Math.cos(a) * v * 0.6 + dx * v, vy: Math.sin(a) * v * 0.6 + dy * v, vz: 2.5 + Math.random() * speed, s: 0.6 + Math.random() * 1.2 });
+    }
   }
 
   /** Fights from the simulation: [x, y, attacker clade, victim clade, kind, step]; kinds as Telemetry.F_*. */
   addFights(list) {
     const now = performance.now();
+    const c = this.controls.target, W = this.W;
     for (const f of list) {
-      const [x, y, , , kind] = f;
+      const [x, y, , , kind, , sa, sv] = f;
       if (kind === 0 && this.fx.length > FX_MAX / 2) continue;   // misses are the first to go when it is busy
       this.fx.push({ x, y, t0: now, kind });
       if (kind === 2 || kind === 4 || kind === 5) this.stains.push({ x, y, t0: now, r: kind === 5 ? 0.5 : 1.1 });
+      // the two animals: the attacker lunges, the victim is thrown back and bleeds
+      const A = sa ? this.agents.get(sa) : null, V = sv ? this.agents.get(sv) : null;
+      let ux = 0, uy = 0;
+      if (A && V) {
+        ux = V.x - A.x; uy = V.y - A.y; ux -= Math.round(ux / W) * W; uy -= Math.round(uy / W) * W;
+        const d = Math.hypot(ux, uy) || 1; ux /= d; uy /= d;
+        A.lungeT = now; A.lx = ux; A.ly = uy; A.lungeD = Math.min(d * 0.8, 0.5 + 0.6 * (A.size || 1));
+      }
+      if (V && kind !== 0) { V.hitT = now; V.hx = ux; V.hy = uy; V.hitD = (kind === 2 ? 0.9 : 0.5) * (V.size || 1); }
+      if (kind === 0) continue;
+      const vs = V ? V.size || 1 : 1, gx = x + W * Math.round((c.x - x) / W), gy = y + W * Math.round((c.z - y) / W);
+      const z = this.heightAt(gx, gy) + vs * 0.6;
+      const N = [0, 14, 60, 10, 40, 8][kind] * Math.min(2.5, Math.max(0.6, vs));
+      if (kind !== 5) this._spray(gx, gy, z, Math.round(N), 3 + 2 * vs, ux, uy);
+      // the dead stay where they fell
+      if ((kind === 2 || kind === 4) && V && !this.dead.has(sv)) {
+        this.dead.add(sv);
+        this.corpses.push({ e: { ...V }, x: V.x, y: V.y, h: V.h + (Math.random() - 0.5), t0: now, serial: sv });
+        if (this.corpses.length > 120) { const old = this.corpses.shift(); this.dead.delete(old.serial); }
+        const dc = Math.hypot(gx - c.x, gy - c.z);
+        if (this.mode === 'overview' && dc < 45) this.shake = Math.max(this.shake, 0.35 * (1 - dc / 45) * Math.min(2, vs));
+      }
     }
     if (this.fx.length > FX_MAX) this.fx.splice(0, this.fx.length - FX_MAX);
-    if (this.stains.length > FX_MAX) this.stains.splice(0, this.stains.length - FX_MAX);
+    if (this.stains.length > STAIN_MAX) this.stains.splice(0, this.stains.length - STAIN_MAX);
+  }
+
+  /** Distance on the map from the centre of the view to a point (for the fight sounds). */
+  viewDist(x, y) {
+    const c = this.controls.target, W = this.W;
+    let dx = x - c.x, dy = y - c.z; dx -= Math.round(dx / W) * W; dy -= Math.round(dy / W) * W;
+    return Math.hypot(dx, dy) + 0.5 * Math.max(0, this.camera.position.distanceTo(c) - 30);
   }
 
   /** Move the camera over a place on the map (a fight in the log). */
@@ -386,6 +434,26 @@ export class World3D {
     if (d > lim) off.multiplyScalar(lim / d);
     const g = this.heightAt(x, y);
     c.set(x, g, y); this.camera.position.set(x + off.x, g + Math.max(8, off.y), y + off.z);
+  }
+
+  _drawBlood(now) {
+    const dt = Math.min(0.05, (now - this._lastFx) / 1000); this._lastFx = now;
+    const m = new THREE.Matrix4(), keep = [];
+    let k = 0;
+    for (const b of this.blood) {
+      b.vz -= 18 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      const g = this.heightAt(b.x, b.y);
+      if (b.z <= g) {   // it lands: a spatter on the ground
+        if (Math.random() < 0.25) this.stains.push({ x: b.x, y: b.y, t0: now, r: 0.12 + 0.18 * Math.random() });
+        continue;
+      }
+      keep.push(b);
+      m.makeScale(b.s, b.s, b.s); m.setPosition(b.x, b.z, b.y);
+      this.bloodMesh.setMatrixAt(k++, m);
+    }
+    this.blood = keep;
+    if (this.stains.length > STAIN_MAX) this.stains.splice(0, this.stains.length - STAIN_MAX);
+    this.bloodMesh.count = k; this.bloodMesh.instanceMatrix.needsUpdate = true;
   }
 
   _drawFights(cx, cz) {
@@ -525,14 +593,20 @@ export class World3D {
     const eggCol = new THREE.Color(), white = new THREE.Color(1, 1, 1);
     const t = now / 1000, Wh = W / 2;
     for (const [serial, e] of this.agents) {
-      if (this.hidden.has(e.sp)) continue;
+      if (this.hidden.has(e.sp) || this.dead.has(serial)) continue;
       if (farStride > 1 && serial % farStride !== 0 && serial !== this.selected) {
         let qx = e.x - camX, qz = e.y - camZ;
         qx -= Math.round(qx / W) * W; qz -= Math.round(qz / W) * W;
         if (qx * qx + qz * qz >= near2) continue;
       }
-      const [x, y, h] = this._pos(e, alpha, cx, cz, P3);
+      let [x, y, h] = this._pos(e, alpha, cx, cz, P3);
       const ci = e.sp * 3;
+      let acts = e.acts, cr = rgb[ci], cg = rgb[ci + 1], cb = rgb[ci + 2];
+      if (e.lungeT && now - e.lungeT < 380) { const f = Math.sin((now - e.lungeT) / 380 * Math.PI) * e.lungeD; x += e.lx * f; y += e.ly * f; acts |= 2; }
+      if (e.hitT && now - e.hitT < 450) {
+        const a = 1 - (now - e.hitT) / 450, f = a * a * e.hitD;
+        x += e.hx * f; y += e.hy * f; cr += (1 - cr) * a; cg *= 1 - 0.8 * a; cb *= 1 - 0.8 * a;   // thrown back, flushed red
+      }
       if (e.stage === 0) {
         if (ne >= 4096) continue;
         p.set(x, this.heightAt(x, y) + 0.3, y); q.identity(); s.set(1, 0.8, 1);
@@ -552,7 +626,19 @@ export class World3D {
       const ddx = x - camX, ddz = y - camZ;
       let B, k;
       if (ddx * ddx + ddz * ddz < near2 && nn < near.cap) { B = near; k = nn++; } else { B = far; k = nf++; if (k >= far.cap) continue; }
-      setBody(B, k, x, gy, y, h, sc, sc * (e.rest && !e.fly ? 0.7 : 1), e, e.gait, (serial % 997) / 997, e.acts, e.rest ? 1 : 0, rgb[ci], rgb[ci + 1], rgb[ci + 2]);
+      setBody(B, k, x, gy, y, h, sc, sc * (e.rest && !e.fly ? 0.7 : 1), e, e.gait, (serial % 997) / 997, acts, e.rest ? 1 : 0, cr, cg, cb);
+    }
+    // the killed: flattened, darkened bodies lying where they fell, sinking into the ground at the end
+    this.corpses = this.corpses.filter((d) => { if (now - d.t0 < CORPSE_LIFE) return true; this.dead.delete(d.serial); return false; });
+    for (const d of this.corpses) {
+      const e = d.e, x = d.x + W * Math.round((cx - d.x) / W), y = d.y + W * Math.round((cz - d.y) / W);
+      const a = (now - d.t0) / CORPSE_LIFE, sc = (e.size || 1) * (e.stage === 1 ? 0.55 : 1);
+      const gy = this.heightAt(x, y, e.swim) - sc * 0.15 - Math.max(0, a - 0.75) * 4 * sc * 0.6;
+      const ddx = x - camX, ddz = y - camZ;
+      let B, k;
+      if (ddx * ddx + ddz * ddz < near2 && nn < near.cap) { B = near; k = nn++; } else { B = far; k = nf++; if (k >= far.cap) continue; }
+      const ci = e.sp * 3, dk = 0.45 - 0.2 * a;
+      setBody(B, k, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, rgb[ci] * dk + 0.18, rgb[ci + 1] * dk * 0.5, rgb[ci + 2] * dk * 0.5);
     }
     commitBodies(near, nn); commitBodies(far, nf);
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
@@ -577,8 +663,13 @@ export class World3D {
       this._perceive(sel, selP, R, fov, alpha, cx, cz);
     } else { this.selRing.visible = this.selBeam.visible = this.fov.visible = false; this.percMesh.count = 0; }
     this._drawFights(cx, cz);
+    this._drawBlood(now);
 
+    // a kill close by shakes the view
+    let sx = 0, sy = 0;
+    if (this.shake > 0.01) { sx = (Math.random() - 0.5) * this.shake; sy = (Math.random() - 0.5) * this.shake; this.camera.position.x += sx; this.camera.position.y += sy; this.shake *= 0.86; }
     this.renderer.render(this.scene, this.camera);
+    this.camera.position.x -= sx; this.camera.position.y -= sy;
   }
 
   _height(e, x, y) { return this.heightAt(x, y, e.swim); }

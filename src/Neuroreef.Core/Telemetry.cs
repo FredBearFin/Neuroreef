@@ -104,11 +104,13 @@ public sealed class Telemetry
     public const int FIGHT_N = 512, FIGHT_F = 6;
     public const int F_MISS = 0, F_WOUND = 1, F_KILL = 2, F_BITE = 3, F_DRAINED = 4, F_EGG = 5;
     public readonly float[] Fights = new float[FIGHT_N * FIGHT_F];
+    public readonly uint[] FightWho = new uint[FIGHT_N * 2];   // attacker and victim serials, for the console to animate them
     public long FightSeq;
 
-    public void Fight(float x, float y, int attacker, int victim, int kind, ulong step)
+    public void Fight(float x, float y, int attacker, int victim, int kind, ulong step, uint sa, uint sv)
     {
-        int o = (int)(FightSeq % FIGHT_N) * FIGHT_F;
+        int o = (int)(FightSeq % FIGHT_N) * FIGHT_F, q = (int)(FightSeq % FIGHT_N) * 2;
+        FightWho[q] = sa; FightWho[q + 1] = sv;
         Fights[o] = x; Fights[o + 1] = y; Fights[o + 2] = attacker; Fights[o + 3] = victim; Fights[o + 4] = kind; Fights[o + 5] = step;
         FightSeq++;
     }

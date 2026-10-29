@@ -389,7 +389,8 @@ public static class Host
                             int o = (int)(q % Telemetry.FIGHT_N) * Telemetry.FIGHT_F;
                             if (q > from) sb.Append(',');
                             sb.Append('[').Append(T.Fights[o].ToString("0.0", CultureInfo.InvariantCulture)).Append(',').Append(T.Fights[o + 1].ToString("0.0", CultureInfo.InvariantCulture))
-                              .Append(',').Append((int)T.Fights[o + 2]).Append(',').Append((int)T.Fights[o + 3]).Append(',').Append((int)T.Fights[o + 4]).Append(',').Append((long)T.Fights[o + 5]).Append(']');
+                              .Append(',').Append((int)T.Fights[o + 2]).Append(',').Append((int)T.Fights[o + 3]).Append(',').Append((int)T.Fights[o + 4]).Append(',').Append((long)T.Fights[o + 5])
+                              .Append(',').Append(T.FightWho[(int)(q % Telemetry.FIGHT_N) * 2]).Append(',').Append(T.FightWho[(int)(q % Telemetry.FIGHT_N) * 2 + 1]).Append(']');
                         }
                         sb.Append("]}");
                         fightSeen = seq;

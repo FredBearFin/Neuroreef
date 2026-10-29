@@ -28,7 +28,7 @@ link.listen('meta', (m) => {
 link.listen('clades', (c) => { if (!meta) { pendingClades = c.list; return; } setClades(c.list, c.step); });
 link.listen('world', (w) => world && world.setWorld(w));
 link.listen('agents', (a) => world && world.setAgents(a));
-link.listen('fights', (f) => { if (world) world.addFights(f.list); fightLog(f.list); });
+link.listen('fights', (f) => { if (world) world.addFights(f.list); fightLog(f.list); fightSound(f.list); });
 link.listen('fields', (f) => { if (world) world.setFields(f); if (panels) panels.setFields(f); });
 link.listen('history', (h) => panels && panels.setHistory(h));
 link.listen('telemetry', (t) => panels && panels.addSample(t));
@@ -273,4 +273,45 @@ function fightLog(list) {
   box.innerHTML = `<div class="fh">FIGHTS · ${killsSeen} kill${killsSeen === 1 ? '' : 's'} seen</div>` +
     show.map((l, i) => `<div class="fl${l.kill ? ' kill' : ''}" data-i="${fightLines.indexOf(l)}">${l.text} <em>step ${l.step.toLocaleString()}</em></div>`).join('');
   for (const d of box.querySelectorAll('.fl')) d.onclick = () => { const l = fightLines[+d.dataset.i]; if (l && world) world.lookAt(l.x, l.y); };
+}
+
+// fight sounds, made on the spot (no files): a thud and a tearing crunch for a kill, a crack for a wound,
+// a wet squelch for a bite. Off until the button is pressed (browsers allow sound only after a click).
+let audio = null, soundOn = false;
+document.getElementById('sound')?.addEventListener('click', (ev) => {
+  soundOn = !soundOn;
+  if (soundOn && !audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+  if (audio && audio.state === 'suspended') audio.resume();
+  ev.currentTarget.textContent = soundOn ? 'sound on' : 'sound off';
+  ev.currentTarget.classList.toggle('on', soundOn);
+});
+function noise(t, dur, gain, f0, f1, q) {
+  const n = Math.ceil(audio.sampleRate * dur), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** 2;
+  const src = audio.createBufferSource(); src.buffer = buf;
+  const bp = audio.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q;
+  bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const g = audio.createGain(); g.gain.value = gain;
+  src.connect(bp).connect(g).connect(audio.destination); src.start(t);
+}
+function thud(t, gain, f) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.35, t + 0.25);
+  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.32);
+}
+function fightSound(list) {
+  if (!soundOn || !audio || !world) return;
+  let made = 0; const t0 = audio.currentTime;
+  for (const f of list) {
+    const [x, y, , , kind] = f;
+    if (kind === 0 || made >= 5) continue;
+    const d = world.viewDist(x, y); if (d > 70) continue;
+    const v = Math.min(1, 12 / (d + 6)), t = t0 + made * 0.06 + Math.random() * 0.05;
+    if (kind === 2 || kind === 4) { thud(t, 0.9 * v, 95 + Math.random() * 30); noise(t + 0.02, 0.35, 0.7 * v, 1800, 300, 1.2); }
+    else if (kind === 1) noise(t, 0.09, 0.6 * v, 2600, 900, 2.5);
+    else if (kind === 3) noise(t, 0.18, 0.5 * v, 500, 180, 4);
+    else if (kind === 5) noise(t, 0.07, 0.5 * v, 3200, 1500, 3);
+    made++;
+  }
 }
