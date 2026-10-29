@@ -58,7 +58,13 @@ public static class Program
         {
             Console.WriteLine("RANDOM BRAINS (no prehistory): nothing will be spawned, so most species will die out.");
         }
-        if (o.Evolve) return Headless.Evolve(o);
+        if (o.Evolve)
+        {
+            // Evolve.bat / LongRun.bat: a NEW prehistory gets the setup page too (a resumed one keeps its sizes)
+            bool resuming = o.CheckpointPath != null && File.Exists(o.CheckpointPath);
+            if (!resuming && !o.NoSetup) Setup.Run(o);
+            return Headless.Evolve(o);
+        }
         if (o.Headless) return Headless.Run(o, bank);
         // a new prehistory: let the person choose its size first, so nothing is allocated that the machine cannot hold
         if (bank == null && !o.RandomBrains && !o.ResumePrehistory && !o.NoSetup && !o.SetupDone) Setup.Run(o);

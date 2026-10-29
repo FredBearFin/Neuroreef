@@ -63,15 +63,17 @@ function build() {
       help: 'The most organisms (eggs included) one branch can hold. This is the main memory cost. Too few and the slot limit, not food, decides who gets born.' },
     { key: 'founders', label: 'Founders per ancestor', min: 100, max: 1500, step: 50, val: info.founders, fmt: (v) => v,
       help: `How many animals each of the ${info.ancestors} ancestors starts with. Fewer founders start faster but risk early extinctions by chance.` },
-    { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: info.steps, fmt: (v) => v === 0 ? 'until you begin the world' : v.toLocaleString() + ' steps',
-      help: 'When the world begins on its own. You can always press "Begin the world" earlier.' },
+    { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: info.steps,
+      fmt: (v) => v === 0 ? (info.evolve ? 'until you stop it (Ctrl+C)' : 'until you begin the world') : v.toLocaleString() + ' steps',
+      help: info.evolve ? 'When the run stops on its own. Ctrl+C in its window stops it early and saves everything.'
+                        : 'When the world begins on its own. You can always press "Begin the world" earlier.' },
     { key: 'bigBrains', label: 'Big-brained ancestors per branch', min: 0, max: info.ancestors, step: 1, val: info.bigBrains, fmt: (v) => v === 0 ? 'none' : v,
       help: `Half on land, half in water. Every other ancestor starts with a random brain of up to ${info.refUnits} units.` },
     { key: 'bigBrainUnits', label: 'Brain size of a big-brained ancestor', min: info.refUnits, max: info.maxUnits, step: 2, val: info.bigBrainUnits, fmt: (v) => v + ' units',
       help: 'Memory units. A bigger brain costs proportionally more energy every step; whether it pays for itself is up to evolution.' },
     { key: 'worldSlots', label: 'Animal slots in the world (after the prehistory)', list: WSLOTS, val: info.worldSlots, fmt: (v) => v.toLocaleString(),
       help: 'The most organisms the world you watch can hold. When it is full, births are refused.' },
-  ];
+  ].filter((r) => !(info.evolve && r.key === 'worldSlots'));   // Evolve.bat / LongRun.bat make no world
   const box = $('rows'); box.innerHTML = '';
   rows = R.map((r) => {
     const d = document.createElement('div'); d.className = 'row';
@@ -93,7 +95,7 @@ function setv(k, v) { rows.find((r) => r.key === k).set(v); }
 
 function estimate() {
   // the prehistory and the world are never both in memory: the larger of the two counts
-  const pre = val('branches') * val('branchSlots') * info.bytesPerSlot, world = val('worldSlots') * info.bytesPerSlot;
+  const pre = val('branches') * val('branchSlots') * info.bytesPerSlot, world = info.evolve ? 0 : val('worldSlots') * info.bytesPerSlot;
   const need = Math.max(pre, world) + 0.4e9;
   $('mem').textContent = gb(need);
   $('ram').textContent = gb(info.ramBytes);
@@ -109,12 +111,17 @@ const PRESETS = {
   normal: { branches: 3, branchSlots: 49152, founders: 600, bigBrains: 2, bigBrainUnits: 36, worldSlots: 65536 },
   big: { branches: 4, branchSlots: 98304, founders: 900, bigBrains: 2, bigBrainUnits: 36, worldSlots: 131072 },
 };
-for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => { const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]); estimate(); };
+for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => { const p = PRESETS[a.dataset.p]; for (const k in p) if (rows.some((r) => r.key === k)) setv(k, p[k]); estimate(); };
 
 $('go').onclick = async () => {
   $('go').disabled = true; $('msg').textContent = 'Creating the prehistory…';
   const body = {}; for (const r of rows) body[r.key] = r.get();
   await fetch('api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (info.evolve) {
+    // Evolve.bat / LongRun.bat: no console follows; the run reports in its own window
+    $('msg').innerHTML = '<b class="ok">Started.</b> The prehistory is running in the command window (it prints a line every 10,000 steps). You can close this page.';
+    return;
+  }
   // the program now builds the branches and opens the console on the same address: wait for it
   const t0 = Date.now();
   const poll = async () => {
@@ -125,7 +132,10 @@ $('go').onclick = async () => {
   setTimeout(poll, 1500);
 };
 
-fetch('api/setup-info').then((r) => r.json()).then((j) => { info = j; build(); });
+fetch('api/setup-info').then((r) => r.json()).then((j) => {
+  info = j; build();
+  if (info.evolve) { document.querySelector('h1').textContent = 'NEUROREEF · NEW PREHISTORY (NO GRAPHICS)'; $('go').textContent = 'Start'; }
+});
 </script>
 </body>
 </html>

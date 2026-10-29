@@ -35,7 +35,7 @@ public static class Setup
         {
             bytesPerSlot = World.BytesPerSlot, ramBytes = ram, cores = Environment.ProcessorCount,
             branches = o.Branches, branchSlots = o.BranchSlots, worldSlots = o.Capacity, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
-            steps = o.PrehistorySteps, bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
+            steps = o.Evolve && o.StepsSet ? (int)Math.Clamp(o.Steps, 0, int.MaxValue) : o.PrehistorySteps, evolve = o.Evolve, bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
             maxUnits = G.NH, refUnits = K.BRAIN_REF, ancestors = K.ANCESTORS_LAND + K.ANCESTORS_WATER,
         }));
         app.MapPost("/api/setup", async (HttpContext ctx) =>
@@ -47,7 +47,8 @@ public static class Setup
             o.BranchSlots = I("branchSlots", 2048, 262144, o.BranchSlots);
             o.Capacity = I("worldSlots", 4096, 524288, o.Capacity);
             o.Founders = I("founders", 20, 5000, K.ANCESTOR_COUNT);
-            o.PrehistorySteps = I("steps", 0, int.MaxValue, o.PrehistorySteps);   // 0 = until you begin the world
+            o.PrehistorySteps = I("steps", 0, int.MaxValue, o.PrehistorySteps);   // 0 = until you begin the world (or stop it)
+            if (o.Evolve) { o.Steps = o.PrehistorySteps; o.StepsSet = true; }   // the headless prehistory takes its length from --steps
             o.BigBrains = I("bigBrains", 0, K.ANCESTORS_LAND + K.ANCESTORS_WATER, K.BIG_BRAINS);
             o.BigBrainUnits = I("bigBrainUnits", K.BRAIN_MIN, G.NH, K.BIG_BRAIN_UNITS);
             Console.WriteLine($"setup: {o.Branches} branches x {o.BranchSlots:N0} slots, {o.Founders} founders per ancestor, " +
