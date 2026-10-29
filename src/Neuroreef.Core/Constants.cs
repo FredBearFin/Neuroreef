@@ -148,6 +148,8 @@ public static class K
     [K("Prehistory", "agent slots per branch", "slots", "HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds)")] public const int BRANCH_CAPACITY = 16384;
     [K("Brain", "founders start in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder group", "units", "HT")] public const float GROUP_SPREAD = 10f;
+    [K("Brain", "radius of an ancestor's home range, as a share of the map side", "-", "Revision N (the user): each lineage starts in its own part of the map; species have homelands and meet as they spread")] public const float HOME_R = 0.12f;
+    [K("Brain", "random sites tried when choosing a home range (the one farthest from the others is taken)", "-", "HT")] public const int HOME_TRIES = 24;
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT (Revision M: 96 before)")] public const int BANK_LIVING = 48;
 
     // ---------------------------------------------------------------- 5b. evolvable bodies (DESIGN §7.5)

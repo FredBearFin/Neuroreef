@@ -3,6 +3,11 @@
 Document NR-DD-001, Revision N. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Home ranges** (the user, 2026-10-30): each founding lineage starts in its own home range (radius HOME_R of the map
+side), the one of HOME_TRIES random sites farthest from the homes already taken; founding from a gene bank does the
+same per clade. Before, every ancestor's founder groups were scattered over the whole map, so every species met every
+other from the first step.
+
 **Changes in Revision N: richer voices** (the user, 2026-10-29: the voices are "clearly too limited"; can languages
 evolve new, unknown words? Designed with the communication designer. Nothing gives a sound or a sequence a meaning, and
 nothing rewards communicating; the only intrinsic signal is matching the *form* of what elders say, through a gene

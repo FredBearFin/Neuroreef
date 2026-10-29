@@ -60,6 +60,7 @@ public sealed class Simulation : IDisposable
         // rest, like a human species")
         int nBig = w.Evo.BigBrains, bigLand = (nBig + 1) / 2, bigWater = nBig / 2;
         int nLand = w.Evo.AncestorsLand, nAll = nLand + w.Evo.AncestorsWater;
+        var homes = new System.Collections.Generic.List<(float, float)>();
         for (int a = 0; a < nAll; a++)
         {
             bool land = a < nLand;
@@ -67,6 +68,9 @@ public sealed class Simulation : IDisposable
             int clade = Clades.NewClade(w, -1, a);
             var realm = land ? Realm.Land : Realm.Water;
             float gx = 0, gy = 0;
+            // each ancestor has its own home range, as far as possible from the others: species meet at the edges of
+            // their ranges as they spread, not everywhere at once (Revision N)
+            if (!Life.PickHome(w, realm, 0x60000u + (uint)a * 977u, homes, out float hx, out float hy)) continue;
             // the ancestor's one brain and body (Revision H: unrelated random brains per founder made crossover
             // scramble networks, a hidden cost only sex paid); each founder varies around it
             var anc = new sbyte[G.LEN];
@@ -78,7 +82,7 @@ public sealed class Simulation : IDisposable
             int founders = Math.Max(K.MIN_SPLIT, (int)MathF.Round(w.Evo.Founders * MathF.Min(1f, area * K.FOUND_AREA)));
             for (int k = 0; k < founders; k++, key++)
             {
-                if (k % K.GROUP_SIZE == 0 && !Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
+                if (k % K.GROUP_SIZE == 0 && !Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy)) break;
                 anc.CopyTo(tmpl, 0);
                 Brain.VaryBrain(tmpl, seed, key, units);
                 Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
@@ -92,6 +96,7 @@ public sealed class Simulation : IDisposable
     {
         var w = W;
         uint key = 1;
+        var homes = new System.Collections.Generic.List<(float, float)>();
         foreach (var c in bank.Clades)
         {
             var s = w.Sp[c.Slot];
@@ -105,14 +110,17 @@ public sealed class Simulation : IDisposable
             float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);
             int n = Math.Min(c.Count, Math.Max(20, (int)(K.ANCESTOR_COUNT * 2 * area)));
             float gx = 0, gy = 0;
+            // the clade's home range in the new world, away from the others' (Revision N)
+            var home = RealmOfGenome(src[0]);
+            if (!Life.PickHome(w, home, 0x61000u + (uint)c.Slot * 977u, homes, out float hx, out float hy)) continue;
             for (int k = 0; k < n; k++, key++)
             {
                 var g = src[(int)(Rng.U(seed, 0, key, Rs.Bank) * src.Count)];
                 if (k % K.GROUP_SIZE == 0)
                 {
-                    // the group's site follows the realm its genes give
+                    // the group's site follows the realm its genes give, within the clade's home range
                     var realm = RealmOfGenome(g);
-                    if (!Life.RandomSite(w, realm, key + 0x50000u, out gx, out gy)) break;
+                    if (!Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy)) break;
                 }
                 Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
             }

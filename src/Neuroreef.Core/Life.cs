@@ -96,6 +96,39 @@ public static class Life
     }
 
     /// <summary>A random cell suitable for the given realm (hashed tries).</summary>
+    /// <summary>
+    /// A home range for a founding lineage (Revision N, the user: each ancestor starts in its own part of the map):
+    /// of HOME_TRIES random sites its realm allows, the one farthest from every home already taken (torus distance).
+    /// </summary>
+    public static bool PickHome(World w, Realm realm, uint key, System.Collections.Generic.List<(float x, float y)> taken, out float hx, out float hy)
+    {
+        hx = hy = 0; float best = -1;
+        for (int t = 0; t < K.HOME_TRIES; t++)
+        {
+            if (!RandomSite(w, realm, key + 0x9000u + (uint)t * 131u, out float x, out float y)) continue;
+            float near = float.MaxValue;
+            foreach (var (tx, ty) in taken) { float dx = World.Delta1(x - tx), dy = World.Delta1(y - ty); near = MathF.Min(near, dx * dx + dy * dy); }
+            if (near > best) { best = near; hx = x; hy = y; }
+        }
+        if (best < 0) return false;
+        taken.Add((hx, hy));
+        return true;
+    }
+
+    /// <summary>A site its realm allows within the home range (radius HOME_R x map side) around (hx, hy); wider if none is found.</summary>
+    public static bool HomeSite(World w, Realm realm, float hx, float hy, uint key, out float x, out float y)
+    {
+        float r = K.HOME_R * Map.W;
+        for (int t = 0; t < 96; t++)
+        {
+            float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 300u + (uint)t * 2) * 2f * MathF.PI;
+            float d = MathF.Sqrt(Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 301u + (uint)t * 2)) * r * (1f + t / 32);
+            x = World.Wrap(hx + MathK.Cos(a) * d); y = World.Wrap(hy + MathK.Sin(a) * d);
+            if (w.CellAllows(World.FIdx(x, y), realm)) return true;
+        }
+        return RandomSite(w, realm, key, out x, out y);
+    }
+
     public static bool RandomSite(World w, Realm realm, uint key, out float x, out float y)
     {
         for (int t = 0; t < 64; t++)

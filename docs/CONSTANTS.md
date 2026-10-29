@@ -175,6 +175,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | GROUP_SIZE | 8 | agents | founders start in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
 | GROUP_SPREAD | 10 | units | radius of a founder group | HT |
+| HOME_R | 0.12 | - | radius of an ancestor's home range, as a share of the map side | Revision N (the user): each lineage starts in its own part of the map; species have homelands and meet as they spread |
+| HOME_TRIES | 24 | - | random sites tried when choosing a home range (the one farthest from the others is taken) | HT |
 | BANK_LIVING | 48 | genomes | genomes per species stored in a gene bank (living sample) | HT (Revision M: 96 before) |
 
 ## 12. Body
