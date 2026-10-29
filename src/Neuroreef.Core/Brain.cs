@@ -112,6 +112,7 @@ public static class Brain
         for (int k = 0; k < G.W2N; k++) { w.W2f[o + k] = w.Genome[g0 + G.W2 + k] * K.WSCALE; w.Trace[o + k] = 0f; }
         Array.Clear(w.Hidden, i * G.NH, G.NH);
         Array.Clear(w.HistA, i * BLOCK, BLOCK);
+        Array.Clear(w.HistV, i * BLOCK, BLOCK); w.VMean[i] = 0;
         Array.Clear(w.HistD, i * BLOCK * P.N, BLOCK * P.N);
         Array.Clear(w.HistY, i * BLOCK * G.NIN, BLOCK * G.NIN);
         Array.Clear(w.Gain, i * P.N, P.N);
@@ -158,6 +159,20 @@ public static class Brain
         float cB = eta * (A1 + A2 * lam + A3 * l2);
         float cC = eta * (A2 + A3 * lam);
         float cD = eta * A3;
+        // vocal learning (Revision N): on the call rows only, the match of its own utterances to its remembered tutors
+        // (HistV) adds to the advantage, weighted by the learning gene: eta x (A + IMIT x V). With IMIT = 0 the call rows
+        // use exactly the coefficients of every other row (Doupe & Kuhl 1999; Brainard & Doupe 2002)
+        float c0v = c0, cAv = cA, cBv = cB, cCv = cC, cDv = cD;
+        float imit = w.PImit[i];
+        if (imit > 0f && w.Evo.VocalLearning)
+        {
+            float V0 = A0 + imit * w.HistV[hb], V1 = A1 + imit * w.HistV[hb + 1], V2 = A2 + imit * w.HistV[hb + 2], V3 = A3 + imit * w.HistV[hb + 3];
+            c0v = eta * (V0 * lam + V1 * l2 + V2 * l3 + V3 * l4);
+            cAv = eta * (V0 + V1 * lam + V2 * l2 + V3 * l3);
+            cBv = eta * (V1 + V2 * lam + V3 * l2);
+            cCv = eta * (V2 + V3 * lam);
+            cDv = eta * V3;
+        }
         fixed (float* W = &w.W2f[i * G.W2N])
         fixed (float* E = &w.Trace[i * G.W2N])
         fixed (float* D = &w.HistD[hb * P.N])
@@ -165,12 +180,15 @@ public static class Brain
         {
             float* y0 = Y, y1 = Y + G.NIN, y2 = Y + 2 * G.NIN, y3 = Y + 3 * G.NIN;
             var hi = Vector256.Create(K.WMAX); var lo = Vector256.Create(-K.WMAX);
-            var vc0 = Vector256.Create(c0); var vl4 = Vector256.Create(l4);
+            var vl4 = Vector256.Create(l4);
             int units = w.PBrain[i];
             for (int p = 0; p < P.N; p++)
             {
+                bool call = p >= P.CALL_0;                                              // the call rows are the last F.NSOUND
+                float k0 = call ? c0v : c0, kA = call ? cAv : cA, kB = call ? cBv : cB, kC = call ? cCv : cC, kD = call ? cDv : cD;
+                var vc0 = Vector256.Create(k0);
                 float d0 = D[p], d1 = D[P.N + p], d2 = D[2 * P.N + p], d3 = D[3 * P.N + p];
-                float wA = cA * d0, wB = cB * d1, wC = cC * d2, wD = cD * d3;          // weight-update coefficients
+                float wA = kA * d0, wB = kB * d1, wC = kC * d2, wD = kD * d3;          // weight-update coefficients
                 float eA = l3 * d0, eB = l2 * d1, eC = lam * d2, eD = d3;              // trace coefficients
                 float* Wr = W + p * G.NIN, Er = E + p * G.NIN;
                 var vwA = Vector256.Create(wA); var vwB = Vector256.Create(wB); var vwC = Vector256.Create(wC); var vwD = Vector256.Create(wD);
@@ -191,7 +209,7 @@ public static class Brain
                 for (; k < kend; k++)
                 {
                     float e = Er[k];
-                    float dw = c0 * e + wA * y0[k] + wB * y1[k] + wC * y2[k] + wD * y3[k];
+                    float dw = k0 * e + wA * y0[k] + wB * y1[k] + wC * y2[k] + wD * y3[k];
                     Wr[k] = Math.Clamp(Wr[k] + dw, -K.WMAX, K.WMAX);
                     Er[k] = l4 * e + eA * y0[k] + eB * y1[k] + eC * y2[k] + eD * y3[k];
                 }

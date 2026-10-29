@@ -108,12 +108,7 @@ public static class Resolve
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
 
         // ---- 6a. voice (Revision M): a sound costs a little energy, and is heard by everyone near on the next step
-        int callK = -1;
-        for (int k = 0; k < F.NSOUND; k++) if ((acts & (1u << (P.CALL_0 + k - P.FIRST_ACTION))) != 0) { callK = k; break; }
-        if (w.PVoice[i] < K.VOICE_MIN) callK = -1;   // a mute animal's call makes no sound (and costs nothing)
-        w.Call[i] = (byte)(callK + 1);
-        if (callK >= 0) w.Energy[i] -= K.C_CALL * K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL);
-        Voices(w, i, s, callK, acts);
+        Voices(w, i, s, Speak(w, i, acts, mass), acts);
 
         // ---- 6. mark and scent, cache
         float carn = diet[(int)Pool.Meat];
@@ -209,23 +204,37 @@ public static class Resolve
     /// <summary>Translator bookkeeping (not a rule; reads only): the context of a call, the usual context, and how a
     /// listener answered what it heard. The caller's whole sense vector and the listeners' gains are summed for the
     /// open-ended translator (Meaning.cs); the 7 fixed contexts are kept as its fallback.</summary>
-    public static void Voices(World w, int i, int s, int callK, uint acts)
+    /// <param name="type">the utterance it made this step (Voice type 0..399; a single sound k is type k), -1 none</param>
+    public static void Voices(World w, int i, int s, int type, uint acts)
     {
         var T = w.T;
         var f = new ReadOnlySpan<float>(w.Feat, i * F.N, F.N);
+        var gain = new ReadOnlySpan<float>(w.Gain, i * P.N, P.N);
         if ((w.Step & 3) == (ulong)(i & 3))   // the usual context, sampled every 4th step per organism
         {
             T.BaseN[s]++;
             for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.BaseCtx[s * Telemetry.NCTX + c]++;
             Accumulate(T.BaseFeat, T.BaseFeat2, s * F.N, f);
-            Accumulate(T.BaseGain, T.BaseGain2, s * P.N, new ReadOnlySpan<float>(w.Gain, i * P.N, P.N));
+            Accumulate(T.BaseGain, T.BaseGain2, s * P.N, gain);
         }
-        if (callK >= 0)
+        Span<byte> syl = stackalloc byte[F.MAX_SYL];
+        if (type >= 0)
         {
-            int sk = s * F.NSOUND + callK;
-            T.CallN[sk]++;
-            for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.CallCtx[sk * Telemetry.NCTX + c]++;
-            Accumulate(T.CallFeat, T.CallFeat2, sk * F.N, f);
+            int n = Voice.Decode(type, syl);
+            for (int p = 0; p < n; p++)   // each sound of it, for the per-sound view
+            {
+                int sk = s * F.NSOUND + syl[p] - 1;
+                T.CallN[sk]++;
+                for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.CallCtx[sk * Telemetry.NCTX + c]++;
+                Accumulate(T.CallFeat, T.CallFeat2, sk * F.N, f);
+            }
+            int st = s * Voice.NTYPE + type;   // the utterance as a whole
+            long now = (long)w.Step + 1;
+            if (T.UttFirst[st] == 0) T.UttFirst[st] = now;
+            T.UttLast[st] = now;
+            if (++T.UttN[st] == Telemetry.MIN_UTT) T.UttCross[st] = now;
+            int tr = T.Track(s);
+            if (tr >= 0) { T.UttFeatN[tr * Voice.NTYPE + type]++; Accumulate(T.UttFeat, T.UttFeat2, (tr * Voice.NTYPE + type) * F.N, f); }
         }
         int h = w.IHeard[i];
         bool user = w.IHeardUser[i] != 0;
@@ -234,14 +243,67 @@ public static class Resolve
         float dx = World.Delta1(w.IHeardX[i] - w.X[i]), dy = World.Delta1(w.IHeardY[i] - w.Y[i]), d = MathF.Sqrt(dx * dx + dy * dy);
         float vmax = MathF.Max(w.Vmax(i), 1e-3f), sp = w.ISpeed[i] / vmax;
         float cos = d > 1e-3f ? (MathK.Cos(w.IHeading[i]) * dx + MathK.Sin(w.IHeading[i]) * dy) / d : 0f;
-        int r = callK >= 0 ? 3 : sp < 0.1f ? 2 : sp > 0.25f && cos > 0.5f ? 0 : sp > 0.25f && cos < -0.5f ? 1 : 4;
+        int r = type >= 0 ? 3 : sp < 0.1f ? 2 : sp > 0.25f && cos > 0.5f ? 0 : sp > 0.25f && cos < -0.5f ? 1 : 4;
         if (user) { if (T.UserRespId != w.UserCallId) { Array.Clear(T.UserResp); T.UserRespId = w.UserCallId; } T.UserResp[r]++; }
-        if (h != 0 && (h - 1) / F.NSOUND == s)   // the caller's own clade
+        if (h != 0 && (h - 1) / Voice.NTYPE == s)   // its focal caller was of its own clade
         {
-            T.CallResp[(h - 1) * Telemetry.NRESP + r]++;
-            T.HeardN[h - 1]++;
-            Accumulate(T.HeardGain, T.HeardGain2, (h - 1) * P.N, new ReadOnlySpan<float>(w.Gain, i * P.N, P.N));
+            int ht = (h - 1) % Voice.NTYPE, st = s * Voice.NTYPE + ht;
+            T.UttResp[st * Telemetry.NRESP + r]++;
+            T.UttHeardN[st]++;
+            int tr = T.TrackOf[s];
+            if (tr >= 0) { T.UttGainN[tr * Voice.NTYPE + ht]++; Accumulate(T.UttGain, T.UttGain2, (tr * Voice.NTYPE + ht) * P.N, gain); }
+            int n = Voice.Decode(ht, syl);
+            for (int p = 0; p < n; p++)
+            {
+                int sk = s * F.NSOUND + syl[p] - 1;
+                T.CallResp[sk * Telemetry.NRESP + r]++;
+                T.HeardN[sk]++;
+                Accumulate(T.HeardGain, T.HeardGain2, sk * P.N, gain);
+            }
         }
+    }
+
+    /// <summary>
+    /// The voice (Revision M, N): the utterance in the fired call actions, up to MAX_SYL sounds in the order of how
+    /// strongly each was intended, is made into w.Call (heard on the next step) and costs C_CALL x basal x
+    /// (1 - CALL_SYL + CALL_SYL x syllables). A mute animal makes no sound and pays nothing. A vocal learner's match to
+    /// its template is stored for the learning block. Returns the utterance type (Voice), -1 when silent.
+    /// </summary>
+    public static int Speak(World w, int i, uint acts, float mass)
+    {
+        int cb = i * F.MAX_SYL;
+        var utt = new Span<byte>(w.Call, cb, F.MAX_SYL);
+        int nsyl = w.PVoice[i] < K.VOICE_MIN ? 0 : Voice.Order(w, i, acts, utt);
+        if (nsyl == 0) utt.Clear();
+        float vmatch = 0f;
+        if (nsyl > 0)
+        {
+            w.Energy[i] -= K.C_CALL * K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * (1f - K.CALL_SYL + K.CALL_SYL * nsyl);
+            utt.CopyTo(new Span<byte>(w.LastUtt, cb, F.MAX_SYL));
+            if (w.PImit[i] > 0f && w.Evo.VocalLearning) vmatch = Match(w, i, utt);
+        }
+        w.HistV[i * Brain.BLOCK + (((int)(w.Step & 0x3FFFFFFF) + i) & (Brain.BLOCK - 1))] = vmatch;   // credited with this step's call outputs
+        return nsyl > 0 ? Voice.TypeOf(utt[0], utt[1], utt[2]) : -1;
+    }
+
+    /// <summary>
+    /// Vocal learning (Revision N): how well an utterance matches the learner's remembered tutors, by form only. Each of
+    /// its syllable pairs (start -> first, first -> second, second -> third) scores its template count against the
+    /// template's largest; the match is their mean, less the learner's running mean of it, so only doing better than
+    /// usual reinforces. 0 while it has no template. Nothing about what was going on is used (Doupe & Kuhl 1999;
+    /// Brainard & Doupe 2002; Tchernichovski et al. 2001).
+    /// </summary>
+    public static float Match(World w, int i, ReadOnlySpan<byte> utt)
+    {
+        int tb = i * Voice.NTMPL, max = 0;
+        for (int k = tb, ke = tb + Voice.NTMPL; k < ke; k++) if (w.Tmpl[k] > max) max = w.Tmpl[k];
+        if (max == 0) return 0f;
+        float sum = w.Tmpl[tb + Voice.Cell(0, utt[0])]; int n = 1;
+        for (int p = 1; p < F.MAX_SYL && utt[p] != 0; p++) { sum += w.Tmpl[tb + Voice.Cell(utt[p - 1], utt[p])]; n++; }
+        float m = sum / (n * (float)max);
+        float rv = m - w.VMean[i];
+        w.VMean[i] += K.IMIT_RBAR * (m - w.VMean[i]);
+        return rv;
     }
 
     static void Accumulate(double[] sum, double[] sum2, int o, ReadOnlySpan<float> v)

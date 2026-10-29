@@ -27,7 +27,9 @@ public static class Life
     {
         uint seed = w.Seed, step = (uint)w.Step;
         w.Spc[c] = (byte)species; w.StageOf[c] = stage;
-        w.Call[c] = 0; w.IHeard[c] = 0; w.IHeardUser[c] = 0;
+        Array.Clear(w.Call, c * F.MAX_SYL, F.MAX_SYL); Array.Clear(w.LastUtt, c * F.MAX_SYL, F.MAX_SYL);
+        Array.Clear(w.Tmpl, c * Voice.NTMPL, Voice.NTMPL);   // a newborn remembers no tutor yet
+        w.IHeard[c] = 0; w.IHeardUser[c] = 0; w.IFocal[c] = -1; w.IFocalSerial[c] = 0; w.CallR[c] = 0;
         w.Flags[c] = Flag.Newborn;
         w.X[c] = World.Wrap(x); w.Y[c] = World.Wrap(y);
         w.Heading[c] = Rng.U(seed, step, (uint)c, Rs.Place) * 2f * MathF.PI;

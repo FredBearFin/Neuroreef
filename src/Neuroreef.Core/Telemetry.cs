@@ -36,12 +36,12 @@ public sealed class Telemetry
         S_MATINGS = S_KILLS + 1, S_IMM = S_MATINGS + 1, S_DAGE = S_IMM + 1, S_MEANAGE = S_DAGE + 4,
         S_SICK = S_MEANAGE + 1, S_INFECT = S_SICK + 1, S_CARE = S_INFECT + 1, S_KIT = S_CARE + 1, S_ARCH = S_KIT + 1, S_TRAITS = S_ARCH + 1, S_GAINS = S_TRAITS + NTRAITS, S_END = S_GAINS + P.N;
     /// <summary>Evolving traits recorded per species (mean over living animals): body multipliers (1 = founder) and diet.</summary>
-    public const int NTRAITS = 25, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
+    public const int NTRAITS = 26, T_MASS = 0, T_LEGS = 1, T_FINS = 2, T_WINGS = 3, T_SPEED = 4, T_SIGHT = 5, T_ARMOUR = 6, T_STRIKE = 7,
         T_LITTER = 8, T_CARE = 9, T_MEAT = 10, T_SEXUAL = 11, T_LIVE = 12, T_LEGN = 13, T_LIFE = 14, T_MATURE = 15, T_BRAIN = 16,
-        T_HERM = 17, T_FEMALE = 18, T_IMMUNE = 19, T_FINN = 20, T_EYEN = 21, T_VIR = 22, T_WATER = 23, T_VOICE = 24;
+        T_HERM = 17, T_FEMALE = 18, T_IMMUNE = 19, T_FINN = 20, T_EYEN = 21, T_VIR = 22, T_WATER = 23, T_VOICE = 24, T_IMIT = 25;
     public static readonly string[] TraitNames = { "mass", "legs", "fins", "wings", "speed", "sight", "armour", "strike", "litter", "care",
         "meat-eating", "sexual share", "live-birth share", "legs (count)", "lifespan", "age at maturity", "brain units",
-        "hermaphrodite share", "daughter share", "immunity", "fin pairs", "eye pairs", "pathogen virulence", "water economy", "voice" };
+        "hermaphrodite share", "daughter share", "immunity", "fin pairs", "eye pairs", "pathogen virulence", "water economy", "voice", "vocal learning" };
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1, G_END = G_RAIN + 1;
@@ -68,6 +68,15 @@ public sealed class Telemetry
     public readonly long[] HeardN;
     public readonly long[] UserResp = new long[NRESP];   // how listeners answered the person's latest call
     public int UserRespId;
+    // utterances (Revision N), per clade x utterance type (Voice.NTYPE ordered sequences of 1..3 sounds): how often made,
+    // when first and last made and when it was first made MIN_UTT times (step + 1; 0 = never), how listeners of the
+    // caller's clade answered (UttResp, UttHeardN). The sums of the caller's senses and of the listeners' gains per type
+    // are kept for NTRACK clades only (the first clades to call; a slot is reused when its clade dies out), to keep memory small
+    public const int NTRACK = 4, MIN_UTT = 30;
+    public readonly long[] UttN, UttFirst, UttLast, UttCross, UttResp, UttHeardN;
+    public readonly int[] TrackOf = new int[K.CLADES], TrackClade = new int[NTRACK];   // clade -> tracker (-1 none), tracker -> clade (-1 free)
+    public readonly double[] UttFeat, UttFeat2, UttGain, UttGain2;   // NTRACK x NTYPE x F.N (senses), x P.N (gains)
+    public readonly long[] UttFeatN, UttGainN;                       // NTRACK x NTYPE: how many made and heard since tracking began
 
     public Telemetry(World w)
     {
@@ -79,6 +88,12 @@ public sealed class Telemetry
         BaseFeat = new double[ns * F.N]; BaseFeat2 = new double[ns * F.N];
         HeardGain = new double[ns * F.NSOUND * P.N]; HeardGain2 = new double[ns * F.NSOUND * P.N]; HeardN = new long[ns * F.NSOUND];
         BaseGain = new double[ns * P.N]; BaseGain2 = new double[ns * P.N];
+        int nt = ns * Voice.NTYPE;
+        UttN = new long[nt]; UttFirst = new long[nt]; UttLast = new long[nt]; UttCross = new long[nt]; UttHeardN = new long[nt]; UttResp = new long[nt * NRESP];
+        Array.Fill(TrackOf, -1); Array.Fill(TrackClade, -1);
+        UttFeat = new double[NTRACK * Voice.NTYPE * F.N]; UttFeat2 = new double[NTRACK * Voice.NTYPE * F.N];
+        UttGain = new double[NTRACK * Voice.NTYPE * P.N]; UttGain2 = new double[NTRACK * Voice.NTYPE * P.N];
+        UttFeatN = new long[NTRACK * Voice.NTYPE]; UttGainN = new long[NTRACK * Voice.NTYPE];
         Created = new long[ns]; Births = new long[ns]; Conceptions = new long[ns]; Deaths = new long[ns * Cause.N];
         KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; Infections = new long[ns]; CareGiven = new double[ns]; _pInf = new long[ns]; _pCare = new double[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
         Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; RewardSum = new double[ns];
@@ -113,6 +128,38 @@ public sealed class Telemetry
         LongRing = new float[K.LONG_RING * Len];
         _acc = new float[Len];
         _cnt = new int[ns];
+    }
+
+    /// <summary>The tracker of clade s's utterance senses, assigned when it first calls (-1 if none is free). A tracker whose
+    /// clade has died out is cleared and reused. No allocation.</summary>
+    public int Track(int s)
+    {
+        int t = TrackOf[s];
+        if (t >= 0) return t;
+        for (int k = 0; k < NTRACK && t < 0; k++) if (TrackClade[k] < 0) t = k;
+        for (int k = 0; k < NTRACK && t < 0; k++) if (!_w.Sp[TrackClade[k]].Alive) t = k;
+        if (t < 0) return -1;
+        if (TrackClade[t] >= 0) TrackOf[TrackClade[t]] = -1;
+        TrackClade[t] = s; TrackOf[s] = t;
+        int f = t * Voice.NTYPE * F.N, g = t * Voice.NTYPE * P.N;
+        Array.Clear(UttFeat, f, Voice.NTYPE * F.N); Array.Clear(UttFeat2, f, Voice.NTYPE * F.N);
+        Array.Clear(UttGain, g, Voice.NTYPE * P.N); Array.Clear(UttGain2, g, Voice.NTYPE * P.N);
+        Array.Clear(UttFeatN, t * Voice.NTYPE, Voice.NTYPE); Array.Clear(UttGainN, t * Voice.NTYPE, Voice.NTYPE);
+        return t;
+    }
+
+    /// <summary>Forget the voice statistics of clade slot s (a new clade takes the slot).</summary>
+    public void ResetVoices(int s)
+    {
+        int n = F.NSOUND, t = Voice.NTYPE;
+        Array.Clear(CallN, s * n, n); Array.Clear(CallCtx, s * n * NCTX, n * NCTX); Array.Clear(CallResp, s * n * NRESP, n * NRESP);
+        Array.Clear(CallFeat, s * n * F.N, n * F.N); Array.Clear(CallFeat2, s * n * F.N, n * F.N);
+        Array.Clear(HeardGain, s * n * P.N, n * P.N); Array.Clear(HeardGain2, s * n * P.N, n * P.N); Array.Clear(HeardN, s * n, n);
+        Array.Clear(UttN, s * t, t); Array.Clear(UttFirst, s * t, t); Array.Clear(UttLast, s * t, t); Array.Clear(UttCross, s * t, t);
+        Array.Clear(UttHeardN, s * t, t); Array.Clear(UttResp, s * t * NRESP, t * NRESP);
+        BaseN[s] = 0; Array.Clear(BaseCtx, s * NCTX, NCTX); Array.Clear(BaseFeat, s * F.N, F.N); Array.Clear(BaseFeat2, s * F.N, F.N);
+        Array.Clear(BaseGain, s * P.N, P.N); Array.Clear(BaseGain2, s * P.N, P.N);
+        if (TrackOf[s] >= 0) { TrackClade[TrackOf[s]] = -1; TrackOf[s] = -1; }
     }
 
     public void KillFlash(int cell)
@@ -226,6 +273,7 @@ public sealed class Telemetry
             a[o + S_TRAITS + T_IMMUNE] += w.PImmune[i];
             a[o + S_TRAITS + T_WATER] += w.PWaterEcon[i];
             a[o + S_TRAITS + T_VOICE] += w.PVoice[i];
+            a[o + S_TRAITS + T_IMIT] += w.PImit[i];
             a[o + S_TRAITS + T_FINN] += w.PFinPairs[i];
             a[o + S_TRAITS + T_EYEN] += w.PEyePairs[i];
             a[o + S_TRAITS + T_VIR] += w.Virulence[i];                // summed over the infected (others are 0)

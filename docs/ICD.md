@@ -1,6 +1,6 @@
 # NEUROREEF 2 — INTERFACE CONTROL DOCUMENT
 
-Document NR-ICD-001, Revision D (AGENTS format 4). This is the link between the simulation server and the browser
+Document NR-ICD-001, Revision E (AGENTS format 5). This is the link between the simulation server and the browser
 console. Encoders: `src/Neuroreef.Core/Snapshot.cs` (AGENTS) and `src/Neuroreef.Server/Wire.cs`
 (all others). Decoder: `src/Neuroreef.Server/wwwroot/js/net.js`. Test: `tests/Neuroreef.Tests/WireTests.cs`.
 
@@ -39,7 +39,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | Offset | Type | Field |
 |---|---|---|
 | 8 | u32 | count n |
-| 12 | 24 B × n | records (every living organism except embryos); header byte 1 = format version 4 |
+| 12 | 26 B × n | records (every living organism except embryos); header byte 1 = format version 5 |
 
 Each record:
 
@@ -61,9 +61,11 @@ Each record:
 | 18 | i8 | body gene: strike |
 | 19 | i8 | meat-eating efficiency × 254 − 127 |
 | 20 | u8 | leg pairs (1..4) |
-| 21 | u8 | locomotion label (Loco: walk, swim, wade, fly, settled), for drawing only |
+| 21 | u8 | bits 0–3 locomotion label (Loco: walk, wade, swim, fly, settled), for drawing only; bits 4–7 the first sound of its utterance this step (0 none, 1..8) |
 | 22 | u8 | fin pairs (1..4) |
 | 23 | u8 | eye pairs (1..4) |
+| 24 | u8 | bits 0–3 the second sound of its utterance, bits 4–7 the third (0 none; Revision N) |
+| 25 | u8 | reserved (0) |
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 
@@ -127,6 +129,7 @@ Every text frame has a `type`:
 | `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity, bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath` |
 | `clades` | when the clade table changes, and every 5 s | `step`, `splits`, `list`: the clade table of the simulation on view (as in `meta.species`) |
 | `prehistory` | every 1 s, during the prehistory | `step`, `rate` (steps/s per branch), `paused`, `finished`, `yearsPerStep`, `view`, `settings` (the EvoSettings fields), `branches`: per branch `clades` (that branch's clade table), `splits`, `step`, `alive`, `full`, and per species `standing` (0 gone, 1 dying, 2 breeding, 3 self-sustaining), `count`, `births` (last ~1,000 steps), `generation` |
+| `lexicon` | every 1.5 s | the translator (display only; Revision M, N): `step`, `minUtt`, `newSteps`, `clades`: per living clade `id`, `calls`, `utts`, `types`, `tracked`, `mute`, `bases`, `sounds` (per sound: `n`, `ctx`, `resp`, `heard`, `z` (standardised difference of every sense), `when`, `then`), `words` (the most made utterance types and every new one: `t`, `syl` (sounds 1..8 in order), `rank`, `n`, `heard`, `resp`, `first`, `last`, `born` (step it reached `minUtt`), `isNew`, `z`, `when`, `then`), `zipf` (counts of its utterance types, most made first), `dialect` (`west`, `east`, `jsd`, `chance`, or null); `user`: `id`, `sounds`, `resp` (how listeners answered the person's latest call) |
 | `explain` | every 3 s | `items`: sentences generated from the telemetry (§12.4 of DESIGN), each with `text`, `species` (−1 = none) and `kind` |
 | `fingerprints` | every 3 s | per species: sampled count and up to 3 clusters (`label`, `share`, `top`, `centroid`) |
 | `ack` / `error` | on commands | result of a command |
@@ -145,6 +148,7 @@ Every text frame has a `type`:
 | `savebank` | — | save a gene bank next to the executable |
 | `branch` | `index` | prehistory: view this branch |
 | `evo` | `set`: {field: number} | prehistory: change EvoSettings fields (`mutRate`, `mutSmall`, `mutBigShare`, `mutBig`, `totalSteps`); applied at the next barrier |
+| `speak` | `x`, `y`, `sounds`: [k1, k2, k3] (0..7, up to 3 distinct; or the older `sound`: k) | the person's utterance at a place, heard on the next step by the animals within HEAR_R as a stranger's (Revision N) |
 | `begin` | — | end the prehistory now and start the world from the brains evolved so far |
 
 During the prehistory, `pause` / `resume` hold all branches; `rate` and `step` have no effect.

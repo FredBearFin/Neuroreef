@@ -489,10 +489,15 @@ public static class Host
                         case "step": h.StepOnce(); break;
                         case "speak":
                             {
-                                // the person's voice: one of the 8 sounds at a place, heard by the animals near it on the next step
+                                // the person's voice: an utterance of up to MAX_SYL distinct sounds (sounds: [k1, k2, k3], 0-based; or
+                                // the older single sound) at a place, heard by the animals near it on the next step
                                 float sx = (float)e.GetProperty("x").GetDouble(), sy = (float)e.GetProperty("y").GetDouble();
-                                int snd = Math.Clamp(e.GetProperty("sound").GetInt32(), 0, F.NSOUND - 1) + 1;
-                                h.Post(s => { var w = s.W; w.UserCallX = World.Wrap(sx); w.UserCallY = World.Wrap(sy); w.UserCallSound = snd; w.UserCallStep = w.Step - 1; /* as if made last step: heard on the step that comes next */ w.UserCallId++; });
+                                var utt = new byte[F.MAX_SYL]; int nu = 0;
+                                void AddSound(int k) { byte b = (byte)(Math.Clamp(k, 0, F.NSOUND - 1) + 1); if (nu < F.MAX_SYL && Array.IndexOf(utt, b, 0, nu) < 0) utt[nu++] = b; }
+                                if (e.TryGetProperty("sounds", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array) foreach (var v in arr.EnumerateArray()) AddSound(v.GetInt32());
+                                else if (e.TryGetProperty("sound", out var one)) AddSound(one.GetInt32());
+                                if (nu == 0) break;
+                                h.Post(s => { var w = s.W; w.UserCallX = World.Wrap(sx); w.UserCallY = World.Wrap(sy); utt.CopyTo(w.UserCall, 0); w.UserCallStep = w.Step - 1; /* as if made last step: heard on the step that comes next */ w.UserCallId++; });
                                 break;
                             }
                         case "history": _history = true; break;

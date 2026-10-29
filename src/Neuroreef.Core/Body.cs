@@ -56,6 +56,11 @@ public static class Body
         float wecon = Organ(gn[g + G.B_WATER]);
         float voice = Organ(gn[g + G.B_VOICE]);
         w.PVoice[i] = voice;
+        // vocal learning (Revision N): how strongly matching a remembered tutor reinforces its own calls, and for how
+        // much of its life it memorises tutors (Doupe & Kuhl 1999; Brainard & Doupe 2002). No upkeep cost of its own:
+        // the learning uses the brain it already pays for, so the gene drifts where it is of no use
+        w.PImit[i] = Organ(gn[g + G.B_IMIT]);
+        w.PImitAge[i] = K.IMIT_AGE_LO + (1f - K.IMIT_AGE_LO) * Organ(gn[g + G.B_IMIT_AGE]);
         int brain = Units(gn[g + G.B_BRAIN]);
         bool herm = gn[g + G.B_HERM] >= 0;
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;

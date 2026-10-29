@@ -31,7 +31,7 @@ public static class K
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
     [K("World", "spatial-hash grid side", "cells", "-")] public const int GW = WORLD / HCELL;
-    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision M, ~155 KB per slot with 256-unit brains: 8,192 is ~1.3 GB")] public const int CAPACITY = 8192;
+    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB")] public const int CAPACITY = 8192;
     [K("World", "share of cells below lake level", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "catchment (cells) above which a cell is river", "cells", "HT")] public const int RIVER_ACC = 900;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
@@ -182,6 +182,13 @@ public static class K
     [K("Body", "energy of one call, as a share of basal metabolism at the caller's mass", "xbasal", "ECO: vocalising costs a few times resting metabolism for its duration (Ophir et al. 2010); a call is a short burst")] public const float C_CALL = 0.5f;
     [K("Body", "a voice organ below this makes no sound", "-", "HT: a little voice is no voice; above founder variation around a mute ancestor")] public const float VOICE_MIN = 0.25f;
     [K("Body", "basal cost of a full voice (larynx and its control)", "xbasal", "ECO: small; vocal tissue and its neural control are a minor part of upkeep")] public const float COST_VOICE = 0.03f;
+    [K("Voice", "syllables in one utterance at most (distinct sounds, in the order of how strongly each is intended)", "sounds", "ECO: animal calls combine a few units into sequences, rarely more (Engesser & Townsend 2019)")] public const int MAX_SYL = 3;
+    [K("Voice", "share of a call's cost that grows with each syllable: an utterance of n syllables costs C_CALL x basal x (1 - CALL_SYL + CALL_SYL x n)", "-", "ECO: a longer song costs more, but much of a call's cost is the start-up (Oberweger & Goller 2001; Ophir et al. 2010)")] public const float CALL_SYL = 0.5f;
+    [K("Voice", "how far a full voice of a body of M=1 carries (range = HEAR_R x voice x M^(1/3), at most MAX_SIGHT)", "units", "ECO: bigger animals call louder and are heard further (Fletcher 2004; Wiley & Richards 1978); about the sight range at M=1 (C_SIGHT)")] public const float HEAR_R = 16f;
+    [K("Voice", "a listener keeps attending to the same caller while it calls at least this share as loud as the loudest alike caller", "-", "ECO/HT: listeners stream one source among many (Bee & Micheyl 2008); hysteresis keeps attention from flickering")] public const float FOCAL_KEEP = 0.7f;
+    [K("Voice", "steps over which the counts of a remembered tutor's syllable pairs halve", "steps", "ECO/HT: a template fades without new tutoring; about a third of a year (Doupe & Kuhl 1999; Tchernichovski et al. 2001); the young copy form from elders, so a language changes by iterated learning (Kirby, Cornish & Smith 2008)")] public const int TMPL_HALF = 1000;
+    [K("Voice", "rate of the running mean of an organism's own match to its template", "/step of calling", "HT: a baseline, as RBAR_RATE is for reward")] public const float IMIT_RBAR = 0.05f;
+    [K("Voice", "shortest sensitive period for memorising tutors, as a share of lifespan (the IMIT_AGE gene spans IMIT_AGE_LO..1)", "-", "ECO: songbirds memorise early in life, some species throughout (Brainard & Doupe 2002)")] public const float IMIT_AGE_LO = 0.1f;
     [K("Food", "share of its meat-digesting skill a meat-eater brings to carrion", "-", "ECO: almost all carnivores scavenge; wolves feed on a kill for days (DeVault et al. 2003)")] public const float SCAVENGE = 0.8f;
     [K("Land", "a pond site is the lowest cell within this many cells", "cells", "ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas)")] public const int POND_R = 2;
     [K("Land", "pond sites are at least this far from a lake, sea or river", "cells", "HT: a pond beside a lake adds nothing")] public const float POND_GAP = 6f;

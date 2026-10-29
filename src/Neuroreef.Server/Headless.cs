@@ -149,12 +149,43 @@ public static class Headless
                 report.AppendLine($"{pre.B[bestB].W.Sp[s].Name,-12} " + string.Join("  ", Enumerable.Range(0, f0.Length).Select(q => $"{f0[q]:0.##}->{f1[q]:0.##}")));
             }
         }
+        for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.Append(VoiceReport(pre.B[b].W, b)); }
         for (int b = 0; b < pre.B.Length; b++) { report.AppendLine(); report.AppendLine($"=== BRANCH {b} ==="); report.Append(Summary(pre.B[b])); }
         Console.Write(report.ToString());
         if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, report.ToString()); Console.WriteLine("report written: " + o.ReportTxt); }
         if (o.SaveBank != null) { pre.SaveBank(o.SaveBank); Console.WriteLine("evolved brains saved: " + o.SaveBank); }
         if (o.Csv != null) { WriteCsv(pre.B[bestB].W, o.Csv); Console.WriteLine("telemetry written: " + o.Csv); }
         return 0;
+    }
+
+    /// <summary>Voices of a world (Revision N; reporting only): per clade that has spoken, its living members' mean voice
+    /// and vocal-learning genes, how many utterances and of how many kinds, how many kinds were made at least
+    /// Telemetry.MIN_UTT times, and its most made utterances with the sense that stands out most when each is made.</summary>
+    public static string VoiceReport(World w, int branch)
+    {
+        var T = w.T; var sb = new StringBuilder();
+        sb.AppendLine($"VOICES in branch {branch}: clade, living (voiced), mean voice, vocal learning, utterances, kinds, kinds made >= {Telemetry.MIN_UTT}x; most made (count: what stands out when it is made)");
+        var syl = new byte[F.MAX_SYL];
+        for (int s = 0; s < K.CLADES; s++)
+        {
+            long utts = 0; int kinds = 0, common = 0;
+            for (int t = 0; t < Voice.NTYPE; t++) { long n = T.UttN[s * Voice.NTYPE + t]; utts += n; if (n > 0) kinds++; if (n >= Telemetry.MIN_UTT) common++; }
+            if (utts == 0 || !w.Sp[s].Used) continue;
+            int alive = 0, voiced = 0; double voice = 0, imit = 0;
+            for (int i = 0; i < w.Cap; i++)
+                if (w.StageOf[i] >= St.Juvenile && w.Spc[i] == s) { alive++; voice += w.PVoice[i]; imit += w.PImit[i]; if (w.PVoice[i] >= K.VOICE_MIN) voiced++; }
+            sb.Append($"{w.Sp[s].Name,-12} {alive,6} ({voiced})  voice {(alive > 0 ? voice / alive : 0):0.00}  learning {(alive > 0 ? imit / alive : 0):0.00}  {utts,9:N0} utterances  {kinds,3} kinds  {common,3} made >= {Telemetry.MIN_UTT}x");
+            var top = Enumerable.Range(0, Voice.NTYPE).Where(t => T.UttN[s * Voice.NTYPE + t] > 0).OrderByDescending(t => T.UttN[s * Voice.NTYPE + t]).Take(6);
+            foreach (int t in top)
+            {
+                int n = Voice.Decode(t, syl);
+                var when = Meaning.RankUttSenses(T, s, t, 1);
+                string read = when.Count > 0 ? $": {Meaning.Phrase(when[0].Index, when[0].High)} ({when[0].D:0.0})" : "";
+                sb.Append($"\n    [{string.Join(" ", syl.Take(n))}] {T.UttN[s * Voice.NTYPE + t]:N0}{read}");
+            }
+            sb.AppendLine();
+        }
+        return sb.ToString();
     }
 
     static void Header(World w)

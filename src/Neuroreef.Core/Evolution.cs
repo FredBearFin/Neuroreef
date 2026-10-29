@@ -18,12 +18,13 @@ public sealed class EvoSettings
     public int Founders = K.ANCESTOR_COUNT;       // founders per ancestor (founding only)
     public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;   // random ancestors (founding only)
     public float MatingDrive = 1f;                // x the breeding instinct (mating and laying alike)
+    public bool VocalLearning = true;             // false: no tutor templates and no match signal at all (for tests and experiments; Revision N)
 
     public EvoSettings Clone() => (EvoSettings)MemberwiseClone();
 
     public void CopyFrom(EvoSettings o)
     {
-        MutRate = o.MutRate; MutBody = o.MutBody; BigBrains = o.BigBrains; BigBrainUnits = o.BigBrainUnits; Founders = o.Founders; AncestorsLand = o.AncestorsLand; AncestorsWater = o.AncestorsWater; MatingDrive = o.MatingDrive; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps;
+        MutRate = o.MutRate; MutBody = o.MutBody; BigBrains = o.BigBrains; BigBrainUnits = o.BigBrainUnits; Founders = o.Founders; AncestorsLand = o.AncestorsLand; AncestorsWater = o.AncestorsWater; MatingDrive = o.MatingDrive; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps; VocalLearning = o.VocalLearning;
     }
 
     /// <summary>Keep every knob inside a sensible range.</summary>

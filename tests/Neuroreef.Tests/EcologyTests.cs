@@ -644,12 +644,12 @@ public class EcologyTests
         w.Sp[0].Used = w.Sp[0].Alive = true;
         foreach (int c in new[] { a, b }) { w.Genome[c * G.LEN + G.B_VOICE] = 127; Body.Express(w, c); }   // both have a voice
         sim.Step();                                     // settle positions and the spatial hash
-        w.Call[a] = 3;                                  // a made sound 3 (index 2) last step
+        w.Call[a * F.MAX_SYL] = 3;                      // a made sound 3 (index 2) last step
         sim.Step();
         Assert.True(w.Feat[b * F.N + F.HEAR_0 + 2] > 0f, "the neighbour did not hear sound 3");
-        for (int k = 0; k < F.NSOUND; k++) if (k != 2 && w.Call[a] != k + 1) Assert.True(w.Feat[b * F.N + F.HEAR_0 + k] <= 0f || w.Call[a] == k + 1);
+        for (int k = 0; k < F.NSOUND; k++) if (k != 2) Assert.True(w.Feat[b * F.N + F.HEAR_0 + k] <= 0f);
         // the person's voice: sound 6 spoken beside b is heard on the next step, and b's answer is counted
-        w.UserCallX = w.X[b] + 1f; w.UserCallY = w.Y[b]; w.UserCallSound = 6; w.UserCallStep = w.Step - 1; w.UserCallId++;
+        w.UserCallX = w.X[b] + 1f; w.UserCallY = w.Y[b]; w.UserCall[0] = 6; w.UserCallStep = w.Step - 1; w.UserCallId++;
         sim.Step();
         Assert.True(w.Feat[b * F.N + F.HEAR_0 + 5] > 0f, "the animal did not hear the person");
         long answers = 0; foreach (var v in w.T.UserResp) answers += v;
@@ -667,6 +667,6 @@ public class EcologyTests
         Assert.True(w.PVoice[a] < K.VOICE_MIN);         // ancestors without the voice are mute
         for (int p = 0; p < F.NSOUND; p++) w.Genome[a * G.LEN + G.W2 + (P.CALL_0 + p) * G.NIN + G.NH + F.BIAS] = 127;   // it tries to call all the time
         Brain.InitLife(w, a);
-        for (int t = 0; t < 20; t++) { sim.Step(); Assert.Equal(0, w.Call[a]); }
+        for (int t = 0; t < 20; t++) { sim.Step(); Assert.Equal(0, w.Call[a * F.MAX_SYL]); }
     }
 }

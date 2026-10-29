@@ -231,7 +231,7 @@ export class Panels {
         <div class="kv" id="ins-kv"></div>
         <h3>body (this animal; its clade's mean in brackets)</h3><div class="kv" id="ins-body"></div>
         <h3>diet efficiencies</h3><div id="ins-diet"></div>
-        <h3>senses (30 features)</h3><div id="ins-feat"></div>
+        <h3>senses (${M.features.length} features)</h3><div id="ins-feat"></div>
         <h3>memory (12 recurrent units)</h3><div id="ins-hid"></div>
         <h3>primitive gains — what the brain asks for</h3><div id="ins-gain"></div>
         <h3>brain: output weights (primitives × [memory units, senses])</h3>

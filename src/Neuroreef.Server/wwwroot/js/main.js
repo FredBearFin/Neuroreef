@@ -354,13 +354,15 @@ function showSplit(c, p) {
   setTimeout(() => d.remove(), 90000);
 }
 
-// ---- the translator (Revision M): each clade's sounds have no built-in meaning. What one seems to mean is read from
-// all 42 senses: those that differ most around a caller from the clade's usual (in the clade's own spread of each sense,
-// Meaning.cs on the server), and the behaviours its clade turns to on hearing it. Any meaning that evolves can show,
-// not only ones designed in advance; the 7 fixed contexts are kept only as a fallback. You type a word; it is matched to
-// a sense (by the plain words for it), the translator picks the sound most made when that sense stands out, and you
-// click where to send it. Your call is not an animal: nothing is added to the world, and no audio is recorded.
-let lexicon = null, xClade = -1, speakArmed = null, xMeaning = -1, xRaw = -1, myCallId = -1, xText = '', xTargets = [];
+// ---- the translator (Revision M, N): each clade's utterances (1 to 3 sounds in order) have no built-in meaning. What
+// one seems to mean is read from all the senses: those that differ most around a caller from the clade's usual (in the
+// clade's own spread of each sense, Meaning.cs on the server), and the behaviours its clade turns to on hearing it from
+// the one they listen to. Any meaning that evolves can show, not only ones designed in advance; the 7 fixed contexts are
+// kept only as a fallback. Words that came into use recently are marked NEW. You type a word; it is matched to a sense
+// (by the plain words for it), the translator picks the utterance most made when that sense stands out, and you click
+// where to send it. Your call is not an animal: nothing is added to the world, and no audio is recorded; the animals
+// hear it as a stranger's.
+let lexicon = null, xClade = -1, speakArmed = null, xMeaning = -1, xRaw = null, myCallId = -1, xText = '', xTargets = [];
 // fallback: a typed word -> one of the 7 fixed contexts, when no sense phrase matches
 const WORDS = [
   ['danger', 'run', 'flee', 'predator', 'help', 'enemy', 'attack', 'hide', 'watch out', 'scary'],
@@ -395,14 +397,19 @@ function senseTargets(t) {
   return out.sort((a, b) => b.score - a.score);
 }
 function readWord() {
-  const t = xText.trim().toLowerCase(); xRaw = -1; xMeaning = -1; xTargets = [];
-  const m = t.match(/^sound\s*([1-8])$/); if (m) { xRaw = +m[1] - 1; return; }
+  const t = xText.trim().toLowerCase(); xRaw = null; xMeaning = -1; xTargets = [];
+  // "sound 3", "3 5", "say 3-5-1": the sounds themselves (up to 3, each once)
+  const m = t.match(/^(?:sounds?|say)?\s*([1-8](?:\s*[ ,\-]\s*[1-8]){0,2})$/);
+  if (m) { const s = [...new Set(m[1].split(/[^1-8]+/).filter(Boolean).map((v) => +v - 1))].slice(0, 3); if (s.length) { xRaw = s; return; } }
   if (!t) return;
   xTargets = senseTargets(t);
   if (!xTargets.length) for (let c = 0; c < WORDS.length; c++) if (WORDS[c].some((w) => t === w || t.includes(w))) { xMeaning = c; return; }
 }
 const XMIN = 25;   // calls before a guess is shown (Meaning.MIN_N on the server)
-const soundCss = (k) => { const c = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]][k]; return `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`; };
+const SOUND_C = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];
+const soundCss = (k) => `rgb(${SOUND_C[k].map((v) => Math.round(v * 255)).join(',')})`;
+// an utterance (0-based sounds) as coloured dots and numbers, e.g. "3·5"
+const uttHtml = (s) => s.map((k) => `<i class="sw" style="background:${soundCss(k)}"></i>`).join('') + `<b>${s.map((k) => k + 1).join('·')}</b>`;
 const phraseOf = (f, hi) => (meta.meaning && (hi ? meta.meaning.high[f] : meta.meaning.low[f])) || meta.features[f];
 // fallback: the old 7 fixed contexts (how much more common around a caller than usual)
 function guess(cl, k) {
@@ -420,33 +427,45 @@ function answer(s) {
 function bestSoundCtx(cl, c) {
   let best = -1, lift = 0;
   for (let k = 0; k < cl.sounds.length; k++) { const s = cl.sounds[k]; if (s.n < XMIN) continue; const l = s.ctx[c] / Math.max(0.01, cl.bases[c]); if (l > lift) { lift = l; best = k; } }
-  return best >= 0 && lift >= 1.2 ? { k: best, lift } : null;
+  return best >= 0 && lift >= 1.2 ? { syl: [best], lift } : null;
 }
-// the sound whose callers most stand out on the typed sense (highest standardised difference in that direction);
-// the best-matching words are tried first, then weaker matches; the fixed contexts only when no sense matched
-function bestSound(cl) {
+// the utterance whose callers most stand out on the typed sense (highest standardised difference in that direction),
+// among the clade's whole utterances and its single sounds; the best-matching words are tried first, then weaker
+// matches; the fixed contexts only when no sense matched
+function bestUtterance(cl) {
   if (!cl) return null;
   if (xTargets.length) {
+    const cands = (cl.words || []).filter((u) => u.n >= XMIN && u.z).map((u) => ({ syl: u.syl.map((v) => v - 1), z: u.z }))
+      .concat(cl.sounds.map((s, k) => ({ syl: [k], z: s.n >= XMIN ? s.z : null })).filter((c) => c.z));
     let i = 0;
     while (i < xTargets.length) {
       const tier = xTargets[i].score; let pick = null;
       for (; i < xTargets.length && xTargets[i].score === tier; i++) {
         const t = xTargets[i];
-        for (let k = 0; k < cl.sounds.length; k++) {
-          const s = cl.sounds[k]; if (s.n < XMIN || !s.z) continue;
-          const d = (t.hi ? 1 : -1) * s.z[t.f];
-          if (d > 0 && (!pick || d > pick.d)) pick = { k, d, f: t.f, hi: t.hi };
+        for (const c of cands) {
+          const d = (t.hi ? 1 : -1) * c.z[t.f];
+          if (d > 0 && (!pick || d > pick.d)) pick = { syl: c.syl, d, f: t.f, hi: t.hi };
         }
       }
       if (pick) return pick;
     }
     return null;
   }
-  if (xMeaning >= 0) { const p = bestSoundCtx(cl, xMeaning); return p ? { k: p.k, lift: p.lift, c: xMeaning } : null; }
+  if (xMeaning >= 0) { const p = bestSoundCtx(cl, xMeaning); return p ? { syl: p.syl, lift: p.lift, c: xMeaning } : null; }
   return null;
 }
 const strength = (d) => `<span class="dim" title="how far from usual, in the clade's own spread of it">${Math.abs(d).toFixed(1)}</span>`;
-let xBuiltFor = '';
+const ago = (step) => step < 0 || !lexicon ? '—' : lexicon.step - step < 1 ? 'now' : `${(lexicon.step - step).toLocaleString()} steps ago`;
+// rank-frequency of the clade's utterance types on log-log axes (a straight falling line is Zipf-like)
+function drawZipf(cv, zipf) {
+  const g = cv.getContext('2d'), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  if (!zipf || zipf.length < 2) return;
+  const lx = (r) => 4 + (w - 8) * Math.log(r) / Math.log(Math.max(2, zipf.length)), top = Math.log(zipf[0]);
+  const ly = (n) => h - 4 - (h - 8) * Math.log(n) / Math.max(1e-6, top);
+  g.strokeStyle = '#ffffff22'; g.beginPath(); g.moveTo(lx(1), ly(zipf[0])); g.lineTo(lx(zipf.length), ly(Math.max(1, zipf[0] / zipf.length))); g.stroke();   // slope -1
+  g.strokeStyle = '#4fd1c5'; g.beginPath(); zipf.forEach((n, r) => (r ? g.lineTo(lx(r + 1), ly(n)) : g.moveTo(lx(1), ly(n)))); g.stroke();
+}
+let xBuiltFor = '', xShowSounds = false;
 function drawTranslator() {
   const box = $('translator'); if (!box || box.classList.contains('hidden') || !lexicon || !meta) return;
   const live = lexicon.clades.filter((c) => clades[c.id] && clades[c.id].used);
@@ -461,21 +480,42 @@ function drawTranslator() {
     const order = live.slice().sort((a, b) => (a.mute ? 1 : 0) - (b.mute ? 1 : 0));
     const opts = order.map((c) => `<option value="${c.id}"${c.id === xClade ? ' selected' : ''}>${clades[c.id].name}${c.mute ? ' (mute)' : ''}</option>`).join('');
     box.innerHTML = `<div class="th"><span>TRANSLATOR</span><select id="x-clade">${opts}</select></div>` +
-      `<div class="dim" id="x-desc"></div><table id="x-table"></table>` +
-      `<div class="speak"><span id="x-to"></span><input id="x-text" type="text" placeholder="type a word: food, danger, alone, hungry, coming…" autocomplete="off"><span id="x-say"></span><button id="x-go">Send</button></div><div id="x-reply" class="reply"></div>`;
+      `<div class="dim" id="x-desc"></div><div id="x-stats" class="dim"></div><canvas id="x-zipf" width="400" height="44" title="rank against frequency of its utterances, log-log; the faint line falls as 1/rank (Zipf)"></canvas>` +
+      `<table id="x-words"></table><div class="sub"><a href="#" id="x-snd-toggle"></a></div><table id="x-table"></table>` +
+      `<div class="speak"><span id="x-to"></span><input id="x-text" type="text" placeholder="type a word: food, danger, alone… or sounds: 3 5" autocomplete="off"><span id="x-say"></span><button id="x-go">Send</button></div><div id="x-reply" class="reply"></div>`;
     $('x-text').value = xText;
     $('x-clade').onchange = (e) => { xClade = +e.target.value; drawTranslator(); };
     $('x-text').oninput = (e) => { xText = e.target.value; readWord(); drawTranslator(); };
     $('x-text').onkeydown = (e) => { if (e.key === 'Enter') $('x-go').click(); };
-    $('x-go').onclick = () => { const pk = xRaw >= 0 ? { k: xRaw } : bestSound(lexicon.clades.find((c) => c.id === xClade)); speakArmed = pk ? pk.k : null; drawTranslator(); };
+    $('x-snd-toggle').onclick = (e) => { e.preventDefault(); xShowSounds = !xShowSounds; drawTranslator(); };
+    $('x-go').onclick = () => { const pk = xRaw ? { syl: xRaw } : bestUtterance(lexicon.clades.find((c) => c.id === xClade)); speakArmed = pk ? pk.syl : null; drawTranslator(); };
   }
+  $('x-snd-toggle').textContent = xShowSounds ? 'hide single sounds' : 'show single sounds (each sound wherever it comes in an utterance)';
   if (cl.mute) {
     $('x-desc').textContent = `${name} are mute: none of them has made a sound, so there is nothing to translate. Pick a clade that calls.`;
-    $('x-table').innerHTML = '';
+    $('x-words').innerHTML = ''; $('x-table').innerHTML = ''; $('x-stats').textContent = ''; drawZipf($('x-zipf'), null);
   } else {
-    $('x-desc').textContent = `What ${name}'s sounds seem to mean: what stands out most around a caller compared with usual (any of its 42 senses), and what ${name} turn to on hearing it. Nothing was given a meaning; it has to evolve. The number is how far from usual, in the clade's own spread.`;
+    $('x-desc').textContent = `What ${name}'s utterances (1 to 3 sounds in order) seem to mean: what stands out most around a caller compared with usual (any of its ${meta.features.length} senses), and what ${name} turn to on hearing it from the one they listen to. Nothing was given a meaning; it has to evolve. The number is how far from usual, in the clade's own spread.`;
+    const d = cl.dialect;
+    $('x-stats').innerHTML = `${(cl.utts || 0).toLocaleString()} utterances of ${cl.types || 0} kinds` +
+      (d ? ` · dialect west/east ${d.jsd.toFixed(2)} bits <span title="the same measure between two halves drawn at random: what sampling alone gives">(chance ${d.chance == null ? '—' : d.chance.toFixed(2)})</span>` : '') +
+      (cl.tracked ? '' : ' · <span title="whole-utterance readings are kept for the first 4 clades that call">readings per utterance not kept for this clade</span>');
+    drawZipf($('x-zipf'), cl.zipf);
     let rows = '';
-    for (let k = 0; k < meta.nSound; k++) {
+    for (const u of cl.words || []) {
+      const when = (u.when || []).slice(0, 2), then = (u.then || []).slice(0, 2), syl = u.syl.map((v) => v - 1);
+      const w = when.length ? when.map((m) => `<span class="mean">${m.text || phraseOf(m.f, m.hi)}</span> ${strength(m.d)}`).join(', ')
+        : `<span class="dim">${u.n < XMIN ? 'too rare to tell' : cl.tracked ? 'no clear meaning' : '—'}</span>`;
+      const a = answer(u);
+      const t = then.length ? then.map((m) => `${m.text} ${strength(m.d)}`).join(', ') + (a ? ` <span class="dim">· ${a}</span>` : '') : a ? `<span class="dim">${a}</span>` : '';
+      rows += `<tr><td class="snd">${uttHtml(syl)}${u.isNew ? ' <span class="new" title="first made ' + lexicon.minUtt + ' times within the last ' + lexicon.newSteps.toLocaleString() + ' steps, with a clear reading">NEW</span>' : ''}` +
+        `<div class="dim">${u.n.toLocaleString()}× · #${u.rank}</div></td>` +
+        `<td><div><span class="dim">when </span>${w}</div>${t ? `<div class="then"><span class="dim">listeners then </span>${t}</div>` : ''}` +
+        `<div class="dim" title="first made ${ago(u.first)}${u.born >= 0 ? `; made ${lexicon.minUtt} times by ${ago(u.born)}` : ''}">last made ${ago(u.last)}</div></td></tr>`;
+    }
+    $('x-words').innerHTML = rows || '<tr><td class="dim">no utterances yet</td></tr>';
+    rows = '';
+    if (xShowSounds) for (let k = 0; k < meta.nSound; k++) {
       const s = cl.sounds[k], when = (s.when || []).slice(0, 2), then = (s.then || []).slice(0, 2);
       let w;
       if (when.length) w = when.map((m) => `<span class="mean">${m.text || phraseOf(m.f, m.hi)}</span> ${strength(m.d)}`).join(', ');
@@ -487,24 +527,24 @@ function drawTranslator() {
     }
     $('x-table').innerHTML = rows;
   }
-  const pick = xRaw >= 0 ? { k: xRaw } : bestSound(cl);
+  const pick = xRaw ? { syl: xRaw } : bestUtterance(cl);
   const want = xTargets.length ? phraseOf(xTargets[0].f, xTargets[0].hi) : xMeaning >= 0 ? meta.ctxNames[xMeaning] : '';
   $('x-to').textContent = `Tell ${name}:`;
-  $('x-say').innerHTML = !xText.trim() ? '' : !xTargets.length && xMeaning < 0 && xRaw < 0 ? '<span class="dim">no word for that; try food, danger, hungry, alone, water, mate, coming, or “sound 3”</span>'
-    : pick ? `→ <b style="color:${soundCss(pick.k)}">sound ${pick.k + 1}</b>${pick.d ? ` <span class="dim">(made when “${phraseOf(pick.f, pick.hi)}”, ${pick.d.toFixed(1)})</span>` : pick.lift ? ` <span class="dim">(×${pick.lift.toFixed(1)} with “${meta.ctxNames[pick.c]}”, rough)</span>` : ''}`
-    : `<span class="dim">${name} have no sound for “${want}” yet; try “sound 1”…“sound 8”</span>`;
+  $('x-say').innerHTML = !xText.trim() ? '' : !xTargets.length && xMeaning < 0 && !xRaw ? '<span class="dim">no word for that; try food, danger, hungry, alone, water, mate, coming, or sounds like “3 5”</span>'
+    : pick ? `→ ${uttHtml(pick.syl)}${pick.d ? ` <span class="dim">(made when “${phraseOf(pick.f, pick.hi)}”, ${pick.d.toFixed(1)})</span>` : pick.lift ? ` <span class="dim">(×${pick.lift.toFixed(1)} with “${meta.ctxNames[pick.c]}”, rough)</span>` : ''}`
+    : `<span class="dim">${name} have nothing that means “${want}” yet; try sounds like “3 5”</span>`;
   const go = $('x-go'); go.disabled = !pick; go.textContent = speakArmed !== null ? 'click the map…' : 'Send';
   const u = lexicon.user, heard = u && u.id === myCallId ? u.resp.reduce((a, b) => a + b, 0) : 0;
   $('x-reply').textContent = myCallId >= 0 && u && u.id === myCallId ? (heard ? `${heard} heard you: ` + u.resp.map((v, r) => v ? `${meta.respNames[r]} ${v}` : '').filter(Boolean).join(', ') : 'nobody heard you yet (speak near animals)') : '';
   box.classList.toggle('armed', speakArmed !== null);
 }
 function speakAt(cx, cy) {
-  const p = world.groundAt(cx, cy), k = speakArmed; speakArmed = null;
-  if (p) {
-    link.send({ cmd: 'speak', x: p[0], y: p[1], sound: k });
-    world.showMyCall(p[0], p[1], k + 1);
+  const p = world.groundAt(cx, cy), s = speakArmed; speakArmed = null;
+  if (p && s) {
+    link.send({ cmd: 'speak', x: p[0], y: p[1], sounds: s });
+    world.showMyCall(p[0], p[1], s.map((k) => k + 1));
     myCallId = lexicon ? lexicon.user.id + 1 : 0;
-    tone(k, 1);
+    s.forEach((k, i) => setTimeout(() => tone(k, 1), 170 * i));
   }
   drawTranslator();
 }
@@ -525,7 +565,8 @@ function callSounds() {
   for (const e of world.agents.values()) {
     if (!e.call || e.callT !== world.frameT) continue;
     const d = world.viewDist(e.x, e.y); if (d > 40) continue;
-    tone(e.call - 1, 0.3 * Math.min(1, 10 / (d + 5))); lastCallTone = now;
+    const v = 0.3 * Math.min(1, 10 / (d + 5));
+    [e.call, e.call2, e.call3].filter(Boolean).forEach((s, i) => setTimeout(() => tone(s - 1, v), 120 * i)); lastCallTone = now;
     if (++made >= 2) break;
   }
 }

@@ -32,6 +32,7 @@ public sealed class World
     public readonly float[] PCare;
     public readonly float[] PDrain;
     public readonly float[] PVoice;            // voice organ (0..1): loudness of its calls; mute below VOICE_MIN
+    public readonly float[] PImit, PImitAge;  // vocal learning (0..1) and its sensitive period (share of lifespan) (Revision N)
     public readonly float[] PWaterEcon;       // water-economy gene expressed (0..1)
     public readonly float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
     public readonly float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
@@ -50,19 +51,28 @@ public sealed class World
     public readonly float[] W2f;           // Cap * G.W2N   working output weights = genome W2 + what was learned (not inherited)
     public readonly float[] Trace;         // Cap * G.W2N   eligibility traces
     public readonly float[] HistA, HistD, HistY;   // learning block history: advantage, perturbation, inputs (Brain.BLOCK steps)
+    public readonly float[] HistV;         // Cap * BLOCK  match of its own utterance to its template, less its running mean (0 when silent; Revision N)
+    public readonly float[] VMean;         // running mean of that match
+    public readonly byte[] Tmpl;           // Cap * Voice.NTMPL  remembered tutors' syllable pairs: (start or previous sound) -> next sound, counts
     public readonly float[] Hidden;        // Cap * G.NH
     public readonly float[] Gain;          // Cap * P.N     last gains (after exploration)
     public readonly float[] Feat;          // Cap * F.N     last features (for probe/telemetry)
     // ---- agents: intents written by DECIDE (own slot only)
     public readonly float[] IHeading, ISpeed;
     public readonly uint[] IActs;          // bit p-FIRST_ACTION set = action fires
-    // voices (Revision M): the sound each organism made this step (0 none, 1..8), and what each heard (loudest call)
-    public readonly byte[] Call;
-    public readonly int[] IHeard;          // 0 nothing; else 1 + caller clade x NSOUND + sound
+    // voices (Revision M, N): the utterance each organism made this step (MAX_SYL bytes per slot: sounds 1..8, 0 = none),
+    // the last utterance it made (whenever), and what each heard: its focal caller's utterance
+    public readonly byte[] Call, LastUtt;
+    public readonly int[] IHeard;          // 0 nothing; else 1 + focal caller's clade x Voice.NTYPE + utterance type
     public readonly float[] IHeardX, IHeardY;
-    public readonly byte[] IHeardUser;     // heard the person's own call this step
-    // the person speaking into the world (the console's translator): one call at a time, heard on the next step
-    public float UserCallX, UserCallY; public int UserCallSound; public ulong UserCallStep = ulong.MaxValue; public int UserCallId;
+    public readonly byte[] IHeardUser;     // its focal caller this step was the person
+    public readonly int[] IFocal;          // the focal caller's slot (-1 none, -2 the person), written by DECIDE (own slot)
+    public readonly uint[] IFocalSerial;   // and its serial, so attention stays with the same animal
+    public readonly float[] CallR;         // how far its call carries this step (BUILD; 0 = silent)
+    public readonly int[] CallStart, CallSorted;   // this step's callers in hash-cell order (BUILD)
+    // the person speaking into the world (the console's translator): one utterance at a time, heard on the next step
+    public float UserCallX, UserCallY; public ulong UserCallStep = ulong.MaxValue; public int UserCallId;
+    public readonly byte[] UserCall = new byte[F.MAX_SYL];   // its sounds (1..8, 0 = none)
     public readonly int[] ITarget, IMate;  // target slot for STRIKE, partner slot for MATE (-1 none)
     public readonly float[] IFoodHere, IKinDensity;
     public readonly byte[] IEatPrey;       // EAT means attacking the target in reach (it is worth more than the plants here)
@@ -109,7 +119,8 @@ public sealed class World
     public bool Prehistory;
     public readonly EvoSettings Evo = new();   // the evolutionary search's knobs (prehistory; mutation also in a live world)
     /// <summary>Approximate memory per agent slot (bytes), for the setup screen's estimate.</summary>
-    public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (1 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 432;
+    public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (2 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 432
+        + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4;   // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
@@ -138,7 +149,7 @@ public sealed class World
         PBirth = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
         PVLand = new float[c]; PVWater = new float[c]; PVAir = new float[c]; PSexRatio = new float[c]; PImmune = new float[c];
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
-        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PLegPairs = new byte[c];
+        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];
@@ -146,16 +157,16 @@ public sealed class World
         W2f = new float[(long)c * G.W2N];
         Trace = new float[(long)c * G.W2N];
         Hidden = new float[c * G.NH];
-        HistA = new float[c * Brain.BLOCK]; HistD = new float[c * Brain.BLOCK * P.N]; HistY = new float[c * Brain.BLOCK * G.NIN];
+        HistA = new float[c * Brain.BLOCK]; HistV = new float[c * Brain.BLOCK]; VMean = new float[c]; Tmpl = new byte[c * Voice.NTMPL]; HistD = new float[c * Brain.BLOCK * P.N]; HistY = new float[c * Brain.BLOCK * G.NIN];
         Gain = new float[c * P.N];
         Feat = new float[c * F.N];
-        IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; Call = new byte[c]; IHeard = new int[c]; IHeardX = new float[c]; IHeardY = new float[c]; IHeardUser = new byte[c]; ITarget = new int[c]; IMate = new int[c];
+        IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; Call = new byte[c * F.MAX_SYL]; LastUtt = new byte[c * F.MAX_SYL]; IFocal = new int[c]; IFocalSerial = new uint[c]; CallR = new float[c]; CallSorted = new int[c]; IHeard = new int[c]; IHeardX = new float[c]; IHeardY = new float[c]; IHeardUser = new byte[c]; ITarget = new int[c]; IMate = new int[c];
         IFoodHere = new float[c]; IKinDensity = new float[c]; IEatPrey = new byte[c]; IScanning = new byte[c];
         FreeStack = new int[c]; Order = new int[c];
         for (int i = 0; i < c; i++) FreeStack[i] = c - 1 - i;
         FreeTop = c;
 
-        CellStart = new int[Map.GW * Map.GW + 1]; CellCount = new int[Map.GW * Map.GW]; Sorted = new int[c]; CellOf = new int[c];
+        CellStart = new int[Map.GW * Map.GW + 1]; CallStart = new int[Map.GW * Map.GW + 1]; CellCount = new int[Map.GW * Map.GW]; Sorted = new int[c]; CellOf = new int[c];
 
         int n = Map.FW * Map.FW;
         Pool = new float[Pools.NFIELD][];

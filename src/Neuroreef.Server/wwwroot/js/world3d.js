@@ -12,7 +12,7 @@ import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize }
 
 const RELIEF = 55;
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
-const CALL_MAX = 384;         // call rings drawn at once
+const CALL_MAX = 768;         // call rings drawn at once (up to 3 per utterance)
 const FX_MAX = 256;           // fight flashes and blood stains drawn at once
 const STAIN_MAX = 1024;       // blood stains on the ground
 const BLOOD_MAX = 2500;       // blood droplets in the air at once
@@ -306,7 +306,7 @@ export class World3D {
         e.fly = o.loco === 'Fly'; e.swim = o.loco === 'Swim';
       }
       e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
-      e.call = o.call; if (o.call) e.callT = now;
+      e.call = o.call; e.call2 = o.call2; e.call3 = o.call3; if (o.call) e.callT = now;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;
@@ -518,15 +518,16 @@ export class World3D {
     return null;
   }
 
-  /** Show the person's call where it was made. */
-  showMyCall(x, y, sound) { this.myCall = { x, y, sound, t0: performance.now() }; }
+  /** Show the person's call where it was made (sounds: 1..8, up to 3). */
+  showMyCall(x, y, sounds) { this.myCall = { x, y, sounds: Array.isArray(sounds) ? sounds : [sounds], t0: performance.now() }; }
 
   _drawCalls(now, cx, cz) {
     const W = this.W, m = new THREE.Matrix4(), col = new THREE.Color(), near = (v, c) => v + W * Math.round((c - v) / W);
     let k = 0;
-    const ring = (x, y, s, sound, a) => {
+    // an utterance is a stack of rings, one per sound in its order: the first lowest and innermost
+    const ring = (x, y, s, sound, a, p = 0) => {
       if (k >= CALL_MAX) return;
-      m.makeScale(s, 1, s); m.setPosition(x, this.heightAt(x, y) + 0.5, y);
+      m.makeScale(s, 1, s); m.setPosition(x, this.heightAt(x, y) + 0.5 + 0.45 * p, y);
       this.callMesh.setMatrixAt(k, m);
       const c = SOUND_RGB[sound - 1]; col.setRGB(c[0] * a, c[1] * a, c[2] * a); this.callMesh.setColorAt(k, col);
       k++;
@@ -534,7 +535,10 @@ export class World3D {
     if (this.myCall) {
       const a = (now - this.myCall.t0) / 2500;
       if (a > 1) this.myCall = null;
-      else for (let r = 0; r < 3; r++) { const q = (a * 3 + r / 3) % 1; ring(near(this.myCall.x, cx), near(this.myCall.y, cz), 2 + q * 22, this.myCall.sound, 1 - q); }
+      else for (let r = 0; r < 3; r++) {
+        const q = (a * 3 + r / 3) % 1;
+        this.myCall.sounds.forEach((snd, p) => ring(near(this.myCall.x, cx), near(this.myCall.y, cz), 2 + 1.5 * p + q * 22, snd, 1 - q, p));
+      }
     }
     const camX = this.camera.position.x, camZ = this.camera.position.z;
     for (const e of this.agents.values()) {
@@ -542,7 +546,9 @@ export class World3D {
       const x = near(e.x, cx), y = near(e.y, cz);
       if ((x - camX) ** 2 + (y - camZ) ** 2 > 140 * 140) continue;
       const q = ((now - e.callT) / 600), sz = (e.size || 1);
-      ring(x, y, sz * (1.2 + 2.5 * q), e.call, 1 - q);
+      ring(x, y, sz * (1.2 + 2.5 * q), e.call, 1 - q, 0);
+      if (e.call2) ring(x, y, sz * (1.6 + 2.5 * q), e.call2, 1 - q, 1);
+      if (e.call3) ring(x, y, sz * (2.0 + 2.5 * q), e.call3, 1 - q, 2);
     }
     this.callMesh.count = k; this.callMesh.instanceMatrix.needsUpdate = true; if (k) this.callMesh.instanceColor.needsUpdate = true;
   }

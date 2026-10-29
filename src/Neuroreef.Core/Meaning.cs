@@ -1,5 +1,5 @@
 // The translator's open-ended reading of the voices (Revision M). Not a rule: nothing here is read by the simulation.
-// A sound's meaning is not chosen from designed categories. It is whichever of the caller's 42 senses differ most
+// A sound's (or a whole utterance's, Revision N) meaning is not chosen from designed categories. It is whichever of the caller's 64 senses differ most
 // from the clade's usual senses when the sound is made, and whichever behaviours the caller's clade turns to on
 // hearing it. Each sense and each behaviour has a plain-language phrase so the console can say what it found.
 
@@ -73,6 +73,17 @@ public static class Meaning
         S(F.SEASON, "the good season", "the lean season", "spring,summer,season,rain", "winter,lean,dry");
         for (int k = 0; k < F.NSOUND; k++)
             S(F.HEAR_0 + k, $"hearing sound {k + 1}", $"not hearing sound {k + 1}", $"answer {k + 1},reply {k + 1},echo {k + 1}", "");
+        for (int k = 0; k < F.NSOUND; k++)
+        {
+            S(F.FOC_POS_0 + k, $"the one it listens to says sound {k + 1}", $"the one it listens to does not say sound {k + 1}", $"repeat {k + 1}", "");
+            S(F.MY_POS_0 + k, $"it said sound {k + 1} last time", $"it did not say sound {k + 1} last time", "", "");
+        }
+        S(F.FOC_KIN, "listening to its own kind", "listening to a stranger", "kin,family,brother,sister,clan", "stranger,foreigner,you,human");
+        S(F.FOC_MOTHER, "listening to its mother", "not listening to its mother", "mother,mom,mum,mama", "");
+        S(F.FOC_ELDER, "listening to an elder", "listening to a younger one", "elder,teacher,chief,leader,old one", "child,pupil");
+        S(F.FOC_SIZE, "listening to a bigger one", "listening to a smaller one", "boss", "");
+        S(F.FOC_FACING, "the one it listens to faces it", "the one it listens to faces away", "look at me,you there,hey", "look,over there,that way");
+        S(F.FOC_LIKE_ME, "hearing what it says itself", "hearing something it does not say", "same,copy,yes,agree", "different,no");
 
         string[] v =
         {
@@ -80,7 +91,7 @@ public static class Meaning
             "flee the nearest animal", "cut off the nearest animal", "circle the nearest animal",
             "gather together", "spread apart", "move the same way", "follow mother", "look for a mate", "head for food",
             "head for water", "head for land", "move away from the danger smell", "wander", "go toward the caller", "move away from the caller",
-            "stand still", "look around", "sprint", "eat", "attack", "drink", "mate", "rest", "mark the ground", "lay eggs", "bury seed",
+            "look where the caller looks", "stand still", "look around", "sprint", "eat", "attack", "drink", "mate", "rest", "mark the ground", "lay eggs", "bury seed",
         };
         for (int p = 0; p < v.Length; p++) Verbs[p] = v[p];
         for (int k = 0; k < F.NSOUND; k++) Verbs[P.CALL_0 + k] = $"call sound {k + 1}";
@@ -116,6 +127,39 @@ public static class Meaning
     {
         int sk = s * F.NSOUND + k;
         Diffs(T.HeardN[sk], T.BaseN[s], T.HeardGain, T.HeardGain2, sk * P.N, T.BaseGain, T.BaseGain2, s * P.N, P.N, d);
+    }
+
+    /// <summary>The same for a whole utterance type t (Voice) of clade s; NaN everywhere when the clade is not tracked.</summary>
+    public static void UttSenseDiffs(Telemetry T, int s, int t, Span<float> d)
+    {
+        int tr = T.TrackOf[s];
+        if (tr < 0) { d.Fill(float.NaN); return; }
+        int k = tr * Voice.NTYPE + t;
+        Diffs(T.UttFeatN[k], T.BaseN[s], T.UttFeat, T.UttFeat2, k * F.N, T.BaseFeat, T.BaseFeat2, s * F.N, F.N, d);
+        d[F.BIAS] = float.NaN;
+    }
+
+    /// <summary>The same for listeners of clade s hearing utterance t from their focal caller of the same clade.</summary>
+    public static void UttAnswerDiffs(Telemetry T, int s, int t, Span<float> d)
+    {
+        int tr = T.TrackOf[s];
+        if (tr < 0) { d.Fill(float.NaN); return; }
+        int k = tr * Voice.NTYPE + t;
+        Diffs(T.UttGainN[k], T.BaseN[s], T.UttGain, T.UttGain2, k * P.N, T.BaseGain, T.BaseGain2, s * P.N, P.N, d);
+    }
+
+    public static List<Item> RankUttSenses(Telemetry T, int s, int t, int max = 3)
+    {
+        Span<float> d = stackalloc float[F.N];
+        UttSenseDiffs(T, s, t, d);
+        return Rank(d, max, false);
+    }
+
+    public static List<Item> RankUttAnswers(Telemetry T, int s, int t, int max = 3)
+    {
+        Span<float> d = stackalloc float[P.N];
+        UttAnswerDiffs(T, s, t, d);
+        return Rank(d, max, true);
     }
 
     static void Diffs(long n, long bn, double[] sum, double[] sum2, int o, double[] bsum, double[] bsum2, int bo, int len, Span<float> d)

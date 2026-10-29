@@ -14,7 +14,7 @@ namespace Neuroreef;
 
 public static class GeneBank
 {
-    public const ushort Version = 3;   // 3: genome length as int32 (Revision M: 256-unit brains)
+    public const ushort Version = 4;   // 3: genome length as int32 (Revision M: 256-unit brains); 4: utterance senses, gaze following and vocal-learning genes (Revision N)
 
     public sealed class CladeInfo
     {
@@ -73,7 +73,7 @@ public static class GeneBank
         if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'B' || magic[3] != 'K') throw new InvalidDataException("not a gene bank");
         ushort ver = br.ReadUInt16();
         if (ver != Version)
-            throw new InvalidDataException(ver < Version ? $"gene bank version {ver}: it was made with smaller brains (before Revision M); run a new prehistory" : $"gene bank version {ver} is from a newer program");
+            throw new InvalidDataException(ver < Version ? $"gene bank version {ver}: it was made with older rules (a different brain or sense layout); run a new prehistory" : $"gene bank version {ver} is from a newer program");
         ushort ns = br.ReadUInt16(); int len = br.ReadInt32();
         if (len != G.LEN) throw new InvalidDataException($"gene bank genome length {len}, expected {G.LEN} (genome layout changed)");
         if (ns != K.CLADES) throw new InvalidDataException($"gene bank has {ns} clade slots, expected {K.CLADES}");

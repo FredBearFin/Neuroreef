@@ -52,6 +52,10 @@ button:disabled { opacity: .35; cursor: default; }
 #translator .speak input { flex: 1; min-width: 120px; background: #0d151d; color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
 #translator .armed { outline: 2px solid #4fd18b; }
 #translator .reply { margin-top: 6px; color: #b6f5cf; }
+#translator .new { font-family: var(--mono); font-size: 9px; color: #08110c; background: #4fd18b; border-radius: 3px; padding: 0 3px; margin-left: 4px; }
+#translator .sub { margin: 2px 0; font-size: 11px; } #translator .sub a { color: var(--faint); }
+#translator #x-zipf { width: 100%; height: 44px; display: block; margin-top: 4px; }
+#translator td.snd b { font-family: var(--mono); font-weight: normal; color: #fff; }
 #legend sup { font-size: 8px; color: var(--faint); margin-left: 1px; }
 #fights .fh { font-family: var(--mono); color: var(--faint); letter-spacing: 0.06em; margin-bottom: 3px; }
 #fights .fl { cursor: pointer; padding: 1px 0; }

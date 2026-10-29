@@ -1,7 +1,58 @@
 # NEUROREEF 2 — DESIGN DOCUMENT
 
-Document NR-DD-001, Revision M. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
+Document NR-DD-001, Revision N. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
+
+**Changes in Revision N: richer voices** (the user, 2026-10-29: the voices are "clearly too limited"; can languages
+evolve new, unknown words? Designed with the communication designer. Nothing gives a sound or a sequence a meaning, and
+nothing rewards communicating; the only intrinsic signal is matching the *form* of what elders say, through a gene
+evolution can drop.)
+- Utterances (`Voice.cs`): in one step a voiced animal makes every call it fired, up to MAX_SYL = 3 distinct sounds,
+  in the order of how strongly each is intended (highest gain first; Engesser & Townsend 2019). A fired sound left out
+  of the utterance counts as not made for learning. `World.Call` holds 3 bytes per slot. An utterance of n sounds costs
+  C_CALL x basal x (1 - CALL_SYL + CALL_SYL x n), CALL_SYL = 0.5. There are 8 + 56 + 336 = 400 utterance types.
+- Range is the caller's: a call carries HEAR_R x voice x M^(1/3) (HEAR_R = 16), at most MAX_SIGHT = 32, so the 5x5
+  hash neighbourhood (HCELL 16) holds every caller a listener can hear. BUILD sorts this step's callers by hash cell
+  (`CallStart`, `CallSorted`) and a listener scans all of them, with no neighbour cap. Loudness is 1 - d / range.
+  Before, hearing used the listener's sight radius and the 64-neighbour cap.
+- The focal caller: each listener attends to one caller, the loudest that looks alike (Body.LooksAlike), else the
+  loudest of any kind (the person included); it stays with the same animal while that one goes on calling at least
+  FOCAL_KEEP = 0.7 as loud as the loudest of its class (Bee & Micheyl 2008). 22 new senses (F.N 42 -> 64): FOC_POS_k
+  (1, 0.67, 0.33 for sound k 1st, 2nd, 3rd in the focal utterance; 0 absent), MY_POS_k (the same for its own last
+  utterance, an efference copy), FOC_KIN, FOC_MOTHER, FOC_ELDER ((focal age - own age) / own lifespan), FOC_SIZE (tanh
+  log mass ratio), FOC_FACING (cosine of the focal's heading toward it), FOC_LIKE_ME (positions where the focal
+  utterance equals its own last one, over the longer length). HEAR_0..7 are kept. A new steering primitive,
+  FOLLOW_GAZE (P.N 38 -> 39, NSTEER 20, FIRST_ACTION 23), turns the way the focal caller faces (gaze following).
+  The person's voice is heard within HEAR_R as a stranger: not kin, not mother, no age, size or gaze; the console's
+  `speak` command takes up to 3 sounds.
+- Vocal learning of form (Doupe & Kuhl 1999; Brainard & Doupe 2002; Tchernichovski et al. 2001; Kirby, Cornish &
+  Smith 2008): two body genes beside B_VOICE (before the MHC block, which stays last): B_IMIT (0..1) and B_IMIT_AGE
+  (sensitive period, IMIT_AGE_LO = 0.1 .. 1 of lifespan). The voiced ancestor starts with IMIT 0.5 and IMIT_AGE 1; every
+  other ancestor with 0. During its sensitive period a learner counts the syllable pairs (start -> 1st, 1st -> 2nd,
+  2nd -> 3rd) of what its focal caller says when that caller is grown, alike and older (`World.Tmpl`, 9 x 8 bytes per
+  slot, saturating; halved every TMPL_HALF = 1000 steps, staggered by slot). On each step it makes an utterance, its
+  match is the mean over its pairs of count / largest count, less its running mean (IMIT_RBAR); it is stored with the
+  learning block (`HistV`) and `Brain.ApplyBlock` uses eta x (A + IMIT x V) on the 8 call rows only, in the same pass.
+  With IMIT = 0 the dynamics are bit-identical to having no vocal learning (tested, `EvoSettings.VocalLearning`). The
+  genes have no upkeep cost of their own (the learning uses the brain the animal already pays for), so where matching
+  elders is of no use they drift; deviation from the designer's note, which named no cost either way.
+- In a fixed two-animal test (a juvenile hearing an elder say [3, 5] for 2,000 steps, no other reward), the learner
+  says [3, 5] about 150 times in its last 500 steps against 0 for the same brain without the gene, but it says [3]
+  alone more often still: the pair score rewards starting right as much as finishing right. With the highest learning
+  rate it locks onto the first partly matching form (e.g. [3, 2]); the learning rate is an evolving gene.
+- The translator (display only): per clade and utterance type, count, first and last step made and the step it
+  reached MIN_UTT = 30, the listeners' answers (from their focal caller of the same clade), and the sums of the
+  caller's senses and of the listeners' gains. The sense and gain sums per type are kept for NTRACK = 4 clades (the
+  first to call; a slot is reused when its clade dies out), ~2.7 MB per world in doubles. The panel lists the 24 most
+  made utterances and any NEW word (reached n >= 30 within the last 2,000 steps and has a clear reading), keeps the
+  per-sound view (each sound wherever it comes in an utterance), draws the rank-frequency of utterance types on
+  log-log axes beside a 1/rank line, and gives a dialect measure: the Jensen-Shannon divergence between the last
+  utterances of the clade's western and eastern halves, beside the same between odd and even slots (what sampling
+  alone gives). A typed word picks the best utterance (or single sound); "3 5" sends those sounds. The 3D view shows
+  an utterance as a stack of coloured rings, one per sound. The prehistory report has a VOICES section.
+- A slot holds 202,541 bytes (World.BytesPerSlot; measured 202,435), 16.6 KB more than Revision M's 185,914 (Revision M's
+  note said ~155 KB; the measured value was ~186 KB). Gene bank version 4, checkpoint version 4, AGENTS format 5
+  (26-byte records: byte 24 holds the 2nd and 3rd sounds).
 
 **Changes in Revision M: far bigger brains, and food that limits numbers** (the user, 2026-10-29: "bigger brains
 far bigger"; "food levels and world size should control population ... natural forces that don't let it hit max

@@ -40,6 +40,7 @@ public static class Clades
         if (slot < 0) return -1;
         var s = w.Sp[slot];
         s.Clear();
+        w.T.ResetVoices(slot);   // a reused slot starts without the old clade's words
         s.Id = slot; s.Used = true; s.Alive = true; s.Parent = parent; s.Ancestor = ancestor; s.Born = (long)w.Step;
         s.Serial = w.CladeScratch.NextSerial++;
         s.Generation = parent >= 0 ? w.Sp[parent].Generation + 1 : 0;
@@ -132,6 +133,10 @@ public static class Clades
         body[G.B_IMMUNE - B] = (sbyte)((U(37) * 2f - 1f) * 127f);
         body[G.B_WATER - B] = (sbyte)((U(38) * 2f - 1f) * 127f);   // water economy: anything
         body[G.B_VOICE - B] = (sbyte)(voiced ? 127 : -127);           // the user's design: one voiced lineage, the rest mute (a gene: it can evolve)
+        // vocal learning (Revision N): the voiced lineage starts as a moderate learner that memorises tutors all its life;
+        // the others start without it (genes: either can evolve)
+        body[G.B_IMIT - B] = (sbyte)(voiced ? 0 : -127);
+        body[G.B_IMIT_AGE - B] = (sbyte)(voiced ? 127 : -127);
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them
         // (plants, algae, meat, carrion, blood, dung...), mediocre at the rest, never at the floor (ecology review:

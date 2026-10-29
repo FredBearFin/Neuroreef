@@ -164,7 +164,7 @@ public static class Wire
         var o = new
         {
             type = "meta", version = 1, world = Map.W, fw = Map.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
-            sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, firstAction = P.FIRST_ACTION, callFirst = P.CALL_0, nSound = F.NSOUND, ctxNames = Telemetry.CtxNames, respNames = Telemetry.RespNames,
+            sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, firstAction = P.FIRST_ACTION, callFirst = P.CALL_0, nSound = F.NSOUND, maxSyl = F.MAX_SYL, ctxNames = Telemetry.CtxNames, respNames = Telemetry.RespNames,
             meaning = new { high = Meaning.High, low = Meaning.Low, keysHigh = Meaning.KeysHigh, keysLow = Meaning.KeysLow, verbs = Meaning.Verbs, minN = Meaning.MIN_N }, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
             fieldLayers = FieldLayers, telemetry = new { names = w.T.Names, offSpecies = w.T.OffSpecies, perSpecies = w.T.PerSpecies, offKill = w.T.OffKill,
                 fields = new { count = Telemetry.S_COUNT, juv = Telemetry.S_JUV, eggs = Telemetry.S_EGGS, gen = Telemetry.S_GEN, energy = Telemetry.S_ENERGY,
@@ -232,14 +232,24 @@ public static class Wire
         return meat > 0.15f ? 2 : 1;                     // omnivores, plant-eaters
     }
 
-    /// <summary>The translator's data (Revision M): per living clade and sound, how often it is made, the senses that
+    /// <summary>Utterance types shown per clade: the most made, and every new word besides.</summary>
+    public const int WORDS_MAX = 24;
+    /// <summary>A word is new when it was first made MIN_UTT times within this many steps and has a clear reading.</summary>
+    public const int NEW_STEPS = 2000;
+
+    /// <summary>The translator's data (Revision M, N): per living clade and sound, how often it is made, the senses that
     /// stand out around the caller against the clade's usual senses (open-ended, Meaning.cs) with the 7 fixed contexts
-    /// as a fallback, and how members of the clade answered it; and the answers to the person's latest call.</summary>
+    /// as a fallback, and how members of the clade answered it; per utterance type (ordered sequences of 1..3 sounds),
+    /// the same readings for the most made, when each was first and last made and whether it is new; the rank-frequency
+    /// of all its utterance types; a dialect measure between the clade's western and eastern halves; and the answers to
+    /// the person's latest call. Display only.</summary>
     public static string Lexicon(World w)
     {
-        var T = w.T; int NS = F.NSOUND, NC = Telemetry.NCTX, NR = Telemetry.NRESP;
+        var T = w.T; int NS = F.NSOUND, NC = Telemetry.NCTX, NR = Telemetry.NRESP, NT = Voice.NTYPE;
         var clades = new List<object>();
         var z = new float[F.N];
+        var syl = new byte[F.MAX_SYL];
+        var dialect = Dialects(w);
         for (int s = 0; s < w.NS; s++)
         {
             if (!w.Sp[s].Alive) continue;
@@ -261,8 +271,71 @@ public static class Wire
                 calls += n;
                 sounds.Add(new { n, ctx, resp, heard = T.HeardN[sk], z = zs, when, then });
             }
-            clades.Add(new { id = s, n = bn, calls, mute = calls == 0, bases, sounds });
+            // utterance types: the most made, and any new word below them
+            var order = Enumerable.Range(0, NT).Where(t => T.UttN[s * NT + t] > 0).OrderByDescending(t => T.UttN[s * NT + t]).ThenBy(t => t).ToArray();
+            long utts = order.Sum(t => T.UttN[s * NT + t]);
+            var words = new List<object>();
+            for (int r = 0; r < order.Length; r++)
+            {
+                int t = order[r], st = s * NT + t; long n = T.UttN[st];
+                bool recent = T.UttCross[st] > 0 && (long)w.Step + 1 - T.UttCross[st] <= NEW_STEPS;
+                if (r >= WORDS_MAX && !recent) continue;
+                var when = Meaning.RankUttSenses(T, s, t, 3).Select(m => new { f = m.Index, hi = m.High, d = MathF.Round(m.D, 2), text = Meaning.Phrase(m.Index, m.High) }).ToArray();
+                var then = Meaning.RankUttAnswers(T, s, t, 3).Select(m => new { p = m.Index, d = MathF.Round(m.D, 2), text = Meaning.Verbs[m.Index] }).ToArray();
+                bool isNew = recent && n >= Telemetry.MIN_UTT && when.Length > 0;
+                if (r >= WORDS_MAX && !isNew) continue;
+                int len = Voice.Decode(t, syl);
+                Meaning.UttSenseDiffs(T, s, t, z);
+                var zs = new float[F.N]; for (int f = 0; f < F.N; f++) zs[f] = float.IsNaN(z[f]) ? 0f : MathF.Round(z[f], 2);
+                var resp = new long[NR]; for (int q = 0; q < NR; q++) resp[q] = T.UttResp[st * NR + q];
+                words.Add(new { t, syl = syl.Take(len).Select(b => (int)b).ToArray(), rank = r + 1, n, heard = T.UttHeardN[st], resp,
+                    first = T.UttFirst[st] - 1, last = T.UttLast[st] - 1, born = T.UttCross[st] - 1, isNew, z = zs, when, then });
+            }
+            var zipf = order.Select(t => T.UttN[s * NT + t]).ToArray();
+            clades.Add(new { id = s, n = bn, calls, utts, types = order.Length, tracked = T.TrackOf[s] >= 0, mute = calls == 0, bases, sounds, words, zipf, dialect = dialect[s] });
         }
-        return System.Text.Json.JsonSerializer.Serialize(new { type = "lexicon", step = w.Step, clades, user = new { id = w.UserCallId, sound = w.UserCallSound, resp = T.UserRespId == w.UserCallId ? T.UserResp : new long[NR] } });
+        return System.Text.Json.JsonSerializer.Serialize(new { type = "lexicon", step = w.Step, minUtt = Telemetry.MIN_UTT, newSteps = NEW_STEPS, clades,
+            user = new { id = w.UserCallId, sounds = w.UserCall.Where(b => b != 0).Select(b => (int)b).ToArray(), resp = T.UserRespId == w.UserCallId ? T.UserResp : new long[NR] } });
+    }
+
+    /// <summary>
+    /// A dialect measure per clade (display only): the Jensen-Shannon divergence (bits) between the last utterances of its
+    /// members in the western and the eastern half of the map, beside the same between two halves drawn without regard to
+    /// place (odd and even slots), which is what sampling alone gives. Null when a half has fewer than 20 speakers.
+    /// </summary>
+    static object?[] Dialects(World w)
+    {
+        int NT = Voice.NTYPE;
+        var west = new int[K.CLADES * NT]; var east = new int[K.CLADES * NT]; var odd = new int[K.CLADES * NT]; var even = new int[K.CLADES * NT];
+        var nw = new int[K.CLADES]; var ne = new int[K.CLADES]; var no = new int[K.CLADES]; var nv = new int[K.CLADES];
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            int t = Voice.TypeOf(w.LastUtt, i * F.MAX_SYL);
+            if (t < 0) continue;
+            int s = w.Spc[i], k = s * NT + t;
+            if (w.X[i] < Map.W * 0.5f) { west[k]++; nw[s]++; } else { east[k]++; ne[s]++; }
+            if ((i & 1) != 0) { odd[k]++; no[s]++; } else { even[k]++; nv[s]++; }
+        }
+        var res = new object?[K.CLADES];
+        for (int s = 0; s < K.CLADES; s++)
+        {
+            if (nw[s] < 20 || ne[s] < 20) continue;
+            res[s] = new { west = nw[s], east = ne[s], jsd = MathF.Round(Jsd(west, east, s * NT, NT, nw[s], ne[s]), 3),
+                chance = no[s] >= 20 && nv[s] >= 20 ? MathF.Round(Jsd(odd, even, s * NT, NT, no[s], nv[s]), 3) : (float?)null };
+        }
+        return res;
+    }
+
+    static float Jsd(int[] a, int[] b, int o, int n, int na, int nb)
+    {
+        double d = 0;
+        for (int k = 0; k < n; k++)
+        {
+            double p = a[o + k] / (double)na, q = b[o + k] / (double)nb, m = 0.5 * (p + q);
+            if (p > 0) d += 0.5 * p * Math.Log2(p / m);
+            if (q > 0) d += 0.5 * q * Math.Log2(q / m);
+        }
+        return (float)d;
     }
 }

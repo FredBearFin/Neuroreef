@@ -191,6 +191,25 @@ public sealed class Simulation : IDisposable
             if (c < 0) continue;
             w.Sorted[w.CellStart[c] + w.CellCount[c]++] = i;
         }
+        // this step's callers (Revision N): every organism that made a sound last step, sorted by hash cell like the
+        // others, with how far its call carries: HEAR_R x voice x M^(1/3) (a bigger, louder animal is heard further),
+        // at most MAX_SIGHT so that the 5x5 cell neighbourhood holds every caller a listener can hear. A listener scans
+        // all of them, with no cap on how many
+        Array.Clear(w.CellCount);
+        for (int i = 0; i < w.Cap; i++)
+        {
+            w.CallR[i] = 0f;
+            int c = w.CellOf[i];
+            if (c < 0 || w.Call[i * F.MAX_SYL] == 0 || w.StageOf[i] < St.Juvenile) continue;
+            w.CallR[i] = MathF.Min(K.MAX_SIGHT, K.HEAR_R * w.PVoice[i] * MathK.Cbrt(w.MassOf(i)));
+            w.CellCount[c]++;
+        }
+        acc = 0;
+        for (int c = 0; c < n; c++) { w.CallStart[c] = acc; acc += w.CellCount[c]; }
+        w.CallStart[n] = acc;
+        Array.Clear(w.CellCount);
+        for (int i = 0; i < w.Cap; i++)
+            if (w.CallR[i] > 0f) { int c = w.CellOf[i]; w.CallSorted[w.CallStart[c] + w.CellCount[c]++] = i; }
     }
 
     // last known facts about the probed animal, kept while it lives (its slot may be reused after death)

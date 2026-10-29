@@ -17,7 +17,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 3;   // 2: the map size and nature settings follow the header; 3: ponds, water in food, water-economy gene
+    public const ushort Version = 4;   // 2: the map size and nature settings follow the header; 3: ponds, water in food, water-economy gene; 4: utterances and vocal learning (Revision N)
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     // classes whose state is saved by walking their fields; any other reference field is not state (links, buffers rebuilt each step)

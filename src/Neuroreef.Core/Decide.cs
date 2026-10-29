@@ -81,9 +81,6 @@ public static class Decide
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         int nOff = R > K.HCELL ? 25 : 9;
         int seen = 0, infNear = 0, strainSrc = -1;
-        // hearing (Revision M): every sound made nearby last step, from any direction, louder the closer
-        Span<float> hear = stackalloc float[F.NSOUND];
-        float loud = 0, callDx = 0, callDy = 0; int heard = 0;
         for (int o = 0; o < nOff && seen < K.MAX_NEIGH; o++)
             {
                 int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
@@ -97,13 +94,6 @@ public static class Decide
                     float d2 = ddx * ddx + ddy * ddy;
                     if (d2 > R2 || d2 < 1e-8f) continue;
                     float d = MathF.Sqrt(d2);
-                    int cj = w.Call[j];
-                    if (cj != 0 && w.StageOf[j] >= St.Juvenile)
-                    {
-                        float l = (1f - d / R) * w.PVoice[j];   // a louder voice carries further
-                        if (l > hear[cj - 1]) hear[cj - 1] = l;
-                        if (l > loud) { loud = l; callDx = ddx; callDy = ddy; heard = 1 + w.Spc[j] * F.NSOUND + (cj - 1); }
-                    }
                     if (d > reach && (ddx * fx + ddy * fy) / d < fovCos) continue;     // outside field of view
                     float close = 1f - d / R;
                     crowd += close;
@@ -189,19 +179,112 @@ public static class Decide
         f[F.FEAR] = MathF.Min(1f, MathK.Tanh(w.Scent[cell] * 4f) + fireNear);
         f[F.CROWD] = MathK.Tanh(crowd * 0.5f);
         f[F.SEASON] = w.SeasonAt(y);
-        // the person's voice, made last step at a place on the map, is heard like any other call (it is no organism)
-        bool heardUser = false;
-        if (w.UserCallStep == w.Step - 1 && w.UserCallSound > 0)
+        // ---- hearing (Revision M, N): every utterance made last step within the caller's range (a louder, bigger caller
+        // carries further), from any direction, louder the closer; each sound as loud as its loudest caller
+        Span<float> hear = stackalloc float[F.NSOUND];
+        float loud = 0, callDx = 0, callDy = 0;
+        int jA = -1, jB = -1; float lA = 0, lB = 0, dxA = 0, dyA = 0, dxB = 0, dyB = 0, dA = 0, dB = 0;   // loudest alike caller, loudest of any kind
+        int prevF = w.IFocal[i]; float lPrev = 0, dxP = 0, dyP = 0, dP = 0; bool prevAlike = false;
+        if (prevF >= 0 && w.Serial[prevF] != w.IFocalSerial[i]) prevF = -1;          // the slot holds another animal now
+        for (int o = 0; o < 25; o++)
         {
-            float udx = World.Delta1(w.UserCallX - x), udy = World.Delta1(w.UserCallY - y), ud = MathF.Sqrt(udx * udx + udy * udy);
-            if (ud < R)
+            int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
+            for (int q = w.CallStart[hc], qe = w.CallStart[hc + 1]; q < qe; q++)
             {
-                float l = 1f - ud / R; heardUser = true;
-                if (l > hear[w.UserCallSound - 1]) hear[w.UserCallSound - 1] = l;
-                if (l > loud) { loud = l; callDx = udx; callDy = udy; heard = 0; }
+                int j = w.CallSorted[q];
+                if (j == i) continue;
+                float rc = w.CallR[j];
+                float ddx = World.Delta1(w.X[j] - x), ddy = World.Delta1(w.Y[j] - y);
+                float d2 = ddx * ddx + ddy * ddy;
+                if (d2 >= rc * rc) continue;
+                float d = MathF.Sqrt(d2), l = 1f - d / rc;
+                int cb = j * F.MAX_SYL;
+                for (int p = 0; p < F.MAX_SYL; p++) { int sk = w.Call[cb + p]; if (sk != 0 && l > hear[sk - 1]) hear[sk - 1] = l; }
+                if (l > loud) { loud = l; callDx = ddx; callDy = ddy; }
+                bool alike = Body.LooksAlike(w, i, j);
+                if (alike && l > lA) { lA = l; jA = j; dxA = ddx; dyA = ddy; dA = d; }
+                if (l > lB) { lB = l; jB = j; dxB = ddx; dyB = ddy; dB = d; }
+                if (j == prevF) { lPrev = l; dxP = ddx; dyP = ddy; dP = d; prevAlike = alike; }
+            }
+        }
+        // the person's voice, made last step at a place on the map, is heard like any other call (it is no organism):
+        // a stranger with an ordinary full voice
+        float lU = 0, udx = 0, udy = 0;
+        if (w.UserCallStep == w.Step - 1 && w.UserCall[0] != 0)
+        {
+            udx = World.Delta1(w.UserCallX - x); udy = World.Delta1(w.UserCallY - y);
+            float ud = MathF.Sqrt(udx * udx + udy * udy);
+            if (ud < K.HEAR_R)
+            {
+                lU = 1f - ud / K.HEAR_R;
+                for (int p = 0; p < F.MAX_SYL; p++) { int sk = w.UserCall[p]; if (sk != 0 && lU > hear[sk - 1]) hear[sk - 1] = lU; }
+                if (lU > loud) { loud = lU; callDx = udx; callDy = udy; }
             }
         }
         for (int k = 0; k < F.NSOUND; k++) f[F.HEAR_0 + k] = hear[k];
+        // the focal caller: the loudest caller that looks alike, else the loudest of any kind (the person included).
+        // Attention stays with the same caller while it goes on calling at least FOCAL_KEEP as loud as the loudest
+        // of its class (Bee & Micheyl 2008)
+        int foc = -1; float fdx = 0, fdy = 0, fd = 0; bool focAlike = false, heardUser = false;
+        if (jA >= 0)
+        {
+            if (prevF >= 0 && prevAlike && lPrev >= K.FOCAL_KEEP * lA) { foc = prevF; fdx = dxP; fdy = dyP; fd = dP; }
+            else { foc = jA; fdx = dxA; fdy = dyA; fd = dA; }
+            focAlike = true;
+        }
+        else if (jB >= 0 || lU > 0)
+        {
+            float top = MathF.Max(lB, lU);
+            if (prevF >= 0 && lPrev > 0 && lPrev >= K.FOCAL_KEEP * top) { foc = prevF; fdx = dxP; fdy = dyP; fd = dP; }
+            else if (w.IFocal[i] == -2 && lU > 0 && lU >= K.FOCAL_KEEP * top) heardUser = true;
+            else if (lU > lB) heardUser = true;
+            else { foc = jB; fdx = dxB; fdy = dyB; fd = dB; }
+            if (heardUser) { foc = -2; fdx = udx; fdy = udy; fd = MathF.Sqrt(udx * udx + udy * udy); }
+        }
+        w.IFocal[i] = foc; w.IFocalSerial[i] = foc >= 0 ? w.Serial[foc] : 0u;
+        // what the focal caller said, where each sound came in it, and who it is: kin, mother, elder, size, facing me.
+        // The person registers as a stranger of no age, size or gaze
+        byte f0 = 0, f1 = 0, f2 = 0;
+        if (foc >= 0) { int cb = foc * F.MAX_SYL; f0 = w.Call[cb]; f1 = w.Call[cb + 1]; f2 = w.Call[cb + 2]; }
+        else if (foc == -2) { f0 = w.UserCall[0]; f1 = w.UserCall[1]; f2 = w.UserCall[2]; }
+        if (f0 != 0) f[F.FOC_POS_0 + f0 - 1] = 1f;
+        if (f1 != 0) f[F.FOC_POS_0 + f1 - 1] = 0.67f;
+        if (f2 != 0) f[F.FOC_POS_0 + f2 - 1] = 0.33f;
+        int mb = i * F.MAX_SYL;
+        byte m0 = w.LastUtt[mb], m1 = w.LastUtt[mb + 1], m2 = w.LastUtt[mb + 2];
+        if (m0 != 0) f[F.MY_POS_0 + m0 - 1] = 1f;
+        if (m1 != 0) f[F.MY_POS_0 + m1 - 1] = 0.67f;
+        if (m2 != 0) f[F.MY_POS_0 + m2 - 1] = 0.33f;
+        if (f0 != 0 && m0 != 0)
+        {
+            int same = (f0 == m0 ? 1 : 0) + (f1 != 0 && f1 == m1 ? 1 : 0) + (f2 != 0 && f2 == m2 ? 1 : 0);
+            int lf = f1 == 0 ? 1 : f2 == 0 ? 2 : 3, lm = m1 == 0 ? 1 : m2 == 0 ? 2 : 3;
+            f[F.FOC_LIKE_ME] = same / (float)Math.Max(lf, lm);
+        }
+        float gzx = 0, gzy = 0;
+        if (foc >= 0)
+        {
+            f[F.FOC_KIN] = focAlike ? 1f : 0f;
+            f[F.FOC_MOTHER] = foc == w.MotherOf(i) ? 1f : 0f;
+            f[F.FOC_ELDER] = Math.Clamp((w.Age[foc] - w.Age[i]) / MathF.Max(w.PLife[i], 1f), -1f, 1f);
+            f[F.FOC_SIZE] = MathK.Tanh(MathK.Log(MathF.Max(w.ApparentMass(foc), 1e-4f) / MathF.Max(myMass, 1e-4f)));
+            gzx = MathK.Cos(w.Heading[foc]); gzy = MathK.Sin(w.Heading[foc]);
+            f[F.FOC_FACING] = fd > 1e-4f ? -(gzx * fdx + gzy * fdy) / fd : 0f;
+            // vocal learning (Revision N): during its sensitive period a learner memorises the form of what an alike,
+            // grown, older focal caller says, as counts of syllable pairs (start -> first, first -> second, second -> third).
+            // Only form is stored, never what was going on (Doupe & Kuhl 1999; Brainard & Doupe 2002)
+            if (focAlike && w.PImit[i] > 0f && w.Evo.VocalLearning && w.StageOf[foc] == St.Adult && w.Age[foc] > w.Age[i]
+                && w.Age[i] < w.PImitAge[i] * w.PLife[i])
+            {
+                int tb = i * Voice.NTMPL;
+                Bump(w.Tmpl, tb + Voice.Cell(0, f0));
+                if (f1 != 0) Bump(w.Tmpl, tb + Voice.Cell(f0, f1));
+                if (f2 != 0) Bump(w.Tmpl, tb + Voice.Cell(f1, f2));
+            }
+        }
+        // a template fades: its counts halve every TMPL_HALF steps (staggered by slot)
+        if (w.PImit[i] > 0f && ((long)w.Step + i) % K.TMPL_HALF == 0)
+            for (int k = i * Voice.NTMPL, ke = k + Voice.NTMPL; k < ke; k++) w.Tmpl[k] >>= 1;
 
         // ---- brain
         Span<float> yv = stackalloc float[G.NIN];
@@ -234,16 +317,22 @@ public static class Decide
             delta[p] = ge - g[p];
             g[p] = ge;
         }
-        Brain.Record(w, i, yv, delta);
-        // one voice: of the sounds the brain chose to make, only the most intended one is made
-        const uint callBits = ((1u << F.NSOUND) - 1) << (P.CALL_0 - P.FIRST_ACTION);
+        // one utterance (Revision N): of the sounds the brain chose to make, at most MAX_SYL, each once, in the order of
+        // how strongly each is intended (Engesser & Townsend 2019). A sound left out is not made, and learning sees that
+        uint callBits = Voice.Bits;
         if ((acts & callBits) != 0)
         {
-            int best = -1; float bg = -1;
+            Span<byte> syl = stackalloc byte[F.MAX_SYL];
+            Voice.Order(w, i, acts, syl);
+            uint kept = Voice.BitsOf(syl);
             for (int k = 0; k < F.NSOUND; k++)
-                if ((acts & (1u << (P.CALL_0 + k - P.FIRST_ACTION))) != 0 && w.Gain[i * P.N + P.CALL_0 + k] > bg) { bg = w.Gain[i * P.N + P.CALL_0 + k]; best = k; }
-            acts = (acts & ~callBits) | (1u << (P.CALL_0 + best - P.FIRST_ACTION));
+            {
+                uint bit = 1u << (P.CALL_0 + k - P.FIRST_ACTION);
+                if ((acts & bit) != 0 && (kept & bit) == 0) { int p = P.CALL_0 + k; delta[p] = -w.Gain[i * P.N + p]; g[p] = 0f; }
+            }
+            acts = (acts & ~callBits) | kept;
         }
+        Brain.Record(w, i, yv, delta);
 
         // ---- primitive vectors (DESIGN §5) and steering sum
         float sx = 0, sy = 0;
@@ -282,6 +371,7 @@ public static class Decide
         float wa = hd + (Rng.U(seed, step / 16u, (uint)i, Rs.Wander) - 0.5f) * 2.0f;   // slowly changing direction
         Add(g[P.WANDER], MathK.Cos(wa), MathK.Sin(wa));
         if (loud > 0) { Add(g[P.TOWARD_CALL], callDx, callDy); Add(g[P.AWAY_CALL], -callDx, -callDy); }
+        if (foc >= 0) Add(g[P.FOLLOW_GAZE], gzx, gzy);   // turn the way the focal caller is facing (gaze following)
 
         float newH = hd;
         if (sx * sx + sy * sy > 0.0025f)
@@ -311,8 +401,11 @@ public static class Decide
         w.IVirNear[i] = infNear > 0 ? virSum / infNear : 0f;
         w.IStrainSrc[i] = strainSrc;
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
-        w.IHeard[i] = heard; w.IHeardUser[i] = (byte)(heardUser ? 1 : 0);
-        w.IHeardX[i] = x + callDx; w.IHeardY[i] = y + callDy;
+        // what it heard, for the translator: its focal caller's utterance and where it came from
+        int ft = Voice.TypeOf(f0, f1, f2);
+        w.IHeard[i] = foc >= 0 && ft >= 0 ? 1 + w.Spc[foc] * Voice.NTYPE + ft : 0;
+        w.IHeardUser[i] = (byte)(heardUser ? 1 : 0);
+        w.IHeardX[i] = x + fdx; w.IHeardY[i] = y + fdy;
         f.CopyTo(new Span<float>(w.Feat, i * F.N, F.N));
         if (probe.Slot == i)
         {
@@ -320,6 +413,9 @@ public static class Decide
             z.CopyTo(probe.Z); probe.Acts = acts; probe.Reward = w.Reward[i]; probe.RewardMean = w.RewardMean[i];
         }
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static void Bump(byte[] t, int k) { if (t[k] < 255) t[k]++; }
 
     public static bool Ready(World w, int i)
     {
