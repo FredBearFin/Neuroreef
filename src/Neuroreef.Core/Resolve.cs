@@ -206,8 +206,10 @@ public static class Resolve
         _ => f[F.MOTHER_FAR] > 0.5f,
     };
 
-    /// <summary>Translator bookkeeping: the context of a call, the usual context, and how a listener answered what it heard.</summary>
-    static void Voices(World w, int i, int s, int callK, uint acts)
+    /// <summary>Translator bookkeeping (not a rule; reads only): the context of a call, the usual context, and how a
+    /// listener answered what it heard. The caller's whole sense vector and the listeners' gains are summed for the
+    /// open-ended translator (Meaning.cs); the 7 fixed contexts are kept as its fallback.</summary>
+    public static void Voices(World w, int i, int s, int callK, uint acts)
     {
         var T = w.T;
         var f = new ReadOnlySpan<float>(w.Feat, i * F.N, F.N);
@@ -215,12 +217,15 @@ public static class Resolve
         {
             T.BaseN[s]++;
             for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.BaseCtx[s * Telemetry.NCTX + c]++;
+            Accumulate(T.BaseFeat, T.BaseFeat2, s * F.N, f);
+            Accumulate(T.BaseGain, T.BaseGain2, s * P.N, new ReadOnlySpan<float>(w.Gain, i * P.N, P.N));
         }
         if (callK >= 0)
         {
             int sk = s * F.NSOUND + callK;
             T.CallN[sk]++;
             for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.CallCtx[sk * Telemetry.NCTX + c]++;
+            Accumulate(T.CallFeat, T.CallFeat2, sk * F.N, f);
         }
         int h = w.IHeard[i];
         bool user = w.IHeardUser[i] != 0;
@@ -231,7 +236,17 @@ public static class Resolve
         float cos = d > 1e-3f ? (MathK.Cos(w.IHeading[i]) * dx + MathK.Sin(w.IHeading[i]) * dy) / d : 0f;
         int r = callK >= 0 ? 3 : sp < 0.1f ? 2 : sp > 0.25f && cos > 0.5f ? 0 : sp > 0.25f && cos < -0.5f ? 1 : 4;
         if (user) { if (T.UserRespId != w.UserCallId) { Array.Clear(T.UserResp); T.UserRespId = w.UserCallId; } T.UserResp[r]++; }
-        if (h != 0 && (h - 1) / F.NSOUND == s) T.CallResp[(h - 1) * Telemetry.NRESP + r]++;   // the caller's own clade
+        if (h != 0 && (h - 1) / F.NSOUND == s)   // the caller's own clade
+        {
+            T.CallResp[(h - 1) * Telemetry.NRESP + r]++;
+            T.HeardN[h - 1]++;
+            Accumulate(T.HeardGain, T.HeardGain2, (h - 1) * P.N, new ReadOnlySpan<float>(w.Gain, i * P.N, P.N));
+        }
+    }
+
+    static void Accumulate(double[] sum, double[] sum2, int o, ReadOnlySpan<float> v)
+    {
+        for (int k = 0; k < v.Length; k++) { double x = v[k]; sum[o + k] += x; sum2[o + k] += x * x; }
     }
 
     /// <summary>Eat mass of a pool: energy, water from the food and from digesting it, and the reward for both.</summary>

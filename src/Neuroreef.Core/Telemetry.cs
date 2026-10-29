@@ -61,6 +61,11 @@ public sealed class Telemetry
     public static readonly string[] CtxNames = { "danger", "food here", "mate near", "hungry", "alone", "thirsty", "young lost" };
     public static readonly string[] RespNames = { "came", "fled", "froze", "called back", "ignored" };
     public readonly long[] CallN, CallCtx, CallResp, BaseN, BaseCtx;
+    // open-ended meaning (Meaning.cs): per clade x sound, the sum and sum of squares of each of the caller's senses
+    // (CallFeat), and of each primitive's gain in listeners of the caller's clade on the step they hear it (HeardGain,
+    // over HeardN hearings); the same over the clade's usual sample (BaseFeat, BaseGain, over BaseN)
+    public readonly double[] CallFeat, CallFeat2, BaseFeat, BaseFeat2, HeardGain, HeardGain2, BaseGain, BaseGain2;
+    public readonly long[] HeardN;
     public readonly long[] UserResp = new long[NRESP];   // how listeners answered the person's latest call
     public int UserRespId;
 
@@ -70,6 +75,10 @@ public sealed class Telemetry
         int ns = NS;
         CallN = new long[ns * F.NSOUND]; CallCtx = new long[ns * F.NSOUND * NCTX]; CallResp = new long[ns * F.NSOUND * NRESP];
         BaseN = new long[ns]; BaseCtx = new long[ns * NCTX];
+        CallFeat = new double[ns * F.NSOUND * F.N]; CallFeat2 = new double[ns * F.NSOUND * F.N];
+        BaseFeat = new double[ns * F.N]; BaseFeat2 = new double[ns * F.N];
+        HeardGain = new double[ns * F.NSOUND * P.N]; HeardGain2 = new double[ns * F.NSOUND * P.N]; HeardN = new long[ns * F.NSOUND];
+        BaseGain = new double[ns * P.N]; BaseGain2 = new double[ns * P.N];
         Created = new long[ns]; Births = new long[ns]; Conceptions = new long[ns]; Deaths = new long[ns * Cause.N];
         KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; Infections = new long[ns]; CareGiven = new double[ns]; _pInf = new long[ns]; _pCare = new double[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
         Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; RewardSum = new double[ns];

@@ -164,7 +164,8 @@ public static class Wire
         var o = new
         {
             type = "meta", version = 1, world = Map.W, fw = Map.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
-            sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, firstAction = P.FIRST_ACTION, callFirst = P.CALL_0, nSound = F.NSOUND, ctxNames = Telemetry.CtxNames, respNames = Telemetry.RespNames, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
+            sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, firstAction = P.FIRST_ACTION, callFirst = P.CALL_0, nSound = F.NSOUND, ctxNames = Telemetry.CtxNames, respNames = Telemetry.RespNames,
+            meaning = new { high = Meaning.High, low = Meaning.Low, keysHigh = Meaning.KeysHigh, keysLow = Meaning.KeysLow, verbs = Meaning.Verbs, minN = Meaning.MIN_N }, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
             fieldLayers = FieldLayers, telemetry = new { names = w.T.Names, offSpecies = w.T.OffSpecies, perSpecies = w.T.PerSpecies, offKill = w.T.OffKill,
                 fields = new { count = Telemetry.S_COUNT, juv = Telemetry.S_JUV, eggs = Telemetry.S_EGGS, gen = Telemetry.S_GEN, energy = Telemetry.S_ENERGY,
                     reward = Telemetry.S_REWARD, learned = Telemetry.S_LEARNED, births = Telemetry.S_BIRTHS, conc = Telemetry.S_CONC, deaths = Telemetry.S_DEATHS,
@@ -231,17 +232,18 @@ public static class Wire
         return meat > 0.15f ? 2 : 1;                     // omnivores, plant-eaters
     }
 
-    /// <summary>The translator's data (Revision M): per living clade and sound, how often it is made, the caller's
-    /// context against the clade's usual context, and how members of the clade answered it; and the answers to the
-    /// person's latest call.</summary>
+    /// <summary>The translator's data (Revision M): per living clade and sound, how often it is made, the senses that
+    /// stand out around the caller against the clade's usual senses (open-ended, Meaning.cs) with the 7 fixed contexts
+    /// as a fallback, and how members of the clade answered it; and the answers to the person's latest call.</summary>
     public static string Lexicon(World w)
     {
         var T = w.T; int NS = F.NSOUND, NC = Telemetry.NCTX, NR = Telemetry.NRESP;
         var clades = new List<object>();
+        var z = new float[F.N];
         for (int s = 0; s < w.NS; s++)
         {
             if (!w.Sp[s].Alive) continue;
-            long bn = T.BaseN[s];
+            long bn = T.BaseN[s], calls = 0;
             var bases = new float[NC];
             for (int c = 0; c < NC; c++) bases[c] = bn > 0 ? MathF.Round(T.BaseCtx[s * NC + c] / (float)bn, 3) : 0f;
             var sounds = new List<object>();
@@ -250,9 +252,16 @@ public static class Wire
                 int sk = s * NS + k; long n = T.CallN[sk];
                 var ctx = new float[NC]; for (int c = 0; c < NC; c++) ctx[c] = n > 0 ? MathF.Round(T.CallCtx[sk * NC + c] / (float)n, 3) : 0f;
                 var resp = new long[NR]; for (int r = 0; r < NR; r++) resp[r] = T.CallResp[sk * NR + r];
-                sounds.Add(new { n, ctx, resp });
+                // open-ended meaning: every sense's standardised difference when the sound is made (0 = no clear difference),
+                // the strongest as phrases, and what listeners of the clade turn to on hearing it
+                Meaning.SenseDiffs(T, s, k, z);
+                var zs = new float[F.N]; for (int f = 0; f < F.N; f++) zs[f] = float.IsNaN(z[f]) ? 0f : MathF.Round(z[f], 2);
+                var when = Meaning.RankSenses(T, s, k, 3).Select(m => new { f = m.Index, hi = m.High, d = MathF.Round(m.D, 2), text = Meaning.Phrase(m.Index, m.High) }).ToArray();
+                var then = Meaning.RankAnswers(T, s, k, 3).Select(m => new { p = m.Index, d = MathF.Round(m.D, 2), text = Meaning.Verbs[m.Index] }).ToArray();
+                calls += n;
+                sounds.Add(new { n, ctx, resp, heard = T.HeardN[sk], z = zs, when, then });
             }
-            clades.Add(new { id = s, n = bn, bases, sounds });
+            clades.Add(new { id = s, n = bn, calls, mute = calls == 0, bases, sounds });
         }
         return System.Text.Json.JsonSerializer.Serialize(new { type = "lexicon", step = w.Step, clades, user = new { id = w.UserCallId, sound = w.UserCallSound, resp = T.UserRespId == w.UserCallId ? T.UserResp : new long[NR] } });
     }
