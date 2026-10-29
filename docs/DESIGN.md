@@ -53,6 +53,11 @@ evolution can drop.)
 - A slot holds 202,541 bytes (World.BytesPerSlot; measured 202,435), 16.6 KB more than Revision M's 185,914 (Revision M's
   note said ~155 KB; the measured value was ~186 KB). Gene bank version 4, checkpoint version 4, AGENTS format 5
   (26-byte records: byte 24 holds the 2nd and 3rd sounds).
+- Result of a short check (8,000 steps, 2 branches x 12,288 slots, region map, seeds 1 and 2): the voiced lineage
+  died out in all four branches, as it does with Revision M's rules on the same seeds (founding bottleneck: mostly
+  starvation and predation). Before dying it made 25,000-38,000 utterances of 300-360 kinds, 53-64 of them at least 30
+  times; the most made were single sounds, and the clearest reading of each was "it said this sound last time" (a
+  caller repeats itself), not anything about the world. Nothing in these runs is a language yet.
 
 **Changes in Revision M: far bigger brains, and food that limits numbers** (the user, 2026-10-29: "bigger brains
 far bigger"; "food levels and world size should control population ... natural forces that don't let it hit max

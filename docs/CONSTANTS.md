@@ -16,7 +16,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FW | 256 | cells | field grid side (WORLD/FCELL) | - |
 | HCELL | 16 | units | spatial-hash cell side | V1 |
 | GW | 64 | cells | spatial-hash grid side | - |
-| CAPACITY | 8192 | slots | default agent slots (animals, eggs, embryos) | HT: Revision M, ~155 KB per slot with 256-unit brains: 8,192 is ~1.3 GB |
+| CAPACITY | 8192 | slots | default agent slots (animals, eggs, embryos) | HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB |
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
 | RIVER_ACC | 900 | cells | catchment (cells) above which a cell is river | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
