@@ -234,7 +234,7 @@ export class Panels {
         <h3>senses (30 features)</h3><div id="ins-feat"></div>
         <h3>memory (12 recurrent units)</h3><div id="ins-hid"></div>
         <h3>primitive gains — what the brain asks for</h3><div id="ins-gain"></div>
-        <h3>brain: output weights (28 primitives × [12 memory, 30 senses])</h3>
+        <h3>brain: output weights (primitives × [memory units, senses])</h3>
         <p class="note">Colour is the weight now (genome + learning). The bar to the right of each row is how much this animal has learned on that row since birth.</p>
         <canvas id="ins-w2" class="plot" height="300"></canvas>
         <h3>reward</h3><div class="kv" id="ins-reward"></div>`;
@@ -255,21 +255,21 @@ export class Panels {
     $('ins-diet').innerHTML = M.pools.map((p, i) => f[P.diet + i] > 0.005 ? bar(p, f[P.diet + i], 1, '#c9a86a') : '').join('');
     $('ins-feat').innerHTML = M.features.map((n, i) => bar(n.toLowerCase(), f[P.feat + i], 1, '#5ab0ff', true)).join('');
     $('ins-hid').innerHTML = Array.from({ length: P.nh }, (_, i) => bar('m' + i, f[P.hid + i], 1, '#b48cff', true)).join('');
-    $('ins-gain').innerHTML = M.primitives.map((n, i) => bar(n.toLowerCase(), f[P.gain + i], 1, i >= 20 ? '#ffb547' : '#4fd1c5')).join('');
+    $('ins-gain').innerHTML = M.primitives.map((n, i) => bar(n.toLowerCase(), f[P.gain + i], 1, i >= M.firstAction ? '#ffb547' : '#4fd1c5')).join('');
     $('ins-reward').innerHTML = `<span>reward this step</span><span>${fmt(sc('reward'), 3)}</span><span>running mean (baseline)</span><span>${fmt(sc('rewardMean'), 3)}</span>`;
     this._drawW2(pr);
   }
 
   _drawW2(pr) {
     const cv = $('ins-w2'); if (!cv) return;
-    const P = this.meta.probe, f = pr.f, rows = 28, cols = P.nin;
+    const P = this.meta.probe, f = pr.f, rows = this.meta.primitives.length, cols = P.nin;
     const w = cv.clientWidth || 400, h = 300; cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
     const g = cv.getContext('2d'); g.scale(devicePixelRatio, devicePixelRatio);
     const lw = 88, cw = (w - lw - 40) / cols, ch = h / rows;
     g.clearRect(0, 0, w, h); g.font = '9px ui-monospace, monospace';
     let maxL = 1e-6; for (let p = 0; p < rows; p++) maxL = Math.max(maxL, f[P.learn + p]);
     for (let p = 0; p < rows; p++) {
-      g.fillStyle = p >= 20 ? '#ffb547' : '#7fa7c0'; g.fillText(this.meta.primitives[p].toLowerCase(), 0, p * ch + ch * 0.8);
+      g.fillStyle = p >= this.meta.firstAction ? '#ffb547' : '#7fa7c0'; g.fillText(this.meta.primitives[p].toLowerCase(), 0, p * ch + ch * 0.8);
       for (let j = 0; j < cols; j++) {
         const v = f[P.w2 + p * cols + j];
         const a = Math.min(1, Math.abs(v) / 3);
@@ -458,7 +458,7 @@ export class Panels {
 
   _buildBehaviour() {
     $('tab-behaviour').innerHTML = `<h3>primitive use by clade (now)</h3>
-      <p class="note">Mean gain each living clade's brains give each of the 28 shared primitives. Every clade has the same primitives; only how they combine them differs.</p>
+      <p class="note">Mean gain each living clade's brains give each of the shared primitives. Every clade has the same primitives; only how they combine them differs.</p>
       <canvas id="primheat" class="plot" height="440"></canvas>
       <h3>behaviour fingerprints</h3>
       <p class="note">The live animals of each clade grouped into up to 3 clusters by their gains, named after the primitives that set each cluster apart. These are measured, not designed.</p>
@@ -477,7 +477,7 @@ export class Panels {
       const g = cv.getContext('2d'); g.scale(devicePixelRatio, devicePixelRatio);
       const lw = 74, top = 86, cw = (w - lw) / np, ch = (h - top) / n;
       g.font = '9px sans-serif';
-      for (let p = 0; p < np; p++) { g.save(); g.translate(lw + p * cw + cw * 0.7, top - 4); g.rotate(-Math.PI / 2.6); g.fillStyle = p >= 20 ? '#ffb547' : '#7fa7c0'; g.fillText(M.primitives[p].toLowerCase(), 0, 0); g.restore(); }
+      for (let p = 0; p < np; p++) { g.save(); g.translate(lw + p * cw + cw * 0.7, top - 4); g.rotate(-Math.PI / 2.6); g.fillStyle = p >= M.firstAction ? '#ffb547' : '#7fa7c0'; g.fillText(M.primitives[p].toLowerCase(), 0, 0); g.restore(); }
       list.forEach((s, k) => {
         g.fillStyle = s.color; g.fillText(s.name, 0, top + k * ch + ch * 0.6 + 3);
         for (let p = 0; p < np; p++) {

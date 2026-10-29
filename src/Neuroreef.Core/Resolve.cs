@@ -107,6 +107,13 @@ public static class Resolve
         if ((acts & BIT_MATE) != 0 && w.IMate[i] >= 0) r += Mate(w, i, w.IMate[i], cell);
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
 
+        // ---- 6a. voice (Revision M): a sound costs a little energy, and is heard by everyone near on the next step
+        int callK = -1;
+        for (int k = 0; k < F.NSOUND; k++) if ((acts & (1u << (P.CALL_0 + k - P.FIRST_ACTION))) != 0) { callK = k; break; }
+        w.Call[i] = (byte)(callK + 1);
+        if (callK >= 0) w.Energy[i] -= K.C_CALL * K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL);
+        Voices(w, i, s, callK, acts);
+
         // ---- 6. mark and scent, cache
         float carn = diet[(int)Pool.Meat];
         float scent = K.C_SCENT * carn * ((acts & BIT_MARK) != 0 ? K.MARK_GAIN : 1f);
@@ -185,6 +192,46 @@ public static class Resolve
     // less as the soil dries (green grass ~75% water, dry-season grass ~10%), prey and fruit are wet, seed and wood dry
     static readonly float[] FoodWater = { 0.75f, 0.65f, 0.85f, 0.1f, 0.8f, 0.6f, 0.8f, 0.8f, 0.5f, 0.3f, 0.1f, 0.1f, 0.5f, 0.7f, 0.8f };
     static bool LivePlant(int p) => p <= (int)Pool.Root;
+
+    /// <summary>What is going on around organism i (from this step's senses): the translator's context categories.</summary>
+    static bool Ctx(ReadOnlySpan<float> f, int c) => c switch
+    {
+        0 => f[F.FEAR] > 0.3f || (f[F.O1_ARMED] > 0.4f && f[F.O1_CLOSE] > 0.4f && f[F.O1_SIZE] > 0.5f),
+        1 => f[F.FOOD_HERE] > 0.5f,
+        2 => f[F.MATE_CLOSE] > 0f,
+        3 => f[F.HUNGER] > 0.6f,
+        4 => f[F.KIN_DENSITY] < 0.05f,
+        5 => f[F.THIRST] > 0.6f,
+        _ => f[F.MOTHER_FAR] > 0.5f,
+    };
+
+    /// <summary>Translator bookkeeping: the context of a call, the usual context, and how a listener answered what it heard.</summary>
+    static void Voices(World w, int i, int s, int callK, uint acts)
+    {
+        var T = w.T;
+        var f = new ReadOnlySpan<float>(w.Feat, i * F.N, F.N);
+        if ((w.Step & 3) == (ulong)(i & 3))   // the usual context, sampled every 4th step per organism
+        {
+            T.BaseN[s]++;
+            for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.BaseCtx[s * Telemetry.NCTX + c]++;
+        }
+        if (callK >= 0)
+        {
+            int sk = s * F.NSOUND + callK;
+            T.CallN[sk]++;
+            for (int c = 0; c < Telemetry.NCTX; c++) if (Ctx(f, c)) T.CallCtx[sk * Telemetry.NCTX + c]++;
+        }
+        int h = w.IHeard[i];
+        bool user = w.IHeardUser[i] != 0;
+        if (h == 0 && !user) return;
+        // the answer: going toward the call, away from it, stopping, calling back, or carrying on
+        float dx = World.Delta1(w.IHeardX[i] - w.X[i]), dy = World.Delta1(w.IHeardY[i] - w.Y[i]), d = MathF.Sqrt(dx * dx + dy * dy);
+        float vmax = MathF.Max(w.Vmax(i), 1e-3f), sp = w.ISpeed[i] / vmax;
+        float cos = d > 1e-3f ? (MathK.Cos(w.IHeading[i]) * dx + MathK.Sin(w.IHeading[i]) * dy) / d : 0f;
+        int r = callK >= 0 ? 3 : sp < 0.1f ? 2 : sp > 0.25f && cos > 0.5f ? 0 : sp > 0.25f && cos < -0.5f ? 1 : 4;
+        if (user) { if (T.UserRespId != w.UserCallId) { Array.Clear(T.UserResp); T.UserRespId = w.UserCallId; } T.UserResp[r]++; }
+        if (h != 0 && (h - 1) / F.NSOUND == s) T.CallResp[(h - 1) * Telemetry.NRESP + r]++;   // the caller's own clade
+    }
 
     /// <summary>Eat mass of a pool: energy, water from the food and from digesting it, and the reward for both.</summary>
     public static float Ingest(World w, int i, int pool, float mass, float eff, float emax, int cell)

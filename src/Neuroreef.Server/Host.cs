@@ -330,7 +330,7 @@ public static class Host
         {
             var h = _s.H;
             long agentsVer = -1, fieldsVer = -1, probeVer = -1; int teleHead = -1, phaseSeen = h.PhaseVersion;
-            double nextPre = 0, nextFights = 0; int cladesSent = int.MinValue; long fightSeen = -1;
+            double nextPre = 0, nextFights = 0, nextLex = 0; int cladesSent = int.MinValue; long fightSeen = -1;
             var sw = Stopwatch.StartNew();
             double nextAgents = 0, nextFields = 0, nextTele = 0, nextAnalysis = 0, nextStatus = 0, nextProbe = 0;
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
@@ -374,6 +374,11 @@ public static class Host
                     nextTele = t + 500;
                     var (d, head) = _s.Telemetry();
                     if (d != null && head != teleHead) { teleHead = head; await Bin(d, ct); }
+                }
+                if (t >= nextLex)
+                {
+                    nextLex = t + 1500;
+                    await Txt(Wire.Lexicon(h.W), ct);
                 }
                 if (t >= nextFights)
                 {
@@ -482,6 +487,14 @@ public static class Host
                             break;
                         }
                         case "step": h.StepOnce(); break;
+                        case "speak":
+                            {
+                                // the person's voice: one of the 8 sounds at a place, heard by the animals near it on the next step
+                                float sx = (float)e.GetProperty("x").GetDouble(), sy = (float)e.GetProperty("y").GetDouble();
+                                int snd = Math.Clamp(e.GetProperty("sound").GetInt32(), 0, F.NSOUND - 1) + 1;
+                                h.Post(s => { var w = s.W; w.UserCallX = World.Wrap(sx); w.UserCallY = World.Wrap(sy); w.UserCallSound = snd; w.UserCallStep = w.Step - 1; /* as if made last step: heard on the step that comes next */ w.UserCallId++; });
+                                break;
+                            }
                         case "history": _history = true; break;
                         case "view":
                             if (e.TryGetProperty("hz", out var hz)) _agentHz = Math.Clamp(hz.GetInt32(), 1, 30);

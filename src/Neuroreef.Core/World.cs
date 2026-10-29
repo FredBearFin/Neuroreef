@@ -55,6 +55,13 @@ public sealed class World
     // ---- agents: intents written by DECIDE (own slot only)
     public readonly float[] IHeading, ISpeed;
     public readonly uint[] IActs;          // bit p-FIRST_ACTION set = action fires
+    // voices (Revision M): the sound each organism made this step (0 none, 1..8), and what each heard (loudest call)
+    public readonly byte[] Call;
+    public readonly int[] IHeard;          // 0 nothing; else 1 + caller clade x NSOUND + sound
+    public readonly float[] IHeardX, IHeardY;
+    public readonly byte[] IHeardUser;     // heard the person's own call this step
+    // the person speaking into the world (the console's translator): one call at a time, heard on the next step
+    public float UserCallX, UserCallY; public int UserCallSound; public ulong UserCallStep = ulong.MaxValue; public int UserCallId;
     public readonly int[] ITarget, IMate;  // target slot for STRIKE, partner slot for MATE (-1 none)
     public readonly float[] IFoodHere, IKinDensity;
     public readonly byte[] IEatPrey;       // EAT means attacking the target in reach (it is worth more than the plants here)
@@ -141,7 +148,7 @@ public sealed class World
         HistA = new float[c * Brain.BLOCK]; HistD = new float[c * Brain.BLOCK * P.N]; HistY = new float[c * Brain.BLOCK * G.NIN];
         Gain = new float[c * P.N];
         Feat = new float[c * F.N];
-        IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; ITarget = new int[c]; IMate = new int[c];
+        IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; Call = new byte[c]; IHeard = new int[c]; IHeardX = new float[c]; IHeardY = new float[c]; IHeardUser = new byte[c]; ITarget = new int[c]; IMate = new int[c];
         IFoodHere = new float[c]; IKinDensity = new float[c]; IEatPrey = new byte[c]; IScanning = new byte[c];
         FreeStack = new int[c]; Order = new int[c];
         for (int i = 0; i < c; i++) FreeStack[i] = c - 1 - i;

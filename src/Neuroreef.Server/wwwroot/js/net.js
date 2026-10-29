@@ -89,7 +89,8 @@ export function agentAt(a, k, world, out) {
   out.legPairs = Math.min(4, Math.max(1, b[o + 20]));   // 2 to 8 legs
   out.finPairs = Math.min(4, b[o + 22] || 1);             // side fins
   out.eyePairs = Math.min(4, b[o + 23] || 1);
-  out.locoCode = b[o + 21];                              // computed by the sim: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
+  out.locoCode = b[o + 21] & 15;                         // computed by the sim: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
+  out.call = b[o + 21] >> 4;                             // the sound it made this step: 0 none, 1..8
   out.loco = LOCO[out.locoCode] || locoOf(out.legs, out.fins, out.wings);
   return out;
 }

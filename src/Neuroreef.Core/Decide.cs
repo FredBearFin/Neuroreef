@@ -81,6 +81,9 @@ public static class Decide
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         int nOff = R > K.HCELL ? 25 : 9;
         int seen = 0, infNear = 0, strainSrc = -1;
+        // hearing (Revision M): every sound made nearby last step, from any direction, louder the closer
+        Span<float> hear = stackalloc float[F.NSOUND];
+        float loud = 0, callDx = 0, callDy = 0; int heard = 0;
         for (int o = 0; o < nOff && seen < K.MAX_NEIGH; o++)
             {
                 int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
@@ -94,6 +97,13 @@ public static class Decide
                     float d2 = ddx * ddx + ddy * ddy;
                     if (d2 > R2 || d2 < 1e-8f) continue;
                     float d = MathF.Sqrt(d2);
+                    int cj = w.Call[j];
+                    if (cj != 0 && w.StageOf[j] >= St.Juvenile)
+                    {
+                        float l = 1f - d / R;
+                        if (l > hear[cj - 1]) hear[cj - 1] = l;
+                        if (l > loud) { loud = l; callDx = ddx; callDy = ddy; heard = 1 + w.Spc[j] * F.NSOUND + (cj - 1); }
+                    }
                     if (d > reach && (ddx * fx + ddy * fy) / d < fovCos) continue;     // outside field of view
                     float close = 1f - d / R;
                     crowd += close;
@@ -179,6 +189,19 @@ public static class Decide
         f[F.FEAR] = MathF.Min(1f, MathK.Tanh(w.Scent[cell] * 4f) + fireNear);
         f[F.CROWD] = MathK.Tanh(crowd * 0.5f);
         f[F.SEASON] = w.SeasonAt(y);
+        // the person's voice, made last step at a place on the map, is heard like any other call (it is no organism)
+        bool heardUser = false;
+        if (w.UserCallStep == w.Step - 1 && w.UserCallSound > 0)
+        {
+            float udx = World.Delta1(w.UserCallX - x), udy = World.Delta1(w.UserCallY - y), ud = MathF.Sqrt(udx * udx + udy * udy);
+            if (ud < R)
+            {
+                float l = 1f - ud / R; heardUser = true;
+                if (l > hear[w.UserCallSound - 1]) hear[w.UserCallSound - 1] = l;
+                if (l > loud) { loud = l; callDx = udx; callDy = udy; heard = 0; }
+            }
+        }
+        for (int k = 0; k < F.NSOUND; k++) f[F.HEAR_0 + k] = hear[k];
 
         // ---- brain
         Span<float> yv = stackalloc float[G.NIN];
@@ -212,6 +235,15 @@ public static class Decide
             g[p] = ge;
         }
         Brain.Record(w, i, yv, delta);
+        // one voice: of the sounds the brain chose to make, only the most intended one is made
+        const uint callBits = ((1u << F.NSOUND) - 1) << (P.CALL_0 - P.FIRST_ACTION);
+        if ((acts & callBits) != 0)
+        {
+            int best = -1; float bg = -1;
+            for (int k = 0; k < F.NSOUND; k++)
+                if ((acts & (1u << (P.CALL_0 + k - P.FIRST_ACTION))) != 0 && w.Gain[i * P.N + P.CALL_0 + k] > bg) { bg = w.Gain[i * P.N + P.CALL_0 + k]; best = k; }
+            acts = (acts & ~callBits) | (1u << (P.CALL_0 + best - P.FIRST_ACTION));
+        }
 
         // ---- primitive vectors (DESIGN §5) and steering sum
         float sx = 0, sy = 0;
@@ -249,6 +281,7 @@ public static class Decide
         Add(g[P.AVOID_FEAR], w.Scent[CellAt(cell, -1, 0)] - w.Scent[CellAt(cell, 1, 0)], w.Scent[CellAt(cell, 0, -1)] - w.Scent[CellAt(cell, 0, 1)]);
         float wa = hd + (Rng.U(seed, step / 16u, (uint)i, Rs.Wander) - 0.5f) * 2.0f;   // slowly changing direction
         Add(g[P.WANDER], MathK.Cos(wa), MathK.Sin(wa));
+        if (loud > 0) { Add(g[P.TOWARD_CALL], callDx, callDy); Add(g[P.AWAY_CALL], -callDx, -callDy); }
 
         float newH = hd;
         if (sx * sx + sy * sy > 0.0025f)
@@ -278,6 +311,8 @@ public static class Decide
         w.IVirNear[i] = infNear > 0 ? virSum / infNear : 0f;
         w.IStrainSrc[i] = strainSrc;
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
+        w.IHeard[i] = heard; w.IHeardUser[i] = (byte)(heardUser ? 1 : 0);
+        w.IHeardX[i] = x + callDx; w.IHeardY[i] = y + callDy;
         f.CopyTo(new Span<float>(w.Feat, i * F.N, F.N));
         if (probe.Slot == i)
         {

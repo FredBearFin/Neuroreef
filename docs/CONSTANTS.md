@@ -131,6 +131,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUNDER_W | 12 | int8 | founder memory-layer (W1) weight range: round(U(-1,1)*FOUNDER_W) | HT |
 | FOUNDER_W2 | 4 | int8 | founder output-layer (W2) weight range | HT |
 | FOUNDER_BIAS | -48 | int8 | founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain) | HT |
+| FOUNDER_BIAS_CALL | -80 | int8 | founder output bias of each of the 8 call primitives (x/16): together about 5%, like one primitive | HT: calm newborn brain (Revision M) |
 | FOUNDER_BIAS_NOISE | 4 | int8 | random spread of the founder output bias | HT |
 | FOUNDER_W_SD | 2 | int8 | standing variation of founders' brain and reflex bytes around their ancestor's (SD) | ECO: members of one population share an inherited nervous system with small heritable variation; half the founder output-weight range (Revision H) |
 | ETA_LO | 0.002 | - | learning rate eta range low | HT |
@@ -148,7 +149,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.20897E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.13537E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -205,6 +206,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WING_LIFT | 1.6 | - | a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading) | ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings |
 | DEEP_SWIM | 0.3 | - | swimming power (share of the body's top speed in water) needed to stay in deep water | ECO: staying up in open water needs swimming power |
 | CRAWL | 0.05 | - | a legless body crawls on land at this share of its top speed | ECO: worms, snakes and stranded fish move slowly without legs |
+| C_CALL | 0.5 | xbasal | energy of one call, as a share of basal metabolism at the caller's mass | ECO: vocalising costs a few times resting metabolism for its duration (Ophir et al. 2010); a call is a short burst |
 
 ## 13. Food
 

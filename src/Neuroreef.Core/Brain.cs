@@ -25,9 +25,11 @@ public static class Brain
         for (int k = 0; k < G.ETA; k++)
         {
             float u = Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f;
-            int col = (k - G.W2) % G.NIN;
+            int col = (k - G.W2) % G.NIN, row = (k - G.W2) / G.NIN;
+            // calling is one behaviour made with 8 sounds: together they start as rare as any other primitive
+            int bias = row >= P.CALL_0 && row < P.CALL_0 + F.NSOUND ? K.FOUNDER_BIAS_CALL : K.FOUNDER_BIAS;
             if (k < G.W2) g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W);
-            else if (col == G.NH + F.BIAS) g[k] = (sbyte)(K.FOUNDER_BIAS + (int)MathF.Round(u * K.FOUNDER_BIAS_NOISE));
+            else if (col == G.NH + F.BIAS) g[k] = (sbyte)(bias + (int)MathF.Round(u * K.FOUNDER_BIAS_NOISE));
             else g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W2);
         }
         for (int k = G.ETA; k < G.BODY; k++)

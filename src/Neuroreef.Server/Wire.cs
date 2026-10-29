@@ -164,7 +164,7 @@ public static class Wire
         var o = new
         {
             type = "meta", version = 1, world = Map.W, fw = Map.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
-            sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
+            sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, firstAction = P.FIRST_ACTION, callFirst = P.CALL_0, nSound = F.NSOUND, ctxNames = Telemetry.CtxNames, respNames = Telemetry.RespNames, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
             fieldLayers = FieldLayers, telemetry = new { names = w.T.Names, offSpecies = w.T.OffSpecies, perSpecies = w.T.PerSpecies, offKill = w.T.OffKill,
                 fields = new { count = Telemetry.S_COUNT, juv = Telemetry.S_JUV, eggs = Telemetry.S_EGGS, gen = Telemetry.S_GEN, energy = Telemetry.S_ENERGY,
                     reward = Telemetry.S_REWARD, learned = Telemetry.S_LEARNED, births = Telemetry.S_BIRTHS, conc = Telemetry.S_CONC, deaths = Telemetry.S_DEATHS,
@@ -229,5 +229,31 @@ public static class Wire
         if (dead > meat && dead > plant) return 0;      // decomposers and scavengers
         if (meat > plant) return mass >= 10 ? 4 : 3;    // meat-eaters (large >= 10)
         return meat > 0.15f ? 2 : 1;                     // omnivores, plant-eaters
+    }
+
+    /// <summary>The translator's data (Revision M): per living clade and sound, how often it is made, the caller's
+    /// context against the clade's usual context, and how members of the clade answered it; and the answers to the
+    /// person's latest call.</summary>
+    public static string Lexicon(World w)
+    {
+        var T = w.T; int NS = F.NSOUND, NC = Telemetry.NCTX, NR = Telemetry.NRESP;
+        var clades = new List<object>();
+        for (int s = 0; s < w.NS; s++)
+        {
+            if (!w.Sp[s].Alive) continue;
+            long bn = T.BaseN[s];
+            var bases = new float[NC];
+            for (int c = 0; c < NC; c++) bases[c] = bn > 0 ? MathF.Round(T.BaseCtx[s * NC + c] / (float)bn, 3) : 0f;
+            var sounds = new List<object>();
+            for (int k = 0; k < NS; k++)
+            {
+                int sk = s * NS + k; long n = T.CallN[sk];
+                var ctx = new float[NC]; for (int c = 0; c < NC; c++) ctx[c] = n > 0 ? MathF.Round(T.CallCtx[sk * NC + c] / (float)n, 3) : 0f;
+                var resp = new long[NR]; for (int r = 0; r < NR; r++) resp[r] = T.CallResp[sk * NR + r];
+                sounds.Add(new { n, ctx, resp });
+            }
+            clades.Add(new { id = s, n = bn, bases, sounds });
+        }
+        return System.Text.Json.JsonSerializer.Serialize(new { type = "lexicon", step = w.Step, clades, user = new { id = w.UserCallId, sound = w.UserCallSound, resp = T.UserRespId == w.UserCallId ? T.UserResp : new long[NR] } });
     }
 }

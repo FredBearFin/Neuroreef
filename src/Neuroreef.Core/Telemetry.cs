@@ -54,10 +54,22 @@ public sealed class Telemetry
     readonly int[] _cnt;
     public readonly float[] KillFlashCells = new float[256]; public int KillFlashN;
 
+    // ---- voices (Revision M), for the console's translator: per clade x sound, how often it was made, what was going on
+    // around the caller when it was made (CallCtx), and what listeners of the caller's clade did next (CallResp). BaseCtx
+    // is the same context over every member, so a sound's meaning is what is more common when it is made than usual.
+    public const int NCTX = 7, NRESP = 5;
+    public static readonly string[] CtxNames = { "danger", "food here", "mate near", "hungry", "alone", "thirsty", "young lost" };
+    public static readonly string[] RespNames = { "came", "fled", "froze", "called back", "ignored" };
+    public readonly long[] CallN, CallCtx, CallResp, BaseN, BaseCtx;
+    public readonly long[] UserResp = new long[NRESP];   // how listeners answered the person's latest call
+    public int UserRespId;
+
     public Telemetry(World w)
     {
         _w = w; NS = w.NS;
         int ns = NS;
+        CallN = new long[ns * F.NSOUND]; CallCtx = new long[ns * F.NSOUND * NCTX]; CallResp = new long[ns * F.NSOUND * NRESP];
+        BaseN = new long[ns]; BaseCtx = new long[ns * NCTX];
         Created = new long[ns]; Births = new long[ns]; Conceptions = new long[ns]; Deaths = new long[ns * Cause.N];
         KillMatrix = new long[ns * ns]; Strikes = new long[ns]; Kills = new long[ns]; Matings = new long[ns]; Lays = new long[ns]; Immigrants = new long[ns]; Infections = new long[ns]; CareGiven = new double[ns]; _pInf = new long[ns]; _pCare = new double[ns]; DeathsByAge = new long[ns * 4]; AgeAtDeath = new double[ns]; _pDAge = new long[ns * 4]; _pAge = new double[ns];
         Intake = new double[ns * Pools.N]; SpendBasal = new double[ns]; SpendMove = new double[ns]; SpendGrowth = new double[ns]; SpendRepro = new double[ns]; RewardSum = new double[ns];

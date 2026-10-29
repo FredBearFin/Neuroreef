@@ -22,6 +22,17 @@ capacity"; the population laws reviewed by the ecologist)
 - MASS_LO = 0.1 (0.01 gave tiny bodies 32x the numbers from the same food; smaller consumers are the fields), and
   newborns and eggs are at least NEWBORN_MIN = 0.01.
 - Founders per ancestor scale with map area (FOUND_AREA), as founding from a bank does.
+- Voices: 8 call primitives (CALL_0..7) and 8 hearing senses (HEAR_0..7: how loud each sound was within the
+  perception radius last step, from any direction), and two steering primitives, toward and away from the loudest
+  call. No sound has a built-in meaning, and nothing rewards calling: a call costs C_CALL x basal and is heard by
+  everyone, predators included. Only the most intended call is made in a step. Founders' call outputs start at
+  FOUNDER_BIAS_CALL so that calling as a whole is as rare as one primitive.
+- The translator (console, display only): per clade and sound, the caller's context (danger, food here, mate near,
+  hungry, alone, thirsty, young lost) against the clade's usual context, and how members of the clade answered
+  (came, fled, froze, called back, ignored). A sound "means" a context when it is made 1.5x more often in it than
+  usual. The person can type a word; the translator picks the sound with the highest lift for it in the chosen
+  clade, and the person clicks where to send it. The call is heard like any other on the next step; it is not an
+  organism, and no audio is recorded.
 - Defaults for a 16 GB computer: 2 branches x 16,384 slots, a world of 8,192 slots. Archive 16 and bank 48 genomes per
   clade. Gene bank version 3. Result: a 512-unit region settles at about 1,500-2,900 animals per branch, limited by food,
   with most ancestor lineages lost in the first years (a founding bottleneck).

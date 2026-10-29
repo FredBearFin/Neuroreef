@@ -6,7 +6,7 @@ using System;
 namespace Neuroreef;
 
 /// <summary>
-/// Feature indices: the 34 senses every organism has (Revision F: no built-in categories). Others are not sorted
+/// Feature indices: the 42 senses every organism has (Revision F: no built-in categories). Others are not sorted
 /// into "bigger", "smaller" or "carnivore" by a designed threshold: an organism senses the two others that stand
 /// out - the nearest (O1) and the largest in view (O2) - through raw quantities (how close, relative size, closing
 /// speed, how armed, how meat-eating, how weak). What counts as prey or danger is for evolution and learning.
@@ -18,8 +18,10 @@ public static class F
         KIN_DENSITY = 10, KIN_CLOSE = 11, MOTHER_FAR = 12, MATE_CLOSE = 13,
         O1_CLOSE = 14, O1_SIZE = 15, O1_APPROACH = 16, O1_ARMED = 17, O1_MEAT = 18, O1_WEAK = 19,
         O2_CLOSE = 20, O2_SIZE = 21, O2_APPROACH = 22, O2_ARMED = 23, O2_MEAT = 24, OTHERS = 25,
-        FOOD_HERE = 26, FOOD_GRAD = 27, IN_WATER = 28, WATER_CLOSE = 29, LAND_CLOSE = 30, FEAR = 31, CROWD = 32, SEASON = 33;
-    public const int N = 34;
+        FOOD_HERE = 26, FOOD_GRAD = 27, IN_WATER = 28, WATER_CLOSE = 29, LAND_CLOSE = 30, FEAR = 31, CROWD = 32, SEASON = 33,
+        HEAR_0 = 34;                    // HEAR_0..HEAR_7: how loud each of the 8 sounds was nearby last step (Revision M: voices)
+    public const int NSOUND = 8;
+    public const int N = HEAR_0 + NSOUND;   // 42
     public static readonly string[] Names =
     {
         "BIAS", "HUNGER", "THIRST", "FATIGUE", "READY", "AGE", "JUVENILE", "FULL", "PAIN", "CARRYING",
@@ -27,27 +29,31 @@ public static class F
         "NEAREST_CLOSE", "NEAREST_SIZE", "NEAREST_APPROACH", "NEAREST_ARMED", "NEAREST_MEAT", "NEAREST_WEAK",
         "LARGEST_CLOSE", "LARGEST_SIZE", "LARGEST_APPROACH", "LARGEST_ARMED", "LARGEST_MEAT", "OTHERS",
         "FOOD_HERE", "FOOD_GRAD", "IN_WATER", "WATER_CLOSE", "LAND_CLOSE", "FEAR", "CROWD", "SEASON",
+        "HEAR_0", "HEAR_1", "HEAR_2", "HEAR_3", "HEAR_4", "HEAR_5", "HEAR_6", "HEAR_7",
     };
 }
 
-/// <summary>Primitive indices: the 28 base behaviours every organism has. Steering toward or away from the two others
+/// <summary>Primitive indices: the 38 base behaviours every organism has. Steering toward or away from the two others
 /// it senses (nearest = 1, largest = 2) replaces designed "seek prey" / "flee predator" primitives.</summary>
 public static class P
 {
     public const int APPROACH_1 = 0, APPROACH_2 = 1, SHADOW_2 = 2, FLEE_2 = 3, FLEE_1 = 4, INTERCEPT_1 = 5, CIRCLE_1 = 6,
         COHERE = 7, SEPARATE = 8, ALIGN = 9, FOLLOW_MOTHER = 10, SEEK_MATE = 11, CLIMB_FOOD = 12, SEEK_WATER = 13, SEEK_LAND = 14,
         AVOID_FEAR = 15, WANDER = 16,
-        HOLD = 17, SCAN = 18, SPRINT = 19,
-        EAT = 20, STRIKE = 21, DRINK = 22, MATE = 23, REST = 24, MARK = 25, LAY = 26, CACHE = 27;
-    public const int N = 28;
-    public const int NSTEER = 17;       // 0..16 steering vectors
-    public const int FIRST_ACTION = 20; // 20..27 discrete actions
+        TOWARD_CALL = 17, AWAY_CALL = 18,   // steer toward / away from the loudest call heard (Revision M: voices)
+        HOLD = 19, SCAN = 20, SPRINT = 21,
+        EAT = 22, STRIKE = 23, DRINK = 24, MATE = 25, REST = 26, MARK = 27, LAY = 28, CACHE = 29,
+        CALL_0 = 30;                        // CALL_0..CALL_7: make one of 8 sounds, none with a built-in meaning
+    public const int N = CALL_0 + F.NSOUND;   // 38
+    public const int NSTEER = 19;       // 0..18 steering vectors
+    public const int FIRST_ACTION = 22; // 22..37 discrete actions
     public static readonly string[] Names =
     {
         "APPROACH_NEAREST", "APPROACH_LARGEST", "SHADOW_LARGEST", "FLEE_LARGEST", "FLEE_NEAREST", "INTERCEPT_NEAREST", "CIRCLE_NEAREST",
         "COHERE", "SEPARATE", "ALIGN", "FOLLOW_MOTHER", "SEEK_MATE", "CLIMB_FOOD", "SEEK_WATER", "SEEK_LAND",
-        "AVOID_FEAR", "WANDER", "HOLD", "SCAN", "SPRINT",
+        "AVOID_FEAR", "WANDER", "TOWARD_CALL", "AWAY_CALL", "HOLD", "SCAN", "SPRINT",
         "EAT", "STRIKE", "DRINK", "MATE", "REST", "MARK", "LAY", "CACHE",
+        "CALL_0", "CALL_1", "CALL_2", "CALL_3", "CALL_4", "CALL_5", "CALL_6", "CALL_7",
     };
 }
 

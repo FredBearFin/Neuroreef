@@ -114,6 +114,7 @@ public static class K
     [K("Brain", "founder memory-layer (W1) weight range: round(U(-1,1)*FOUNDER_W)", "int8", "HT")] public const int FOUNDER_W = 12;
     [K("Brain", "founder output-layer (W2) weight range", "int8", "HT")] public const int FOUNDER_W2 = 4;
     [K("Brain", "founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain)", "int8", "HT")] public const int FOUNDER_BIAS = -48;
+    [K("Brain", "founder output bias of each of the 8 call primitives (x/16): together about 5%, like one primitive", "int8", "HT: calm newborn brain (Revision M)")] public const int FOUNDER_BIAS_CALL = -80;
     [K("Brain", "random spread of the founder output bias", "int8", "HT")] public const int FOUNDER_BIAS_NOISE = 4;
     [K("Brain", "standing variation of founders' brain and reflex bytes around their ancestor's (SD)", "int8", "ECO: members of one population share an inherited nervous system with small heritable variation; half the founder output-weight range (Revision H)")] public const float FOUNDER_W_SD = 2f;
     [K("Brain", "learning rate eta range low", "-", "HT")] public const float ETA_LO = 0.002f;
@@ -178,6 +179,7 @@ public static class K
     [K("Body", "a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading)", "-", "ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings")] public const float WING_LIFT = 1.6f;
     [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
     [K("Body", "a legless body crawls on land at this share of its top speed", "-", "ECO: worms, snakes and stranded fish move slowly without legs")] public const float CRAWL = 0.05f;
+    [K("Body", "energy of one call, as a share of basal metabolism at the caller's mass", "xbasal", "ECO: vocalising costs a few times resting metabolism for its duration (Ophir et al. 2010); a call is a short burst")] public const float C_CALL = 0.5f;
     [K("Food", "share of its meat-digesting skill a meat-eater brings to carrion", "-", "ECO: almost all carnivores scavenge; wolves feed on a kill for days (DeVault et al. 2003)")] public const float SCAVENGE = 0.8f;
     [K("Land", "a pond site is the lowest cell within this many cells", "cells", "ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas)")] public const int POND_R = 2;
     [K("Land", "pond sites are at least this far from a lake, sea or river", "cells", "HT: a pond beside a lake adds nothing")] public const float POND_GAP = 6f;

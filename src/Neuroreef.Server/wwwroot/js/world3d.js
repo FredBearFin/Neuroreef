@@ -11,6 +11,8 @@ import { merge } from './creatures/kit.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize } from './creatures/body.js';
 
 const RELIEF = 55;
+export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
+const CALL_MAX = 384;         // call rings drawn at once
 const FX_MAX = 256;           // fight flashes and blood stains drawn at once
 const STAIN_MAX = 1024;       // blood stains on the ground
 const BLOOD_MAX = 2500;       // blood droplets in the air at once
@@ -304,6 +306,7 @@ export class World3D {
         e.fly = o.loco === 'Fly'; e.swim = o.loco === 'Swim';
       }
       e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
+      e.call = o.call; if (o.call) e.callT = now;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;
@@ -366,6 +369,13 @@ export class World3D {
     this.bloodMesh = new THREE.InstancedMesh(drop, new THREE.MeshBasicMaterial({ color: 0xa10b0b }), BLOOD_MAX);
     this.bloodMesh.count = 0; this.bloodMesh.frustumCulled = false;
     this.scene.add(this.flashMesh, this.stainMesh, this.bloodMesh);
+    // voices: a ring in the sound's colour around an animal while it calls, and the person's own call
+    const cr = new THREE.RingGeometry(0.85, 1.0, 28); cr.rotateX(-Math.PI / 2);
+    this.callMesh = new THREE.InstancedMesh(cr, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, depthTest: false }), CALL_MAX);
+    this.callMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CALL_MAX * 3), 3);
+    this.callMesh.count = 0; this.callMesh.renderOrder = 8; this.callMesh.frustumCulled = false;
+    this.scene.add(this.callMesh);
+    this.myCall = null;   // {x, y, sound, t0}
     this.fx = [];      // live flashes {x, y, t0, kind}
     this.stains = [];  // blood where animals died {x, y, t0, r}
     this.blood = [];   // droplets {x, y, z, vx, vy, vz, s}
@@ -491,6 +501,50 @@ export class World3D {
     this.scene.fog.near = m === 'ride' ? 60 : 250; this.scene.fog.far = m === 'ride' ? 380 : 900;
     if (m === 'overview' && this._selPos) this.controls.target.set(this._selPos[0], 0, this._selPos[1]);
     this._plants(true);
+  }
+
+  /** Where a screen point meets the ground, as map coordinates, or null. */
+  groundAt(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, this.camera);
+    const o = ray.ray.origin, d = ray.ray.direction, W = this.W;
+    let t = 0;
+    for (let i = 0; i < 600; i++) {
+      const p = o.clone().addScaledVector(d, t);
+      if (p.y <= this.heightAt(p.x, p.z) + 0.2) return [((p.x % W) + W) % W, ((p.z % W) + W) % W];
+      t += Math.max(0.5, (p.y - this.heightAt(p.x, p.z)) * 0.5);
+    }
+    return null;
+  }
+
+  /** Show the person's call where it was made. */
+  showMyCall(x, y, sound) { this.myCall = { x, y, sound, t0: performance.now() }; }
+
+  _drawCalls(now, cx, cz) {
+    const W = this.W, m = new THREE.Matrix4(), col = new THREE.Color(), near = (v, c) => v + W * Math.round((c - v) / W);
+    let k = 0;
+    const ring = (x, y, s, sound, a) => {
+      if (k >= CALL_MAX) return;
+      m.makeScale(s, 1, s); m.setPosition(x, this.heightAt(x, y) + 0.5, y);
+      this.callMesh.setMatrixAt(k, m);
+      const c = SOUND_RGB[sound - 1]; col.setRGB(c[0] * a, c[1] * a, c[2] * a); this.callMesh.setColorAt(k, col);
+      k++;
+    };
+    if (this.myCall) {
+      const a = (now - this.myCall.t0) / 2500;
+      if (a > 1) this.myCall = null;
+      else for (let r = 0; r < 3; r++) { const q = (a * 3 + r / 3) % 1; ring(near(this.myCall.x, cx), near(this.myCall.y, cz), 2 + q * 22, this.myCall.sound, 1 - q); }
+    }
+    const camX = this.camera.position.x, camZ = this.camera.position.z;
+    for (const e of this.agents.values()) {
+      if (!e.call || !e.callT || now - e.callT > 600 || this.hidden.has(e.sp)) continue;
+      const x = near(e.x, cx), y = near(e.y, cz);
+      if ((x - camX) ** 2 + (y - camZ) ** 2 > 140 * 140) continue;
+      const q = ((now - e.callT) / 600), sz = (e.size || 1);
+      ring(x, y, sz * (1.2 + 2.5 * q), e.call, 1 - q);
+    }
+    this.callMesh.count = k; this.callMesh.instanceMatrix.needsUpdate = true; if (k) this.callMesh.instanceColor.needsUpdate = true;
   }
 
   /** Pick the animal nearest to where the screen point meets the ground. */
@@ -664,6 +718,7 @@ export class World3D {
     } else { this.selRing.visible = this.selBeam.visible = this.fov.visible = false; this.percMesh.count = 0; }
     this._drawFights(cx, cz);
     this._drawBlood(now);
+    this._drawCalls(now, cx, cz);
 
     // a kill close by shakes the view
     let sx = 0, sy = 0;

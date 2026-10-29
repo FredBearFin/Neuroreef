@@ -555,7 +555,11 @@ public class EcologyTests
         {
             Brain.RandomGenome(w.GenomeOf(i), 2, 0, (uint)i);
             w.Genome[i * G.LEN + G.B_BRAIN] = Body.UnitsGene(12);   // an ordinary founder brain (12 units)
-            for (int p = 0; p < P.N; p++) Assert.InRange(w.Genome[i * G.LEN + G.W2 + p * G.NIN + G.NH + F.BIAS], K.FOUNDER_BIAS - K.FOUNDER_BIAS_NOISE, K.FOUNDER_BIAS + K.FOUNDER_BIAS_NOISE);
+            for (int p = 0; p < P.N; p++)
+            {
+                int b0 = p >= P.CALL_0 && p < P.CALL_0 + F.NSOUND ? K.FOUNDER_BIAS_CALL : K.FOUNDER_BIAS;   // the 8 calls together start as rare as one primitive
+                Assert.InRange(w.Genome[i * G.LEN + G.W2 + p * G.NIN + G.NH + F.BIAS], b0 - K.FOUNDER_BIAS_NOISE, b0 + K.FOUNDER_BIAS_NOISE);
+            }
             w.Spc[i] = (byte)(i % K.CLADES); w.StageOf[i] = St.Adult;
             Body.Express(w, i); Brain.InitLife(w, i);
             f[F.BIAS] = 1; for (int k = 1; k < F.N; k++) f[k] = rs.Next();
@@ -624,5 +628,27 @@ public class EcologyTests
         Assert.True(seed < grass && seed > 0.2f * grass, $"seed {seed:F3} vs grass {grass:F3}");
         w.Moisture[0] = 0.1f;
         Assert.True(Relief((int)Pool.Grass) < 0.6f * grass, "dry-season grass is as wet as green grass");
+    }
+
+    [Fact] // Revision M: a sound made nearby is heard on the next step, and so is the person's voice; none has a built-in meaning
+    public void CallsAndThePersonsVoiceAreHeard()
+    {
+        using var sim = new Simulation(1024, 5, 1, empty: true);
+        var w = sim.W;
+        Life.RandomSite(w, Realm.Land, 77u, out float x, out float y);
+        int a = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 1u, x, y), b = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 2u, x, y);
+        Assert.True(a >= 0 && b >= 0);
+        w.Sp[0].Used = w.Sp[0].Alive = true;
+        sim.Step();                                     // settle positions and the spatial hash
+        w.Call[a] = 3;                                  // a made sound 3 (index 2) last step
+        sim.Step();
+        Assert.True(w.Feat[b * F.N + F.HEAR_0 + 2] > 0f, "the neighbour did not hear sound 3");
+        for (int k = 0; k < F.NSOUND; k++) if (k != 2 && w.Call[a] != k + 1) Assert.True(w.Feat[b * F.N + F.HEAR_0 + k] <= 0f || w.Call[a] == k + 1);
+        // the person's voice: sound 6 spoken beside b is heard on the next step, and b's answer is counted
+        w.UserCallX = w.X[b] + 1f; w.UserCallY = w.Y[b]; w.UserCallSound = 6; w.UserCallStep = w.Step - 1; w.UserCallId++;
+        sim.Step();
+        Assert.True(w.Feat[b * F.N + F.HEAR_0 + 5] > 0f, "the animal did not hear the person");
+        long answers = 0; foreach (var v in w.T.UserResp) answers += v;
+        Assert.True(answers >= 1);
     }
 }

@@ -89,7 +89,7 @@ public sealed class Snapshot
             span[18] = (byte)w.Genome[g + G.B_STRIKE];
             span[19] = (byte)(sbyte)Math.Clamp((int)MathF.Round(w.PDiet[i * Pools.N + (int)Pool.Meat] * 254f - 127f), -127, 127);   // meat-eating
             span[20] = w.PLegPairs[i];                                   // number of leg pairs (1..4)
-            span[21] = w.PLoco[i];                                       // locomotion: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
+            span[21] = (byte)(w.PLoco[i] | (w.Call[i] << 4));          // locomotion (low 4 bits: 0 walk .. 4 settled); the sound it made (high 4 bits, 0 none)
             span[22] = w.PFinPairs[i]; span[23] = w.PEyePairs[i];        // fin pairs, eye pairs (1..4)
             o += REC; n++;
         }

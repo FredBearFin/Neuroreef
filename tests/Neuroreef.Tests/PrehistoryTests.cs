@@ -119,7 +119,7 @@ public class PrehistoryTests
     public void BranchesRunInLockstepAndTakeSettings()
     {
         var e = new EvoSettings { TotalSteps = 1000 };
-        using var pre = new Prehistory(2, 16384, 72, 2, e);
+        using var pre = new Prehistory(2, 8192, 72, 2, e);
         pre.Configure(s => { s.MutRate = 0.003f; s.MutBig = 20; });
         pre.Start();
         var until = DateTime.UtcNow.AddMinutes(5);
@@ -140,7 +140,7 @@ public class PrehistoryTests
         Assert.Equal(K.CLADES, bank.Genomes.Length);
         Assert.NotEmpty(bank.Clades);
         foreach (var c in bank.Clades) Assert.NotEmpty(bank.Genomes[c.Slot]);
-        using var live = new Simulation(16384, 72, 1, bank, prehistory: false, terrainSeed: 72);
+        using var live = new Simulation(8192, 72, 1, bank, prehistory: false, terrainSeed: 72);
         Assert.False(live.W.Prehistory);
         for (int k = 0; k < 300; k++) live.Step();
         foreach (var m in live.W.T.Immigrants) Assert.Equal(0, m);

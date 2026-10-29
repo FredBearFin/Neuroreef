@@ -20,6 +20,7 @@
   <div id="s-random" class="badge warn hidden" title="No prehistory has been run, so the first animals have random brains and most species will die out. Run Evolve.bat, then restart Neuroreef.exe.">RANDOM BRAINS · RUN EVOLVE.BAT</div>
   <div id="s-full" class="badge warn hidden" title="All agent slots are in use, so births are refused. This is a memory limit of the program, not an ecological result. Restart with a larger --capacity.">WORLD FULL</div>
   <div class="grow"></div>
+  <button id="xlate" class="btn" title="The translator: what each clade's sounds seem to mean, and your own voice in their world">translator</button>
   <button id="sound" class="btn" title="Sounds of the fights near where you are looking (off until you turn it on)">sound off</button>
   <a id="export" class="btn" href="api/export.zip" download title="Download everything recorded so far (population, traits, deaths, clades, the report) as a zip of CSV files. The world also writes them to the exports folder beside Neuroreef.exe every 30 minutes and when you close it.">Export data</a>
   <div class="group" id="speed">
@@ -55,6 +56,7 @@
     </div>
     <div id="legend" class="floating"></div>
     <div id="splits" class="floating"></div>
+    <div id="translator" class="floating hidden"></div>
     <div id="fights" class="floating" title="Strikes, kills and blood-drinking as they happen. Tap a line to fly there."></div>
     <div id="hint" class="floating">drag to orbit · scroll or pinch to zoom · tap an animal to inspect it</div>
   </section>

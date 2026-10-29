@@ -27,7 +27,8 @@ link.listen('meta', (m) => {
 });
 link.listen('clades', (c) => { if (!meta) { pendingClades = c.list; return; } setClades(c.list, c.step); });
 link.listen('world', (w) => world && world.setWorld(w));
-link.listen('agents', (a) => world && world.setAgents(a));
+link.listen('agents', (a) => { if (!world) return; world.setAgents(a); callSounds(); });
+link.listen('lexicon', (l) => { lexicon = l; drawTranslator(); });
 link.listen('fights', (f) => { if (world) world.addFights(f.list); fightLog(f.list); fightSound(f.list); });
 link.listen('fields', (f) => { if (world) world.setFields(f); if (panels) panels.setFields(f); });
 link.listen('history', (h) => panels && panels.setHistory(h));
@@ -158,6 +159,7 @@ function buildControls() {
   cv.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
   cv.addEventListener('pointerup', (e) => {
     if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+    if (speakArmed !== null) { speakAt(e.clientX, e.clientY); return; }   // the translator is waiting for a place to speak
     const s = world.pick(e.clientX, e.clientY);
     if (s) select(s);
   });
@@ -350,4 +352,115 @@ function showSplit(c, p) {
   box.prepend(d);
   while (box.children.length > 3) box.lastChild.remove();
   setTimeout(() => d.remove(), 90000);
+}
+
+// ---- the translator (Revision M): each clade's sounds have no built-in meaning. What one seems to mean is what is
+// more often going on around the caller when it is made than usual (the context's lift), and what members of its
+// clade do when they hear it. You type a word; the translator picks the sound that best carries it for a clade, and
+// you click where to send it. Your call is not an animal: nothing is added to the world, and no audio is recorded.
+let lexicon = null, xClade = -1, speakArmed = null, xMeaning = -1, xRaw = -1, myCallId = -1, xText = '';
+// a typed word -> one of the contexts the translator knows (or a raw sound: "sound 3"). No audio is ever recorded.
+const WORDS = [
+  ['danger', 'run', 'flee', 'predator', 'help', 'enemy', 'attack', 'hide', 'watch out', 'scary'],
+  ['food', 'eat', 'grass', 'fruit', 'meat', 'dinner'],
+  ['mate', 'love', 'partner', 'breed', 'babe'],
+  ['hungry', 'starving', 'hunger'],
+  ['alone', 'come', 'here', 'where', 'gather', 'follow', 'lonely', 'friend'],
+  ['thirsty', 'water', 'drink', 'thirst'],
+  ['baby', 'child', 'young', 'lost', 'mother', 'mom', 'kid'],
+];
+function readWord() {
+  const t = xText.trim().toLowerCase(); xRaw = -1; xMeaning = -1;
+  const m = t.match(/^sound\s*([1-8])$/); if (m) { xRaw = +m[1] - 1; return; }
+  if (!t) return;
+  for (let c = 0; c < WORDS.length; c++) if (WORDS[c].some((w) => t === w || t.includes(w))) { xMeaning = c; return; }
+}
+const XMIN = 25;   // calls before a guess is shown
+const soundCss = (k) => { const c = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]][k]; return `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`; };
+function guess(cl, k) {
+  const s = cl.sounds[k];
+  if (s.n < XMIN) return null;
+  let best = -1, lift = 0;
+  for (let c = 0; c < s.ctx.length; c++) { const l = s.ctx[c] / Math.max(0.01, cl.bases[c]); if (s.ctx[c] >= 0.1 && l > lift) { lift = l; best = c; } }
+  return best >= 0 && lift >= 1.5 ? { c: best, lift } : null;
+}
+function answer(s) {
+  const tot = s.resp.reduce((a, b) => a + b, 0); if (tot < 10) return '';
+  let b = 0; for (let r = 1; r < s.resp.length; r++) if (s.resp[r] > s.resp[b]) b = r;
+  return `${meta.respNames[b]} ${Math.round(100 * s.resp[b] / tot)}%`;
+}
+function bestSound(cl, c) {
+  let best = -1, lift = 0;
+  for (let k = 0; k < cl.sounds.length; k++) { const s = cl.sounds[k]; if (s.n < XMIN) continue; const l = s.ctx[c] / Math.max(0.01, cl.bases[c]); if (l > lift) { lift = l; best = k; } }
+  return best >= 0 && lift >= 1.2 ? { k: best, lift } : null;
+}
+let xBuiltFor = '';
+function drawTranslator() {
+  const box = $('translator'); if (!box || box.classList.contains('hidden') || !lexicon || !meta) return;
+  const live = lexicon.clades.filter((c) => clades[c.id] && clades[c.id].used);
+  if (!live.length) { box.innerHTML = '<div class="th">TRANSLATOR</div><div class="dim">No living clades.</div>'; xBuiltFor = ''; return; }
+  if (!live.find((c) => c.id === xClade)) xClade = live.slice().sort((a, b) => (clades[b.id].count || 0) - (clades[a.id].count || 0))[0].id;
+  const cl = live.find((c) => c.id === xClade), name = clades[xClade].name;
+  // the controls are built once per set of clades, so a menu you are using is never rebuilt under you
+  const sig = live.map((c) => c.id + clades[c.id].name).join() + '|' + xClade;
+  if (sig !== xBuiltFor) {
+    xBuiltFor = sig;
+    const opts = live.map((c) => `<option value="${c.id}"${c.id === xClade ? ' selected' : ''}>${clades[c.id].name}</option>`).join('');
+    box.innerHTML = `<div class="th"><span>TRANSLATOR</span><select id="x-clade">${opts}</select></div>` +
+      `<div class="dim" id="x-desc"></div><table id="x-table"></table>` +
+      `<div class="speak"><span id="x-to"></span><input id="x-text" type="text" placeholder="type a word: danger, food, water, come…" autocomplete="off"><span id="x-say"></span><button id="x-go">Send</button></div><div id="x-reply" class="reply"></div>`;
+    $('x-text').value = xText;
+    $('x-clade').onchange = (e) => { xClade = +e.target.value; drawTranslator(); };
+    $('x-text').oninput = (e) => { xText = e.target.value; readWord(); drawTranslator(); };
+    $('x-text').onkeydown = (e) => { if (e.key === 'Enter') $('x-go').click(); };
+    $('x-go').onclick = () => { const pk = xRaw >= 0 ? { k: xRaw } : xMeaning >= 0 ? bestSound(lexicon.clades.find((c) => c.id === xClade), xMeaning) : null; speakArmed = pk ? pk.k : null; drawTranslator(); };
+  }
+  $('x-desc').textContent = `What ${name}'s sounds seem to mean: what is more common around a caller than usual, and what ${name} do on hearing it. Nothing was given a meaning; it has to evolve.`;
+  let rows = '';
+  for (let k = 0; k < meta.nSound; k++) {
+    const s = cl.sounds[k], g = guess(cl, k), a = answer(s);
+    rows += `<tr><td><i class="sw" style="background:${soundCss(k)}"></i>sound ${k + 1}</td><td class="dim">${s.n.toLocaleString()}×</td>` +
+      `<td>${g ? `<span class="mean">≈ ${meta.ctxNames[g.c]}</span> <span class="dim">×${g.lift.toFixed(1)}</span>` : `<span class="dim">${s.n < XMIN ? 'too rare to tell' : 'no clear meaning'}</span>`}</td>` +
+      `<td class="dim">${a ? 'listeners: ' + a : ''}</td></tr>`;
+  }
+  $('x-table').innerHTML = rows;
+  const pick = xRaw >= 0 ? { k: xRaw, lift: 0 } : xMeaning >= 0 ? bestSound(cl, xMeaning) : null;
+  $('x-to').textContent = `Tell ${name}:`;
+  $('x-say').innerHTML = !xText.trim() ? '' : xMeaning < 0 && xRaw < 0 ? '<span class="dim">no word for that; try danger, food, mate, hungry, come, water, baby, or “sound 3”</span>'
+    : pick ? `→ <b style="color:${soundCss(pick.k)}">sound ${pick.k + 1}</b>${pick.lift ? ` <span class="dim">(×${pick.lift.toFixed(1)} with “${meta.ctxNames[xMeaning]}”)</span>` : ''}` : `<span class="dim">${name} have no sound for “${meta.ctxNames[xMeaning]}” yet; try “sound 1”…“sound 8”</span>`;
+  const go = $('x-go'); go.disabled = !pick; go.textContent = speakArmed !== null ? 'click the map…' : 'Send';
+  const u = lexicon.user, heard = u && u.id === myCallId ? u.resp.reduce((a, b) => a + b, 0) : 0;
+  $('x-reply').textContent = myCallId >= 0 && u && u.id === myCallId ? (heard ? `${heard} heard you: ` + u.resp.map((v, r) => v ? `${meta.respNames[r]} ${v}` : '').filter(Boolean).join(', ') : 'nobody heard you yet (speak near animals)') : '';
+  box.classList.toggle('armed', speakArmed !== null);
+}
+function speakAt(cx, cy) {
+  const p = world.groundAt(cx, cy), k = speakArmed; speakArmed = null;
+  if (p) {
+    link.send({ cmd: 'speak', x: p[0], y: p[1], sound: k });
+    world.showMyCall(p[0], p[1], k + 1);
+    myCallId = lexicon ? lexicon.user.id + 1 : 0;
+    tone(k, 1);
+  }
+  drawTranslator();
+}
+$('xlate')?.addEventListener('click', (ev) => { const b = $('translator'); b.classList.toggle('hidden'); ev.currentTarget.classList.toggle('on', !b.classList.contains('hidden')); drawTranslator(); });
+// each sound has its own pitch when sound is on
+function tone(k, v) {
+  if (!soundOn || !audio) return;
+  const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'triangle'; o.frequency.setValueAtTime(330 * Math.pow(2, k / 4), t); o.frequency.exponentialRampToValueAtTime(330 * Math.pow(2, k / 4) * 1.12, t + 0.12);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25 * v, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.2);
+}
+let lastCallTone = 0;
+function callSounds() {
+  if (!soundOn || !audio || !world) return;
+  const now = performance.now(); if (now - lastCallTone < 150) return;
+  let made = 0;
+  for (const e of world.agents.values()) {
+    if (!e.call || e.callT !== world.frameT) continue;
+    const d = world.viewDist(e.x, e.y); if (d > 40) continue;
+    tone(e.call - 1, 0.3 * Math.min(1, 10 / (d + 5))); lastCallTone = now;
+    if (++made >= 2) break;
+  }
 }
