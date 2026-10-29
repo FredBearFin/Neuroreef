@@ -27,6 +27,10 @@ capacity"; the population laws reviewed by the ecologist)
   call. No sound has a built-in meaning, and nothing rewards calling: a call costs C_CALL x basal and is heard by
   everyone, predators included. Only the most intended call is made in a step. Founders' call outputs start at
   FOUNDER_BIAS_CALL so that calling as a whole is as rare as one primitive.
+- One voiced, far smarter lineage (the user: "ONE creature ... WAY smarter than the rest, like a human species"):
+  a voice body gene (B_VOICE, 0..1; COST_VOICE of basal) sets how loud calls are; below VOICE_MIN a call makes no
+  sound. Per branch, BIG_BRAINS = 1 big-brained ancestor, on land, starts with BIG_BRAIN_UNITS = 256 units and a full
+  voice; every other ancestor starts mute with an ordinary brain. Voice is a gene, so another lineage could evolve one.
 - The translator (console, display only): per clade and sound, the caller's context (danger, food here, mate near,
   hungry, alone, thirsty, young lost) against the clade's usual context, and how members of the clade answered
   (came, fled, froze, called back, ignored). A sound "means" a context when it is made 1.5x more often in it than

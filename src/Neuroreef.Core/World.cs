@@ -31,6 +31,7 @@ public sealed class World
     public readonly float[] PDiet;            // Cap * Pools.N digestive efficiencies
     public readonly float[] PCare;
     public readonly float[] PDrain;
+    public readonly float[] PVoice;            // voice organ (0..1): loudness of its calls; mute below VOICE_MIN
     public readonly float[] PWaterEcon;       // water-economy gene expressed (0..1)
     public readonly float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
     public readonly float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
@@ -137,7 +138,7 @@ public sealed class World
         PBirth = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
         PVLand = new float[c]; PVWater = new float[c]; PVAir = new float[c]; PSexRatio = new float[c]; PImmune = new float[c];
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
-        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PLegPairs = new byte[c];
+        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PLegPairs = new byte[c];
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];

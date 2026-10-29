@@ -100,7 +100,7 @@ public static class Decide
                     int cj = w.Call[j];
                     if (cj != 0 && w.StageOf[j] >= St.Juvenile)
                     {
-                        float l = 1f - d / R;
+                        float l = (1f - d / R) * w.PVoice[j];   // a louder voice carries further
                         if (l > hear[cj - 1]) hear[cj - 1] = l;
                         if (l > loud) { loud = l; callDx = ddx; callDy = ddy; heard = 1 + w.Spc[j] * F.NSOUND + (cj - 1); }
                     }

@@ -93,8 +93,8 @@ function defs() {
       { key: 'ancestorsWater', label: 'Ancestors in water', min: 0, max: 12, step: 1, val: V.ancestorsWater, fmt: (v) => v, help: 'At most 16 ancestors in all.' },
       { key: 'founders', label: 'Founders per ancestor', min: 100, max: 1500, step: 50, val: V.founders, fmt: (v) => v,
         help: 'Animals each ancestor starts with. Fewer start faster but risk dying out by chance.' },
-      { key: 'bigBrains', label: 'Big-brained ancestors', min: 0, max: 8, step: 1, val: V.bigBrains, fmt: (v) => v == 0 ? 'none' : v,
-        help: `Half on land, half in water. The others start with up to ${info.refUnits} brain units.` },
+      { key: 'bigBrains', label: 'Big-brained ancestors', min: 0, max: 8, step: 1, val: V.bigBrains, fmt: (v) => v == 0 ? 'none' : v == 1 ? '1: the voiced one' : v,
+        help: `The first lives on land and is the only one born with a voice: your "human" species. More alternate water and land. The others start with up to ${info.refUnits} brain units and no voice (a voice is a gene: it could still evolve).` },
       { key: 'bigBrainUnits', label: 'Their brain size', min: info.refUnits, max: info.maxUnits, step: 2, val: V.bigBrainUnits, fmt: (v) => v + ' units',
         help: 'A bigger brain costs more energy every step; whether it pays is up to evolution.' },
       { key: 'matingDrive', label: 'Breeding drive', min: 0.25, max: 2, step: 0.05, val: V.matingDrive, fmt: x,
@@ -166,10 +166,10 @@ function estimate() {
 }
 
 const PRESETS = {
-  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 2, bigBrainUnits: 128, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3 },
-  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 2, bigBrainUnits: 64, worldSlots: 4096, rate: 3 },
-  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 2, bigBrainUnits: 128, worldSlots: 8192, rate: 3 },
-  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 2, bigBrainUnits: 256, worldSlots: 16384, rate: 10 },
+  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3 },
+  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3 },
+  normal: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3 },
+  big: { preMap: 1024, worldMap: 512, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10 },
 };
 for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
   const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]);

@@ -98,7 +98,7 @@ public static class Clades
     /// start). Every value inside those bounds is random; nothing else is decided.
     /// </summary>
     /// <param name="brainUnits">0: a random brain of up to BRAIN_START units; otherwise exactly this many (a big-brained ancestor)</param>
-    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0)
+    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0, bool voiced = false)
     {
         float U(int k) => Rng.U(seed, (uint)ancestor, (uint)k, Rs.Founder + 7000u);
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
@@ -131,6 +131,7 @@ public static class Clades
         body[G.B_SEXRATIO - B] = (sbyte)((U(36) - 0.5f) * 40f);    // about even sex ratio
         body[G.B_IMMUNE - B] = (sbyte)((U(37) * 2f - 1f) * 127f);
         body[G.B_WATER - B] = (sbyte)((U(38) * 2f - 1f) * 127f);   // water economy: anything
+        body[G.B_VOICE - B] = (sbyte)(voiced ? 127 : -127);           // the user's design: one voiced lineage, the rest mute (a gene: it can evolve)
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them
         // (plants, algae, meat, carrion, blood, dung...), mediocre at the rest, never at the floor (ecology review:

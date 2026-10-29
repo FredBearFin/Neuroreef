@@ -55,7 +55,9 @@ public sealed class Simulation : IDisposable
         var tmpl = new sbyte[G.LEN];
         uint key = 1;
         // big-brained ancestors (the user's experiment): the first of the land ancestors and the first of the
-        // water ones, alternating, BigBrains in all; each starts with BigBrainUnits memory units
+        // water ones, alternating, BigBrains in all; each starts with BigBrainUnits memory units. The big-brained
+        // land ancestor is also the one with a voice (Revision M, the user: "ONE creature ... WAY smarter than the
+        // rest, like a human species")
         int nBig = w.Evo.BigBrains, bigLand = (nBig + 1) / 2, bigWater = nBig / 2;
         int nLand = w.Evo.AncestorsLand, nAll = nLand + w.Evo.AncestorsWater;
         for (int a = 0; a < nAll; a++)
@@ -69,7 +71,7 @@ public sealed class Simulation : IDisposable
             // scramble networks, a hidden cost only sex paid); each founder varies around it
             var anc = new sbyte[G.LEN];
             Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)a);
-            Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0);
+            Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land);
             int units = Body.Units(anc[G.B_BRAIN]);
             // founders scale with the map's area, as founding from a bank does: a valley is not stocked like a continent
             float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);

@@ -421,6 +421,9 @@ public class EcologyTests
     public void SomeAncestorsStartBigBrained()
     {
         using var sim = new Simulation(8192, 7, 1, evo: new EvoSettings { BigBrains = 2, BigBrainUnits = 128 });
+        // only the big-brained land ancestor has a voice (Revision M)
+        for (int i = 0; i < sim.W.Cap; i++)
+            if (sim.W.StageOf[i] != St.Dead) Assert.Equal(sim.W.Spc[i] == 0, sim.W.PVoice[i] >= K.VOICE_MIN);
         var w = sim.W;
         var maxUnits = new int[K.CLADES];
         for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) maxUnits[w.Spc[i]] = Math.Max(maxUnits[w.Spc[i]], w.PBrain[i]);
@@ -639,6 +642,7 @@ public class EcologyTests
         int a = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 1u, x, y), b = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 2u, x, y);
         Assert.True(a >= 0 && b >= 0);
         w.Sp[0].Used = w.Sp[0].Alive = true;
+        foreach (int c in new[] { a, b }) { w.Genome[c * G.LEN + G.B_VOICE] = 127; Body.Express(w, c); }   // both have a voice
         sim.Step();                                     // settle positions and the spatial hash
         w.Call[a] = 3;                                  // a made sound 3 (index 2) last step
         sim.Step();
@@ -650,5 +654,19 @@ public class EcologyTests
         Assert.True(w.Feat[b * F.N + F.HEAR_0 + 5] > 0f, "the animal did not hear the person");
         long answers = 0; foreach (var v in w.T.UserResp) answers += v;
         Assert.True(answers >= 1);
+    }
+
+    [Fact] // Revision M: a mute animal's call makes no sound
+    public void MuteAnimalsMakeNoSound()
+    {
+        using var sim = new Simulation(1024, 6, 1, empty: true);
+        var w = sim.W;
+        Life.RandomSite(w, Realm.Land, 78u, out float x, out float y);
+        int a = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 1u, x, y);
+        w.Sp[0].Used = w.Sp[0].Alive = true;
+        Assert.True(w.PVoice[a] < K.VOICE_MIN);         // ancestors without the voice are mute
+        for (int p = 0; p < F.NSOUND; p++) w.Genome[a * G.LEN + G.W2 + (P.CALL_0 + p) * G.NIN + G.NH + F.BIAS] = 127;   // it tries to call all the time
+        Brain.InitLife(w, a);
+        for (int t = 0; t < 20; t++) { sim.Step(); Assert.Equal(0, w.Call[a]); }
     }
 }

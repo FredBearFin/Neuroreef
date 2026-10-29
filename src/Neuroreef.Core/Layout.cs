@@ -87,9 +87,10 @@ public static class G
         B_EYEN = B_CARE + 15,                    // number of eye pairs (1..4)
         B_IMMUNE = B_CARE + 16,                  // immune investment (0..1): resists disease, costs energy
         B_WATER = B_CARE + 17,                   // water economy (0..1): loses less water, costs energy (Revision K)
-        B_MHC = B_CARE + 18;                     // NMHC recognition genes: a pathogen strain must match them to infect
+        B_VOICE = B_CARE + 18,                   // voice (0..1): how loud its calls are; below VOICE_MIN it is mute (Revision M)
+        B_MHC = B_CARE + 19;                     // NMHC recognition genes: a pathogen strain must match them to infect
     public const int NMHC = 4;
-    public const int NBODY = B_MHC + NMHC - BODY;   // 43
+    public const int NBODY = B_MHC + NMHC - BODY;   // 44
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
     public const int NC = 11;                    // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;

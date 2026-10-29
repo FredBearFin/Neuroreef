@@ -110,6 +110,7 @@ public static class Resolve
         // ---- 6a. voice (Revision M): a sound costs a little energy, and is heard by everyone near on the next step
         int callK = -1;
         for (int k = 0; k < F.NSOUND; k++) if ((acts & (1u << (P.CALL_0 + k - P.FIRST_ACTION))) != 0) { callK = k; break; }
+        if (w.PVoice[i] < K.VOICE_MIN) callK = -1;   // a mute animal's call makes no sound (and costs nothing)
         w.Call[i] = (byte)(callK + 1);
         if (callK >= 0) w.Energy[i] -= K.C_CALL * K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL);
         Voices(w, i, s, callK, acts);

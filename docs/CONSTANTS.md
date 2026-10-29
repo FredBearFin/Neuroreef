@@ -149,7 +149,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.13537E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.13536E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -207,6 +207,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DEEP_SWIM | 0.3 | - | swimming power (share of the body's top speed in water) needed to stay in deep water | ECO: staying up in open water needs swimming power |
 | CRAWL | 0.05 | - | a legless body crawls on land at this share of its top speed | ECO: worms, snakes and stranded fish move slowly without legs |
 | C_CALL | 0.5 | xbasal | energy of one call, as a share of basal metabolism at the caller's mass | ECO: vocalising costs a few times resting metabolism for its duration (Ophir et al. 2010); a call is a short burst |
+| VOICE_MIN | 0.25 | - | a voice organ below this makes no sound | HT: a little voice is no voice; above founder variation around a mute ancestor |
+| COST_VOICE | 0.03 | xbasal | basal cost of a full voice (larynx and its control) | ECO: small; vocal tissue and its neural control are a minor part of upkeep |
 
 ## 13. Food
 
@@ -248,8 +250,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| BIG_BRAINS | 2 | - | big-brained ancestors per branch (half on land, half in water), by default | designed: the user's experiment (2026-10-28): some lineages start with three times the brain |
-| BIG_BRAIN_UNITS | 128 | units | memory units of a big-brained ancestor, by default | designed: the user's experiment (Revision M: half the largest brain) |
+| BIG_BRAINS | 1 | - | big-brained ancestors per branch (the first on land, then alternating water and land), by default | designed: the user (Revision M): ONE lineage far smarter than the rest, like a human species; the big-brained land ancestor is also the voiced one |
+| BIG_BRAIN_UNITS | 256 | units | memory units of a big-brained ancestor, by default | designed: the user (Revision M): the largest brain, ten times an ordinary ancestor's |
 | DRIVE_FEMALE | 0.6 | - | strength of the mating instinct in females, against males (1) | designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972) |
 | DRIVE_HERM | 0.8 | - | strength of the mating instinct in hermaphrodites, against males (1) | designed: between the two sexes |
 

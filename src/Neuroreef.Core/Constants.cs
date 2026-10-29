@@ -180,6 +180,8 @@ public static class K
     [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
     [K("Body", "a legless body crawls on land at this share of its top speed", "-", "ECO: worms, snakes and stranded fish move slowly without legs")] public const float CRAWL = 0.05f;
     [K("Body", "energy of one call, as a share of basal metabolism at the caller's mass", "xbasal", "ECO: vocalising costs a few times resting metabolism for its duration (Ophir et al. 2010); a call is a short burst")] public const float C_CALL = 0.5f;
+    [K("Body", "a voice organ below this makes no sound", "-", "HT: a little voice is no voice; above founder variation around a mute ancestor")] public const float VOICE_MIN = 0.25f;
+    [K("Body", "basal cost of a full voice (larynx and its control)", "xbasal", "ECO: small; vocal tissue and its neural control are a minor part of upkeep")] public const float COST_VOICE = 0.03f;
     [K("Food", "share of its meat-digesting skill a meat-eater brings to carrion", "-", "ECO: almost all carnivores scavenge; wolves feed on a kill for days (DeVault et al. 2003)")] public const float SCAVENGE = 0.8f;
     [K("Land", "a pond site is the lowest cell within this many cells", "cells", "ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas)")] public const int POND_R = 2;
     [K("Land", "pond sites are at least this far from a lake, sea or river", "cells", "HT: a pond beside a lake adds nothing")] public const float POND_GAP = 6f;
@@ -201,8 +203,8 @@ public static class K
     [K("Body", "fewest memory units a brain can have", "units", "-")] public const int BRAIN_MIN = 2;
     [K("Body", "basal cost of a brain of BRAIN_REF memory units, scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M)")] public const float COST_BRAIN = 0.25f;
     [K("Body", "reference brain size for the brain cost: the largest brain (G.NH)", "units", "Revision M: was 12, the old limit")] public const int BRAIN_REF = 256;
-    [K("Brain", "big-brained ancestors per branch (half on land, half in water), by default", "-", "designed: the user's experiment (2026-10-28): some lineages start with three times the brain")] public const int BIG_BRAINS = 2;
-    [K("Brain", "memory units of a big-brained ancestor, by default", "units", "designed: the user's experiment (Revision M: half the largest brain)")] public const int BIG_BRAIN_UNITS = 128;
+    [K("Brain", "big-brained ancestors per branch (the first on land, then alternating water and land), by default", "-", "designed: the user (Revision M): ONE lineage far smarter than the rest, like a human species; the big-brained land ancestor is also the voiced one")] public const int BIG_BRAINS = 1;
+    [K("Brain", "memory units of a big-brained ancestor, by default", "units", "designed: the user (Revision M): the largest brain, ten times an ordinary ancestor's")] public const int BIG_BRAIN_UNITS = 256;
     [K("Brain", "strength of the mating instinct in females, against males (1)", "-", "designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972)")] public const float DRIVE_FEMALE = 0.6f;
     [K("Brain", "strength of the mating instinct in hermaphrodites, against males (1)", "-", "designed: between the two sexes")] public const float DRIVE_HERM = 0.8f;
     [K("Body", "basal cost of being a hermaphrodite (keeping both sexes' organs)", "xbasal", "ECO: hermaphrodites maintain male and female function")] public const float COST_HERM = 0.05f;

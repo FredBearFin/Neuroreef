@@ -54,6 +54,8 @@ public static class Body
         float life = Mul(gn[g + G.B_LIFE], K.LIFE_RANGE), devel = Mul(gn[g + G.B_DEVEL], K.LIFE_RANGE);
         float imm = Organ(gn[g + G.B_IMMUNE]);
         float wecon = Organ(gn[g + G.B_WATER]);
+        float voice = Organ(gn[g + G.B_VOICE]);
+        w.PVoice[i] = voice;
         int brain = Units(gn[g + G.B_BRAIN]);
         bool herm = gn[g + G.B_HERM] >= 0;
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
@@ -68,7 +70,7 @@ public static class Body
         float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
                      + K.COST_LIMB * (legs * legPairs * 0.5f + fins * finPairs * 0.5f) + K.COST_WING * wings * MathK.Cbrt(m)
                      + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
-                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon;
+                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice;
         // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
         w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;
