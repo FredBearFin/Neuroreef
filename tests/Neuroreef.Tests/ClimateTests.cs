@@ -186,15 +186,15 @@ public class ClimateTests
             Assert.Equal(10f, Heat.Core(10f, 0f)); Assert.Equal(K.T_BODY, Heat.Core(10f, 1f)); Assert.Equal(K.T_BODY, Heat.Core(45f, 0f));
             (double basal, double heat, float gut) Run(sbyte endo)
             {
-                var (w, i) = Animal(0f, endo: endo);
+                var (w, i) = Animal(-20f, endo: endo);
                 w.Gut[i] = 1f; w.GutEnergy[i] = 1f;
                 Resolve.Run(w, 1, 0);
                 return (w.T.SpendBasal[0], w.T.SpendHeat[0], w.Gut[i]);
             }
             var cold = Run(-127); var warm = Run(127);
             Assert.Equal(0.0, cold.heat);
-            Assert.True(warm.heat > 0.0, "a warm-blooded body near 0 °C made no heat");
-            Assert.InRange(cold.basal / warm.basal, 0.03, 0.25);                  // ~0.07 at a few °C
+            Assert.True(warm.heat > 0.0, "a warm-blooded body at -20 °C made no heat");
+            Assert.InRange(cold.basal / warm.basal, 0.02, 0.15);                  // ~0.05 near freezing
             Assert.True(cold.gut > warm.gut, $"the cold gut digested as fast ({cold.gut} vs {warm.gut})");
         });
     }

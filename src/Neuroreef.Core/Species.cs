@@ -68,7 +68,8 @@ public sealed class Species
     public int Serial;                  // unique number for the run (slots are recycled; serials are not)
     public bool Sub;                    // a subspecies: still more than half fertile with the clade it split from
     public string SplitWhy = "";        // how it looked different when it split ("bigger (x1.8), more armour")
-    public float SplitDist, SplitGap;   // at the last check: how visibly different its two forms were, and how clear the gap (1 = enough)
+    public float SplitDist, SplitGap;
+    public float HomeX, HomeY, HomeR;   // where its founders started, and how wide that home range was (Revision P; 0 = not founded)   // at the last check: how visibly different its two forms were, and how clear the gap (1 = enough)
 
-    public void Clear() { Name = ""; Used = Alive = false; Parent = -1; Ancestor = 0; Born = 0; Extinct = -1; Generation = 0; Serial = 0; R = G = B = 0; Sub = false; SplitWhy = ""; SplitDist = SplitGap = 0; }
+    public void Clear() { Name = ""; Used = Alive = false; Parent = -1; Ancestor = 0; Born = 0; Extinct = -1; Generation = 0; Serial = 0; R = G = B = 0; Sub = false; SplitWhy = ""; SplitDist = SplitGap = 0; HomeX = HomeY = HomeR = 0; }
 }

@@ -92,6 +92,7 @@ public sealed class Simulation : IDisposable
             // body's size, brain and diet, at least one group and at most Founders, spread over that range
             float cap0 = ProbeCapacity(w, clade, anc, realm, hx, hy, key + 0x70000u + (uint)bestT, out float range);
             int founders = Math.Min(w.Evo.Founders, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap0)));
+            w.Sp[clade].HomeX = hx; w.Sp[clade].HomeY = hy; w.Sp[clade].HomeR = range;
             for (int k = 0; k < founders; k++, key++)
             {
                 if (k % K.GROUP_SIZE == 0 && !Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
@@ -168,7 +169,7 @@ public sealed class Simulation : IDisposable
                     if (!Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
                 }
                 int f = Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
-                if (k == 0 && f >= 0) n = FedFounders(w, f, hx, hy, n, out range);   // no more than its home range can feed
+                if (k == 0 && f >= 0) { n = FedFounders(w, f, hx, hy, n, out range); s.HomeX = hx; s.HomeY = hy; s.HomeR = range; }   // no more than its home range can feed
             }
         }
         w.CladeScratch.Version++;

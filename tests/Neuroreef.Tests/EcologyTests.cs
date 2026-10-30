@@ -698,35 +698,28 @@ public class EcologyTests
         for (int t = 0; t < 20; t++) { sim.Step(); Assert.Equal(0, w.Call[a * F.MAX_SYL]); }
     }
 
-    [Fact] // Revision N: each ancestor starts in its own home range, apart from the others
+    [Fact] // Revision N: each ancestor starts in its own home range, apart from the others (Revision P: a range is as wide as
+           // its body needs, so each clade records its home and radius)
     public void AncestorsStartInTheirOwnHomeRanges()
     {
         using var sim = new Simulation(8192, 11, 1);
         var w = sim.W;
         int n = K.ANCESTORS_LAND + K.ANCESTORS_WATER;
-        // the circular mean of each clade's positions on the torus, and how far its members are from it
-        var cx = new double[n]; var cy = new double[n]; var sx = new double[n]; var sy = new double[n]; var cnt = new int[n];
-        double k2 = 2 * Math.PI / Map.W;
-        for (int i = 0; i < w.Cap; i++)
-        {
-            if (w.StageOf[i] == St.Dead || w.Spc[i] >= n) continue;
-            int s = w.Spc[i]; cnt[s]++;
-            cx[s] += Math.Cos(w.X[i] * k2); sx[s] += Math.Sin(w.X[i] * k2); cy[s] += Math.Cos(w.Y[i] * k2); sy[s] += Math.Sin(w.Y[i] * k2);
-        }
-        var mx = new float[n]; var my = new float[n];
-        for (int s = 0; s < n; s++) { if (cnt[s] == 0) continue; mx[s] = World.Wrap((float)(Math.Atan2(sx[s], cx[s]) / k2)); my[s] = World.Wrap((float)(Math.Atan2(sy[s], cy[s]) / k2)); }
         int inside = 0, total = 0;
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] == St.Dead || w.Spc[i] >= n) continue;
-            int s = w.Spc[i]; float dx = World.Delta1(w.X[i] - mx[s]), dy = World.Delta1(w.Y[i] - my[s]);
-            total++; if (dx * dx + dy * dy <= MathF.Pow(2.2f * K.HOME_R * Map.W, 2)) inside++;
+            var c = w.Sp[w.Spc[i]];
+            Assert.True(c.HomeR >= K.HOME_R * Map.W && c.HomeR <= K.HOME_R_MAX * Map.W + 1e-3f, $"{c.Name}: range {c.HomeR}");
+            float dx = World.Delta1(w.X[i] - c.HomeX), dy = World.Delta1(w.Y[i] - c.HomeY);
+            total++; if (dx * dx + dy * dy <= MathF.Pow(c.HomeR + K.GROUP_SPREAD, 2)) inside++;
         }
         Assert.True(inside > 0.9 * total, $"only {inside} of {total} founders are within their home range");
         float closest = float.MaxValue;
         for (int a = 0; a < n; a++) for (int b = a + 1; b < n; b++)
-            if (cnt[a] > 0 && cnt[b] > 0) { float dx = World.Delta1(mx[a] - mx[b]), dy = World.Delta1(my[a] - my[b]); closest = MathF.Min(closest, MathF.Sqrt(dx * dx + dy * dy)); }
-        Assert.True(closest > K.HOME_R * Map.W, $"two home ranges are only {closest:F0} apart");
+            if (w.Sp[a].HomeR > 0 && w.Sp[b].HomeR > 0)
+            { float dx = World.Delta1(w.Sp[a].HomeX - w.Sp[b].HomeX), dy = World.Delta1(w.Sp[a].HomeY - w.Sp[b].HomeY); closest = MathF.Min(closest, MathF.Sqrt(dx * dx + dy * dy)); }
+        Assert.True(closest > K.HOME_R * Map.W, $"two homes are only {closest:F0} apart");
     }
 
     [Fact] // the user (2026-10-30): size classes with their own floors (0.1, 1, 3, 10), inherited, rarely changing
