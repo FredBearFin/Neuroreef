@@ -1,9 +1,13 @@
 // Path integration (Revision P). An animal no longer knows the way to water from anywhere on the map: it senses water
 // only within SENSE_WATER cells. What it can do, as real animals do (desert ants, rodents, birds; Mueller & Wehner 1988;
 // Etienne & Jeffery 2004), is keep a running vector back to the last place it drank and the last place it fed well,
-// adding up its own movement. Its sense of its own movement is not exact: each step's estimate is off by a random
-// vector of SD PI_ERR x the distance moved, so the remembered place drifts the further it goes. Nothing is told where
-// water is: the memory is only of where this animal itself has been.
+// adding up its own movement. This vector is held by its brain, as path integration is in real animals (the insect
+// central complex, the grid cells of mammals): it is part of the brain's memory (the memory-reset control wipes it),
+// and its precision is bought with brain units. Each step's estimate of the move is off by a random vector of SD
+// PI_ERR x the distance moved, and the held position also diffuses by PI_DIFF a step at rest; both scale as
+// sqrt(BRAIN_START / units), because in a neural integrator the drift falls as more neurons share the work (Burak &
+// Fiete 2009: diffusion ~ 1/N). A big brain finds its way back from far; a small one soon loses it. Nothing is told
+// where water is: the memory is only of where this animal itself has been.
 
 using System;
 
@@ -19,15 +23,14 @@ public static class PathMemory
 
     /// <summary>
     /// Update the remembered vectors after the animal moved (dx, dy) world units this step. Its estimate of that move is
-    /// off by N(0, (PI_ERR x |move|)^2) on each axis, the same estimate for both memories (it is one sense of self-motion).
+    /// off by N(0, ((PI_ERR x |move| + PI_DIFF) x sqrt(BRAIN_START / units))^2) on each axis, the same estimate for both memories (it is one sense of self-motion).
     /// </summary>
     public static void Integrate(World w, int i, float dx, float dy)
     {
         if (w.MemHas[i] == 0) return;
         float d = MathF.Sqrt(dx * dx + dy * dy);
-        if (d <= 0f) return;
         uint seed = w.Seed, step = (uint)w.Step;
-        float sd = K.PI_ERR * d;
+        float sd = (K.PI_ERR * d + K.PI_DIFF) * MathF.Sqrt(K.BRAIN_START / (float)Math.Max(1, (int)w.PBrain[i]));
         float ex = dx + sd * Rng.N(seed, step, (uint)i, Rs.PathX), ey = dy + sd * Rng.N(seed, step, (uint)i, Rs.PathY);
         // on the torus the remembered place is kept as the nearest copy of itself
         if ((w.MemHas[i] & Mem.Drink) != 0) { w.MemDrinkX[i] = World.Delta1(w.MemDrinkX[i] - ex); w.MemDrinkY[i] = World.Delta1(w.MemDrinkY[i] - ey); }

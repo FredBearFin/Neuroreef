@@ -46,8 +46,8 @@ public sealed class Simulation : IDisposable
         _decideJob = (lo, hi) =>
         {
             // the memory-reset control (World.MemoryReset, off by default): forget the last step's activity of the
-            // units in use (Brain.Forward zeroes the rest itself); weights and learning traces are kept
-            if (W.MemoryReset) for (int i = lo; i < hi; i++) Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]);
+            // units in use (Brain.Forward zeroes the rest itself) and the places its brain holds; weights and learning traces are kept
+            if (W.MemoryReset) for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
             for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe);
         };
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };

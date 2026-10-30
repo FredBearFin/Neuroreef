@@ -234,11 +234,12 @@ public class DecisionTests
             w.Step = (ulong)k + 1;
             w.IActs[i] = 0; w.IHeading[i] = 0.3f + 0.02f * k; w.ISpeed[i] = 1f; w.Energy[i] = w.EmaxOf(i); w.Thirst[i] = 0f;
             Resolve.Run(w, 1, 0);
-            sumD2 += 1.0;
+            float sdStep = (K.PI_ERR * 1f + K.PI_DIFF) * MathF.Sqrt(K.BRAIN_START / (float)Math.Max(1, (int)w.PBrain[i]));   // a unit move; error bought with brain units
+            sumD2 += sdStep * sdStep;
         }
         float tx = World.Delta1(x0 - w.X[i]), ty = World.Delta1(y0 - w.Y[i]);   // the true way back
         float ex = w.MemDrinkX[i] - tx, ey = w.MemDrinkY[i] - ty, err = MathF.Sqrt(ex * ex + ey * ey);
-        float sd = K.PI_ERR * (float)Math.Sqrt(sumD2);   // per-axis SD of the summed error
+        float sd = (float)Math.Sqrt(sumD2);   // per-axis SD of the summed error
         Assert.True(MathF.Sqrt(tx * tx + ty * ty) > 50f);
         Assert.True(err > 0f, "path integration is exact");
         Assert.True(err < 4f * sd, $"error {err} against expected SD {sd}");
