@@ -71,7 +71,9 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   started at 0, so every early call was rewarded: voiced animals came to call on ~80% of steps, costing ~20% of
   basal on top of the big brain's 13-17%. The match now reinforces only in the sensitive period (IMIT_AGE gene), as
   song practice does in young songbirds, and its running mean starts at the first match. (Calling still rises to
-  ~65% of steps by plain reinforcement: the brain's reward does not count energy spent. Not yet changed.)
+  ~50-65% of steps by plain reinforcement. Energy spent on strikes, calls, moving and heat now counts against the
+  reward as energy eaten counts for it (R_SPEND; animals learn by net gain), but a call is too cheap against the
+  reward's swings for that to lower it measurably: only selection against costly callers can.)
 - The world report (headless) ends with the VOICES table, as the prehistory report does.
 - *Calmer newborns.* Every discrete action of a newborn brain started near 5% a step (FOUNDER_BIAS -48), so naive
   animals struck whatever was in reach every ~20 steps and founding groups killed each other (one lineage: 30% of its

@@ -33,6 +33,7 @@ public static class Resolve
         float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
         var diet = w.DietOf(i);
         float r = w.PendingR[i]; w.PendingR[i] = 0;
+        float spent = 0f;   // energy spent this step on what it chose to do (strikes, calls, moving, keeping warm), Revision P
         uint acts = w.IActs[i];
         bool rest = (acts & BIT_REST) != 0;
         bool scanning = w.IScanning[i] != 0;
@@ -145,6 +146,7 @@ public static class Resolve
             {
                 if (strikeAttempt) metrics?.Allow(P.STRIKE);
                 w.Energy[i] -= K.C_STRIKE * mass;                       // no target, no strike (DESIGN §5)
+                spent += K.C_STRIKE * mass;
                 T.Strikes[s]++;
                 float dx = World.Delta1(w.X[v] - w.X[i]), dy = World.Delta1(w.Y[v] - w.Y[i]);
                 float reachAll = w.PReach[i] + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(v));
@@ -162,7 +164,9 @@ public static class Resolve
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
 
         // ---- 6a. voice (Revision M): a sound costs a little energy, and is heard by everyone near on the next step
+        float eCall = w.Energy[i];
         int callType = Speak(w, i, acts, mass);
+        spent += eCall - w.Energy[i];
         if (metrics != null)
             for (int p = P.CALL_0; p < P.N; p++)
             {
@@ -270,6 +274,10 @@ public static class Resolve
         w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
         float fear = w.Feat[i * F.N + F.FEAR];
         r -= K.R_FEAR * MathF.Max(0f, fear - w.LastFear[i]);
+        // energy spent counts against the reward as energy eaten counts for it (Revision P): the learner feels the net
+        // gain, so a habit that costs and earns nothing (calling on 65-80% of steps) is not reinforced for free.
+        // Basal cost is not counted: nothing it does changes it
+        r -= K.R_SPEND * K.R_INTAKE * (spent + moveCost + thermo) / emax;
         w.LastFear[i] = fear;
         w.Reward[i] = r;
         T.RewardSum[s] += r;
