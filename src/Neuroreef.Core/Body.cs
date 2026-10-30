@@ -34,6 +34,17 @@ public static class Body
 
     /// <summary>An organ size gene, 0..1.</summary>
     public static float Organ(sbyte b) => (b + 127) / 254f;
+
+    /// <summary>Relative body axes, sharing the renderer's exponential scale and unit-volume normalization.</summary>
+    public static void Dimensions(sbyte lengthGene, sbyte widthGene, sbyte heightGene, out float length, out float width, out float height)
+    {
+        float logTwo = MathF.Log(2f);
+        length = MathF.Exp(logTwo * (2f * Organ(lengthGene) - 1f));
+        width = MathF.Exp(logTwo * (2f * Organ(widthGene) - 1f));
+        height = MathF.Exp(logTwo * (2f * Organ(heightGene) - 1f));
+        float volumeScale = MathF.Cbrt(length * width * height);
+        length /= volumeScale; width /= volumeScale; height /= volumeScale;
+    }
     /// <summary>The smallest body of each size class (the user, 2026-10-30).</summary>
     public static readonly float[] Floors = { 0.1f, 1f, 3f, 10f };
     /// <summary>Memory units in use from the brain-size gene: log scale BRAIN_MIN..G.NH, so a mutation changes a brain
@@ -108,11 +119,12 @@ public static class Body
         float v = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * fs / (1f + drag);
         float vLand = v * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
-        float length = Organ(gn[g + G.B_LENGTH]) - 0.5f, width = Organ(gn[g + G.B_WIDTH]) - 0.5f;
-        float height = Organ(gn[g + G.B_HEIGHT]) - 0.5f, limbShape = Organ(gn[g + G.B_LIMB_SHAPE]) - 0.5f;
+        Dimensions(gn[g + G.B_LENGTH], gn[g + G.B_WIDTH], gn[g + G.B_HEIGHT], out float length, out float width, out float height);
+        length = MathF.Log2(length) * 0.5f; width = MathF.Log2(width) * 0.5f; height = MathF.Log2(height) * 0.5f;
+        float limbShape = Organ(gn[g + G.B_LIMB_SHAPE]) - 0.5f;
         // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
         // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
-        float streamlining = 1f + 0.2f * length - 0.15f * width - 0.15f * height;
+        float streamlining = Math.Clamp(1f + 0.2f * length - 0.15f * width - 0.15f * height, 0.75f, 1.25f);
         vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
         vWater *= streamlining * (1f - 0.2f * limbShape * legs);
         w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
@@ -189,22 +201,33 @@ public static class Body
         _ => (realm & Realm.Land) != 0,
     };
 
-    /// <summary>Genetic distance between two organisms' body genes: root-mean-square per gene (/127), so it does not grow with the number of genes.</summary>
+    /// <summary>Root-mean-square distance in the original ecological body genes (/127).
+    /// Appearance and recognition variation do not create reproductive barriers or dilute ecological differences.</summary>
     public static float Distance(World w, int a, int b)
     {
         int ga = a * G.LEN + G.BODY, gb = b * G.LEN + G.BODY; float s = 0;
-        const int N = G.NBODY - G.NMHC;              // recognition genes are not part of fertility (balancing selection keeps them diverse)
+        const int N = G.APPEARANCE - G.BODY;
         for (int k = 0; k < N; k++) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
         return MathF.Sqrt(s / N);
     }
 
     static readonly int[] Visible = { G.B_MASS, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_ARMOUR, G.B_STRIKE, G.B_LEGN, G.B_FINN };
 
-    /// <summary>Does b look like a's kind? (visible body genes within KIN_LOOK, root-mean-square per gene)</summary>
+    /// <summary>Does b look like a's kind? Ecological traits and appearance each pass their own RMS test,
+    /// so new cosmetic genes cannot dilute an existing visible ecological difference.</summary>
     public static bool LooksAlike(World w, int a, int b)
     {
         int ga = a * G.LEN, gb = b * G.LEN; float s = 0;
         foreach (int k in Visible) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
-        return s < K.KIN_LOOK * K.KIN_LOOK * Visible.Length;
+        if (s >= K.KIN_LOOK * K.KIN_LOOK * Visible.Length) return false;
+        float shape = 0f, colour = 0f;
+        for (int k = G.APPEARANCE; k < G.B_MHC; k++)
+        {
+            float d = MathF.Abs(w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f);
+            if (k == G.B_HUE || k == G.B_PATTERN_HUE) d = MathF.Min(d, 2f - d);
+            if (k < G.B_HUE) shape += d * d;
+            else colour += d * d;
+        }
+        return shape < K.KIN_LOOK * K.KIN_LOOK * 10 && colour < K.KIN_LOOK * K.KIN_LOOK * 6;
     }
 }

@@ -496,13 +496,12 @@ public class EcologyTests
         Assert.Equal(basal0 + extra, w.PBasal[i], 4);
     }
 
-    [Fact] // every random ancestor can digest a primary producer available in its realm
+    [Fact] // raw draws have no assigned realm; diet expression follows the realm their organs permit
     public void AncestorsCanDigestRealmProducers()
     {
         var w = new World(16, 1);
         foreach (bool land in new[] { true, false })
         {
-            int producer = land ? (int)Pool.Grass : (int)Pool.Phyto;
             for (int seed = 0; seed < 32; seed++)
             {
                 var body = new sbyte[G.NBODY];
@@ -510,8 +509,13 @@ public class EcologyTests
                 body.CopyTo(new Span<sbyte>(w.Genome, G.BODY, G.NBODY));
                 Body.Express(w, 0);
 
-                Assert.True(Body.Reachable((Realm)w.PRealm[0], producer), $"seed {seed}, land {land}: producer not in realm");
-                Assert.True(w.PDiet[producer] > 0f, $"seed {seed}, land {land}: producer not digestible");
+                float producers = 0f;
+                for (int p = 0; p <= (int)Pool.Phyto; p++)
+                {
+                    if (Body.Reachable(w.RealmOf(0), p)) producers += w.PDiet[p];
+                    else Assert.Equal(0f, w.PDiet[p]);
+                }
+                Assert.True(producers > 0f, $"seed {seed}, land {land}: no digestible producer");
             }
         }
     }

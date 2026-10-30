@@ -115,6 +115,122 @@ public class AppearanceTests
         }
     }
 
+    [Fact]
+    public void DimensionsMatchRenderedExponentialAxesAndConserveVolume()
+    {
+        foreach (sbyte a in new sbyte[] { -127, -63, 0, 63, 127 })
+            foreach (sbyte b in new sbyte[] { -127, 0, 127 })
+                foreach (sbyte c in new sbyte[] { -127, 0, 127 })
+                {
+                    Body.Dimensions(a, b, c, out float length, out float width, out float height);
+                    double x = Math.Exp(Math.Log(2) * (2 * Body.Organ(a) - 1));
+                    double y = Math.Exp(Math.Log(2) * (2 * Body.Organ(b) - 1));
+                    double z = Math.Exp(Math.Log(2) * (2 * Body.Organ(c) - 1));
+                    double volumeScale = Math.Cbrt(x * y * z);
+                    Assert.InRange(Math.Abs(length - x / volumeScale), 0, 1e-6);
+                    Assert.InRange(Math.Abs(width - y / volumeScale), 0, 1e-6);
+                    Assert.InRange(Math.Abs(height - z / volumeScale), 0, 1e-6);
+                    Assert.InRange(MathF.Abs(length * width * height - 1f), 0f, 1e-6f);
+                }
+        var w = new World(1, 2);
+        Body.Express(w, 0);
+        float land = w.PVLand[0], water = w.PVWater[0], turn = w.PTurn[0];
+        foreach (sbyte scale in new sbyte[] { -127, 127 })
+        {
+            w.Genome[G.B_LENGTH] = w.Genome[G.B_WIDTH] = w.Genome[G.B_HEIGHT] = scale;
+            Body.Express(w, 0);
+            Assert.Equal(land, w.PVLand[0], 5);
+            Assert.Equal(water, w.PVWater[0], 5);
+            Assert.Equal(turn, w.PTurn[0], 5);
+        }
+    }
+
+    [Fact]
+    public void AppearanceAndRecognitionDoNotCreateOrDiluteFertilityDistance()
+    {
+        var w = new World(2, 1);
+        for (int k = G.APPEARANCE; k < G.REFLEX; k++)
+        {
+            w.Genome[k] = -127; w.Genome[G.LEN + k] = 127;
+        }
+        Assert.Equal(0f, Body.Distance(w, 0, 1));
+        w.Genome[G.B_SPEED] = -127; w.Genome[G.LEN + G.B_SPEED] = 127;
+        Assert.Equal(2f / MathF.Sqrt(G.APPEARANCE - G.BODY), Body.Distance(w, 0, 1), 6);
+        Assert.Equal(G.APPEARANCE - G.BODY, new Clades.Scratch().G1.Length);
+    }
+
+    static World ShapeClusters(int gene, bool uniformAxes = false)
+    {
+        var w = new World(2 * K.MIN_SPLIT, 91);
+        Clades.NewClade(w, -1, 0);
+        for (int i = 0; i < w.Cap; i++)
+        {
+            w.StageOf[i] = St.Adult;
+            w.Serial[i] = (uint)i + 1;
+            sbyte value = (sbyte)(i < K.MIN_SPLIT ? -100 + i % 3 : 100 - i % 3);
+            w.Genome[i * G.LEN + gene] = value;
+            if (uniformAxes)
+                w.Genome[i * G.LEN + G.B_LENGTH] = w.Genome[i * G.LEN + G.B_WIDTH] = w.Genome[i * G.LEN + G.B_HEIGHT] = value;
+            Body.Express(w, i);
+        }
+        w.Step = K.SPEC_EVERY;
+        return w;
+    }
+
+    [Theory]
+    [InlineData(G.B_LENGTH)]
+    [InlineData(G.B_WIDTH)]
+    [InlineData(G.B_HEIGHT)]
+    [InlineData(G.B_HEAD)]
+    [InlineData(G.B_NECK)]
+    [InlineData(G.B_TAIL)]
+    [InlineData(G.B_LIMB_POS)]
+    [InlineData(G.B_LIMB_SHAPE)]
+    [InlineData(G.B_FIN_SHAPE)]
+    [InlineData(G.B_WING_SHAPE)]
+    public void ShapeOnlyClustersBecomeSubspeciesWithoutLosingFertility(int gene)
+    {
+        var w = ShapeClusters(gene);
+        Assert.Equal(0f, Body.Distance(w, 0, w.Cap - 1));
+        Clades.Update(w);
+        Assert.Equal(1, w.T.Splits);
+        Assert.NotEqual(w.Spc[0], w.Spc[w.Cap - 1]);
+        int next = w.Spc[0] == 0 ? w.Spc[w.Cap - 1] : w.Spc[0];
+        Assert.True(w.Sp[next].Sub);
+        Assert.False(string.IsNullOrEmpty(w.Sp[next].SplitWhy));
+    }
+
+    [Fact]
+    public void PigmentAndVolumeNormalizedUniformScalingDoNotSplitClades()
+    {
+        foreach (int gene in Enumerable.Range(G.B_HUE, 6).Append(G.B_LENGTH))
+        {
+            var w = ShapeClusters(gene, uniformAxes: gene == G.B_LENGTH);
+            Clades.Update(w);
+            Assert.Equal(0, w.T.Splits);
+        }
+    }
+
+    [Fact]
+    public void KinRecognitionSeesShapeAndColourWithoutDilutingEcologicalTraits()
+    {
+        var w = new World(2, 1);
+        Assert.True(Body.LooksAlike(w, 0, 1));
+        foreach (int gene in Enumerable.Range(G.APPEARANCE, G.NAPPEARANCE))
+        {
+            bool hue = gene == G.B_HUE || gene == G.B_PATTERN_HUE;
+            w.Genome[gene] = hue ? (sbyte)-63 : (sbyte)-100;
+            w.Genome[G.LEN + gene] = hue ? (sbyte)64 : (sbyte)100;
+            Assert.False(Body.LooksAlike(w, 0, 1));
+            Assert.Equal(0f, Body.Distance(w, 0, 1));
+            w.Genome[gene] = w.Genome[G.LEN + gene] = 0;
+        }
+        w.Genome[G.B_HUE] = -127; w.Genome[G.LEN + G.B_HUE] = 127;
+        Assert.True(Body.LooksAlike(w, 0, 1)); // the two ends of the hue circle are the same colour
+        w.Genome[G.B_ARMOUR] = -127; w.Genome[G.LEN + G.B_ARMOUR] = 127;
+        Assert.False(Body.LooksAlike(w, 0, 1));
+    }
+
     static World VisibleWorld()
     {
         var w = new World(4, 17);

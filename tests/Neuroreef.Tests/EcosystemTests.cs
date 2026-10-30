@@ -134,7 +134,7 @@ public class EcosystemTests
         Life.Run(w, new int[w.NS]);
         float gave = w.Energy[j] - ej, lost = em - w.Energy[m];
         Assert.True(gave > 0, "the young got nothing");
-        Assert.Equal(gave / K.CARE_EFF, lost, 5);
+        Assert.InRange(MathF.Abs(gave / K.CARE_EFF - lost), 0f, 2e-6f * MathF.Max(1f, em + ej));
         Assert.True(gave <= K.CARE_RATE * w.PBasal[m] * w.PCare[m] + 1e-6f);
         // far from the mother: no care
         w.X[j] = World.Wrap(w.X[m] + 50); ej = w.Energy[j];

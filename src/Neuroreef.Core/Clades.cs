@@ -12,7 +12,7 @@ namespace Neuroreef;
 public static class Clades
 {
     const int SAMPLE = 512;
-    const int D = G.NBODY - G.NMHC;     // recognition genes excluded: their polymorphism is not speciation
+    const int D = G.APPEARANCE - G.BODY; // same ecological genes and normalization as Body.Distance; no pigment or recognition barriers
 
     /// <summary>Per-world scratch for speciation (allocated once, with the world).</summary>
     public sealed class Scratch
@@ -195,19 +195,32 @@ public static class Clades
     // The traits you can see on a body, each in "visible units": 1 unit is a difference you notice at a glance
     // (Revision L, the user: "subspeciation that is very clearly visual"): half again the body mass, 0.15 of an
     // organ's range (legs, fins, wings, armour, weapons, eyes), or one more pair of legs, fins or eyes.
-    static readonly int[] VisGene = { G.B_MASS, G.B_SIGHT, G.B_ARMOUR, G.B_STRIKE, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_LEGN, G.B_FINN, G.B_EYEN };
-    static readonly string[] VisName = { "size", "eyes", "armour", "weapons", "legs", "fins", "wings", "leg pairs", "fin pairs", "eye pairs" };
-    const int V = 10;
+    static readonly int[] VisGene = { G.B_MASS, G.B_SIGHT, G.B_ARMOUR, G.B_STRIKE, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_LEGN, G.B_FINN, G.B_EYEN,
+        G.B_LENGTH, G.B_WIDTH, G.B_HEIGHT, G.B_HEAD, G.B_NECK, G.B_TAIL, G.B_LIMB_POS, G.B_LIMB_SHAPE, G.B_FIN_SHAPE, G.B_WING_SHAPE };
+    static readonly string[] VisName = { "size", "eyes", "armour", "weapons", "legs", "fins", "wings", "leg pairs", "fin pairs", "eye pairs",
+        "body length", "body width", "body height", "head size", "neck length", "tail length", "limb position", "limb shape", "fin shape", "wing shape" };
+    const int V = 20;
     static readonly float MassUnit = MathF.Log(1.5f) / MathF.Log(K.MASS_HI / K.MASS_LO) * 254f;
-    static float VisUnit(int k) => k == 0 ? MassUnit : k >= 7 ? 254f / 4f : 0.15f * 254f;
+    static bool PairTrait(int k) => k >= 7 && k <= 9;
+    static float VisUnit(int k) => k == 0 ? MassUnit : PairTrait(k) ? 254f / 4f : 0.15f * 254f;
     // size is the body's actual size (its class floor included), not the mass gene alone
-    static float Vis(World w, int i, int k) => k == 0 ? MathF.Log(w.PM[i] / K.MASS_LO) / MathF.Log(1.5f) : w.Genome[i * G.LEN + VisGene[k]] / VisUnit(k);
+    static float Vis(World w, int i, int k)
+    {
+        int g = i * G.LEN;
+        if (k >= 10 && k <= 12)
+        {
+            Body.Dimensions(w.Genome[g + G.B_LENGTH], w.Genome[g + G.B_WIDTH], w.Genome[g + G.B_HEIGHT], out float length, out float width, out float height);
+            return MathF.Log(k == 10 ? length : k == 11 ? width : height) / MathF.Log(1.5f);
+        }
+        return k == 0 ? MathF.Log(w.PM[i] / K.MASS_LO) / MathF.Log(1.5f) : w.Genome[g + VisGene[k]] / VisUnit(k);
+    }
 
     /// <summary>
     /// Split clade s if its visible traits form two clusters with few intermediates (a gap of SPLIT_GAP pooled SDs
     /// along the axis between them, Mallet's genotypic clusters) and the two forms differ visibly (by at least
     /// SPLIT_VIS units in some trait). The new clade is a subspecies while the two centres are still more than half
-    /// fertile together (their whole body genomes, as Mate uses), else a species. Returns the new clade or -1.
+    /// fertile together (their ecological body genes, as Mate uses), else a species. Pigment alone does not split a clade.
+    /// Returns the new clade or -1.
     /// </summary>
     public static int TrySplit(World w, int s, Scratch x)
     {
@@ -291,7 +304,7 @@ public static class Clades
         int second2 = -1; float b2 = 0;
         for (int k = 0; k < V; k++) { float d = MathF.Abs(cn[k] - co[k]); if (k != most && d > b2 && d >= 0.5f * K.SPLIT_VIS) { b2 = d; second2 = k; } }
         string Why(int k) => k == 0 ? (cn[0] > co[0] ? $"bigger (x{MathF.Pow(1.5f, cn[0] - co[0]):0.#})" : $"smaller (x{MathF.Pow(1.5f, cn[0] - co[0]):0.##})")
-                              : (cn[k] > co[k] ? "more " : "fewer ").Replace("fewer ", k >= 7 ? "fewer " : "less ") + VisName[k];
+                              : (cn[k] > co[k] ? "more " : "fewer ").Replace("fewer ", PairTrait(k) ? "fewer " : "less ") + VisName[k];
         w.Sp[nc].SplitWhy = second2 >= 0 ? Why(most) + ", " + Why(second2) : Why(most);
         w.T.Splits++;
         return nc;
