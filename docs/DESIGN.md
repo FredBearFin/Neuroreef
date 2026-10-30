@@ -27,6 +27,37 @@ world (expect more thirst deaths at first, as the founders no longer find water 
 Other senses that still read more than an animal could know, left for now: FOLLOW_MOTHER and MOTHER_FAR give the way to a
 young animal's mother at any distance; a mate's readiness, another's diet (NEAREST_MEAT) and weakness are read from its
 internal state rather than from signals.
+**Rivers that run (Revision Q, hydrology)** (2026-10-30; the user: "basic hydrology, so the world has meaningful
+persistent places: river valleys, floodplains, fertile alluvial soil, wetlands. These should come from physics"). Measured before the change (default
+1024 map, seeds 1, 2, 3, 7, 11): river cells were 0.00-0.01% of the map. The old D8 pass routed water into the first
+pit of the noise relief and stopped, so flow hardly ever reached RIVER_ACC. Land was 11-20 cells from drinkable water
+on average. Changes (Hydrology.cs, Terrain.Build):
+- *Routing.* Priority-Flood+epsilon from the lakes outward (Barnes et al. 2014) gives every cell one receiver over the
+  depression-filled surface, and an order in which each cell comes after the cell it drains into. Flow is the rain
+  each cell gathers from above (Climate.Rainfall, which reads winds and relief but not the climate's strength, so a
+  seed makes the same land at any climate setting). At the lakes it sums to exactly the rain that fell. Rivers are the
+  land cells whose flow passes RIVER_ACC. They are drinkable shallow water whose depth goes as flow^0.4 (Leopold &
+  Maddock 1953), and they run river to river into the existing lakes.
+- *Erosion and alluvium.* ERODE_ITERS passes of hillslope creep (Culling 1960), detachment-limited stream power
+  dh = -K A^0.5 S solved implicitly (Braun & Willett 2013), and transport: a load over capacity (~A^0.5 S) is partly
+  dropped, and a closed basin keeps what it can hold up to its rim. Sediment is conserved: what the land loses is what
+  reaches the lakes. Alluvium (what is left of the deposit) adds up to ALLUV_FERT to the soil's fertility (Fert).
+- *Wetlands.* Closed basins that are left on the worked relief (BASIN_MIN below their rim) become pond sites, as well
+  as the old local minima. Sediment fills many small basins, so without this the pond sites fell from ~2,000-2,600
+  cells to ~200-340.
+- *Floods.* Each land cell up to FLOOD_R flow steps above a river, and low enough above it, gets the wetness (season x
+  year's rain) at which that river's stage tops its banks (BANKFULL) and reaches it. When it floods (Ponds.Update), the
+  cell is drinkable (Wet = 3) and soaked (moisture 1). It also takes FLOOD_MIX of the gap between its nutrient and the
+  river's, and that nutrient leaves the river (the flood pulse, Junk et al. 1989). Frozen rivers do not flood.
+Measured after (default map, seeds 1, 2, 3, 7, 11): rivers are 0.8-1.05% of the map, floodplains 3.1-3.5% of the land,
+alluvial soil (over ALLUV_D) 10-12% of the land. Alluvial cells have fertility 0.94-0.97 against 0.51-0.63 on other
+land. Lake share is 10.3-10.5% (it was 10.0%; erosion lowers a few river mouths below lake level). Land is now 11-14
+cells from drinkable water on average. Channels on slopes are cut ~20 m on average and up to 200-350 m; hillsides
+lose ~6 m. Generation takes 0.75-1.0 s at the 1024 map (it was 0.5-0.7 s; erosion is ~0.28 s of it) and 3.5 s at 2048
+(was 1.8 s). Over two simulated years (empty world, seeds 1 and 7), 12-35% of the floodplain flooded at least once.
+Flooded cells ended with nutrient 0.62-0.73 and plant cover 0.76, against 0.58-0.63 and 0.62 on other land. Floodplain
+cells that never flooded are poorer (nutrient ~0.43): the existing runoff rule washes a shore cell's nutrient into the
+water beside it, and rivers now give the land many more shores. River water is near N_MAX.
 
 **Brains that remember** (2026-10-30; the user: "why do big brains die so much, why are they not smarter"). Measured
 before the change: a 256-unit brain held about 7 steps of its past, no more than a 24-unit brain, and learned a

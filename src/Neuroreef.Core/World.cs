@@ -116,8 +116,12 @@ public sealed class World
     public readonly byte[] Cell;           // Realm bits of the cell (Land, Shallow, Deep)
     public readonly float[] DistWater, DistLand;   // in cells
     public readonly byte[] PondSite;               // 1 = a basin that can hold a seasonal pond (Revision K)
-    public readonly byte[] Wet;                    // drinkable water now: 1 = lake, sea or river, 2 = a full pond
-    public readonly float[] DistDrink;             // cells to the nearest drinkable water (lakes and full ponds)
+    public readonly byte[] Wet;                    // drinkable water now: 1 = lake, sea or river, 2 = a full pond, 3 = a flooded floodplain
+    public readonly float[] DistDrink;             // cells to the nearest drinkable water (lakes, full ponds and floods)
+    // hydrology (Revision Q), fixed at Terrain.Build: the rain each cell gathers from above (in cells of mean rain),
+    // the depth of alluvium left on it, and the wetness (season x year) at which its river floods it (+inf: never)
+    public readonly float[] Flow, Alluvium, FloodWet;
+    public readonly int[] FloodFrom;               // the river cell that floods it (-1: none)
     // climate (Revision O), fixed at Terrain.Build: cooling by height x climate strength (K), continentality (0..1)
     public readonly float[] TLapse, Cont;
     public float ClimateZ = 1f;                    // normaliser of the evaporation factor: the land as moist over a year as with no climate
@@ -203,6 +207,7 @@ public sealed class World
         Temp = new float[n]; Array.Fill(Temp, K.T_REF); TLapse = new float[n]; Cont = new float[n];
         Elev = new float[n]; Depth = new float[n]; MoistBase = new float[n]; Fert = new float[n]; Cell = new byte[n];
         DistWater = new float[n]; DistLand = new float[n]; PondSite = new byte[n]; Wet = new byte[n]; DistDrink = new float[n];
+        Flow = new float[n]; Alluvium = new float[n]; FloodWet = new float[n]; Array.Fill(FloodWet, float.PositiveInfinity); FloodFrom = new int[n]; Array.Fill(FloodFrom, -1);
 
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];

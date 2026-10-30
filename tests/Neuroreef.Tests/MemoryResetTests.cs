@@ -33,11 +33,13 @@ public class MemoryResetTests
 
     static int Differing(World a, World b)
     {
-        Assert.Equal(a.AliveCount, b.AliveCount);
+        // a scrambled memory may change who is born or dies this step: count the slots alive in both, plus any not alive in both
         int d = 0;
         for (int i = 0; i < a.Cap; i++)
         {
-            if (a.StageOf[i] < St.Juvenile) continue;
+            bool la = a.StageOf[i] >= St.Juvenile, lb = b.StageOf[i] >= St.Juvenile;
+            if (la != lb) { d++; continue; }
+            if (!la) continue;
             for (int h = 0; h < G.NH; h++) if (a.Hidden[i * G.NH + h] != b.Hidden[i * G.NH + h]) { d++; break; }
         }
         return d;
