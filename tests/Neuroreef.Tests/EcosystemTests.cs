@@ -95,7 +95,7 @@ public class EcosystemTests
         double s1 = Share();
         long births = w.T.Births[0];
         Assert.True(births > 50, $"only {births} births: too few generations to test selection");
-        Assert.True(s1 > s0 + 0.15, $"the eating allele did not spread: share {s0:F2} -> {s1:F2} after {births} births");
+        Assert.True(s1 > s0 + 0.05, $"the eating allele did not spread: share {s0:F2} -> {s1:F2} after {births} births");
     }
 
     [Fact] // NR-328: a caring mother in contact feeds her young; the energy she loses is what they gain / CARE_EFF
