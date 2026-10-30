@@ -39,14 +39,13 @@ public static class Resolve
 
         // ---- 1. move (realm rule, DESIGN §9.2)
         float h = w.IHeading[i], spd = w.ISpeed[i];
-        float nx = World.Wrap(w.X[i] + MathK.Cos(h) * spd), ny = World.Wrap(w.Y[i] + MathK.Sin(h) * spd);
-        int nc = World.FIdx(nx, ny);
-        if (spd > 0 && !w.CellAllows(nc, realm))
+        float nx = w.X[i], ny = w.Y[i];
+        if (spd > 0 && !Move(w, nx, ny, h, spd, realm, out nx, out ny, out float fraction))
         {
-            spd = 0;
+            spd *= fraction;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
         }
-        else { w.X[i] = nx; w.Y[i] = ny; }
+        w.X[i] = nx; w.Y[i] = ny;
         w.Heading[i] = h; w.Speed[i] = spd;
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool waterCell = (w.Cell[cell] & (byte)Realm.Water) != 0;
@@ -58,6 +57,43 @@ public static class Resolve
         {
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
+        }
+
+        static bool Move(World w, float x, float y, float h, float speed, Realm realm, out float nx, out float ny, out float fraction)
+        {
+            float dx = MathK.Cos(h) * speed, dy = MathK.Sin(h) * speed;
+            int cx = (int)(x / K.FCELL), cy = (int)(y / K.FCELL);
+            if (!w.CellAllows(World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW), realm))
+            {
+                nx = x; ny = y;
+                fraction = 0f;
+                return false;
+            }
+
+            int sx = Math.Sign(dx), sy = Math.Sign(dy);
+            float tx = sx == 0 ? float.PositiveInfinity : (sx > 0 ? (cx + 1) * K.FCELL - x : x - cx * K.FCELL) / MathF.Abs(dx);
+            float ty = sy == 0 ? float.PositiveInfinity : (sy > 0 ? (cy + 1) * K.FCELL - y : y - cy * K.FCELL) / MathF.Abs(dy);
+            float dtx = sx == 0 ? float.PositiveInfinity : K.FCELL / MathF.Abs(dx);
+            float dty = sy == 0 ? float.PositiveInfinity : K.FCELL / MathF.Abs(dy);
+            while (true)
+            {
+                float t = MathF.Min(tx, ty);
+                if (t > 1f) break;
+                if (tx <= ty) { cx += sx; tx += dtx; }
+                if (ty <= t) { cy += sy; ty += dty; }
+                int cell = World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW);
+                if (!w.CellAllows(cell, realm))
+                {
+                    float back = 1e-4f / MathF.Max(speed, 1e-6f);
+                    float safe = MathF.Max(0f, t - back);
+                    nx = World.Wrap(x + dx * safe); ny = World.Wrap(y + dy * safe);
+                    fraction = safe;
+                    return false;
+                }
+            }
+            nx = World.Wrap(x + dx); ny = World.Wrap(y + dy);
+            fraction = 1f;
+            return true;
         }
 
         // ---- 3. eat (DESIGN §9.3)
