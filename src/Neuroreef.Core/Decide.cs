@@ -198,6 +198,7 @@ public static class Decide
         f[F.FOOD_GRAD] = MathK.Tanh(MathF.Sqrt(fgx * fgx + fgy * fgy) * 3f);
         bool inWater = (w.Cell[cell] & (byte)Realm.Water) != 0;
         f[F.IN_WATER] = inWater ? 1f : 0f;
+        f[F.DEPTH] = Math.Clamp(w.Depth[cell] / (K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE)), 0f, 1f);
         f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / 8f);   // drinkable water: lakes and full ponds
         f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / 8f);
         float fireNear = (w.Fire[cell] > 0 || w.Fire[CellAt(cell, 2, 0)] > 0 || w.Fire[CellAt(cell, -2, 0)] > 0 || w.Fire[CellAt(cell, 0, 2)] > 0 || w.Fire[CellAt(cell, 0, -2)] > 0) ? 1f : 0f;

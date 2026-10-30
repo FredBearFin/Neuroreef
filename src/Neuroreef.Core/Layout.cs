@@ -32,10 +32,10 @@ public static class F
         FOC_LIKE_ME = 63,               // how much the focal utterance matches its own last one, position by position
         // body heat (Revision O): a signed internal need like HUNGER (last step's heat made minus heat evaporated, in
         // basal units, through tanh: > 0 cold, < 0 hot), and the operative temperature it is in against its body's
-        HEAT_NEED = 64, AIR_T = 65;
+        HEAT_NEED = 64, AIR_T = 65, DEPTH = 66;
     public const int NSOUND = 8;
     public const int MAX_SYL = K.MAX_SYL; // syllables in one utterance at most (Revision N)
-    public const int N = AIR_T + 1;   // 66
+    public const int N = DEPTH + 1;   // 67
     public static readonly string[] Names =
     {
         "BIAS", "HUNGER", "THIRST", "FATIGUE", "READY", "AGE", "JUVENILE", "FULL", "PAIN", "CARRYING",
@@ -46,7 +46,7 @@ public static class F
         "HEAR_0", "HEAR_1", "HEAR_2", "HEAR_3", "HEAR_4", "HEAR_5", "HEAR_6", "HEAR_7",
         "FOC_POS_0", "FOC_POS_1", "FOC_POS_2", "FOC_POS_3", "FOC_POS_4", "FOC_POS_5", "FOC_POS_6", "FOC_POS_7",
         "MY_POS_0", "MY_POS_1", "MY_POS_2", "MY_POS_3", "MY_POS_4", "MY_POS_5", "MY_POS_6", "MY_POS_7",
-        "FOC_KIN", "FOC_MOTHER", "FOC_ELDER", "FOC_SIZE", "FOC_FACING", "FOC_LIKE_ME", "HEAT_NEED", "AIR_T",
+        "FOC_KIN", "FOC_MOTHER", "FOC_ELDER", "FOC_SIZE", "FOC_FACING", "FOC_LIKE_ME", "HEAT_NEED", "AIR_T", "DEPTH",
     };
 }
 

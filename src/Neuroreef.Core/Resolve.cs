@@ -27,7 +27,7 @@ public static class Resolve
     static void One(World w, int i)
     {
         var T = w.T;
-        var loco = w.LocoOf(i); var realm = w.RealmOf(i);
+        var loco = w.LocoOf(i);
         int s = w.Spc[i];
         uint seed = w.Seed, step = (uint)w.Step;
         float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
@@ -41,7 +41,7 @@ public static class Resolve
         // ---- 1. move (realm rule, DESIGN §9.2)
         float h = w.IHeading[i], spd = w.ISpeed[i];
         float nx = w.X[i], ny = w.Y[i];
-        if (spd > 0 && !Move(w, nx, ny, h, spd, realm, out nx, out ny, out float fraction))
+        if (spd > 0 && !Move(w, i, nx, ny, h, spd, out nx, out ny, out float fraction))
         {
             spd *= fraction;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
@@ -64,11 +64,11 @@ public static class Resolve
             if (rel > 0f) metrics?.Apply(P.DRINK);
         }
 
-        static bool Move(World w, float x, float y, float h, float speed, Realm realm, out float nx, out float ny, out float fraction)
+        static bool Move(World w, int i, float x, float y, float h, float speed, out float nx, out float ny, out float fraction)
         {
             float dx = MathK.Cos(h) * speed, dy = MathK.Sin(h) * speed;
             int cx = (int)(x / K.FCELL), cy = (int)(y / K.FCELL);
-            if (!w.CellAllows(World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW), realm))
+            if (!w.CellAllows(i, World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW)))
             {
                 nx = x; ny = y;
                 fraction = 0f;
@@ -87,7 +87,7 @@ public static class Resolve
                 if (tx <= ty) { cx += sx; tx += dtx; }
                 if (ty <= t) { cy += sy; ty += dty; }
                 int cell = World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW);
-                if (!w.CellAllows(cell, realm))
+                if (!w.CellAllows(i, cell))
                 {
                     float back = 1e-4f / MathF.Max(speed, 1e-6f);
                     float safe = MathF.Max(0f, t - back);
@@ -108,7 +108,7 @@ public static class Resolve
         bool preyEat = (acts & BIT_EAT) != 0 && w.IEatPrey[i] != 0 && (acts & BIT_STRIKE) == 0 && w.PStrike[i] > 0;
         if (preyEat) { acts |= BIT_STRIKE; metrics?.Allow(P.EAT); }
         else if ((acts & BIT_EAT) != 0 && scanning && metrics != null) metrics.Add(ref metrics.ScanBlockedEats);
-        if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
+        if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && w.Depth[cell] > K.SHALLOW))
         {
             int best = -1; float bv = 0;
             for (int p = 0; p < Pools.NFIELD; p++)

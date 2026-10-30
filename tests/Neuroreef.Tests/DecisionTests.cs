@@ -51,7 +51,8 @@ public class DecisionTests
     public void MovementStopsAtOneCellBarrierInsteadOfCrossingIt()
     {
         var (w, i) = Walker();
-        w.Cell[2 * Map.FW + 4] = (byte)Realm.Deep;
+        int barrier = 2 * Map.FW + 4;
+        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + K.SHALLOW;
 
         Move(w, i, 10f, 10f, 0f, 12f);
 
@@ -74,7 +75,8 @@ public class DecisionTests
     public void MovementChecksRealmAcrossTheWrappedEdge()
     {
         var (w, i) = Walker();
-        w.Cell[2 * Map.FW] = (byte)Realm.Deep;
+        int barrier = 2 * Map.FW;
+        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + K.SHALLOW;
 
         Move(w, i, Map.W - 2f, 10f, 0f, 8f);
 
@@ -86,7 +88,8 @@ public class DecisionTests
     public void MovementStopsJustBeforeBlockedCellBoundary()
     {
         var (w, i) = Walker();
-        w.Cell[2 * Map.FW + 4] = (byte)Realm.Deep;
+        int barrier = 2 * Map.FW + 4;
+        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + K.SHALLOW;
 
         Move(w, i, 15f, 10f, 0f, 4f);
 
@@ -106,5 +109,54 @@ public class DecisionTests
         Assert.Equal(forward.target, reversed.target);
         Assert.Equal(forward.mate, reversed.mate);
         Assert.Equal(forward.actions, reversed.actions);
+    }
+
+    [Fact]
+    public void WaterDepthControlsAccessAndSwimmingSpeedContinuously()
+    {
+        var (w, i) = Walker();
+        int shallow = 3 * Map.FW + 3, deep = shallow + 1;
+        w.Cell[shallow] = w.Cell[deep] = (byte)Realm.Deep;
+        w.Depth[shallow] = K.SHALLOW * 0.5f;
+        w.Depth[deep] = K.SHALLOW * 5f;
+
+        w.Genome[i * G.LEN + G.B_FINS] = -127;
+        Body.Express(w, i);
+        Assert.True(w.CellAllows(i, shallow));
+        Assert.False(w.CellAllows(i, deep));
+        float lowFinSpeed = w.Vmax(i, shallow);
+
+        w.Genome[i * G.LEN + G.B_FINS] = 127;
+        Body.Express(w, i);
+        Assert.True(w.CellAllows(i, deep));
+        Assert.True(w.Vmax(i, shallow) > w.Vmax(i, deep));
+        Assert.True(w.Vmax(i, shallow) > lowFinSpeed);
+    }
+
+    [Fact]
+    public void DepthSenseTracksLocalWaterDepth()
+    {
+        var (w, i) = Walker();
+        int cell = World.FIdx(w.X[i], w.Y[i]);
+        w.Cell[cell] = (byte)Realm.Deep;
+        w.Depth[cell] = K.SHALLOW * 3f;
+
+        Decide.Run(w, i, new Decide.ProbeBuf());
+
+        Assert.Equal(0.2f, w.Feat[i * F.N + F.DEPTH], 4);
+    }
+
+    [Fact]
+    public void AlgaeYieldFallsWithWaterDepth()
+    {
+        var w = new World(1, 23);
+        int shallow = 0, deep = 1;
+        w.Cell[shallow] = (byte)Realm.Shallow; w.Depth[shallow] = K.SHALLOW * 0.5f;
+        w.Cell[deep] = (byte)Realm.Deep; w.Depth[deep] = K.SHALLOW * 5f;
+        w.Nutrient[shallow] = w.Nutrient[deep] = 1f;
+        w.Pool[(int)Pool.Algae][shallow] = w.Pool[(int)Pool.Algae][deep] = 0.1f;
+        var diet = new float[Pools.N]; diet[(int)Pool.Algae] = 1f;
+
+        Assert.True(Fields.Yield(w, shallow, diet) > Fields.Yield(w, deep, diet));
     }
 }

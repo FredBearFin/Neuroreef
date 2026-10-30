@@ -239,13 +239,24 @@ public sealed class World
 
     public float Carnivory(int i) => PDiet[i * Pools.N + (int)Neuroreef.Pool.Meat];
 
-    /// <summary>Top speed in the medium of a cell: flying, swimming (deep water), wading (shallow) or on land.</summary>
+    /// <summary>Top speed in the cell's water depth, blended from wading to swimming.</summary>
     public float Vmax(int i, int cell)
     {
         float v;
         if (PLoco[i] == (byte)Neuroreef.Loco.Fly) v = PVAir[i];
-        else if ((Cell[cell] & (byte)Realm.Deep) != 0) v = PVWater[i];
-        else if ((Cell[cell] & (byte)Realm.Shallow) != 0) v = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
+        else if ((Cell[cell] & (byte)Realm.Water) != 0)
+        {
+            float depth = MathF.Max(0f, Depth[cell]);
+            float wade = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
+            float mix = Math.Clamp(depth / K.SHALLOW, 0f, 1f);
+            v = wade + (PVWater[i] - wade) * mix;
+            float maxDepth = MaxWaterDepth(i);
+            if (maxDepth > K.SHALLOW)
+            {
+                float load = Math.Clamp((depth - K.SHALLOW) / (maxDepth - K.SHALLOW), 0f, 1f);
+                v *= 1f - 0.5f * load;
+            }
+        }
         else v = PVLand[i];
         return v * MathF.Max(0.3f, MassOf(i) / PM[i]);
     }
@@ -253,6 +264,18 @@ public sealed class World
     public float Vmax(int i) => Vmax(i, FIdx(X[i], Y[i]));
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
+
+    public float MaxWaterDepth(int i) => K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
+
+    public bool CellAllows(int i, int cell) => CellAllows(i, cell, RealmOf(i));
+
+    public bool CellAllows(int i, int cell, Realm realm)
+    {
+        byte kind = Cell[cell];
+        if ((kind & (byte)Realm.Land) != 0) return (realm & Realm.Land) != 0;
+        if ((kind & (byte)Realm.Water) == 0 || (realm & Realm.Water) == 0) return false;
+        return PLoco[i] == (byte)Loco.Fly || Depth[cell] <= MaxWaterDepth(i);
+    }
 
     public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * (float)(Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / Map.W);
 
