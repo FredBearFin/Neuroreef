@@ -28,7 +28,16 @@ public static class Brain
             int col = (k - G.W2) % G.NIN, row = (k - G.W2) / G.NIN;
             // calling is one behaviour made with 8 sounds: together they start as rare as any other primitive
             int bias = row >= P.CALL_0 && row < P.CALL_0 + F.NSOUND ? K.FOUNDER_BIAS_CALL : K.FOUNDER_BIAS;
-            if (k < G.W2) g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W);
+            // the output weights from memory unit h shrink as 1/h beyond BRAIN_START units, so a big newborn brain is as
+            // calm as a small one: its extra units start almost silent, and learning (the output layer is plastic) or
+            // evolution brings them in as they pay
+            float hs = col < G.NH ? (float)K.BRAIN_START / MathF.Max(K.BRAIN_START, col + 1) : 1f;
+            // likewise the memory layer's weights from other memory units (input j >= F.N is unit j - F.N): a unit's
+            // summed input does not grow with the brain, so big brains do not start saturated
+            int jin = k % G.NIN;
+            float hw = jin >= F.N ? MathF.Sqrt((float)K.BRAIN_START / MathF.Max(K.BRAIN_START, jin - F.N + 1)) : 1f;
+            if (k < G.W2) g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W * hw);
+            else if (col < G.NH) g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W2 * hs);
             else if (col == G.NH + F.BIAS) g[k] = (sbyte)(bias + (int)MathF.Round(u * K.FOUNDER_BIAS_NOISE));
             else g[k] = (sbyte)MathF.Round(u * K.FOUNDER_W2);
         }

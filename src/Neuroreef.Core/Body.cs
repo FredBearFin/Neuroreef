@@ -74,7 +74,7 @@ public static class Body
         bool herm = gn[g + G.B_HERM] >= 0;
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
         w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)finPairs; w.PEyePairs[i] = (byte)eyePairs;
-        w.PBrain[i] = (byte)brain; w.PHerm[i] = (byte)(herm ? 1 : 0); w.PImmune[i] = imm;
+        w.PBrain[i] = (ushort)brain; w.PHerm[i] = (byte)(herm ? 1 : 0); w.PImmune[i] = imm;
         w.PSexRatio[i] = Organ(gn[g + G.B_SEXRATIO]);
 
         w.PM[i] = m;

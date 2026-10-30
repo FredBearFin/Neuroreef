@@ -42,7 +42,8 @@ public sealed class World
     public readonly float[] TOp;              // last step's operative temperature (°C), for telemetry
     public readonly float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
     public readonly float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
-    public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PBrain, PHerm;
+    public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PHerm;
+    public readonly ushort[] PBrain;       // memory units in use (up to G.NH = 256: a byte held at most 255, so 256 read as 0)
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
     public readonly float[] CareLeft;         // care a mother can still give this step
     public readonly uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
@@ -162,7 +163,7 @@ public sealed class World
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
         PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PFloor = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
         PInsul = new float[c]; PAppend = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
-        PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
+        PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new ushort[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];
         Genome = new sbyte[(long)c * G.LEN];

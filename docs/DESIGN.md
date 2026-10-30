@@ -10,6 +10,12 @@ one class with probability FLOOR_MUT = 5e-5 per birth. Ancestors are spread over
 their mass log-uniform from the floor up to max(4 x floor, 20 on land or 5 in water). The console's AGENTS record carries
 the body's actual size; the split test compares actual sizes.
 
+**Big brains fixed** (2026-10-30, found after the user saw the big-brained founders kill each other at once): the
+brain size was stored in a byte, so a 256-unit brain ran with 0 memory units while paying for 256; it is now a ushort.
+And newborn brains are calm at any size: founder output weights from memory unit h are scaled by BRAIN_START/h beyond
+BRAIN_START, and memory-layer weights from unit h by sqrt(BRAIN_START/h), so a 256-unit newborn strikes about as rarely
+as a 24-unit one (8.1% vs 7.4%) instead of 11%. Its extra units start almost silent; learning or evolution brings them in.
+
 **Changes in Revision O: climate and body heat** (the user, 2026-10-30: "I don't want you to specifically create
 biozones ... come up with a logical system for how the world works ... simulate some physics ... and then this should
 get created by itself ... heat tolerance genes, those should theoretically evolve through the simulation ... It's not

@@ -731,4 +731,29 @@ public class EcologyTests
         for (int i = 0; i < sim.W.Cap; i++) if (sim.W.StageOf[i] != St.Dead) seen.Add(sim.W.Genome[i * G.LEN + G.B_FLOOR]);
         Assert.Equal(K.FLOOR_CLASSES, seen.Count);
     }
+
+    [Fact] // a 256-unit brain really has 256 units (a byte held 255, so 256 read as 0), and a big newborn brain is as calm as a small one
+    public void BigNewbornBrainsAreRealAndCalm()
+    {
+        var w = new World(256, 2); var rs = new Rng.Seq(3);
+        var f = new float[F.N]; var y = new float[G.NIN]; var z = new float[P.N]; var g = new float[P.N];
+        (double gain, double strike) Measure(int units)
+        {
+            double sum = 0, st = 0; int n = 0;
+            for (int i = 0; i < 200; i++)
+            {
+                Brain.RandomGenome(w.GenomeOf(i), 2, 0, (uint)i);
+                w.Genome[i * G.LEN + G.B_BRAIN] = Body.UnitsGene(units);
+                w.Spc[i] = 0; w.StageOf[i] = St.Adult; Body.Express(w, i); Brain.InitLife(w, i);
+                Assert.Equal(units, (int)w.PBrain[i]);
+                for (int t = 0; t < 5; t++) { f[F.BIAS] = 1; for (int k = 1; k < F.N; k++) f[k] = rs.Next(); Brain.Forward(w, i, f, y, z, g); }
+                for (int p = 0; p < P.N; p++) { sum += g[p]; n++; }
+                st += g[P.STRIKE];
+            }
+            return (sum / n, st / 200);
+        }
+        var small = Measure(24); var big = Measure(G.NH);
+        Assert.True(big.gain < small.gain * 1.15, $"big brain mean gain {big.gain:F3} vs {small.gain:F3}");
+        Assert.True(big.strike < small.strike * 1.25, $"big brain P(strike) {big.strike:F3} vs {small.strike:F3}");
+    }
 }
