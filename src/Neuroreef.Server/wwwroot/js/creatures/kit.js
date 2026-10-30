@@ -2,17 +2,17 @@
 //
 // Every part of the body is stored in its own local frame (a unit sphere, a unit cone, a flat outline);
 // the vertex shader (anim.js) places and sizes each part from the organism's genes. A part carries:
-//   aPart  which part it is (P below)
-//   aAux   (side, along, 0): side = +1 left / -1 right for paired parts; along = where on the body the
-//          part sits (front/back for legs, position along the jaw for teeth, along the back for plates)
+//   aAux (side, along, part): side = +1 left / -1 right for paired parts; along = where on the body the
+//          part sits (front/back for legs, position along the jaw for teeth, along the back for plates);
+//          part = the id below. Packing these leaves room for appearance on 16-attribute GPUs.
 // Display only: nothing here affects the simulation.
 
 import * as THREE from 'three';
 
-/** Part ids (the vertex attribute aPart). */
+/** Part ids (aAux.z). */
 export const P = {
   BODY: 0, HEAD: 1, EYE: 2, SNOUT: 3, JAW: 4, TEETH_U: 5, TEETH_L: 6, LEG: 7,
-  FIN_SIDE: 8, FIN_DORSAL: 9, TAIL: 10, TAIL_FIN: 11, WING: 12, PLATE: 13, SCUTE: 14, NECK: 15,
+  FIN_SIDE: 8, FIN_DORSAL: 9, TAIL: 10, TAIL_FIN: 11, WING: 12, PLATE: 13, SCUTE: 14, NECK: 15, FUR: 16, APPEND: 17,
 };
 
 /** Non-indexed positions of a three.js geometry. */

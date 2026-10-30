@@ -20,13 +20,13 @@
 <script type="module">
 // A body gallery for checking the parametric organism body without running the world. Every tile is one
 // gene combination drawn by the same shader the console uses (js/creatures/body.js, anim.js).
-//   ?view=arch      labelled archetype rows (each: four variants near, then the low-detail body)
+//   ?view=arch      labelled appearance sweeps (each: four variants near, then the low-detail body)
 //   ?view=grid      a grid of random gene combinations, seeded by ?seed=N
-//   ?row=N          one archetype row only (close up)
+//   ?row=N          one appearance row only (close up)
 //   (default: both) ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time · ?true=1 true relative sizes
 import * as THREE from 'three';
 import { OrbitControls } from './lib/OrbitControls.js';
-import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize, massOf, locoOf, triangles } from './js/creatures/body.js';
+import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize, massOf, locoOf, triangles, DEFAULT_APPEARANCE } from './js/creatures/body.js';
 
 const q = new URLSearchParams(location.search);
 const row = q.has('row') ? +q.get('row') : -1, view = row >= 0 ? 'arch' : q.get('view') || 'both', seed = +(q.get('seed') || 1), trueSize = q.has('true');
@@ -38,29 +38,26 @@ function mulberry(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = 
 const rnd = mulberry(seed * 7919 + 13);
 const organ = () => (Math.floor(rnd() * 255) - 127 + 127) / 254;     // a uniform int8 gene as an organ size
 
-const ARCH = [
-  ['legless swimmer',        { legs: 0.05, fins: 0.80, wings: 0.00, sight: 0.50, armour: 0.10, strike: 0.30, meat: 0.20, m01: 0.50, legPairs: 1 }, 0x3fa7d6],
-  ['long-legged walker',     { legs: 0.95, fins: 0.05, wings: 0.05, sight: 0.60, armour: 0.15, strike: 0.10, meat: 0.05, m01: 0.65, legPairs: 2 }, 0xc9a24a],
-  ['small winged flyer',     { legs: 0.25, fins: 0.05, wings: 0.85, sight: 0.70, armour: 0.00, strike: 0.10, meat: 0.10, m01: 0.20, legPairs: 3 }, 0x9f7fe0],
-  ['armoured toothed walker',{ legs: 0.55, fins: 0.10, wings: 0.00, sight: 0.50, armour: 0.95, strike: 0.95, meat: 0.90, m01: 0.80, legPairs: 2 }, 0x8a8f5a],
-  ['wader',                  { legs: 0.70, fins: 0.60, wings: 0.10, sight: 0.50, armour: 0.20, strike: 0.40, meat: 0.40, m01: 0.55, legPairs: 3 }, 0x4fc48a],
-  ['settled',                { legs: 0.05, fins: 0.10, wings: 0.00, sight: 0.10, armour: 0.20, strike: 0.00, meat: 0.00, m01: 0.40, legPairs: 1 }, 0xd46f9a],
+const SWEEPS = [
+  ['body proportions', [0, 1, 2]],
+  ['head · neck · tail', [3, 4, 5]],
+  ['limb placement · shape', [6, 7]],
+  ['fin outline', [8]],
+  ['wing outline', [9]],
+  ['pigment · markings', [10, 11, 12, 13, 14, 15]],
 ];
 
 const tiles = [];   // { body, color (hex), x, z, far, label }
-const clamp01 = (v) => Math.max(0, Math.min(1, v));
 let x0 = 0;
 if (view !== 'grid') {
-  ARCH.forEach(([name, base, color], r) => {
+  SWEEPS.forEach(([name, genes], r) => {
     if (row >= 0 && r !== row) return;
     for (let i = 0; i < 5; i++) {
-      let b = { ...base };
-      if (i > 0 && i < 4) {    // variants: the same plan with jittered genes (kept on the same locomotion)
-        const v = {}; for (const k in base) v[k] = clamp01(base[k] + (rnd() - 0.5) * 0.3);
-        v.meat = Math.min(0.95, v.meat); v.finPairs = i === 1 ? 2 : 1; v.eyePairs = i === 2 ? 3 : 1; v.legPairs = i === 3 ? 1 + (base.legPairs % 4) : i === 2 ? 1 + ((base.legPairs + 1) % 4) : base.legPairs;   // other leg counts
-        if (locoOf(v.legs, v.fins, v.wings) === locoOf(base.legs, base.fins, base.wings)) b = v;
-      }
-      tiles.push({ body: b, color, x: i * 10 + (i === 4 ? 1 : 0), z: r * 10, far: i === 4, row: r === 0 || i === 0 ? name : null });
+      const appearance = new Float32Array(DEFAULT_APPEARANCE), u = (i === 4 ? 0 : i) / 3;
+      appearance[11] = 0.65;
+      for (let j = 0; j < genes.length; j++) appearance[genes[j]] = j % 2 ? 1 - u : u;
+      const b = { legs: 0.65, fins: 0.65, wings: 0.65, sight: 0.5, armour: 0.3, strike: 0.3, meat: 0.2, m01: 0.5, legPairs: 2, finPairs: 2, eyePairs: 1, fur: r === 0 ? u : 0, append: r === 1 ? u : 0, appearance };
+      tiles.push({ body: b, color: 0x8aa0b5, x: i * 10 + (i === 4 ? 1 : 0), z: r * 10, far: i === 4, row: i === 0 ? name : null });
     }
   });
   x0 = 62;
@@ -68,7 +65,7 @@ if (view !== 'grid') {
 if (view !== 'arch') {
   const cols = 6, rows = view === 'grid' ? 5 : 6;
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    const b = { legs: organ(), fins: organ(), wings: organ(), sight: organ(), armour: organ(), strike: organ(), meat: Math.min(0.95, organ()), m01: organ(), legPairs: 1 + Math.floor(rnd() * 4), finPairs: 1 + Math.floor(rnd() * 4), eyePairs: 1 + Math.floor(rnd() * 4) };
+    const b = { legs: organ(), fins: organ(), wings: organ(), sight: organ(), armour: organ(), strike: organ(), meat: Math.min(0.95, organ()), m01: organ(), legPairs: 1 + Math.floor(rnd() * 4), finPairs: 1 + Math.floor(rnd() * 4), eyePairs: 1 + Math.floor(rnd() * 4), fur: organ(), append: organ(), appearance: Float32Array.from({ length: 16 }, organ) };
     const color = new THREE.Color().setHSL(rnd(), 0.55, 0.5).getHex();
     tiles.push({ body: b, color, x: x0 + c * 10, z: r * 10, far: false });
   }
@@ -84,6 +81,7 @@ const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000);
 const controls = new OrbitControls(camera, canvas);
 
 const mat = bodyMaterial(), nearGeo = bodyGeometry('near'), farGeo = bodyGeometry('far');
+mat.userData.uniforms.uSpeciesOverlay.value = q.has('overlay') ? 1 : 0;
 const N = bodyMesh(nearGeo, mat, tiles.length), F = bodyMesh(farGeo, mat, tiles.length);
 scene.add(N.mesh, F.mesh);
 let nn = 0, nf = 0;
@@ -99,7 +97,7 @@ tiles.forEach((tl, i) => {
   ground.rotation.x = -Math.PI / 2; ground.position.set(tl.x, -0.01, tl.z); scene.add(ground);
   const l = document.createElement('div'); l.className = 'lab';
   l.innerHTML = `<b>${loco}</b> · mass ${mass < 1 ? mass.toFixed(2) : mass.toFixed(1)}${tl.far ? ' · low detail' : ''}<br>` +
-    `legs ${f2(b.legs)} ×${2 * b.legPairs} fins ${f2(b.fins)} ×${2 * (b.finPairs || 1)} wings ${f2(b.wings)}<br>sight ${f2(b.sight)} ×${2 * (b.eyePairs || 1)} armour ${f2(b.armour)} strike ${f2(b.strike)} meat ${f2(b.meat)}`;
+    `legs ${f2(b.legs)} ×${2 * b.legPairs} fins ${f2(b.fins)} ×${2 * (b.finPairs || 1)} wings ${f2(b.wings)}<br>fur ${f2(b.fur)} appendages ${f2(b.append)} · appearance ${Array.from(b.appearance, f2).join(' ')}`;
   document.body.append(l); labels.push([l, new THREE.Vector3(tl.x, 0, tl.z + 3.0)]);
   if (tl.row && tl.x === 0) {
     const r = document.createElement('div'); r.className = 'row'; r.textContent = tl.row; document.body.append(r);
@@ -108,7 +106,7 @@ tiles.forEach((tl, i) => {
 });
 commitBodies(N, nn); commitBodies(F, nf);
 document.getElementById('info').textContent = `Neuroreef bodies · one parametric body from genes · near ${triangles(nearGeo)} triangles, far ${triangles(farGeo)} · ` +
-  `?view=arch|grid · ?row=N · ?seed=N · ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time · ?true=1 true relative sizes`;
+  `?view=arch|grid · ?row=N · ?seed=N · ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time · ?true=1 true sizes · ?overlay=1 species colours`;
 
 // frame all tiles
 const xs = tiles.map((t) => t.x), zs = tiles.map((t) => t.z);

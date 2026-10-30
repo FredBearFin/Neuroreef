@@ -11,8 +11,9 @@ namespace Neuroreef.Tests;
 
 public class EcologyTests
 {
-    [Fact] // NR-315, NR-316: life starts from random ancestors on land and in water, each its own clade, each able to live on what its home range grows (Revision P)
-    public void AncestorsAreRandomPlantEatersOfTheirRealm()
+    [Fact] // NR-315, NR-316: random ancestors are filtered for viability, never given realm body templates: each its own
+           // clade, each starting where its realm allows, nearly each able to live on what its home range grows (Revision P)
+    public void AncestorsAreRandomViableBodiesOfTheirRealm()
     {
         using var sim = new Simulation(16384, 7, 1);
         var w = sim.W;
@@ -25,6 +26,7 @@ public class EcologyTests
             int s = w.Spc[i];
             bool land = s < K.ANCESTORS_LAND;
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
+            Assert.True(w.CellAllows(i, World.FIdx(w.X[i], w.Y[i]), w.RealmOf(i) & (land ? Realm.Land : Realm.Water)));
             var c = w.Sp[s];
             if (!seen[s]) { seen[s] = true; viable[s] = Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR) > 0f; }
             Assert.True(w.PStrike[i] <= 0.65f * K.STRIKE_MAX, $"clade {s} strike {w.PStrike[i]}");   // weapons and armour start in the same range (Revision L)
@@ -501,13 +503,12 @@ public class EcologyTests
         Assert.Equal(basal0 + extra, w.PBasal[i], 4);
     }
 
-    [Fact] // every random ancestor can digest a primary producer available in its realm
+    [Fact] // raw draws have no assigned realm; diet expression follows the realm their organs permit
     public void AncestorsCanDigestRealmProducers()
     {
         var w = new World(16, 1);
         foreach (bool land in new[] { true, false })
         {
-            int producer = land ? (int)Pool.Grass : (int)Pool.Phyto;
             for (int seed = 0; seed < 32; seed++)
             {
                 var body = new sbyte[G.NBODY];
@@ -515,8 +516,13 @@ public class EcologyTests
                 body.CopyTo(new Span<sbyte>(w.Genome, G.BODY, G.NBODY));
                 Body.Express(w, 0);
 
-                Assert.True(Body.Reachable((Realm)w.PRealm[0], producer), $"seed {seed}, land {land}: producer not in realm");
-                Assert.True(w.PDiet[producer] > 0f, $"seed {seed}, land {land}: producer not digestible");
+                float producers = 0f;
+                for (int p = 0; p <= (int)Pool.Phyto; p++)
+                {
+                    if (Body.Reachable(w.RealmOf(0), p)) producers += w.PDiet[p];
+                    else Assert.Equal(0f, w.PDiet[p]);
+                }
+                Assert.True(producers > 0f, $"seed {seed}, land {land}: no digestible producer");
             }
         }
     }

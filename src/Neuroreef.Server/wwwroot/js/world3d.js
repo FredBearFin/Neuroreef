@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { agentAt } from './net.js';
 import { merge } from './creatures/kit.js';
-import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize } from './creatures/body.js';
+import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize, appearanceColor } from './creatures/body.js';
 
 const RELIEF = 55;
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
@@ -315,6 +315,8 @@ export class World3D {
         e.fly = o.loco === 'Fly'; e.swim = o.loco === 'Swim';
       }
       e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
+      e.fur = o.fur; e.append = o.append;
+      (e.appearance ||= new Float32Array(16)).set(o.appearance);
       e.call = o.call; e.call2 = o.call2; e.call3 = o.call3; if (o.call) e.callT = now;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
@@ -654,6 +656,7 @@ export class World3D {
     const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0];
     const camX = this.camera.position.x, camZ = this.camera.position.z, near2 = NEAR_DIST * NEAR_DIST;
     this.bodyMat.userData.uniforms.uTime.value = now / 1000;
+    this.bodyMat.userData.uniforms.uSpeciesOverlay.value = this.speciesOverlay ? 1 : 0;
     let nn = 0, nf = 0, ne = 0;
     // with tens of thousands of organisms, draw every near one and a sample of the far ones (by serial, so the
     // same ones stay drawn from frame to frame): far bodies are a few pixels, and the frame time stays bounded
@@ -680,7 +683,9 @@ export class World3D {
         if (ne >= 4096) continue;
         p.set(x, this.heightAt(x, y) + 0.3, y); q.identity(); s.set(1, 0.8, 1);
         this.eggs.setMatrixAt(ne, m.compose(p, q, s));
-        this.eggs.setColorAt(ne, eggCol.setRGB(rgb[ci], rgb[ci + 1], rgb[ci + 2]).lerp(white, 0.6));
+        if (this.speciesOverlay) eggCol.setRGB(rgb[ci], rgb[ci + 1], rgb[ci + 2]);
+        else appearanceColor(e, eggCol);
+        this.eggs.setColorAt(ne, eggCol.lerp(white, 0.6));
         ne++; continue;
       }
       const size = e.size, sc = size * (e.stage === 1 ? 0.55 : 1);
@@ -792,4 +797,3 @@ function treeGeometry() {
   const crown2 = new THREE.ConeGeometry(0.7, 1.6, 7); crown2.translate(0, 3.3, 0);
   return merge([[trunk, 0x5a3d26], [crown, 0x1f5a2a], [crown2, 0x2a6e32]]);
 }
-

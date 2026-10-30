@@ -2,10 +2,21 @@
 
 An artificial-life ecosystem built on the energy cycle, with **open-ended evolution**. Only the laws of
 physics, physiology, plants, water and weather are designed. Life is not: it starts from 10 random
-ancestors (6 on land, 4 in water), all simple plant-eaters. Every organism's body (size, legs, fins,
+ancestors (6 on land, 4 in water), with random diets screened against local food. Every organism's body (size, legs, fins,
 wings, armour, weapons, senses, diet, how it reproduces) comes from its own genes, and its brain learns
 during life and evolves across generations. New species form on their own when lineages diverge.
 Whatever predators, scavengers, fliers or anything else exist, evolution produced.
+
+Appearance is inherited too: body proportions, head/neck/tail dimensions, appendage placement and
+shape, pigmentation and markings mutate and recombine with the genome. Insulation controls the
+visible covering. Different seeds start different lineages; related offspring retain family
+resemblance. Colours are genetic by default, with optional clade colours for identification.
+Locomotion animates the body but does not choose a preset animal silhouette or diet-based colour.
+The developmental geometry still imposes limits; evolution need not produce different adaptations
+in similar environments.
+
+The expanded genome requires version-9 gene banks and checkpoints; older saves are rejected.
+Run a new prehistory rather than loading a bank from an earlier version.
 
 - **Simulation:** C# / .NET 8, written in a fixed-memory, fixed-step, deterministic style (the same
   seed gives the same run).
