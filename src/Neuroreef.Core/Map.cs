@@ -12,8 +12,8 @@ public static class Map
     public static int FW { get; private set; } = K.FW;        // field grid side (cells)
     public static int GW { get; private set; } = K.GW;        // spatial-hash grid side (cells)
 
-    public static readonly int[] Sizes = { 256, 512, 1024 };
-    public static readonly string[] Names = { "valley", "region", "continent" };
+    public static readonly int[] Sizes = { 256, 512, 1024, 2048 };
+    public static readonly string[] Names = { "valley", "region", "continent", "supercontinent" };
 
     /// <summary>Set the map side (a multiple of HCELL). Only before any World is created.</summary>
     public static void Set(int side)
