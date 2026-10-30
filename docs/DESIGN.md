@@ -640,8 +640,8 @@ against 22,309 with L2 after 8,000 steps.) Hunters, scavengers, parasites, flyer
 
 ### 6.3 Bodies from genes (Revision F, NR-320)
 
-The body genes (G.BODY, 38 bytes) are mapped to absolute ranges (`Body.Express`). Every trait has a
-cost:
+The body genes (`G.BODY`, `G.NBODY` bytes) are mapped to absolute ranges (`Body.Express`).
+Functional traits have physical costs:
 
 | Trait | Gene → value | Cost / effect |
 |---|---|---|
@@ -664,6 +664,21 @@ cost:
 | litter | 1..LITTER_MAX | the mother's energy limits how many she makes |
 | newborn share | log BIRTH_LO..BIRTH_HI | big young cost more and grow up sooner |
 | care | 0..1 | §7.8 |
+
+**Inherited appearance.** Sixteen genes before the final MHC block independently control trunk
+length/width/height, head size, neck/tail length, limb placement/shape, fin/wing shape, pigmentation
+and markings (see ICD record bytes 26–41). They use the normal body-gene inheritance and mutation
+path. Pigmentation and markings can drift without a dedicated fitness bonus; morphology can
+affect locomotion. Founder draws span the allowed appearance and locomotion-organ ranges without
+land/water anatomical presets; habitat and feeding viability filter candidate ancestors.
+Insulation and heat-shedding appendages also start with random values.
+
+The renderer develops the same inherited genes into proportions, appendages, covering and
+body-local markings. Locomotion labels choose animation, not anatomical proportions. Meat-eating
+does not prescribe a colour, and a clade split cannot repaint the animals. Clade colours remain
+identification metadata and an optional overlay. Shared primitive geometry, bilateral pairing
+and bounded gene ranges remain developmental constraints, not unrestricted topology evolution.
+The expanded layout uses gene-bank/checkpoint version 9 and AGENTS format 6.
 
 Thirst rises only on land cells, by C_THIRST·M^EXP_THIRST·(1 − WATER_ECON·g)·(1 − SOIL_WATER·moisture),
 where g is the water-economy gene: any organism in water draws water from it, and damp ground dries an
@@ -1220,21 +1235,18 @@ following:
 
 Cameras: overview, follow-cam (lineage), ride-along.
 
-**Animal models** (`wwwroot/js/creatures/`, display only). Each species has two models:
-- **Near:** a detailed, animated model for animals within 90 units of the camera, up to 1,500 per
-  species.
-  - A model is a list of parts. Each part is tagged as body, head, a leg, a wing, the tail, the jaw or
-    a swarm member, and has a pivot and a colour role. Colours come from the species colour: the body
-    is countershaded, and eyes, horns and beaks have their own roles.
-  - The vertex shader moves the parts from three things per animal: speed (gait), a phase taken from
-    its serial, and the action bits of the AGENTS frame. Legs trot in step with speed, wings flap,
-    tails and fish bodies sway, the head dips to eat, the jaw opens and the body lunges on a strike,
-    and swarm members wander.
-  - There are no skeletons, so each species is still one instanced draw call per detail level.
-- **Far:** the simple shape, in one colour, for everything else.
+**Animal models** (`wwwroot/js/creatures/`, display only). Organisms share instanced primitive
+geometry at two detail levels rather than species-specific models. Each part is tagged as trunk,
+head, neck, eye, limb, fin, wing, tail or armour. The vertex shader develops the organism's inherited
+appearance genes into proportions and appendage shapes; genetic pigmentation, body-local markings
+and insulation determine its surface. Optional clade colours identify related populations without
+changing those genes.
 
-`gallery.html` shows every species near and far without running the world. The models read nothing
-back into the simulation.
+The shader animates parts using speed (gait), a serial-derived phase and the action bits of the
+AGENTS frame. Legs trot, wings flap, swimming bodies sway, heads dip to eat and jaws open on strikes.
+The phase affects motion only, not inherited anatomy or pigmentation. Near and far meshes use the
+same gene interpretation; far geometry omits small details. The renderer never feeds values back
+into the simulation: physical morphology effects are expressed separately by `Body.Express`.
 
 ## 14. Code organisation
 

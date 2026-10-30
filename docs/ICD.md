@@ -1,6 +1,6 @@
 # NEUROREEF 2 — INTERFACE CONTROL DOCUMENT
 
-Document NR-ICD-001, Revision F (AGENTS format 5; Revision O fills record byte 25 and adds field layers). This is the link between the simulation server and the browser
+Document NR-ICD-001, Revision G (AGENTS format 6 adds inherited appearance genes). This is the link between the simulation server and the browser
 console. Encoders: `src/Neuroreef.Core/Snapshot.cs` (AGENTS) and `src/Neuroreef.Server/Wire.cs`
 (all others). Decoder: `src/Neuroreef.Server/wwwroot/js/net.js`. Test: `tests/Neuroreef.Tests/WireTests.cs`.
 
@@ -39,7 +39,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | Offset | Type | Field |
 |---|---|---|
 | 8 | u32 | count n |
-| 12 | 26 B × n | records (every living organism except embryos); header byte 1 = format version 5 |
+| 12 | 42 B × n | records (every living organism except embryos); header byte 1 = format version 6 |
 
 Each record:
 
@@ -66,6 +66,12 @@ Each record:
 | 23 | u8 | eye pairs (1..4) |
 | 24 | u8 | bits 0–3 the second sound of its utterance, bits 4–7 the third (0 none; Revision N) |
 | 25 | u8 | bits 4–7 fur (insulation gene × 15), bits 0–3 appendages (× 15) (Revision O; reserved 0 before) |
+| 26–41 | i8[16] | inherited appearance genes, in the order below; each maps to 0..1 as (g+127)/254 |
+
+Appearance genes: length, width, height, head size, neck length, tail length, limb placement,
+limb shape, fin shape, wing shape, hue, saturation, lightness, markings, marking scale,
+and marking hue. These are organism genes, not values generated from serials or clade labels.
+The first 26 record bytes retain their format-5 meaning.
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 

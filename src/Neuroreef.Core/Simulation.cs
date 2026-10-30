@@ -78,7 +78,7 @@ public sealed class Simulation : IDisposable
             // Nothing says which diet or size: a water animal that eats grass, or a meat-eater with nothing to eat,
             // is simply not among the ancestors (2026-10-30: such ancestors starved in the first few hundred steps)
             var anc = new sbyte[G.LEN];
-            int bestT = 0; float bestCap = -1f;
+            int bestT = -1; float bestCap = 0f;
             for (int t = 0; t < K.ANCESTOR_TRIES; t++)
             {
                 Ancestor(anc, seed, a, t, land, big);
@@ -86,6 +86,7 @@ public sealed class Simulation : IDisposable
                 if (cap > bestCap) { bestCap = cap; bestT = t; }
                 if (cap >= K.FOUND_MIN) break;
             }
+            if (bestT < 0) continue;   // no viable draw: never fall back to an incompatible or unfed body
             Ancestor(anc, seed, a, bestT, land, big);
             int units = Body.Units(anc[G.B_BRAIN]);
             // founders: FOUND_FILL of what its home range (widened for a big body, Life.RangeFor) can feed at this
@@ -99,7 +100,7 @@ public sealed class Simulation : IDisposable
                 anc.CopyTo(tmpl, 0);
                 Brain.VaryBrain(tmpl, seed, key, units);
                 Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
-                Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
+                Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy, realm);
             }
         }
     }
@@ -118,7 +119,7 @@ public sealed class Simulation : IDisposable
     {
         range = K.HOME_R * Map.W;
         if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
-        int c = Life.Found(w, clade, genome, true, key, gx, gy);
+        int c = Life.Found(w, clade, genome, true, key, gx, gy, realm);
         if (c < 0) return 0f;
         range = Life.RangeFor(w, c, hx, hy, out float cap);
         Life.FreeSlot(w, c);

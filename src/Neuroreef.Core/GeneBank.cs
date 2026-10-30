@@ -14,7 +14,7 @@ namespace Neuroreef;
 
 public static class GeneBank
 {
-    public const ushort Version = 8;   // 8: breeding-condition gene   // 7: endothermy gene (Revision P)   // 6: size-class floor gene   // 5: heat senses, warmer/cooler steering, insulation and appendage genes (Revision O); 3: genome length as int32 (Revision M: 256-unit brains); 4: utterance senses, gaze following and vocal-learning genes (Revision N)
+    public const ushort Version = 9;   // 9: inherited appearance genes; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
 
     public sealed class CladeInfo
     {

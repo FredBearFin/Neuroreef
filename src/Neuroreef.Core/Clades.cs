@@ -105,10 +105,10 @@ public static class Clades
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
         for (int k = 0; k < G.NBODY; k++) body[k] = 0;
         int B = G.BODY;
-        // size class: its floor, and a mass log-uniform from the floor up to 20 on land, 5 in water (at least 4x the floor)
+        // Realm is a founding viability constraint, not a body template.
         body[G.B_FLOOR - B] = (sbyte)Math.Clamp(floorClass, 0, K.FLOOR_CLASSES - 1);
-        float fl = Body.Floors[body[G.B_FLOOR - B]], top = MathF.Min(K.MASS_HI, MathF.Max(4f * fl, land ? 20f : 5f));
-        body[G.B_MASS - B] = G.ToGeneLog(fl * MathF.Pow(top / fl, U(0)), K.MASS_LO, K.MASS_HI);
+        float fl = Body.Floors[body[G.B_FLOOR - B]];
+        body[G.B_MASS - B] = G.ToGeneLog(fl * MathF.Pow(K.MASS_HI / fl, U(0)), K.MASS_LO, K.MASS_HI);
         body[G.B_SPEED - B] = (sbyte)((U(1) - 0.5f) * 60f);
         body[G.B_SIGHT - B] = (sbyte)((U(2) - 0.5f) * 60f);
         // armour and weapons from the same range, so neither side of an arms race starts ahead (Revision L, ecology review)
@@ -116,9 +116,9 @@ public static class Clades
         body[G.B_STRIKE - B] = Lin(4, -1f, 0f);
         body[G.B_LITTER - B] = Lin(5, -0.8f, 0.4f);
         body[G.B_CARE - B] = Lin(6, -1f, 0.2f);
-        body[G.B_LEGS - B] = land ? Lin(7, -0.2f, 0.6f) : Lin(7, -1f, -0.6f);   // land: legs above the walking threshold
-        body[G.B_FINS - B] = land ? Lin(8, -1f, -0.6f) : Lin(8, -0.2f, 0.6f);   // water: fins above the swimming threshold
-        body[G.B_WINGS - B] = Lin(9, -1f, -0.6f);
+        body[G.B_LEGS - B] = Lin(7, -1f, 1f);
+        body[G.B_FINS - B] = Lin(8, -1f, 1f);
+        body[G.B_WINGS - B] = Lin(9, -1f, 1f);
         body[G.B_FOV - B] = (sbyte)((U(10) - 0.3f) * 160f);
         body[G.B_SEX - B] = (sbyte)(U(11) < 0.5f ? -40 : 40);
         body[G.B_LIVE - B] = (sbyte)(U(12) < 0.5f ? -40 : 40);
@@ -140,10 +140,10 @@ public static class Clades
         // the others start without it (genes: either can evolve)
         body[G.B_IMIT - B] = (sbyte)(voiced ? 0 : -127);
         body[G.B_IMIT_AGE - B] = (sbyte)(voiced ? 127 : -127);
-        // body heat (Revision O): every ancestor starts with a thin coat and middling appendages, thermoneutral at about
-        // 15-32 °C near T_REF at M = 1; founder variation and evolution do the rest (no tolerance is given)
-        body[G.B_INSUL - B] = (sbyte)MathF.Round(K.FOUND_INS * 254f - 127f);
-        body[G.B_APPEND - B] = (sbyte)MathF.Round(K.FOUND_APP * 254f - 127f);
+        body[G.B_INSUL - B] = Lin(92, -1f, 1f);
+        body[G.B_APPEND - B] = Lin(93, -1f, 1f);
+        for (int k = 0; k < G.NAPPEARANCE; k++)
+            body[G.APPEARANCE - B + k] = (sbyte)(Rng.Hash(seed, (uint)ancestor, (uint)k, Rs.Founder + 10000u) % 255u - 127);
         // warm- or cold-blooded, or between (Revision P): anything; what it pays for and gains from it is physics (Heat.Core)
         body[G.B_ENDO - B] = (sbyte)((U(90) * 2f - 1f) * 127f);
         // breeding condition (Revision P): anything from breeding on a thin reserve (many young, weak mothers) to waiting

@@ -1,6 +1,6 @@
 // The link to the simulation (docs/ICD.md). Decodes frames into plain objects and hands them to listeners.
 
-export const REC = 26;   // bytes per AGENTS record (header byte 1 = 5)
+export const REC = 42;   // bytes per AGENTS record (header byte 1 = 6)
 export const T_WORLD = 1, T_AGENTS = 2, T_FIELDS = 3, T_TELEMETRY = 4, T_HISTORY = 5, T_PROBE = 6;
 
 export class Link {
@@ -66,7 +66,7 @@ export class Link {
   }
 }
 
-/** Decode one AGENTS record (26 bytes) at index k. */
+/** Decode one format-6 AGENTS record; reuse out and its appearance buffer. */
 export function agentAt(a, k, world, out) {
   const o = k * REC, dv = a.dv, b = a.bytes;
   out.x = dv.getUint16(o, true) * world / 65536;
@@ -93,6 +93,8 @@ export function agentAt(a, k, world, out) {
   out.call = b[o + 21] >> 4;                             // the first sound of its utterance this step: 0 none, 1..8
   out.call2 = b[o + 24] & 15; out.call3 = b[o + 24] >> 4; // its second and third sounds (Revision N), 0 none
   out.fur = (b[o + 25] >> 4) / 15; out.append = (b[o + 25] & 15) / 15;   // fur and appendages, 0..1 (Revision O)
+  const appearance = out.appearance ||= new Float32Array(16);
+  for (let j = 0; j < 16; j++) appearance[j] = (dv.getInt8(o + 26 + j) + 127) / 254;
   out.loco = LOCO[out.locoCode] || locoOf(out.legs, out.fins, out.wings);
   return out;
 }

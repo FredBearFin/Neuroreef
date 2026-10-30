@@ -15,7 +15,7 @@ public sealed class Snapshot
     int _readyLen, _readLen;
     int _fresh;                 // 1 when _ready holds a frame the reader has not taken
     public volatile bool Requested;
-    public const int REC = 26;  // bytes per agent record (ICD §1, AGENTS format 5)
+    public const int REC = 42;  // bytes per agent record (ICD §1, AGENTS format 6)
 
     public Snapshot(World w)
     {
@@ -54,7 +54,7 @@ public sealed class Snapshot
     int Encode(byte[] b)
     {
         var w = _w;
-        b[0] = 0x02; b[1] = 5; b[2] = 0; b[3] = 0;
+        b[0] = 0x02; b[1] = 6; b[2] = 0; b[3] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(4), (uint)w.Step);
         int n = 0, o = 12;
         float sx = 65536f / Map.W;
@@ -94,6 +94,7 @@ public sealed class Snapshot
             span[22] = w.PFinPairs[i]; span[23] = w.PEyePairs[i];        // fin pairs, eye pairs (1..4)
             span[24] = (byte)(w.Call[cb + 1] | (w.Call[cb + 2] << 4));  // its second and third sounds (Revision N)
             span[25] = (byte)(((int)(w.PInsul[i] * 15f + 0.5f) << 4) | (int)(w.PAppend[i] * 15f + 0.5f));   // fur (high 4 bits) and appendages (low), 0..15 (Revision O)
+            for (int k = 0; k < G.NAPPEARANCE; k++) span[26 + k] = (byte)w.Genome[g + G.APPEARANCE + k];
             o += REC; n++;
         }
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(8), (uint)n);

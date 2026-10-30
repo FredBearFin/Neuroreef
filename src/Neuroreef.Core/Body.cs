@@ -108,9 +108,17 @@ public static class Body
         float v = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * fs / (1f + drag);
         float vLand = v * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
+        float length = Organ(gn[g + G.B_LENGTH]) - 0.5f, width = Organ(gn[g + G.B_WIDTH]) - 0.5f;
+        float height = Organ(gn[g + G.B_HEIGHT]) - 0.5f, limbShape = Organ(gn[g + G.B_LIMB_SHAPE]) - 0.5f;
+        // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
+        // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
+        float streamlining = 1f + 0.2f * length - 0.15f * width - 0.15f * height;
+        vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
+        vWater *= streamlining * (1f - 0.2f * limbShape * legs);
+        w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
         bool flies = wings * K.WING_LIFT >= MathK.Cbrt(m);
         if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
-        float vAir = flies ? v * K.FLY_SPEED * MathF.Min(1f, wings * K.WING_LIFT / MathK.Cbrt(m) - 0.5f) : 0f;
+        float vAir = flies ? v * K.FLY_SPEED * MathF.Min(1f, wings * K.WING_LIFT / MathK.Cbrt(m) - 0.5f) * streamlining : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }

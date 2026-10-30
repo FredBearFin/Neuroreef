@@ -114,9 +114,17 @@ public static class G
         B_FLOOR = B_CARE + 23,                   // body-plan size class (0..FLOOR_CLASSES-1): the smallest it can be; copied exactly, rarely steps a class
         B_ENDO = B_CARE + 24,                    // endothermy (0..1): how far it keeps its core above its surroundings (0 cold-blooded, 1 warm-blooded at T_BODY) (Revision P)
         B_BREEDE = B_CARE + 25,                  // breeding condition: the share of its reserve it needs before it breeds (READY_LO..READY_HI) (Revision P)
-        B_MHC = B_CARE + 26;                     // NMHC recognition genes: a pathogen strain must match them to infect (always last)
+        APPEARANCE = B_CARE + 26,
+        B_LENGTH = APPEARANCE, B_WIDTH = APPEARANCE + 1, B_HEIGHT = APPEARANCE + 2,
+        B_HEAD = APPEARANCE + 3, B_NECK = APPEARANCE + 4, B_TAIL = APPEARANCE + 5,
+        B_LIMB_POS = APPEARANCE + 6, B_LIMB_SHAPE = APPEARANCE + 7,
+        B_FIN_SHAPE = APPEARANCE + 8, B_WING_SHAPE = APPEARANCE + 9,
+        B_HUE = APPEARANCE + 10, B_SAT = APPEARANCE + 11, B_LIGHT = APPEARANCE + 12,
+        B_PATTERN = APPEARANCE + 13, B_PATTERN_SCALE = APPEARANCE + 14, B_PATTERN_HUE = APPEARANCE + 15,
+        B_MHC = APPEARANCE + NAPPEARANCE;         // NMHC recognition genes: a pathogen strain must match them to infect (always last)
+    public const int NAPPEARANCE = 16;
     public const int NMHC = 4;
-    public const int NBODY = B_MHC + NMHC - BODY;   // 50
+    public const int NBODY = B_MHC + NMHC - BODY;   // 67
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
     public const int NC = 11;                    // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;

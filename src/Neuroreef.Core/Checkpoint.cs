@@ -17,7 +17,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 8;   // 8: breeding-condition gene   // 7: endothermy gene (Revision P)   // 6: size-class floor gene   // 5: climate strength, temperature and body heat (Revision O); 2: the map size and nature settings follow the header; 3: ponds, water in food, water-economy gene; 4: utterances and vocal learning (Revision N)
+    public const ushort Version = 9;   // 9: inherited appearance genes; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     // classes whose state is saved by walking their fields; any other reference field is not state (links, buffers rebuilt each step)
