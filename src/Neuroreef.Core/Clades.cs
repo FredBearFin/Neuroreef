@@ -105,7 +105,7 @@ public static class Clades
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
         for (int k = 0; k < G.NBODY; k++) body[k] = 0;
         int B = G.BODY;
-        body[G.B_MASS - B] = G.ToGeneLog(land ? 0.3f * MathF.Pow(20f / 0.3f, U(0)) : 0.1f * MathF.Pow(50f, U(0)), K.MASS_LO, K.MASS_HI);   // log-uniform: land 0.3-20, water 0.1-5 (Revision L)
+        body[G.B_MASS - B] = G.ToGeneLog(K.MASS_LO * MathF.Pow((land ? 20f : 5f) / K.MASS_LO, U(0)), K.MASS_LO, K.MASS_HI);   // log-uniform from the floor: land up to 20, water up to 5
         body[G.B_SPEED - B] = (sbyte)((U(1) - 0.5f) * 60f);
         body[G.B_SIGHT - B] = (sbyte)((U(2) - 0.5f) * 60f);
         // armour and weapons from the same range, so neither side of an arms race starts ahead (Revision L, ecology review)

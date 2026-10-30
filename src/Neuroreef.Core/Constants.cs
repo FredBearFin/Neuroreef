@@ -159,7 +159,7 @@ public static class K
     [K("Body", "speed loss per unit of extra armour", "-", "HT")] public const float ARMOUR_DRAG = 0.2f;
 
     // ---------------------------------------------------------------- 5c. bodies from genes (DESIGN §6.3, Revision F)
-    [K("Body", "smallest body mass a mass gene can give", "M", "ECO: Revision M, ecology review: the agents are animals with brains; smaller consumers live in the fields (algae, decomposers). 0.01 gave tiny bodies 32x the numbers from the same food")] public const float MASS_LO = 0.1f;
+    [K("Body", "smallest body mass a mass gene can give", "M", "designed: the user (2026-10-30): the smallest body is 1 (0.1 before; 0.01 before Revision M); mass still evolves continuously above it")] public const float MASS_LO = 1f;
     [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units)")] public const float MASS_HI = 40f;
     [K("Body", "organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth)", "-", "-")] public const float LIMB_MIN = 0.3f;
     [K("Body", "basal cost per unit of fin size, or of leg size per pair of legs", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;

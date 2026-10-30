@@ -3,6 +3,9 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Body-size floor** (the user, 2026-10-30): MASS_LO = 1 (was 0.1). Mass still evolves continuously above it; ancestors
+are log-uniform from the floor up to 20 on land and 5 in water.
+
 **Changes in Revision O: climate and body heat** (the user, 2026-10-30: "I don't want you to specifically create
 biozones ... come up with a logical system for how the world works ... simulate some physics ... and then this should
 get created by itself ... heat tolerance genes, those should theoretically evolve through the simulation ... It's not
