@@ -32,6 +32,7 @@ public class ClimateTests
     }
 
     [Fact] // Climate = 0 is the world without a climate, bit for bit: the hash of a year of fields made by Revision N's code
+    [BigWorld]
     public void NoClimateIsBitIdenticalToBefore()
     {
         ulong h = With(0f, () =>
@@ -331,6 +332,7 @@ public class ClimateTests
     }
 
     [Fact] // a frozen pond cannot be drunk
+    [BigWorld]
     public void FrozenPondsAreNotDrinkable()
     {
         With(K.CLIMATE, () =>

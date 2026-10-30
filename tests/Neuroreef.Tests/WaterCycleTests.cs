@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Neuroreef.Tests;
 
+[BigWorld]
 public class WaterCycleTests
 {
     static T With<T>(float climate, Func<T> f)

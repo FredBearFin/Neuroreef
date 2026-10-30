@@ -469,6 +469,7 @@ public class EcologyTests
     }
 
     [Fact] // NR-303
+    [BigWorld]
     public void ThirstKillsLandAnimalsThatDoNotDrink()
     {
         var w = new World(256, 14); Terrain.Build(w);
@@ -629,6 +630,7 @@ public class EcologyTests
 
     [Fact] // Revision K, the water cycle: ponds fill from their basins' runoff in a wet year and dry in a drought (bar those that
            // groundwater feeds); drinking water is measured to them
+    [BigWorld]
     public void PondsFillInTheWetAndDryInTheDry()
     {
         // the law of rain and runoff alone (with a climate, warm ponds also evaporate faster and cold ones freeze;

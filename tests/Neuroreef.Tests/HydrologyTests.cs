@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Neuroreef.Tests;
 
+[BigWorld]
 public class HydrologyTests
 {
     /// <summary>The relief of world seed before and after the generation's erosion, with its rain.</summary>

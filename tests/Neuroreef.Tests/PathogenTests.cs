@@ -116,6 +116,7 @@ public class PathogenTests
     }
 
     [Fact] // the reservoir: waterborne pathogens run down the river network, never up it
+    [BigWorld]
     public void WaterbornePathogensTravelDownstream()
     {
         using var sim = new Simulation(64, 84, 1, empty: true);
