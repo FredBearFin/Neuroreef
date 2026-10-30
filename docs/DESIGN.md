@@ -63,6 +63,16 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   are the efficient search for what is out of sight; Bartumeus et al. 2005). And the share of its reserve a body needs
   before it breeds is a gene (B_BREEDE, READY_LO 0.25 .. READY_HI 0.9; it was a fixed 0.6): selection can find income
   breeders that breed thin and often, or capital breeders that wait. "breeding condition" is a trait in the charts.
+- *Diets differ again, and there are more ancestors.* The staple diet given to every ancestor (grass on land,
+  plankton in water) put them all in one niche; it is removed, as the viability test already makes every ancestor a
+  body its range can feed. ANCESTORS_LAND 10 and ANCESTORS_WATER 6 (16, the most the clade slots allow; was 6 and 4):
+  most random ancestors fail, and a prehistory of 10 left 1-4 lineages to found the world.
+- *Song is learned when young.* Matching remembered tutors reinforced calling for life, and the match's running mean
+  started at 0, so every early call was rewarded: voiced animals came to call on ~80% of steps, costing ~20% of
+  basal on top of the big brain's 13-17%. The match now reinforces only in the sensitive period (IMIT_AGE gene), as
+  song practice does in young songbirds, and its running mean starts at the first match. (Calling still rises to
+  ~65% of steps by plain reinforcement: the brain's reward does not count energy spent. Not yet changed.)
+- The world report (headless) ends with the VOICES table, as the prehistory report does.
 - *Calmer newborns.* Every discrete action of a newborn brain started near 5% a step (FOUNDER_BIAS -48), so naive
   animals struck whatever was in reach every ~20 steps and founding groups killed each other (one lineage: 30% of its
   deaths by its own kind). All actions now start near 2% (FOUNDER_BIAS -64), the same for every action; the instincts
@@ -289,9 +299,9 @@ reviewed by the ecologist)
   thirst, water, ponds), multipliers on the documented constants; 1 = the law. Saved in every checkpoint.
 - Hunger senses prey: an animal that can digest meat or blood sees the value of the animal in reach as food
   (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants.
-- Ancestors' diet preferences are sparse and random, but each can digest its realm's abundant primary
-  producer (grass on land, phytoplankton in water); the remaining preferences stay random. Drain or kill
-  is a share (PDrain), not a switch.
+- Ancestors' diet preferences are sparse and random: good at 1-3 of all 15 foods, poor at the rest. Revision P: a
+  guaranteed staple (grass on land, plankton in water) was tried and removed, as it put every ancestor in the same
+  niche; an ancestor is instead a body its home range can feed. Drain or kill is a share (PDrain), not a switch.
 - The laying instinct: ready to breed → LAY, for cloners and egg-layers as the mating instinct is for the sexual.
 - Water (§6.3, ecology review). Food holds water (FoodWater per pool; live plants as wet as their ground),
   and digestion makes metabolic water (MET_WATER); both relieve thirst by K_FOODWATER per unit body mass.

@@ -289,8 +289,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | CLADES | 32 | clades | clade slots (lineages that can exist at once) | -: limited by the console frame (5 bits) |
-| ANCESTORS_LAND | 6 | ancestors | ancestors that start on land | user choice |
-| ANCESTORS_WATER | 4 | ancestors | ancestors that start in water | user choice |
+| ANCESTORS_LAND | 10 | ancestors | ancestors that start on land | user choice |
+| ANCESTORS_WATER | 6 | ancestors | ancestors that start in water | user choice |
 | ANCESTOR_COUNT | 600 | organisms | founding organisms per ancestor | HT |
 | FOUND_FILL | 0.25 | - | a lineage starts with this share of the animals its home range's plants can feed at its body size and brain | ECO: founding at a quarter of the carrying capacity leaves room for the founders' first wave of young (2026-10-30: a fixed 600 per ancestor started big bodies at many times their food, and 70% of founders starved; at a half, the first wave doubled the population by step 300 and it crashed by 90%; at a quarter, three worlds kept 3-4 lineages and 190-1,150 animals at step 8,000 against 2-4 and 18-630) |
 | FIELD_METAB | 1.5 | xbasal | a day of living costs this many times the basal cost (moving, growing, breeding, keeping warm) | measured: this world's own animals spend 1.45x basal over the first 3000 steps (2026-10-30, seed 7: basal 0.92, move 0.12, growth 0.16, breeding 0.15, heat 0.10); free-living mammals 2-3x (Nagy 1987) |
@@ -470,4 +470,4 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 ## 28. Organisms
 
-There are no designed species (Revision F). Life starts from 6 land and 4 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).
+There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

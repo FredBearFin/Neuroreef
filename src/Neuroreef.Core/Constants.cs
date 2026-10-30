@@ -229,8 +229,8 @@ public static class K
 
     // ---------------------------------------------------------------- 5d. clades and speciation (DESIGN §7.9)
     [K("Clades", "clade slots (lineages that can exist at once)", "clades", "-: limited by the console frame (5 bits)")] public const int CLADES = 32;
-    [K("Clades", "ancestors that start on land", "ancestors", "user choice")] public const int ANCESTORS_LAND = 6;
-    [K("Clades", "ancestors that start in water", "ancestors", "user choice")] public const int ANCESTORS_WATER = 4;
+    [K("Clades", "ancestors that start on land", "ancestors", "user choice")] public const int ANCESTORS_LAND = 10;
+    [K("Clades", "ancestors that start in water", "ancestors", "user choice")] public const int ANCESTORS_WATER = 6;
     [K("Clades", "founding organisms per ancestor", "organisms", "HT")] public const int ANCESTOR_COUNT = 600;
     [K("Clades", "a lineage starts with this share of the animals its home range's plants can feed at its body size and brain", "-", "ECO: founding at a quarter of the carrying capacity leaves room for the founders' first wave of young (2026-10-30: a fixed 600 per ancestor started big bodies at many times their food, and 70% of founders starved; at a half, the first wave doubled the population by step 300 and it crashed by 90%; at a quarter, three worlds kept 3-4 lineages and 190-1,150 animals at step 8,000 against 2-4 and 18-630)")] public const float FOUND_FILL = 0.25f;
     [K("Clades", "a day of living costs this many times the basal cost (moving, growing, breeding, keeping warm)", "xbasal", "measured: this world's own animals spend 1.45x basal over the first 3000 steps (2026-10-30, seed 7: basal 0.92, move 0.12, growth 0.16, breeding 0.15, heat 0.10); free-living mammals 2-3x (Nagy 1987)")] public const float FIELD_METAB = 1.5f;

@@ -162,10 +162,10 @@ public static class Headless
     /// <summary>Voices of a world (Revision N; reporting only): per clade that has spoken, its living members' mean voice
     /// and vocal-learning genes, how many utterances and of how many kinds, how many kinds were made at least
     /// Telemetry.MIN_UTT times, and its most made utterances with the sense that stands out most when each is made.</summary>
-    public static string VoiceReport(World w, int branch)
+    public static string VoiceReport(World w, int branch, string? where = null)
     {
         var T = w.T; var sb = new StringBuilder();
-        sb.AppendLine($"VOICES in branch {branch}: clade, living (voiced), mean voice, vocal learning, utterances, kinds, kinds made >= {Telemetry.MIN_UTT}x; most made (count: what stands out when it is made)");
+        sb.AppendLine($"VOICES in {where ?? "branch " + branch}: clade, living (voiced), mean voice, vocal learning, utterances, kinds, kinds made >= {Telemetry.MIN_UTT}x; most made (count: what stands out when it is made)");
         var syl = new byte[F.MAX_SYL];
         for (int s = 0; s < K.CLADES; s++)
         {
@@ -322,6 +322,8 @@ public static class Headless
         o.AppendLine($"steps on which the world was full: {T.FullSteps:N0} of {sim.W.Step:N0}");
         if (T.FullSteps > 0.01 * Math.Max(1UL, sim.W.Step))
             o.AppendLine("INVALID: the slot cap, not food, limited this world on more than 1% of steps, so the cap chose who was born. Give it more slots or a smaller map.");
+        o.AppendLine();
+        o.Append(VoiceReport(w, 0, "the world"));   // whether any utterance has come to go with something (2026-10-30)
         return o.ToString();
     }
 

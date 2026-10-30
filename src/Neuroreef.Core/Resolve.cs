@@ -315,7 +315,9 @@ public static class Resolve
         {
             w.Energy[i] -= K.C_CALL * K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * (1f - K.CALL_SYL + K.CALL_SYL * nsyl);
             utt.CopyTo(new Span<byte>(w.LastUtt, cb, F.MAX_SYL));
-            if (w.PImit[i] > 0f && w.Evo.VocalLearning) vmatch = Match(w, i, utt);
+            // matching its tutors reinforces only in its sensitive period, as song practice does in young songbirds; the
+            // adult song is set (Revision P: rewarded for life, voiced animals came to call on ~80% of steps, ~20% of basal)
+            if (w.PImit[i] > 0f && w.Evo.VocalLearning && w.Age[i] < w.PImitAge[i] * w.PLife[i]) vmatch = Match(w, i, utt);
         }
         w.HistV[i * Brain.BLOCK + (((int)(w.Step & 0x3FFFFFFF) + i) & (Brain.BLOCK - 1))] = vmatch;   // credited with this step's call outputs
         return nsyl > 0 ? Voice.TypeOf(utt[0], utt[1], utt[2]) : -1;
@@ -336,6 +338,7 @@ public static class Resolve
         float sum = w.Tmpl[tb + Voice.Cell(0, utt[0])]; int n = 1;
         for (int p = 1; p < F.MAX_SYL && utt[p] != 0; p++) { sum += w.Tmpl[tb + Voice.Cell(utt[p - 1], utt[p])]; n++; }
         float m = sum / (n * (float)max);
+        if (w.VMean[i] == 0f) w.VMean[i] = m;   // the running mean starts at its first match, not at 0 (which rewarded every early call)
         float rv = m - w.VMean[i];
         w.VMean[i] += K.IMIT_RBAR * (m - w.VMean[i]);
         return rv;
