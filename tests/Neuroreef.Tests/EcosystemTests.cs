@@ -51,7 +51,16 @@ public class EcosystemTests
         Brain.Forward(w, c, f, y, z, g);
         Assert.True(g[P.DRINK] > 0.7f, $"DRINK {g[P.DRINK]}");
         Assert.True(g[P.SEEK_WATER] > 0.7f, $"SEEK_WATER {g[P.SEEK_WATER]}");
-        Assert.True(g[P.MATE] < 0.3f, "mating is not in the kit");
+        f.Clear(); f[F.BIAS] = 1; f[F.HUNGER] = 1; f[F.FOOD_HERE] = 1;
+        Brain.Forward(w, c, f, y, z, g);
+        Assert.True(g[P.EAT] > 0.7f, $"EAT {g[P.EAT]}");
+        f.Clear(); f[F.BIAS] = 1; f[F.READY] = 1; f[F.MATE_CLOSE] = 1;
+        Brain.Forward(w, c, f, y, z, g);
+        Assert.True(g[P.MATE] > 0.7f, $"MATE {g[P.MATE]}");
+        f[F.MATE_CLOSE] = 0;
+        Brain.Forward(w, c, f, y, z, g);
+        Assert.True(g[P.SEEK_MATE] > 0.7f, $"SEEK_MATE {g[P.SEEK_MATE]}");
+        Assert.True(g[P.LAY] > 0.7f, $"LAY {g[P.LAY]}");
     }
 
     [Fact] // NR-205: natural selection works: in a births-only world a heritable trait that helps animals eat spreads

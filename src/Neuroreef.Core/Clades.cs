@@ -95,8 +95,8 @@ public static class Clades
     // ------------------------------------------------------------------ ancestors
 
     /// <summary>
-    /// The body genes of a random ancestor: a small, simple plant-eater of its realm (the only food that exists at the
-    /// start). Every value inside those bounds is random; nothing else is decided.
+    /// The body genes of a random ancestor: a small, simple plant-eater of its realm. Its realm's primary producer is
+    /// guaranteed in the diet; the other diet preferences and every other value inside the bounds are random.
     /// </summary>
     /// <param name="brainUnits">0: a random brain of up to BRAIN_START units; otherwise exactly this many (a big-brained ancestor)</param>
     public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0, bool voiced = false, int floorClass = 0)
@@ -147,12 +147,13 @@ public static class Clades
         // warm- or cold-blooded, or between (Revision P): anything; what it pays for and gains from it is physics (Heat.Core)
         body[G.B_ENDO - B] = (sbyte)((U(90) * 2f - 1f) * 127f);
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
-        // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them
-        // (plants, algae, meat, carrion, blood, dung...), mediocre at the rest, never at the floor (ecology review:
-        // an even generalist digests every food at ~0.2 and starves; a random sparse diet is still undesigned)
+        // Diet preferences stay random (Revision K), but every ancestor can eat an abundant primary producer in its
+        // realm: grass on land, phytoplankton in water. Without that staple, a random diet could make a founder unable
+        // to eat the food available where it lives.
         for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-90 + (int)(U(40 + p) * 40f));
         int good = 1 + (int)(U(70) * 3f);
         for (int k = 0; k < good; k++) body[G.B_DIET - B + (int)(U(71 + k) * Pools.N) % Pools.N] = (sbyte)(40 + (int)(U(74 + k) * 87f));
+        body[G.B_DIET - B + (land ? (int)Pool.Grass : (int)Pool.Phyto)] = 127;
     }
 
     /// <summary>Standing variation: each founder's body genes vary around its ancestor's by FOUNDER_BODY_SD.</summary>

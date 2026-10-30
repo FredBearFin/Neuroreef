@@ -495,6 +495,26 @@ public class EcologyTests
         Assert.Equal(basal0 + extra, w.PBasal[i], 4);
     }
 
+    [Fact] // every random ancestor can digest a primary producer available in its realm
+    public void AncestorsCanDigestRealmProducers()
+    {
+        var w = new World(16, 1);
+        foreach (bool land in new[] { true, false })
+        {
+            int producer = land ? (int)Pool.Grass : (int)Pool.Phyto;
+            for (int seed = 0; seed < 32; seed++)
+            {
+                var body = new sbyte[G.NBODY];
+                Clades.AncestorBody(body, (uint)seed, seed, land);
+                body.CopyTo(new Span<sbyte>(w.Genome, G.BODY, G.NBODY));
+                Body.Express(w, 0);
+
+                Assert.True(Body.Reachable((Realm)w.PRealm[0], producer), $"seed {seed}, land {land}: producer not in realm");
+                Assert.True(w.PDiet[producer] > 0f, $"seed {seed}, land {land}: producer not digestible");
+            }
+        }
+    }
+
     [Fact] // NR-322: a growing juvenile pays for its tissue
     public void GrowthCostsEnergy()
     {
