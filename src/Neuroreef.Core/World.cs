@@ -31,6 +31,7 @@ public sealed class World
     public readonly float[] PDiet;            // Cap * Pools.N digestive efficiencies
     public readonly float[] PCare;
     public readonly float[] PDrain;
+    public readonly float[] PFloor;            // the smallest body its size class allows
     public readonly float[] PVoice;            // voice organ (0..1): loudness of its calls; mute below VOICE_MIN
     public readonly float[] PImit, PImitAge;  // vocal learning (0..1) and its sensitive period (share of lifespan) (Revision N)
     public readonly float[] PWaterEcon;       // water-economy gene expressed (0..1)
@@ -159,7 +160,7 @@ public sealed class World
         PBirth = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
         PVLand = new float[c]; PVWater = new float[c]; PVAir = new float[c]; PSexRatio = new float[c]; PImmune = new float[c];
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
-        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
+        PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PFloor = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
         PInsul = new float[c]; PAppend = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new byte[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };

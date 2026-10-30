@@ -64,9 +64,14 @@ public static class Brain
         // with its rate independently; the mutated bytes are found by geometric skips (Revision M: a genome of
         // ~90,000 bytes made one random draw per byte the cost of every birth)
         uint j = 0;
+        sbyte floor = g[G.B_FLOOR];
         Segment(g, 0, G.BODY, e.MutRate, seed, step, key, e, ref j);
         Segment(g, G.BODY, G.BODY + G.NBODY, e.MutBody, seed, step, key, e, ref j);
         Segment(g, G.BODY + G.NBODY, G.LEN, e.MutRate, seed, step, key, e, ref j);
+        // the size class is copied exactly, and only rarely steps up or down one class
+        float u = Rng.U(seed, step, key, Rs.Mutate + 0x3FFFFFF0u);
+        if (u < K.FLOOR_MUT) floor = (sbyte)Math.Clamp(floor + (u < K.FLOOR_MUT * 0.5f ? -1 : 1), 0, K.FLOOR_CLASSES - 1);
+        g[G.B_FLOOR] = floor;
     }
 
     static void Segment(Span<sbyte> g, int start, int end, float rate, uint seed, uint step, uint key, EvoSettings e, ref uint j)

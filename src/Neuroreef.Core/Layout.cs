@@ -111,7 +111,8 @@ public static class G
         B_IMIT_AGE = B_CARE + 20,                // sensitive period for memorising tutors, as a share of its lifespan (0.1..1)
         B_INSUL = B_CARE + 21,                   // insulation (0..1): fur or feathers; keeps heat in, costs energy (Revision O)
         B_APPEND = B_CARE + 22,                  // appendages (0..1): ears, limbs, tail as radiators; lose heat when warm (Revision O)
-        B_MHC = B_CARE + 23;                     // NMHC recognition genes: a pathogen strain must match them to infect (always last)
+        B_FLOOR = B_CARE + 23,                   // body-plan size class (0..FLOOR_CLASSES-1): the smallest it can be; copied exactly, rarely steps a class
+        B_MHC = B_CARE + 24;                     // NMHC recognition genes: a pathogen strain must match them to infect (always last)
     public const int NMHC = 4;
     public const int NBODY = B_MHC + NMHC - BODY;   // 48
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive

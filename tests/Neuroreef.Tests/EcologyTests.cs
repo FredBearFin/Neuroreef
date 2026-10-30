@@ -708,4 +708,27 @@ public class EcologyTests
             if (cnt[a] > 0 && cnt[b] > 0) { float dx = World.Delta1(mx[a] - mx[b]), dy = World.Delta1(my[a] - my[b]); closest = MathF.Min(closest, MathF.Sqrt(dx * dx + dy * dy)); }
         Assert.True(closest > K.HOME_R * Map.W, $"two home ranges are only {closest:F0} apart");
     }
+
+    [Fact] // the user (2026-10-30): size classes with their own floors (0.1, 1, 3, 10), inherited, rarely changing
+    public void SizeClassesHaveFloorsThatRarelyChange()
+    {
+        var w = new World(16, 1);
+        for (int c = 0; c < K.FLOOR_CLASSES; c++)
+        {
+            w.Genome[G.B_FLOOR] = (sbyte)c;
+            w.Genome[G.B_MASS] = -128; Body.Express(w, 0);
+            Assert.Equal(Body.Floors[c], w.PM[0], 3);                 // the smallest mass gene gives the class floor
+            w.Genome[G.B_MASS] = 127; Body.Express(w, 0);
+            Assert.True(w.PM[0] > 30f);                                 // above the floor, size is free up to MASS_HI
+        }
+        // the class copies exactly through mutation, but steps a class about FLOOR_MUT of the time
+        var g = new sbyte[G.LEN]; int steps = 0, n = 200000;
+        for (uint k = 0; k < n; k++) { g[G.B_FLOOR] = 2; Brain.Mutate(g, 7, 0, k); if (g[G.B_FLOOR] != 2) { steps++; Assert.InRange(g[G.B_FLOOR], 1, 3); } }
+        Assert.InRange(steps, 1, (int)(n * K.FLOOR_MUT * 3));
+        // ancestors are spread over the classes
+        using var sim = new Simulation(8192, 13, 1);
+        var seen = new System.Collections.Generic.HashSet<int>();
+        for (int i = 0; i < sim.W.Cap; i++) if (sim.W.StageOf[i] != St.Dead) seen.Add(sim.W.Genome[i * G.LEN + G.B_FLOOR]);
+        Assert.Equal(K.FLOOR_CLASSES, seen.Count);
+    }
 }

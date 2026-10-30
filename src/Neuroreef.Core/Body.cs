@@ -34,6 +34,8 @@ public static class Body
 
     /// <summary>An organ size gene, 0..1.</summary>
     public static float Organ(sbyte b) => (b + 127) / 254f;
+    /// <summary>The smallest body of each size class (the user, 2026-10-30).</summary>
+    public static readonly float[] Floors = { 0.1f, 1f, 3f, 10f };
     /// <summary>Memory units in use from the brain-size gene: log scale BRAIN_MIN..G.NH, so a mutation changes a brain
     /// by a share of its size, as with body mass (Revision M: on a linear scale of 256 units, ordinary founder variation
     /// swung a 12-unit brain by tens of units).</summary>
@@ -45,7 +47,9 @@ public static class Body
     {
         int g = i * G.LEN;
         var gn = w.Genome;
-        float m = G.GeneLog(gn[g + G.B_MASS], K.MASS_LO, K.MASS_HI);
+        float floor = Floors[Math.Clamp((int)gn[g + G.B_FLOOR], 0, K.FLOOR_CLASSES - 1)];
+        w.PFloor[i] = floor;
+        float m = MathF.Max(floor, G.GeneLog(gn[g + G.B_MASS], K.MASS_LO, K.MASS_HI));   // its size class's floor; free above it
         float fs = Mul(gn[g + G.B_SPEED], K.BODY_RANGE_TRAIT);
         float fsi = Mul(gn[g + G.B_SIGHT], K.BODY_RANGE_TRAIT);
         float armour = Organ(gn[g + G.B_ARMOUR]) * K.ARMOUR_MAX;

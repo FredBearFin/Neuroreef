@@ -75,7 +75,7 @@ public sealed class Simulation : IDisposable
             // scramble networks, a hidden cost only sex paid); each founder varies around it
             var anc = new sbyte[G.LEN];
             Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)a);
-            Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land);
+            Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES);   // ancestors spread over the size classes
             int units = Body.Units(anc[G.B_BRAIN]);
             // founders scale with the map's area, as founding from a bank does: a valley is not stocked like a continent
             float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);

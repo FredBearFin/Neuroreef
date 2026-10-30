@@ -3,8 +3,12 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
-**Body-size floor** (the user, 2026-10-30): MASS_LO = 1 (was 0.1). Mass still evolves continuously above it; ancestors
-are log-uniform from the floor up to 20 on land and 5 in water.
+**Size classes with floors** (the user, 2026-10-30): a body-plan gene B_FLOOR puts each lineage in one of FLOOR_CLASSES = 4
+size classes whose smallest body is 0.1, 1, 3 or 10 (Body.Floors). Mass still evolves continuously above the floor, up
+to MASS_HI. The class gene is copied exactly (founder variation and ordinary mutation leave it alone) and steps up or down
+one class with probability FLOOR_MUT = 5e-5 per birth. Ancestors are spread over the classes (ancestor a gets class a mod 4),
+their mass log-uniform from the floor up to max(4 x floor, 20 on land or 5 in water). The console's AGENTS record carries
+the body's actual size; the split test compares actual sizes.
 
 **Changes in Revision O: climate and body heat** (the user, 2026-10-30: "I don't want you to specifically create
 biozones ... come up with a logical system for how the world works ... simulate some physics ... and then this should

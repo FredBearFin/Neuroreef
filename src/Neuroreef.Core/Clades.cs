@@ -99,13 +99,16 @@ public static class Clades
     /// start). Every value inside those bounds is random; nothing else is decided.
     /// </summary>
     /// <param name="brainUnits">0: a random brain of up to BRAIN_START units; otherwise exactly this many (a big-brained ancestor)</param>
-    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0, bool voiced = false)
+    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0, bool voiced = false, int floorClass = 0)
     {
         float U(int k) => Rng.U(seed, (uint)ancestor, (uint)k, Rs.Founder + 7000u);
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
         for (int k = 0; k < G.NBODY; k++) body[k] = 0;
         int B = G.BODY;
-        body[G.B_MASS - B] = G.ToGeneLog(K.MASS_LO * MathF.Pow((land ? 20f : 5f) / K.MASS_LO, U(0)), K.MASS_LO, K.MASS_HI);   // log-uniform from the floor: land up to 20, water up to 5
+        // size class: its floor, and a mass log-uniform from the floor up to 20 on land, 5 in water (at least 4x the floor)
+        body[G.B_FLOOR - B] = (sbyte)Math.Clamp(floorClass, 0, K.FLOOR_CLASSES - 1);
+        float fl = Body.Floors[body[G.B_FLOOR - B]], top = MathF.Min(K.MASS_HI, MathF.Max(4f * fl, land ? 20f : 5f));
+        body[G.B_MASS - B] = G.ToGeneLog(fl * MathF.Pow(top / fl, U(0)), K.MASS_LO, K.MASS_HI);
         body[G.B_SPEED - B] = (sbyte)((U(1) - 0.5f) * 60f);
         body[G.B_SIGHT - B] = (sbyte)((U(2) - 0.5f) * 60f);
         // armour and weapons from the same range, so neither side of an arms race starts ahead (Revision L, ecology review)
@@ -153,11 +156,13 @@ public static class Clades
     /// <summary>Standing variation: each founder's body genes vary around its ancestor's by FOUNDER_BODY_SD.</summary>
     public static void VaryBody(Span<sbyte> body, uint seed, uint key)
     {
+        sbyte floor = body[G.B_FLOOR - G.BODY];   // the size class is copied exactly, not varied
         for (int k = 0; k < body.Length; k++)
             body[k] = (sbyte)Math.Clamp((int)MathF.Round(body[k] + Rng.N(seed, 0, key, Rs.Founder + 9000u + (uint)k) * K.FOUNDER_BODY_SD), -127, 127);
         // recognition genes are hyper-polymorphic within populations (MHC): each founder draws its own
         for (int k = 0; k < G.NMHC; k++)
             body[G.B_MHC - G.BODY + k] = (sbyte)(Rng.U(seed, 0, key, Rs.Founder + 9500u + (uint)k) * 254f - 127f);
+        body[G.B_FLOOR - G.BODY] = floor;
     }
 
     // ------------------------------------------------------------------ bookkeeping and speciation (serial, after LIFECYCLE)
@@ -189,7 +194,8 @@ public static class Clades
     const int V = 10;
     static readonly float MassUnit = MathF.Log(1.5f) / MathF.Log(K.MASS_HI / K.MASS_LO) * 254f;
     static float VisUnit(int k) => k == 0 ? MassUnit : k >= 7 ? 254f / 4f : 0.15f * 254f;
-    static float Vis(World w, int i, int k) => w.Genome[i * G.LEN + VisGene[k]] / VisUnit(k);
+    // size is the body's actual size (its class floor included), not the mass gene alone
+    static float Vis(World w, int i, int k) => k == 0 ? MathF.Log(w.PM[i] / K.MASS_LO) / MathF.Log(1.5f) : w.Genome[i * G.LEN + VisGene[k]] / VisUnit(k);
 
     /// <summary>
     /// Split clade s if its visible traits form two clusters with few intermediates (a gap of SPLIT_GAP pooled SDs

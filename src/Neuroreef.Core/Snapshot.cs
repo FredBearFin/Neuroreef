@@ -80,7 +80,7 @@ public sealed class Snapshot
             BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(8), w.Serial[i]);
             // the organism's own body genes, from which the console draws its body (ICD: record bytes 12-19)
             int g = i * G.LEN;
-            span[12] = (byte)w.Genome[g + G.B_MASS];
+            span[12] = (byte)G.ToGeneLog(w.PM[i], K.MASS_LO, K.MASS_HI);   // the body's actual size (its class floor included), on the mass gene's scale
             span[13] = (byte)w.Genome[g + G.B_LEGS];
             span[14] = (byte)w.Genome[g + G.B_FINS];
             span[15] = (byte)w.Genome[g + G.B_WINGS];
