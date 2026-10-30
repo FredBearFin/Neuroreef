@@ -31,7 +31,7 @@ public static class K
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
     [K("World", "spatial-hash grid side", "cells", "-")] public const int GW = WORLD / HCELL;
-    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB")] public const int CAPACITY = 8192;
+    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB")] public const int CAPACITY = 16384;
     [K("World", "share of cells below lake level", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "catchment (cells) above which a cell is river", "cells", "HT")] public const int RIVER_ACC = 900;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
