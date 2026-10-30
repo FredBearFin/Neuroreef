@@ -3,6 +3,29 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Evolving plants (Revision S)** (2026-10-30; Plants.cs). Land vegetation is no longer three fixed layers with designed
+rates. Each land cell has four slots (herb, shrub, tree, sapling), each one genotype (an id into a table of up to 65,535)
+and its cover (Pool.Grass, World.Shrub/Tree/Sapling, now updated in place: the old double buffers are gone). A genotype
+is 20 traits of 4 bits: height, leaf mass per area, rooting, water-use efficiency, drought tolerance, temperature
+optimum, deciduousness, flowering phase, reproductive allocation, seed mass, fruit pulp, wings, hooks, nectar, toxin,
+thorns, resprouting, bark, nitrogen fixation, selfing. Its phenotype follows cited trade-offs (CONSTANTS.md, group
+"Plants"); a genome of all 0.5 grows at the old R_G, R_S and R_T at 0.3, 1.3 and 15 m. Growth is carbon x water
+colimitation under the light of taller slots, with root overlap, frost, drought mortality and leaf shedding. Mature
+plants flower in a pulse at their own phase, set seed by wind or animal pollen (crosses need genetic and phenological
+compatibility, else they self), and put seed into nectar, fruit (Pool.Fruit, eaten and dispersed by animals) and dry
+seed, which wind takes to the cell itself, its 8 neighbours or (a simple fat tail) a 16x16-cell block spread over the
+3x3 blocks around; mass is conserved exactly. Each cell keeps a seed bank per stratum (Pool.Seed is its sum) with one
+seed and pollen parent pair; recruits are crosses with rare one-level mutations, and win the slot by lottery (Chesson &
+Warner 1981). Animals taste plants at the mouth: toxins, tough leaves and fixed nitrogen change a bite's energy, thorns
+its size (FOOD_HERE and the bite choice; FOOD_GRAD does not taste). Seed passes guts (gape-limited) into dung, caches go
+into banks, hooked seed rides in coats, nectar feeders carry pollen. Fire burns by traits (resprouting, bark, height over
+the flames). Founding: 128 random genotypes, each cell taking the best growers for its site; then a year of spin-up
+without animals. Schedule: a stripe of rows (y = step mod 8) per step, rows in parallel, dt = 8, new genotypes queued per
+row and committed serially, so results do not depend on the thread count; a census every 64 steps frees unused
+genotypes. Not built yet (design steps 7-8 in full): lineage splitting into named species and varieties, the Flora
+console panel and 3D tinting; the world report has a FLORA section and the console seven new map layers. Checkpoint
+version 17.
+
 **Land formed by geology (Revision R)** (2026-10-30; the user: "the land should be FORMED by geological processes at
 world creation, not drawn from fractal noise"). Before, the relief was fBm noise, the lakes its lowest 10%, and 20
 erosion passes cut it. Now Geology.Form (Geology.cs) makes it in deep time, and Terrain.Build finishes it with the same

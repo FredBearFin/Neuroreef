@@ -51,14 +51,19 @@ public static class Decide
     /// step reads 0.63. (Before 2026-10-30 it was measured against the best food the diet could ever give, so a
     /// nectar eater in a meadow sensed almost nothing, its eating instinct hardly fired, and founders starved on food.)
     /// </summary>
-    public static float FoodValue(World w, ReadOnlySpan<float> diet, float bite, float need, int cell)
+    /// Revision S: with taste (FOOD_HERE: food at the mouth) the plants' defences count, as when it bites; food further
+    /// away (FOOD_GRAD) is judged by how much there is, as it cannot taste it.
+    public static float FoodValue(World w, ReadOnlySpan<float> diet, float bite, float need, int cell, bool taste = false)
     {
         float v = 0;
+        bool land = w.Cell[cell] == (byte)Realm.Land;
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             float e = diet[p];
             if (e <= 0) continue;
-            v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite, w.Pool[p][cell]));
+            float bm = 1f;
+            if (taste && land && p <= (int)Pool.Root) { Plants.Taste(w, p, cell, bite, out float em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
+            v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite * bm, w.Pool[p][cell]));
         }
         return Worth(v, need);
     }
@@ -183,7 +188,7 @@ public static class Decide
         float meatEff = diet[(int)Pool.Meat];
         float mfp = MathK.Pow(w.MassOf(i) / w.PM[i], K.EXP_BASAL);
         float bite = w.PBite[i] * mfp, need = MathF.Max(1e-7f, K.FIELD_METAB * w.PBasal[i] * mfp);
-        float fh = FoodValue(w, diet, bite, need, cell);
+        float fh = FoodValue(w, diet, bite, need, cell, taste: true);
         float fgx = FoodValue(w, diet, bite, need, CellAt(cell, 2, 0)) - FoodValue(w, diet, bite, need, CellAt(cell, -2, 0));
         float fgy = FoodValue(w, diet, bite, need, CellAt(cell, 0, 2)) - FoodValue(w, diet, bite, need, CellAt(cell, 0, -2));
         byte eatPrey = 0;

@@ -16,7 +16,7 @@ public sealed class Simulation : IDisposable
     readonly Workers _pool;
     readonly int[] _active;
     readonly int _orderA;
-    readonly Action<int, int> _decideJob, _fieldsJob, _waterJob;
+    readonly Action<int, int> _decideJob, _fieldsJob, _waterJob, _plantJob;
     public readonly int[] ActiveCount;
 
     /// <param name="prehistory">true for a prehistory branch (a label: every world is births and deaths only after its founders).</param>
@@ -27,6 +27,10 @@ public sealed class Simulation : IDisposable
         Terrain.Build(W);
         _pool = new Workers(Math.Max(1, threads));
         WaterCycle.Init(W, (job, n) => _pool.Run(job, n));   // rain, soil, groundwater, rivers, ponds and lakes in their seasonal state, before founders are fed
+        _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
+        _waterJob = (lo, hi) => { for (int y = lo; y < hi; y++) WaterCycle.Row(W, y); };
+        _plantJob = (lo, hi) => { for (int k = lo; k < hi; k++) Plants.StripeRow(W, k); };
+        SpinUp(K.PLANT_SPINUP * Nature.SeasonLength);   // the plants grow into what their genes can hold before the animals come (Revision S)
         _active = new int[W.NS];
         ActiveCount = _active;
         W.Prehistory = prehistory && !empty;
@@ -53,8 +57,37 @@ public sealed class Simulation : IDisposable
             if (W.MemoryReset) for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
             for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe);
         };
-        _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
-        _waterJob = (lo, hi) => { for (int y = lo; y < hi; y++) WaterCycle.Row(W, y); };
+    }
+
+    /// <summary>
+    /// The world without animals for this many steps (whole years: it ends in the season it started in): weather,
+    /// fields, plants, fire and water. Then the clock, the weather years and the fire and water counters start again.
+    /// </summary>
+    void SpinUp(int steps)
+    {
+        var w = W;
+        for (int k = 0; k < steps; k++)
+        {
+            Weather.Update(w);
+            PlantsStep();
+            Fields.Fire(w);
+            if (w.Step % K.WC_EVERY == 0 && w.WaterOn) { _pool.Run(_waterJob, Map.FW); WaterCycle.Finish(w); }
+            w.Step++;
+        }
+        w.Step = 0; w.RainYear = -1; w.RainAnom = 0f; w.T.FireCells = 0;
+        w.WbRain = w.WbET = w.WbPondEvap = w.WbToLakes = w.WbLakeRain = w.WbLakeEvap = w.WbLakeSpill = 0;
+    }
+
+    /// <summary>FIELDS rows, the swap, then this step's stripe of plants and its serial commit.</summary>
+    void PlantsStep()
+    {
+        var w = W;
+        _pool.Run(_fieldsJob, Map.FW);
+        Fields.Swap(w);
+        Plants.BeginStep(w);
+        _pool.Run(_plantJob, Plants.StripeRows);
+        Plants.Commit(w);
+
     }
 
     /// <summary>AncestorsLand + AncestorsWater random ancestors, each its own clade, ANCESTOR_COUNT organisms in groups.</summary>
@@ -216,8 +249,7 @@ public sealed class Simulation : IDisposable
         Clades.Update(w);
         Lap(3);
         Weather.Update(w);
-        _pool.Run(_fieldsJob, Map.FW);
-        Fields.Swap(w);
+        PlantsStep();
         Lap(4);
         Fields.Fire(w);
         // the water cycle (rows in parallel, then the routing, drinkable water and lakes in order)

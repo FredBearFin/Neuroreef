@@ -79,12 +79,15 @@ The first 26 record bytes retain their format-5 meaning.
 |---|---|---|
 | 8 | u16 | side D = FW / 2 (2×2 cells averaged) |
 | 10 | u16 | layer count L |
-| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen |
+| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora |
 
 Layer values are 0..255 for 0..1. Pools that can exceed 1 are sent as tanh(amount) (carrion,
 dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)). `pond` is 1 where a seasonal
 pond holds water; `temp` is the air temperature as (T + 40) / 90 (−40..50 °C; Revision O); `frozen` is 1 where the air
-is below 0 °C (frost on land, ice on water).
+is below 0 °C (frost on land, ice on water). The plant layers (Revision S): `plant height` is the tallest plant with
+cover above 0.02 on the height trait's log scale (5 cm..40 m); `toxin`, `thorns` and `drought tolerance` are the
+cover-weighted trait levels /15 of the cell's slots; `fleshy fruit` is the FRUIT level /15 of the fruit there; `leaf-on`
+is the leafy share of the cover; `flora` is (founding lineage + 1) / 129 of the plant with most cover (0 = none).
 
 ### 0x04 TELEMETRY (when a new sample exists, checked every 0.5 s)
 

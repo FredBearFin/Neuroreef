@@ -42,6 +42,9 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Revision S (evolving plants) re-pinned it: land vegetation is now genotypes in four slots per cell, grown in stripes
+        // with their own traits after a year of spin-up, so the same seed grows different fields; Climate = 0 still skips
+        // every climate rule (the plants read T_REF). It was 0x3EBEA675E685E2C7 at the water cycle.
         // The water cycle (2026-10-30) re-pinned it: soil moisture is the soil's water over its capacity, ponds and floods
         // follow the water's stores, and the world spins up two years of weather before it starts. It was
         // 0x47BA1DC94894B8A4 at Revision R (geology).
@@ -50,9 +53,9 @@ public class ClimateTests
         // climate rule. It was 0x52A982E9B31E42C1 at Revision Q (hydrology, commit 4583355), 0x18289DE28D12409D at
         // Revision P with continuous water depth (commit dde4d60), and 0x3BF8C06B3FB53E61 at Revision N (commit 2baed5e);
         // same seed, map and steps.
-        // Re-pinned when all simulation math moved to MathK (NR-104): it was 0x3EBEA675E685E2C7 on Linux and differed on
-        // Windows, because MathF.Pow/Exp/Sin in the geology, water cycle and climate gave last-digit differences between them.
-        Assert.Equal(0xD1A92250AB690304UL, h);
+        // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
+        // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
+        Assert.Equal(0x4635958CC1772992UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
@@ -262,7 +265,9 @@ public class ClimateTests
             float g0 = w.Pool[(int)Pool.Grass][c];
             Fields.Row(w, c / Map.FW);
             Assert.True(w.Temp[c] < K.GRASS_TMIN, $"cell at {w.Temp[c]:F1} °C");
-            Assert.True(w.GrassN[c] <= g0, $"grass grew from {g0} to {w.GrassN[c]} at {w.Temp[c]:F1} °C");
+            // Revision S: the herbs are evolving genotypes (Plants.cs); far below every plant's lowest temperature none grows
+            Plants.UpdateRow(w, c / Map.FW);
+            Assert.True(w.Pool[(int)Pool.Grass][c] <= g0, $"grass grew from {g0} to {w.Pool[(int)Pool.Grass][c]} at {w.Temp[c]:F1} °C");
         });
     }
 
@@ -331,7 +336,9 @@ public class ClimateTests
         });
         double flat = Treeline(0f), line = Treeline(1f);   // Earth-like strength: the physics, not the default setting
         Assert.InRange(flat, 0.9, 1.1);
-        Assert.True(line < 0.7, $"high/low tree cover with a climate {line:F3} (without {flat:F3})");
+        // Revision S: trees are evolving genotypes whose temperature optimum and frost tolerance are genes, so cold-adapted
+        // trees hold some of the high ground and the line is softer than with the old fixed curves (0.7); it is still there
+        Assert.True(line < 0.9, $"high/low tree cover with a climate {line:F3} (without {flat:F3})");
     }
 
     [Fact] // a frozen pond cannot be drunk

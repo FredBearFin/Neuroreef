@@ -17,11 +17,11 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 16;   // 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 17;   // 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     // classes whose state is saved by walking their fields; any other reference field is not state (links, buffers rebuilt each step)
-    static readonly HashSet<Type> Walk = new() { typeof(World), typeof(Species), typeof(Clades.Scratch), typeof(Telemetry), typeof(EvoSettings) };
+    static readonly HashSet<Type> Walk = new() { typeof(World), typeof(Species), typeof(Clades.Scratch), typeof(Telemetry), typeof(EvoSettings), typeof(PlantTable) };
     static readonly Dictionary<Type, FieldInfo[]> _fields = new();
 
     static FieldInfo[] FieldsOf(Type t)

@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(16, Checkpoint.Version);   // 16: pathogens (new World arrays)
+            Assert.Equal(17, Checkpoint.Version);   // 17: evolving plants (plant table, slots, seed banks; new World arrays)
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);

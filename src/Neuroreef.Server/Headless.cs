@@ -206,6 +206,13 @@ public static class Headless
         var top = Enumerable.Range(0, w.NS).Where(s => sim.ActiveCount[s] > 0).OrderByDescending(s => sim.ActiveCount[s]).Take(6);
         sb.Append(string.Join("  ", top.Select(s => $"{w.Sp[s].Name}:{sim.ActiveCount[s]}")));
         Console.WriteLine(sb.ToString());
+        {
+            // the plants (Revision S): genotypes in plants and in the table, mean cover, establishments so far
+            double g = 0, sh = 0, tr = 0; int land = 0;
+            for (int i = 0; i < Map.FW * Map.FW; i++) if (w.Cell[i] == (byte)Realm.Land) { land++; g += w.Pool[(int)Pool.Grass][i]; sh += w.Shrub[i]; tr += w.Tree[i]; }
+            land = Math.Max(1, land);
+            Console.WriteLine($"         plants: {Plants.SlotGenotypes(w)} genotypes in plants, {w.Flora.Live} in the table; cover herb {g / land:F2} shrub {sh / land:F2} tree {tr / land:F2}; establishments {w.Flora.Establish:N0}, mutations {w.Flora.Mutations:N0}");
+        }
         if (Environment.GetEnvironmentVariable("NR_PROFILE") == "1")
         {
             Console.WriteLine("         ms: " + string.Join(" ", sim.PhaseMs.Select(v => v.ToString("F0"))));
@@ -324,6 +331,8 @@ public static class Headless
             o.AppendLine("INVALID: the slot cap, not food, limited this world on more than 1% of steps, so the cap chose who was born. Give it more slots or a smaller map.");
         o.AppendLine();
         o.Append(Pathogens.Report(w));   // the pathogens' census, lineages and deaths by disease (Revision R)
+        o.AppendLine();
+        o.Append(Plants.Report(w));   // the plants' genotypes, dispersal, traits and lineages (Revision S)
         o.AppendLine();
         o.Append(VoiceReport(w, 0, "the world"));   // whether any utterance has come to go with something (2026-10-30)
         return o.ToString();

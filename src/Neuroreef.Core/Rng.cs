@@ -45,5 +45,6 @@ public static class Rs
     public const uint Wander = 1, Explore = 2, Fire = 3, Strike = 4, Death = 5, Turn = 6, Sex = 7,
         Place = 8, Mutate = 9, Cross = 10, Founder = 11, Immigrant = 12, Spore = 13, Order = 14, Act = 15,
         Archive = 16, Bank = 17, Disease = 18, Weather = 19, Wind = 20, Compat = 21, Pond = 22,
-        PathX = 23, PathY = 24;   // path-integration error (Revision P)
+        PathX = 23, PathY = 24,   // path-integration error (Revision P)
+        PlantMut = 25, PlantCross = 26, PlantFound = 27, PlantPick = 40;   // plants (Revision S); PlantPick + 0..15 are its draws
 }
