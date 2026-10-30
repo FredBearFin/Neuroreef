@@ -189,8 +189,7 @@ public static class Clades
     const int V = 10;
     static readonly float MassUnit = MathF.Log(1.5f) / MathF.Log(K.MASS_HI / K.MASS_LO) * 254f;
     static float VisUnit(int k) => k == 0 ? MassUnit : k >= 7 ? 254f / 4f : 0.15f * 254f;
-    // size is the body's size class (what you see), not the mass gene: two forms differ in size only in different classes
-    static float Vis(World w, int i, int k) => k == 0 ? MathF.Log(w.PM[i] / K.MASS_LO) / MathF.Log(1.5f) : w.Genome[i * G.LEN + VisGene[k]] / VisUnit(k);
+    static float Vis(World w, int i, int k) => w.Genome[i * G.LEN + VisGene[k]] / VisUnit(k);
 
     /// <summary>
     /// Split clade s if its visible traits form two clusters with few intermediates (a gap of SPLIT_GAP pooled SDs

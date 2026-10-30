@@ -13,7 +13,7 @@ import { locoOf } from '../net.js';
 export { bodyMaterial, locoOf };
 
 /** Body mass from the mass gene (-127..127), as the sim expresses it. */
-export function massOf(g) { const m = 0.1 * Math.pow(46.415888 / 0.1, (g + 128) / 255); return Math.min(46.415888, 0.1 * Math.pow(10, Math.round(Math.log10(m / 0.1) * 3) / 3)); }   // size classes, as Body.SizeClass
+export function massOf(g) { return 0.1 * Math.pow(40 / 0.1, (g + 128) / 255); }
 
 /** View scale of an organism of this mass (model units to world units): length grows as mass^(1/3). */
 export function bodySize(mass) { return 1.5 * Math.cbrt(mass); }

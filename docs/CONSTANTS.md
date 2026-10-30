@@ -188,8 +188,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_SIGHT | 0.15 | - | basal cost per unit of extra sight | HT |
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
 | MASS_LO | 0.1 | M | smallest body mass a mass gene can give | ECO: Revision M, ecology review: the agents are animals with brains; smaller consumers live in the fields (algae, decomposers). 0.01 gave tiny bodies 32x the numbers from the same food |
-| MASS_HI | 46.4159 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units); 10^(5/3) so it is a size class (Revision O: 40 before) |
-| SIZE_CLASSES_PER_DECADE | 3 | - | size classes per decade of body mass: the body takes the nearest class (0.1, 0.22, 0.46, 1, 2.2, 4.6, 10, 22, 46) | designed: the user (2026-10-30) asked for clear size classes; 3 per decade is a 2.15x step, near the 2.2x mass ratio between coexisting species (Hutchinson 1959) |
+| MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
 | LIMB_MIN | 0.3 | - | organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth) | - |
 | COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size, or of leg size per pair of legs | ECO: locomotor muscle is maintained at a cost |
 | COST_WING | 0.5 | xbasal | basal cost per unit of wing size, times mass^(1/3) | ECO: flight power rises faster than mass, so flight favours the small |
