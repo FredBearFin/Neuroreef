@@ -546,7 +546,7 @@ export class Panels {
       <div id="tree-tip" class="note tree-tip">&nbsp;</div>
       <p class="note">What evolution is doing, measured from the living animals' genes. Nothing here steers it:
         a trait rises only if animals carrying more of it leave more offspring.</p>
-      <h3>Traits of <select id="evo-sp"></select></h3><div id="evo-traits"></div>
+      <h3>Traits of <select id="evo-sp"></select></h3><p class="note">Each trait as a multiple of its value when the clade began: 1 = unchanged, 2 = doubled, 0.5 = halved. Hover for the step.</p><div id="evo-traits"></div>
       <h3>One trait across clades: <select id="evo-trait"></select></h3><div id="evo-across"></div>
       <h3>Starter-kit instinct strength</h3><div id="evo-kit"></div>
       <h3>Generations reached</h3><div id="evo-gen"></div>`;
@@ -573,7 +573,10 @@ export class Panels {
     const xs = R.map((r) => r[this.SC]);
     const ok = (r, s) => r[this.SC] >= this.born(s) && r[this.idx(s, T.fields.count)] > 0;   // no animals: no value
     if (!this.charts.evoTraits) this._chart('evoTraits', $('evo-traits'), M.traitNames.map((n, i) => ({ label: n, color: TRAIT_C[i % TRAIT_C.length] })), { height: 220 });
-    this.charts.evoTraits.setData([xs, ...M.traitNames.map((_, i) => R.map((r) => sp >= 0 && ok(r, sp) ? r[this.idx(sp, T.fields.traits + i)] : null))]);
+    // each trait as a multiple of its value when the clade began (x1 = unchanged): traits in steps (lifespan, maturity)
+    // would otherwise flatten every trait measured 0..1 onto the axis
+    const raw = M.traitNames.map((_, i) => R.map((r) => sp >= 0 && ok(r, sp) ? r[this.idx(sp, T.fields.traits + i)] : null));
+    this.charts.evoTraits.setData([xs, ...raw.map((v) => { const v0 = v.find((q) => q !== null && isFinite(q)); return v.map((q) => q === null || v0 === undefined ? null : (q + 0.02) / (v0 + 0.02)); })]);
     this._cladeChart('evoAcross', $('evo-across'), T.fields.traits + this.sel.evoTrait, { height: 180, skipEmpty: true });
     this._cladeChart('evoKit', $('evo-kit'), T.fields.kit, { height: 150, skipEmpty: true });
     this._cladeChart('evoGen', $('evo-gen'), T.fields.gen, { height: 150, skipEmpty: true });
