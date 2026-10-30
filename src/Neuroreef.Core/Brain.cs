@@ -90,12 +90,12 @@ public static class Brain
     static void Segment(Span<sbyte> g, int start, int end, float rate, uint seed, uint step, uint key, EvoSettings e, ref uint j)
     {
         if (rate <= 0f) return;
-        float lq = MathF.Log(1f - MathF.Min(rate, 0.999f));
+        float lq = MathK.Log(1f - MathF.Min(rate, 0.999f));
         int k = start - 1;
         while (true)
         {
             float u = Rng.U(seed, step, key, Rs.Mutate + 4u * j++);
-            k += 1 + (int)MathF.Min(1e9f, MathF.Floor(MathF.Log(MathF.Max(1e-12f, 1f - u)) / lq));
+            k += 1 + (int)MathF.Min(1e9f, MathF.Floor(MathK.Log(MathF.Max(1e-12f, 1f - u)) / lq));
             if (k >= end) return;
             bool big = Rng.U(seed, step, key, Rs.Mutate + 4u * j++) < e.MutBigShare;
             float d = Rng.N(seed, step, key, Rs.Mutate + 4u * j++) * (big ? e.MutBig : e.MutSmall);

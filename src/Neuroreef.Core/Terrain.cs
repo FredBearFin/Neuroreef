@@ -98,7 +98,7 @@ public static class Terrain
             float e = w.Elev[i];
             if (e < w.SeaLevel) w.Depth[i] = w.SeaLevel - e;
             // depth ~ discharge^0.4 (Leopold & Maddock 1953), wadeable at most
-            else if (w.Flow[i] > riverAcc) w.Depth[i] = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathF.Pow(w.Flow[i] / riverAcc, K.RIVER_DEPTH_EXP));
+            else if (w.Flow[i] > riverAcc) w.Depth[i] = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(w.Flow[i] / riverAcc, K.RIVER_DEPTH_EXP));
             else w.Depth[i] = 0;
             w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
         }

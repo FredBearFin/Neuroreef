@@ -140,10 +140,10 @@ public static class G
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
     public static float Gene(sbyte b, float lo, float hi) => lo + (hi - lo) * ((b + 128) / 255f);
     /// <summary>A gene on a logarithmic range (mass, newborn share).</summary>
-    public static float GeneLog(sbyte b, float lo, float hi) => lo * MathF.Pow(hi / lo, (b + 128) / 255f);
+    public static float GeneLog(sbyte b, float lo, float hi) => lo * MathK.Pow(hi / lo, (b + 128) / 255f);
     /// <summary>The gene byte that gives value v on a linear range (used to build ancestors).</summary>
     public static sbyte ToGene(float v, float lo, float hi) => (sbyte)Math.Clamp((int)MathF.Round((v - lo) / (hi - lo) * 255f - 128f), -127, 127);
-    public static sbyte ToGeneLog(float v, float lo, float hi) => (sbyte)Math.Clamp((int)MathF.Round(MathF.Log(v / lo) / MathF.Log(hi / lo) * 255f - 128f), -127, 127);
+    public static sbyte ToGeneLog(float v, float lo, float hi) => (sbyte)Math.Clamp((int)MathF.Round(MathK.Log(v / lo) / MathK.Log(hi / lo) * 255f - 128f), -127, 127);
 }
 
 /// <summary>Agent life stages within a slot.</summary>

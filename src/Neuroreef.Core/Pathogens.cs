@@ -42,9 +42,9 @@ public static class Pathogens
         for (int b = 0; b < 256; b++)
         {
             float u = b / 255f;
-            RepT[b] = K.PG_REP_LO * MathF.Pow(K.PG_REP_HI / K.PG_REP_LO, u);
-            QsT[b] = K.PG_QS_LO * MathF.Pow(K.PG_QS_HI / K.PG_QS_LO, u);
-            DecayT[b] = K.PG_DECAY_HI * MathF.Pow(K.PG_DECAY_LO / K.PG_DECAY_HI, u);
+            RepT[b] = K.PG_REP_LO * MathK.Pow(K.PG_REP_HI / K.PG_REP_LO, u);
+            QsT[b] = K.PG_QS_LO * MathK.Pow(K.PG_QS_HI / K.PG_QS_LO, u);
+            DecayT[b] = K.PG_DECAY_HI * MathK.Pow(K.PG_DECAY_LO / K.PG_DECAY_HI, u);
         }
     }
 

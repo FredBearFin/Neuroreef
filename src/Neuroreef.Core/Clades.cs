@@ -108,7 +108,7 @@ public static class Clades
         // Realm is a founding viability constraint, not a body template.
         body[G.B_FLOOR - B] = (sbyte)Math.Clamp(floorClass, 0, K.FLOOR_CLASSES - 1);
         float fl = Body.Floors[body[G.B_FLOOR - B]];
-        body[G.B_MASS - B] = G.ToGeneLog(fl * MathF.Pow(K.MASS_HI / fl, U(0)), K.MASS_LO, K.MASS_HI);
+        body[G.B_MASS - B] = G.ToGeneLog(fl * MathK.Pow(K.MASS_HI / fl, U(0)), K.MASS_LO, K.MASS_HI);
         body[G.B_SPEED - B] = (sbyte)((U(1) - 0.5f) * 60f);
         body[G.B_SIGHT - B] = (sbyte)((U(2) - 0.5f) * 60f);
         // armour and weapons from the same range, so neither side of an arms race starts ahead (Revision L, ecology review)
@@ -202,7 +202,7 @@ public static class Clades
     static readonly string[] VisName = { "size", "eyes", "armour", "weapons", "legs", "fins", "wings", "leg pairs", "fin pairs", "eye pairs",
         "body length", "body width", "body height", "head size", "neck length", "tail length", "limb position", "limb shape", "fin shape", "wing shape" };
     const int V = 20;
-    static readonly float MassUnit = MathF.Log(1.5f) / MathF.Log(K.MASS_HI / K.MASS_LO) * 254f;
+    static readonly float MassUnit = MathK.Log(1.5f) / MathK.Log(K.MASS_HI / K.MASS_LO) * 254f;
     static bool PairTrait(int k) => k >= 7 && k <= 9;
     static float VisUnit(int k) => k == 0 ? MassUnit : PairTrait(k) ? 254f / 4f : 0.15f * 254f;
     // size is the body's actual size (its class floor included), not the mass gene alone
@@ -212,9 +212,9 @@ public static class Clades
         if (k >= 10 && k <= 12)
         {
             Body.Dimensions(w.Genome[g + G.B_LENGTH], w.Genome[g + G.B_WIDTH], w.Genome[g + G.B_HEIGHT], out float length, out float width, out float height);
-            return MathF.Log(k == 10 ? length : k == 11 ? width : height) / MathF.Log(1.5f);
+            return MathK.Log(k == 10 ? length : k == 11 ? width : height) / MathK.Log(1.5f);
         }
-        return k == 0 ? MathF.Log(w.PM[i] / K.MASS_LO) / MathF.Log(1.5f) : w.Genome[g + VisGene[k]] / VisUnit(k);
+        return k == 0 ? MathK.Log(w.PM[i] / K.MASS_LO) / MathK.Log(1.5f) : w.Genome[g + VisGene[k]] / VisUnit(k);
     }
 
     /// <summary>
@@ -292,7 +292,7 @@ public static class Clades
         if (c1 < K.MIN_SPLIT || c2 < K.MIN_SPLIT) return -1;
         float dg = 0; for (int k = 0; k < D; k++) { float d = x.G1[k] / c1 - x.G2[k] / c2; dg += d * d; }
         dg = MathF.Sqrt(dg / D) / K.D_COMPAT;
-        bool sub = MathF.Exp(-dg * dg * dg * dg) > 0.5f;   // still more than half fertile together
+        bool sub = MathK.Exp(-dg * dg * dg * dg) > 0.5f;   // still more than half fertile together
         bool secondIsNew = c2 <= c1;
         int nc = NewClade(w, s, w.Sp[s].Ancestor, sub);
         if (nc < 0) return -1;
@@ -305,7 +305,7 @@ public static class Clades
         var cn = secondIsNew ? x.C2 : x.C1; var co = secondIsNew ? x.C1 : x.C2;
         int second2 = -1; float b2 = 0;
         for (int k = 0; k < V; k++) { float d = MathF.Abs(cn[k] - co[k]); if (k != most && d > b2 && d >= 0.5f * K.SPLIT_VIS) { b2 = d; second2 = k; } }
-        string Why(int k) => k == 0 ? (cn[0] > co[0] ? $"bigger (x{MathF.Pow(1.5f, cn[0] - co[0]):0.#})" : $"smaller (x{MathF.Pow(1.5f, cn[0] - co[0]):0.##})")
+        string Why(int k) => k == 0 ? (cn[0] > co[0] ? $"bigger (x{MathK.Pow(1.5f, cn[0] - co[0]):0.#})" : $"smaller (x{MathK.Pow(1.5f, cn[0] - co[0]):0.##})")
                               : (cn[k] > co[k] ? "more " : "fewer ").Replace("fewer ", PairTrait(k) ? "fewer " : "less ") + VisName[k];
         w.Sp[nc].SplitWhy = second2 >= 0 ? Why(most) + ", " + Why(second2) : Why(most);
         w.T.Splits++;

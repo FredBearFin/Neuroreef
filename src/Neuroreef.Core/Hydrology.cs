@@ -116,7 +116,7 @@ public static class Hydrology
                 if (r < 0 || h[c] <= h[r]) continue;        // a lake, or the floor of a closed basin: no slope to cut
                 // bedrock under alluvium is not cut until the alluvium is gone: sediment is soft (kRock 1)
                 float kr = kRock == null || alluv[c] > 0f ? 1f : kRock[c];
-                float F = kErode * kr * MathF.Pow(flow[c], K.ERODE_M) / Dist(c, r, FW);
+                float F = kErode * kr * MathK.Pow(flow[c], K.ERODE_M) / Dist(c, r, FW);
                 float hn = (h[c] + F * h[r]) / (1f + F);
                 cut[c] = h[c] - hn; h[c] = hn;
             }
@@ -134,7 +134,7 @@ public static class Hydrology
                 if (slope <= 0f) dep = MathF.Min(s, MathF.Max(0f, fill[c] - h[c]));
                 else
                 {
-                    float cap = kCarry * MathF.Pow(flow[c], K.ERODE_M) * slope;
+                    float cap = kCarry * MathK.Pow(flow[c], K.ERODE_M) * slope;
                     dep = s > cap ? drop * (s - cap) : 0f;
                 }
                 h[c] += dep; alluv[c] += dep; b.Deposited += dep;
@@ -162,7 +162,7 @@ public static class Hydrology
     {
         int FW = Map.FW, n = FW * FW;
         var drain = new int[n]; var steps = new int[n];
-        float bank = MathF.Pow(K.BANKFULL, K.RIVER_DEPTH_EXP);
+        float bank = MathK.Pow(K.BANKFULL, K.RIVER_DEPTH_EXP);
         for (int q = 0; q < n; q++)
         {
             int c = net.Order[q], r = net.Recv[c];
@@ -175,7 +175,7 @@ public static class Hydrology
             float above = w.Elev[c] - w.Elev[d];
             if (above > K.FLOOD_HAND * K.SHALLOW) continue;
             // stage / mean depth = wet^f; it reaches the cell when Depth (wet^f - BANKFULL^f) >= height above the river
-            w.FloodWet[c] = MathF.Pow(bank + MathF.Max(0f, above) / w.Depth[d], 1f / K.RIVER_DEPTH_EXP);
+            w.FloodWet[c] = MathK.Pow(bank + MathF.Max(0f, above) / w.Depth[d], 1f / K.RIVER_DEPTH_EXP);
             w.FloodFrom[c] = d;
         }
     }

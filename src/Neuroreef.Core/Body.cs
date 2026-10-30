@@ -38,11 +38,11 @@ public static class Body
     /// <summary>Relative body axes, sharing the renderer's exponential scale and unit-volume normalization.</summary>
     public static void Dimensions(sbyte lengthGene, sbyte widthGene, sbyte heightGene, out float length, out float width, out float height)
     {
-        float logTwo = MathF.Log(2f);
-        length = MathF.Exp(logTwo * (2f * Organ(lengthGene) - 1f));
-        width = MathF.Exp(logTwo * (2f * Organ(widthGene) - 1f));
-        height = MathF.Exp(logTwo * (2f * Organ(heightGene) - 1f));
-        float volumeScale = MathF.Cbrt(length * width * height);
+        float logTwo = MathK.Log(2f);
+        length = MathK.Exp(logTwo * (2f * Organ(lengthGene) - 1f));
+        width = MathK.Exp(logTwo * (2f * Organ(widthGene) - 1f));
+        height = MathK.Exp(logTwo * (2f * Organ(heightGene) - 1f));
+        float volumeScale = MathK.Cbrt(length * width * height);
         length /= volumeScale; width /= volumeScale; height /= volumeScale;
     }
     /// <summary>The smallest body of each size class (the user, 2026-10-30).</summary>
@@ -50,9 +50,9 @@ public static class Body
     /// <summary>Memory units in use from the brain-size gene: log scale BRAIN_MIN..G.NH, so a mutation changes a brain
     /// by a share of its size, as with body mass (Revision M: on a linear scale of 256 units, ordinary founder variation
     /// swung a 12-unit brain by tens of units).</summary>
-    public static int Units(sbyte b) => Math.Clamp((int)MathF.Round(K.BRAIN_MIN * MathF.Pow((float)G.NH / K.BRAIN_MIN, Organ(b))), K.BRAIN_MIN, G.NH);
+    public static int Units(sbyte b) => Math.Clamp((int)MathF.Round(K.BRAIN_MIN * MathK.Pow((float)G.NH / K.BRAIN_MIN, Organ(b))), K.BRAIN_MIN, G.NH);
     /// <summary>The brain-size gene for a number of memory units (inverse of Units).</summary>
-    public static sbyte UnitsGene(float units) => (sbyte)Math.Clamp((int)MathF.Round(MathF.Log(Math.Max(units, K.BRAIN_MIN) / K.BRAIN_MIN) / MathF.Log((float)G.NH / K.BRAIN_MIN) * 254f - 127f), -127, 127);
+    public static sbyte UnitsGene(float units) => (sbyte)Math.Clamp((int)MathF.Round(MathK.Log(Math.Max(units, K.BRAIN_MIN) / K.BRAIN_MIN) / MathK.Log((float)G.NH / K.BRAIN_MIN) * 254f - 127f), -127, 127);
 
     public static void Express(World w, int i)
     {
@@ -121,7 +121,8 @@ public static class Body
         float vLand = v * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         Dimensions(gn[g + G.B_LENGTH], gn[g + G.B_WIDTH], gn[g + G.B_HEIGHT], out float length, out float width, out float height);
-        length = MathF.Log2(length) * 0.5f; width = MathF.Log2(width) * 0.5f; height = MathF.Log2(height) * 0.5f;
+        const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
+        length = MathK.Log(length) * invLn2 * 0.5f; width = MathK.Log(width) * invLn2 * 0.5f; height = MathK.Log(height) * invLn2 * 0.5f;
         float limbShape = Organ(gn[g + G.B_LIMB_SHAPE]) - 0.5f;
         // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
         // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
@@ -144,7 +145,7 @@ public static class Body
 
         w.PArmour[i] = armour;
         w.PStrike[i] = strike;
-        w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathF.Exp(Organ(gn[g + G.B_LITTER]) * MathF.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
+        w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathK.Exp(Organ(gn[g + G.B_LITTER]) * MathK.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
         float birth = G.GeneLog(gn[g + G.B_BIRTH], K.BIRTH_LO, K.BIRTH_HI);
         birth = MathF.Min(K.BIRTH_HI, MathF.Max(birth, K.NEWBORN_MIN / m));   // eggs and young have a smallest size (Revision M)
         w.PBirth[i] = birth;
@@ -211,7 +212,7 @@ public static class Body
     }
 
     /// <summary>Fibre fermented by a body of mass m, against a body of mass 1 (Jarman-Bell; TAU_FERM).</summary>
-    public static float Ferment(float m) => (1f - MathF.Exp(-MathK.Pow(m, 0.25f) / K.TAU_FERM)) / (1f - MathF.Exp(-1f / K.TAU_FERM));
+    public static float Ferment(float m) => (1f - MathK.Exp(-MathK.Pow(m, 0.25f) / K.TAU_FERM)) / (1f - MathK.Exp(-1f / K.TAU_FERM));
 
     /// <summary>Can an organism living in this realm get at this pool?</summary>
     public static bool Reachable(Realm realm, int p) => p switch

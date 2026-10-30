@@ -64,7 +64,7 @@ public static class Decide
     }
 
     /// <summary>The worth of an energy gain against a step's need: 1 - exp(-gain / need).</summary>
-    public static float Worth(float gain, float need) => 1f - MathF.Exp(-gain / need);
+    public static float Worth(float gain, float need) => 1f - MathK.Exp(-gain / need);
 
     static int CellAt(int c, int dx, int dy)
         => World.WrapI(c / Map.FW + dy, Map.FW) * Map.FW + World.WrapI(c % Map.FW + dx, Map.FW);

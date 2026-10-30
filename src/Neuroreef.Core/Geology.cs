@@ -121,7 +121,7 @@ public static class Geology
             c.PX[k] = bx; c.PY[k] = by;
             c.PW[k] = r.Next() * K.GEO_SIZE_VAR * spacing;
             float ang = 2f * MathF.PI * r.Next(), sp = K.GEO_V_LO + (K.GEO_V_HI - K.GEO_V_LO) * r.Next();
-            c.VX[k] = sp * MathF.Cos(ang); c.VY[k] = sp * MathF.Sin(ang);
+            c.VX[k] = sp * MathK.Cos(ang); c.VY[k] = sp * MathK.Sin(ang);
             c.Spin[k] = (2f * r.Next() - 1f) * K.GEO_SPIN;
             c.PT[k] = K.GEO_T_LO + (K.GEO_T_HI - K.GEO_T_LO) * r.Next();
         }
@@ -167,25 +167,25 @@ public static class Geology
                 {
                     if (MathF.Abs(Ta - Tb) < K.GEO_SUBDUCT)
                     {   // collision: both sides thicken
-                        float g = MathF.Exp(-Sq(dist / K.GEO_W_OROGEN));
+                        float g = MathK.Exp(-Sq(dist / K.GEO_W_OROGEN));
                         rate = Tm * conv / (sq * K.GEO_W_OROGEN) * g;
                         coll = dist < K.GEO_W_OROGEN;
                     }
                     else if (Ta > Tb)
                     {   // a rides over b: a volcanic arc behind the trench, shortening as well as magma
-                        float g = MathF.Exp(-Sq((dist - K.GEO_ARC_D) / K.GEO_W_ARC));
+                        float g = MathK.Exp(-Sq((dist - K.GEO_ARC_D) / K.GEO_W_ARC));
                         rate = K.GEO_ARC_SHARE * Tm * conv / (sq * K.GEO_W_ARC) * g;
                         volc = g > 0.3f; arc = dist < K.GEO_ARC_D + K.GEO_W_ARC;
                     }
                     else
                     {   // a sinks under b: a flexural moat (trench, foredeep) in front of the load
-                        float g = MathF.Exp(-Sq(dist / K.GEO_W_ARC));
+                        float g = MathK.Exp(-Sq(dist / K.GEO_W_ARC));
                         rate = -K.GEO_FOREDEEP * K.GEO_ARC_SHARE * Tm * conv / (sq * K.GEO_W_ARC) * g;
                     }
                 }
                 else
                 {   // rift: the crust thins; fast rifts erupt basalt along their axis
-                    float g = MathF.Exp(-Sq(dist / K.GEO_W_RIFT));
+                    float g = MathK.Exp(-Sq(dist / K.GEO_W_RIFT));
                     rate = Tm * conv / (sq * K.GEO_W_RIFT) * g;
                     volc = g > 0.5f && -conv > 0.5f * K.GEO_V_HI;
                 }

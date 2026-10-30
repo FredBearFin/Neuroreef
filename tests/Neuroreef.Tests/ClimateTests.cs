@@ -50,7 +50,9 @@ public class ClimateTests
         // climate rule. It was 0x52A982E9B31E42C1 at Revision Q (hydrology, commit 4583355), 0x18289DE28D12409D at
         // Revision P with continuous water depth (commit dde4d60), and 0x3BF8C06B3FB53E61 at Revision N (commit 2baed5e);
         // same seed, map and steps.
-        Assert.Equal(0x3EBEA675E685E2C7UL, h);
+        // Re-pinned when all simulation math moved to MathK (NR-104): it was 0x3EBEA675E685E2C7 on Linux and differed on
+        // Windows, because MathF.Pow/Exp/Sin in the geology, water cycle and climate gave last-digit differences between them.
+        Assert.Equal(0xD1A92250AB690304UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

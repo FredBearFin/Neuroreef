@@ -257,7 +257,7 @@ public static class WaterCycle
     static float[] SatTable()
     {
         var t = new float[SAT_N];
-        for (int k = 0; k < SAT_N; k++) t[k] = 1f - (float)Math.Pow(1.0 - k / (double)(SAT_N - 1), K.INFIL_B / (1.0 + K.INFIL_B));
+        for (int k = 0; k < SAT_N; k++) t[k] = 1f - MathK.Pow(1f - k / (float)(SAT_N - 1), K.INFIL_B / (1f + K.INFIL_B));
         return t;
     }
 

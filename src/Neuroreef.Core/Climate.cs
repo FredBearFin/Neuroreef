@@ -22,16 +22,16 @@ public static class Climate
 {
     // ---- response tables: TT_N entries of TT_STEP from TT_LO (nearest entry)
     /// <summary>(e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens saturation vapour pressure): how evaporation dries the soil.</summary>
-    public static readonly float[] Evap = Table(t => MathF.Pow(Es(t) / Es(K.T_REF), -K.EVAP_BETA));
+    public static readonly float[] Evap = Table(t => MathK.Pow(Es(t) / Es(K.T_REF), -K.EVAP_BETA));
     /// <summary>Yan & Hunt (1999) growth curves of grass, shrubs and trees, 1 at T_REF, at most PLANT_CAP; 0 outside (Tmin, Tmax).</summary>
     public static readonly float[] FGrass = Beta(K.GRASS_TMIN, K.GRASS_TOPT, K.GRASS_TMAX),
         FShrub = Beta(K.SHRUB_TMIN, K.SHRUB_TOPT, K.SHRUB_TMAX), FTree = Beta(K.TREE_TMIN, K.TREE_TOPT, K.TREE_TMAX);
     /// <summary>Algae and plankton growth x EPPLEY^(T - T_REF), at the water's temperature (Eppley 1972).</summary>
-    public static readonly float[] Algae = Table(t => MathF.Pow(K.EPPLEY, MathF.Max(t, K.T_WATER_MIN) - K.T_REF));
+    public static readonly float[] Algae = Table(t => MathK.Pow(K.EPPLEY, MathF.Max(t, K.T_WATER_MIN) - K.T_REF));
     /// <summary>Decomposition x Q10_ROT^((T - T_REF) / 10) (Lloyd & Taylor 1994).</summary>
-    public static readonly float[] Rot = Table(t => MathF.Pow(K.Q10_ROT, (t - K.T_REF) / 10f));
+    public static readonly float[] Rot = Table(t => MathK.Pow(K.Q10_ROT, (t - K.T_REF) / 10f));
 
-    internal static float Es(float t) => 0.6108f * MathF.Exp(17.27f * t / (t + 237.3f));
+    internal static float Es(float t) => 0.6108f * MathK.Exp(17.27f * t / (t + 237.3f));
 
     static float[] Table(Func<float, float> f)
     {
@@ -42,7 +42,7 @@ public static class Climate
 
     static float[] Beta(float lo, float opt, float hi)
     {
-        double F(double t) => t <= lo || t >= hi ? 0 : (hi - t) / (hi - opt) * Math.Pow((t - lo) / (opt - lo), (opt - lo) / (hi - opt));
+        double F(double t) => t <= lo || t >= hi ? 0 : (hi - t) / (hi - opt) * MathK.Pow((float)((t - lo) / (opt - lo)), (float)((opt - lo) / (hi - opt)));
         double r = F(K.T_REF);
         return Table(t => (float)Math.Min(K.PLANT_CAP, F(t) / r));
     }
@@ -61,8 +61,8 @@ public static class Climate
     /// <summary>Row constants of the temperature: T = a + b x Cont - TLapse (TLapse already holds Climate x LAPSE x height).</summary>
     public static void RowParams(World w, int y, out float a, out float b)
     {
-        float s = MathF.Sin(2f * MathF.PI * y / Map.FW), c = Nature.Climate;
-        float year = MathF.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength);
+        float s = MathK.Sin(2f * MathF.PI * y / Map.FW), c = Nature.Climate;
+        float year = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength);
         a = K.T_REF + c * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
         b = c * K.A_SEAS * s * year;
     }
@@ -85,7 +85,7 @@ public static class Climate
         {
             float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea) * K.H_RELIEF;      // m above the lakes
             w.TLapse[i] = Nature.Climate * K.LAPSE * h * 0.001f;
-            w.Cont[i] = 1f - K.WATER_DAMP * MathF.Exp(-w.DistWater[i] / K.L_MAR);
+            w.Cont[i] = 1f - K.WATER_DAMP * MathK.Exp(-w.DistWater[i] / K.L_MAR);
         }
         for (int y = 0; y < Map.FW; y++) TempRow(w, y);
     }
@@ -106,11 +106,12 @@ public static class Climate
         double sum = 0; int nLand = 0;
         for (int y = 0; y < FW; y++)
         {
-            float s = MathF.Abs(MathF.Sin(2f * MathF.PI * y / FW));
-            float lat = MathF.Asin(MathF.Min(1f, s)) * (180f / MathF.PI);
+            float s = MathF.Abs(MathK.Sin(2f * MathF.PI * y / FW));
+            // asin(|sin p|) is the distance of p to the nearest multiple of pi: exact, and the same on every machine (NR-104)
+            float ph = 2f * MathF.PI * y / FW % MathF.PI, lat = MathF.Min(ph, MathF.PI - ph) * (180f / MathF.PI);
             int dir = lat < 30f ? -1 : lat < 60f ? 1 : -1;
-            float belt = K.RAIN_DRY + (1f - K.RAIN_DRY) * MathF.Exp(-lat * lat / (K.RAIN_BELT * K.RAIN_BELT))
-                       + K.RAIN_MID * MathF.Exp(-(lat - 55f) * (lat - 55f) / (K.RAIN_BELT * K.RAIN_BELT));
+            float belt = K.RAIN_DRY + (1f - K.RAIN_DRY) * MathK.Exp(-lat * lat / (K.RAIN_BELT * K.RAIN_BELT))
+                       + K.RAIN_MID * MathK.Exp(-(lat - 55f) * (lat - 55f) / (K.RAIN_BELT * K.RAIN_BELT));
             float q = 0f; int x = 0; float hPrev = 0f;
             for (int k = 0; k < 2 * FW; k++, x = World.WrapI(x + dir, FW))
             {
@@ -145,7 +146,7 @@ public static class Climate
         double target = 0; int q = 0;
         for (int y = 0; y < FW; y++)
         {
-            float s = MathF.Sin(2f * MathF.PI * y / FW);
+            float s = MathK.Sin(2f * MathF.PI * y / FW);
             float a = K.T_REF + Nature.Climate * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
             for (int i = y * FW, e = i + FW; i < e; i++)
             {
@@ -153,8 +154,8 @@ public static class Climate
                 for (int p = 0; p < PH; p++)
                 {
                     float ph = 2f * MathF.PI * (p + 0.5f) / PH;
-                    float season = MathF.Sin(ph - 2f * MathF.PI * y / FW);                 // as Fields: the moisture season by latitude
-                    float b = Nature.Climate * K.A_SEAS * s * MathF.Sin(ph);
+                    float season = MathK.Sin(ph - 2f * MathF.PI * y / FW);                 // as Fields: the moisture season by latitude
+                    float b = Nature.Climate * K.A_SEAS * s * MathK.Sin(ph);
                     float m = w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season);
                     mb[q] = m; ev[q] = Evap[Idx(MathF.FusedMultiplyAdd(b, w.Cont[i], a) - w.TLapse[i])];
                     float m0 = reference == null ? m : reference[i] * (1f + K.A_SEASON * Nature.Seasons * season);
@@ -172,7 +173,7 @@ public static class Climate
                 if (w.Cell[i] != (byte)Realm.Land) continue;
                 for (int p = 0; p < PH; p++, q++)
                 {
-                    float season = MathF.Sin(2f * MathF.PI * (p + 0.5f) / PH - 2f * MathF.PI * y / FW);
+                    float season = MathK.Sin(2f * MathF.PI * (p + 0.5f) / PH - 2f * MathF.PI * y / FW);
                     float m0 = (reference == null ? w.MoistBase[i] : reference[i]) * (1f + K.A_SEASON * Nature.Seasons * season);
                     target += 0.5 * (Math.Clamp(m0 * (1f - sd), 0f, 1f) + Math.Clamp(m0 * (1f + sd), 0f, 1f));
                 }
@@ -192,7 +193,7 @@ public static class Climate
     public static float AnnualMean(World w, int i)
     {
         if (!On) return K.T_REF;
-        float s = MathF.Sin(2f * MathF.PI * (i / Map.FW) / Map.FW);
+        float s = MathK.Sin(2f * MathF.PI * (i / Map.FW) / Map.FW);
         return K.T_REF + Nature.Climate * (K.T_EQ - K.DT_EP * s * s - K.T_REF) - w.TLapse[i];
     }
 
@@ -272,7 +273,7 @@ public static class Heat
     public static float Rate(float t)
     {
         const float kB = 8.617e-5f;   // Boltzmann's constant, eV/K
-        return MathF.Exp(K.E_ACT / kB * (1f / (K.T_BODY + 273.15f) - 1f / (MathF.Max(t, K.T_CORE_MIN) + 273.15f)));
+        return MathK.Exp(K.E_ACT / kB * (1f / (K.T_BODY + 273.15f) - 1f / (MathF.Max(t, K.T_CORE_MIN) + 273.15f)));
     }
 
     /// <summary>Lower and upper critical temperatures (operative, °C) of a body making heat h: the thermoneutral zone.</summary>
