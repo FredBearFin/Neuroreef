@@ -916,7 +916,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | maturity | c_A·M^0.25·k_mat: the fastest time to adult size, with food unlimited |
 | sight R | min(32, c_R·M^0.2·k_sight) |
 | reach | 1 + 0.4·M^(1/3) |
-| movement cost | c_M·M·speed² |
+| movement cost | C_MOVE·C_SPEED·M^EXP_MOVE·speed (cost of transport ~M^0.7 × speed, Taylor et al. 1982; × FLY_COST flying, × (1 + INS_MOVE·fur)) |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
 | growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
