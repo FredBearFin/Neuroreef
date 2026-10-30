@@ -57,6 +57,12 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   its gut passes in a step (optimal diet theory, Charnov 1976): a heap of dung or litter no longer beats a little good
   food and clogs the gut (gut food was 0.53 E/M against a best diet food of ~1.9). Births over 3,000 steps rose by
   10-55% in three worlds.
+- *Mates are searched for, and the breeding condition evolves.* A ready animal with no mate in sight did nothing; in a
+  thinly spread lineage a ready female had a mate in sight 3% of the time, and the last big lineage of one world died
+  unmated. SEEK_MATE now steers toward a mate in sight, else toward its own kind, else straight on (long straight runs
+  are the efficient search for what is out of sight; Bartumeus et al. 2005). And the share of its reserve a body needs
+  before it breeds is a gene (B_BREEDE, READY_LO 0.25 .. READY_HI 0.9; it was a fixed 0.6): selection can find income
+  breeders that breed thin and often, or capital breeders that wait. "breeding condition" is a trait in the charts.
 - *Calmer newborns.* Every discrete action of a newborn brain started near 5% a step (FOUNDER_BIAS -48), so naive
   animals struck whatever was in reach every ~20 steps and founding groups killed each other (one lineage: 30% of its
   deaths by its own kind). All actions now start near 2% (FOUNDER_BIAS -64), the same for every action; the instincts

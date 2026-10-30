@@ -380,7 +380,12 @@ public static class Decide
             Add(g[P.SEPARATE], sepX, sepY);
         }
         if (mom >= 0) Add(g[P.FOLLOW_MOTHER], mdx, mdy);
+        // looking for a mate (Revision P): toward one in sight; else toward its own kind, where mates are likely; else on
+        // straight ahead, the efficient way to search for something out of sight (long straight runs, Bartumeus et al.
+        // 2005). Before, a ready animal with no mate in sight did nothing, and thinly spread lineages died unmated
         if (mate.J >= 0) Add(g[P.SEEK_MATE], mate.Dx, mate.Dy);
+        else if (kinSum > 0) Add(g[P.SEEK_MATE], kinCx, kinCy);
+        else Add(g[P.SEEK_MATE], fx, fy);
         Add(g[P.CLIMB_FOOD], fgx, fgy);
         Add(g[P.SEEK_WATER], w.DistDrink[CellAt(cell, -1, 0)] - w.DistDrink[CellAt(cell, 1, 0)], w.DistDrink[CellAt(cell, 0, -1)] - w.DistDrink[CellAt(cell, 0, 1)]);
         Add(g[P.SEEK_LAND], w.DistLand[CellAt(cell, -1, 0)] - w.DistLand[CellAt(cell, 1, 0)], w.DistLand[CellAt(cell, 0, -1)] - w.DistLand[CellAt(cell, 0, 1)]);
@@ -453,7 +458,7 @@ public static class Decide
         // a male only needs to afford mating (and keep a reserve); a female (or hermaphrodite) must afford young
         if (w.PSexual[i] != 0 && w.PHerm[i] == 0 && w.Sex[i] != 0)
             return w.Energy[i] > K.C_MATE * w.PM[i] + 0.15f * w.EmaxOf(i);
-        return w.Energy[i] > K.READY_ENERGY * w.EmaxOf(i);
+        return w.Energy[i] > w.PReadyE[i] * w.EmaxOf(i);   // its own breeding threshold, a gene (Revision P)
     }
 
     /// <summary>

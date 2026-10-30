@@ -146,6 +146,9 @@ public static class Clades
         body[G.B_APPEND - B] = (sbyte)MathF.Round(K.FOUND_APP * 254f - 127f);
         // warm- or cold-blooded, or between (Revision P): anything; what it pays for and gains from it is physics (Heat.Core)
         body[G.B_ENDO - B] = (sbyte)((U(90) * 2f - 1f) * 127f);
+        // breeding condition (Revision P): anything from breeding on a thin reserve (many young, weak mothers) to waiting
+        // for a full one (few young, strong mothers); selection decides
+        body[G.B_BREEDE - B] = (sbyte)((U(91) * 2f - 1f) * 127f);
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // Diet preferences stay random (Revision K), but every ancestor can eat an abundant primary producer in its
         // realm: grass on land, phytoplankton in water. Without that staple, a random diet could make a founder unable

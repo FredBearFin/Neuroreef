@@ -244,7 +244,8 @@ public static class K
     [K("Clades", "an extinct clade's slot is reused only after this many steps", "steps", "-")] public const int CLADE_RECYCLE = 20000;
 
     // ---------------------------------------------------------------- 6. reproduction
-    [K("Reproduction", "energy needed to be READY", "xEmax", "HT")] public const float READY_ENERGY = 0.60f;
+    [K("Reproduction", "lowest breeding condition a body can have: it breeds once its reserve is above this share (B_BREEDE gene)", "xEmax", "ECO: income breeders breed on what they eat as they go, capital breeders on stored reserves (Jonsson 1997; Stephens et al. 2009); was the fixed READY_ENERGY = 0.6 until 2026-10-30")] public const float READY_LO = 0.25f;
+    [K("Reproduction", "highest breeding condition a body can have", "xEmax", "ECO: as READY_LO")] public const float READY_HI = 0.9f;
     [K("Reproduction", "newborn energy (paid by parent at conception)", "xEmax child", "V1")] public const float F_BIRTH = 0.40f;
     [K("Reproduction", "mating cost per partner", "E/M", "HT")] public const float C_MATE = 0.02f;
     [K("Reproduction", "a male's refractory period after mating, as a share of the breeding cooldown", "-", "ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972)")] public const float REFRACT = 0.1f;
