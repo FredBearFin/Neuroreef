@@ -11,7 +11,7 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
 - *A new seed every world.* The program always used seed 1, so every world had the same map, ancestors and names. With
   no --seed, a new world now draws a random seed (printed at start and shown in the console's bar; `--seed N` makes the
   same world again; a saved world or prehistory resumes with its own).
-- *Founders set by food.* Each lineage starts with FOUND_FILL (half) of what its home range can feed at its body size,
+- *Founders set by food.* Each lineage starts with FOUND_FILL (a quarter) of what its home range can feed at its body size,
   brain and diet: the range's sustained plant yield (Fields.Yield: each pool's growth at the stock where it grows
   fastest, seasonal pools at their yearly mean) over a day of living, FIELD_METAB = 1.5 x basal (measured in this world:
   basal 0.92, moving 0.12, growth 0.16, breeding 0.15, heat 0.10). The setup's "founders" is now only an upper limit.
