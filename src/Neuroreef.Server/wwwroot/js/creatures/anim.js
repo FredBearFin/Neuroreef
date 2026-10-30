@@ -61,6 +61,12 @@ const GLSL_BODY = `
   float legE = smoothstep(0.05, 0.3, legs);
   float legLen = (0.12 + 1.05 * legs) * legE * mix(0.55, 1.55, limbShape);
   float legR = (0.035 + 0.045 * legs + 0.03 * armour) * legE * mix(1.7, 0.55, limbShape);
+  // legs scale with body mass as bone must (elastic similarity, McMahon 1975: length ~ M^1/4, diameter ~ M^3/8), not
+  // as the body does (all lengths ~ M^1/3): a heavy body stands on shorter, stouter legs, a light one on thin long ones.
+  // The model is scaled by mass^1/3 (bodySize = 1.5 cbrt(M)), so relative to M = 1 legs go as M^-1/12 long, M^+1/24 thick
+  float massI = pow(max(length(instanceMatrix[0].xyz) / 1.5, 0.05), 3.0);
+  legLen *= pow(massI, -1.0 / 12.0);
+  legR *= pow(massI, 1.0 / 24.0) * pow(massI, 1.0 / 12.0);   // thickness against length: d/L ~ M^1/8
   // the body stands on its legs, or lies on its belly; a swimmer is centred on the water line
   float cy = max(ryB * 0.85, 0.45 * ryB + legLen * 0.97);
   vec3 C = vec3(0.0, cy, 0.0);
