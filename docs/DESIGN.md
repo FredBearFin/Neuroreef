@@ -258,8 +258,9 @@ reviewed by the ecologist)
   thirst, water, ponds), multipliers on the documented constants; 1 = the law. Saved in every checkpoint.
 - Hunger senses prey: an animal that can digest meat or blood sees the value of the animal in reach as food
   (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants.
-- Ancestors' diets are sparse and random: good at 1-3 of all 15 foods, poor at the rest (they could all
-  eat plants before). Drain or kill is a share (PDrain), not a switch.
+- Ancestors' diet preferences are sparse and random, but each can digest its realm's abundant primary
+  producer (grass on land, phytoplankton in water); the remaining preferences stay random. Drain or kill
+  is a share (PDrain), not a switch.
 - The laying instinct: ready to breed → LAY, for cloners and egg-layers as the mating instinct is for the sexual.
 - Water (§6.3, ecology review). Food holds water (FoodWater per pool; live plants as wet as their ground),
   and digestion makes metabolic water (MET_WATER); both relieve thirst by K_FOODWATER per unit body mass.
