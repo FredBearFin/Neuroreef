@@ -24,7 +24,7 @@ public class AppearanceTests
         Assert.Equal(Enumerable.Range(G.APPEARANCE, G.NAPPEARANCE), genes);
         Assert.Equal(G.APPEARANCE + G.NAPPEARANCE, G.B_MHC);
         Assert.Equal(G.B_MHC + G.NMHC, G.BODY + G.NBODY);
-        Assert.Equal(67, G.NBODY);
+        Assert.Equal(68, G.NBODY);
         Assert.Equal(0f, Body.Organ(-127));
         Assert.Equal(0.5f, Body.Organ(0));
         Assert.Equal(1f, Body.Organ(127));
@@ -284,7 +284,7 @@ public class AppearanceTests
         var w = VisibleWorld();
         using var bank = new MemoryStream();
         GeneBank.Save(w, bank);
-        Assert.Equal(10, GeneBank.Version);
+        Assert.Equal(11, GeneBank.Version);
         bank.Position = 0;
         var loaded = GeneBank.Load(bank);
         foreach (var genome in loaded.Genomes[0])
@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(10, Checkpoint.Version);
+            Assert.Equal(11, Checkpoint.Version);
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);

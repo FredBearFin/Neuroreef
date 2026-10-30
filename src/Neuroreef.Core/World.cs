@@ -36,7 +36,8 @@ public sealed class World
     public readonly float[] PImit, PImitAge;  // vocal learning (0..1) and its sensitive period (share of lifespan) (Revision N)
     public readonly float[] PWaterEcon;       // water-economy gene expressed (0..1)
     public readonly float[] PInsul, PAppend;  // fur (insulation) and appendages (0..1), for the heat budget (Revision O)
-    public readonly float[] PReadyE;          // share of its reserve it needs before breeding (Revision P)
+    public readonly float[] PReadyE;
+    public readonly float[] PWire;            // scale of its recurrent memory weights: its wiring gain over the raw radius of its genome's (Revision P)          // share of its reserve it needs before breeding (Revision P)
     public readonly float[] PEndo;            // endothermy (0..1): 0 its core follows its surroundings, 1 it is kept at T_BODY (Revision P)
     // ---- agents: body heat (Revision O), written by RESOLVE (own slot)
     public readonly float[] ThermStrain;      // heat strain from shortfalls beyond what the body can make or lose (1 = death by cold or heat)
@@ -164,7 +165,7 @@ public sealed class World
         PVLand = new float[c]; PVWater = new float[c]; PVAir = new float[c]; PSexRatio = new float[c]; PImmune = new float[c];
         PLegs = new float[c]; PFins = new float[c]; PWings = new float[c];
         PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PFloor = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
-        PInsul = new float[c]; PAppend = new float[c]; PEndo = new float[c]; PReadyE = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
+        PInsul = new float[c]; PAppend = new float[c]; PEndo = new float[c]; PReadyE = new float[c]; PWire = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new ushort[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];

@@ -165,6 +165,20 @@ public static class Brain
         int g0 = i * G.LEN;
         float eta = G.Gene(w.Genome[g0 + G.ETA], K.ETA_LO, K.ETA_HI);
         float lam = G.Gene(w.Genome[g0 + G.LAMBDA], K.LAMBDA_LO, K.LAMBDA_HI);
+        // normalised learning (Revision P): a step changes an output by eta x advantage x |input|^2, and a big brain's input
+        // is larger (|input|^2 ~117 at 256 units against ~25 at 24), so its steps were ~5x too big and it learned a delayed
+        // cue worse than a small brain. Above NLMS_REF the step is scaled by NLMS_REF / |input|^2 (normalised LMS)
+        {
+            int un = w.PBrain[i], yb = i * BLOCK * G.NIN; double ys = 0;
+            for (int b = 0; b < BLOCK; b++)
+            {
+                int o = yb + b * G.NIN;
+                for (int k = 0; k < un; k++) { float v = w.HistY[o + k]; ys += v * v; }
+                for (int k = G.NH; k < G.NIN; k++) { float v = w.HistY[o + k]; ys += v * v; }
+            }
+            ys /= BLOCK;
+            if (ys > K.NLMS_REF) eta *= (float)(K.NLMS_REF / ys);
+        }
         float l2 = lam * lam, l3 = l2 * lam, l4 = l3 * lam;
         int hb = i * BLOCK;
         float A0 = w.HistA[hb], A1 = w.HistA[hb + 1], A2 = w.HistA[hb + 2], A3 = w.HistA[hb + 3];
@@ -268,9 +282,14 @@ public static class Brain
             int units = w.PBrain[i];                 // the brain-size gene: memory units beyond it do not exist
             for (int h = units; h < G.NH; h++) { hid[h] = 0f; yp[h] = 0f; u[F.N + h] = 0f; }
             int nu = F.N + units;                   // inputs that exist: the features and the units in use
+            float wire = w.PWire[i];                 // its wiring gain (Revision P): the recurrent part is scaled to its radius
+            // the senses' total drive into memory is the same at any size (fan-in normalisation, Revision P): each unit's
+            // sense input is sqrt(BRAIN_START / units) of its genome's, so a big brain's units hold different past moments
+            // instead of echoing the same input (256 units recalled 16 steps at full input, 31 at a quarter)
+            float ins = MathF.Sqrt(K.BRAIN_START / (float)Math.Max(K.BRAIN_START, units));
             for (int h = 0; h < units; h++)
             {
-                float v = MathK.Tanh(DotS8(gen + h * G.NIN, u, nu) * K.WSCALE);
+                float v = MathK.Tanh((ins * DotS8(gen + h * G.NIN, u, F.N) + wire * DotS8(gen + h * G.NIN + F.N, u + F.N, units)) * K.WSCALE);
                 hid[h] = v; yp[h] = v;
             }
             for (int k = 0; k < F.N; k++) yp[G.NH + k] = f[k];

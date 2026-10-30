@@ -149,7 +149,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.03677E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.03676E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -157,6 +157,9 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
 | RSCALE | 0.0625 | - | reflex input weight scale (int8 / 16, as the output layer) | - |
 | SATIETY | 0.2 | xEmax | appetite is full while the reserve is more than this share below full (hunger above it), and fades to none as it tops up | ECO: voluntary intake is limited by gut fill and energy status, not by energy deficit alone (Forbes 2007); measured 2026-10-30: adults on food ate on 47% of steps and sat at 20-60% reserve, so females were ready to breed 12% of the time |
+| NLMS_REF | 25 | - | input size (|input|^2 of memory units and senses) above which a brain's learning step is scaled down by NLMS_REF / |input|^2 | ML: normalised LMS (Widrow & Hoff; Haykin 2002); measured 2026-10-30: ~17-25 for brains under 48 units in a living world, ~117 at 256 units |
+| WIRE_LO | 0.5 | - | lowest spectral radius (feedback strength) of a brain's recurrent memory, set by the wiring-gain gene | ECO/ML: a reservoir holds the most memory near 1 (Jaeger 2001; Lukosevicius & Jaeger 2009); below it memories fade fast |
+| WIRE_HI | 1.5 | - | highest spectral radius of a brain's recurrent memory | as WIRE_LO: above ~1.2 activity turns chaotic and scrambles what it holds |
 | KIT_W | 120 | int8 | founder strength of each starter-kit reflex (x/16): at full need, 120/16 = 7.5 against the calm bias of -4 gives about 97% | designed: the innate starter kit (DESIGN §7.7, Revision D); the user (2026-10-30): the base instincts should be very strong, "like primary colours" (was 80, 88% against a bias of -3) |
 | ARCHIVE | 16 | genomes | elite archive size per species | HT (Revision M: 64 before; a genome is now ~83 KB) |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |

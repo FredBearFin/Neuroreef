@@ -3,6 +3,17 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Brains that remember** (2026-10-30; the user: "why do big brains die so much, why are they not smarter"). Measured
+before the change: a 256-unit brain held about 7 steps of its past, no more than a 24-unit brain, and learned a
+delayed-cue task worse. Its many recurrent inputs drowned its senses, and its learning step grew with its size.
+- *Wiring gain gene (B_WIRE).* It sets the spectral radius of the recurrent memory, from WIRE_LO to WIRE_HI
+  (Body.WireScale estimates the radius by the circular law). Near 1 a reservoir holds the most memory (Jaeger 2001).
+- *Fan-in.* A brain larger than BRAIN_START scales its sense weights by sqrt(BRAIN_START / units), so its senses are
+  not lost among its memory units.
+- *Normalised learning (NLMS).* When a brain's input size goes above NLMS_REF, its learning step is scaled down to match.
+Measured after (tests/BrainTests.cs): memory capacity is 7.8 steps at 24 units and 23.2 at 256. On a cue that must be
+held 6 steps, 12 units score +0.30 and 256 units +0.65. On a 3-step delay small brains still learn faster (+0.58 vs +0.33).
+
 **Revision P: worlds start as food allows, and every world is new** (2026-10-30; the user: "why were so many spawning
 in? ... how are they getting so much food?", "within 10,000 steps [one] kills everything else", "it starts the
 ancestors as preforms ... it's supposed to be randomly generated every time"). Measured before the change (default

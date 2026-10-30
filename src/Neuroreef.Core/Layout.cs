@@ -114,7 +114,8 @@ public static class G
         B_FLOOR = B_CARE + 23,                   // body-plan size class (0..FLOOR_CLASSES-1): the smallest it can be; copied exactly, rarely steps a class
         B_ENDO = B_CARE + 24,                    // endothermy (0..1): how far it keeps its core above its surroundings (0 cold-blooded, 1 warm-blooded at T_BODY) (Revision P)
         B_BREEDE = B_CARE + 25,                  // breeding condition: the share of its reserve it needs before it breeds (READY_LO..READY_HI) (Revision P)
-        APPEARANCE = B_CARE + 26,
+        B_WIRE = B_CARE + 26,                    // wiring gain: the feedback strength (spectral radius) of its memory, WIRE_LO..WIRE_HI (Revision P)
+        APPEARANCE = B_CARE + 27,
         B_LENGTH = APPEARANCE, B_WIDTH = APPEARANCE + 1, B_HEIGHT = APPEARANCE + 2,
         B_HEAD = APPEARANCE + 3, B_NECK = APPEARANCE + 4, B_TAIL = APPEARANCE + 5,
         B_LIMB_POS = APPEARANCE + 6, B_LIMB_SHAPE = APPEARANCE + 7,

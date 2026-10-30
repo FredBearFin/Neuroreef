@@ -88,6 +88,7 @@ public static class Body
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
         w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)finPairs; w.PEyePairs[i] = (byte)eyePairs;
         w.PBrain[i] = (ushort)brain; w.PHerm[i] = (byte)(herm ? 1 : 0); w.PImmune[i] = imm;
+        w.PWire[i] = WireScale(gn.AsSpan(g, G.LEN), brain);   // after the brain size: it scales the units in use
         w.PSexRatio[i] = Organ(gn[g + G.B_SEXRATIO]);
 
         w.PM[i] = m;
@@ -187,6 +188,26 @@ public static class Body
         // its value at M = 1: a small animal gets less from grass and leaves, a big one more (never above DigMax)
         float ferm = Ferment(w.PM[i]);
         for (int p = 0; p < Pools.N; p++) if (Pools.Fibrous(p)) dst[p] = MathF.Min(Pools.DigMax[p], dst[p] * ferm);
+    }
+
+    /// <summary>
+    /// The scale of a brain's recurrent weights (Revision P): its wiring-gain gene's spectral radius (WIRE_LO..WIRE_HI)
+    /// over the radius its genome's recurrent block among its units has, estimated by the circular law as
+    /// sqrt(sum of squared weights / units). A reservoir holds the most memory near a radius of 1 (Jaeger 2001); founder
+    /// genomes had 2 at 24 units and 4.3 at 256, chaotic, and a 256-unit brain recalled about 7 steps of its input.
+    /// </summary>
+    public static float WireScale(ReadOnlySpan<sbyte> genome, int units)
+    {
+        if (units <= 0) return 1f;
+        double s = 0;
+        for (int h = 0; h < units; h++)
+        {
+            int r = h * G.NIN + F.N;
+            for (int k = 0; k < units; k++) { double v = genome[r + k] * K.WSCALE; s += v * v; }
+        }
+        double rho = Math.Sqrt(s / units);
+        float target = K.WIRE_LO + (K.WIRE_HI - K.WIRE_LO) * Organ(genome[G.B_WIRE]);
+        return rho > 1e-6 ? (float)(target / rho) : 1f;
     }
 
     /// <summary>Fibre fermented by a body of mass m, against a body of mass 1 (Jarman-Bell; TAU_FERM).</summary>

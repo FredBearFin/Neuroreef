@@ -149,6 +149,8 @@ public static class Clades
         // breeding condition (Revision P): anything from breeding on a thin reserve (many young, weak mothers) to waiting
         // for a full one (few young, strong mothers); selection decides
         body[G.B_BREEDE - B] = (sbyte)((U(91) * 2f - 1f) * 127f);
+        // wiring gain (Revision P): how strongly its memory feeds back, anything from fading fast to the edge of chaos
+        body[G.B_WIRE - B] = (sbyte)((U(94) * 2f - 1f) * 127f);
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them, mediocre
         // at the rest. Revision P: no staple is given (a forced grass or plankton diet made every land ancestor a grazer

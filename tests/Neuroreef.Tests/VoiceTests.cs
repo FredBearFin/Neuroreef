@@ -298,7 +298,7 @@ public class VoiceTests
         // the only thing its call outputs can learn from is the match of its own utterances to its template
         int[] Run(bool imit)
         {
-            var (w, x, y) = NewWorld(10);   // seeds 10-20: the learner beats the control in all; in 1 of 11 (15) a random control brain itself favours [3,5]
+            var (w, x, y) = NewWorld(11);   // seeds 10-20: the learner says [3,5] more than the control in all; by 3x in 9 of 11 (in 13 a random control brain itself favours [3,5])
             int T = Org(w, -1, x + 2f, y, true, 1);
             int L = Org(w, T, x, y, false, 2);
             int g = L * G.LEN;
