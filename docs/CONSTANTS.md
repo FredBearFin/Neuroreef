@@ -244,8 +244,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | POND_R | 2 | cells | a pond site is the lowest cell within this many cells | ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas) |
 | POND_GAP | 6 | cells | pond sites are at least this far from a lake, sea or river | HT: a pond beside a lake adds nothing |
-| POND_FILL | 1 | x | a pond holds water while its cell is this much wetter than its average (season x this year's rain) | ECO: ephemeral pools fill in the wet season and dry in the dry season and in drought years, in wet and dry country alike |
-| POND_EVERY | 100 | steps | steps between pond updates | HT: ponds change over a season, so a few times a season is enough |
 
 ## 16. Body
 
@@ -515,8 +513,39 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BANKFULL | 1.35 | x | discharge, against its mean, at which a river tops its banks (wetness = season x this year's rain) | ECO: bankfull flow recurs every 1-2 years (Leopold, Wolman & Miller 1964; Williams 1978): the wet season of an average year (1 + A_SEASON) just tops it |
 | FLOOD_R | 3 | cells | floodplain: cells at most this many flow steps upstream of the river they drain into | HT: floodplains are a few channel widths to tens of km wide |
 | FLOOD_HAND | 0.5 | xSHALLOW | floodplain: cells at most this high above that river, x SHALLOW | HT: bounds the search; the stage decides which of them flood |
-| FLOOD_MIX | 0.5 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each pond update (POND_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993) |
+| FLOOD_MIX | 0.3 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each water-cycle update (WC_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993); 0.5 per 100 steps before the water cycle, the same rate per step at 50 |
 
-## 31. Organisms
+## 31. Water cycle
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| WC_EVERY | 50 | steps | steps between water-cycle updates (rain, snow, soil, groundwater, routing, ponds, lakes, drinkable water) | HT: 60 updates a year at T_SEASON (about 6 days each at 365 days a year); a step is ~3 hours, so the stores change little between updates |
+| P_MEAN | 800 | mm/year | mean yearly rain on the land (the rain pattern Climate.Rainfall is relative to it) | ECO: mean land precipitation ~750-800 mm a year (Trenberth et al. 2007) |
+| RAIN_LOCAL | 0.35 | - | share of the land's rain that falls as local convective rain of recycled moisture, spread evenly over the land of its latitude; the rest follows the wind-borne pattern (Climate.Rainfall) | ECO: ~40% of land rain comes from land evaporation (Trenberth 1999; van der Ent et al. 2010) and falls near where it rose; HT: without it a third of the land got under a quarter of the mean rain |
+| PET_REF | 1000 | mm/year | potential evapotranspiration at T_REF; it follows the saturation vapour pressure e_s(T) / e_s(T_REF) (Tetens), and is 0 at or below 0 °C | ECO: PET of a 20 °C climate ~1,000-1,200 mm a year (Thornthwaite 1948; Hamon 1961: PET ~ saturation vapour density) |
+| T_SNOW | 1 | °C | air temperature at or below which rain falls as snow | ECO: the 50% rain-snow line over land lies near 1 °C (Jennings et al. 2018) |
+| DDF | 3 | mm/K/day | degree-day factor: snow melted per K above 0 °C per day | ECO: degree-day factors of snow 2.5-6 mm/K/day (Hock 2003) |
+| SNOW_MAX | 4000 | mm | deepest snowpack (water equivalent): deeper snow is a glacier, and its ice carries the surplus downhill to where it melts and runs off | ECO: a glacier's accumulation is balanced by ice flow to its ablation zone (Paterson 1994); HT: several years of polar snowfall |
+| SOIL_CAP | 150 | mm | water the soil holds for plants (field capacity of the Manabe bucket) on ordinary ground | ECO: Manabe (1969) 150 mm; plant-available water of the root zone 100-200 mm on most soils (Saxton & Rawls 2006) |
+| ALLUV_CAP | 1 | - | extra share of SOIL_CAP that deep alluvium adds (x (1 - exp(-alluvium / ALLUV_D))) | ECO: deep alluvial loams hold 200-300 mm in the root zone (Saxton & Rawls 2006), twice thin upland soils |
+| INFIL_B | 0.2 | - | shape of the spread of soil capacity within a cell: the saturated share of the cell is 1 - (1 - soil water / capacity)^(b / (1 + b)), and rain on it runs off (variable infiltration capacity) | ECO: Xinanjiang / VIC curve (Zhao 1992; Wood, Lettenmaier & Zartarian 1992), b 0.1-0.4 (Liang et al. 1994) |
+| BETA_FC | 0.75 | - | soil wetness (share of capacity) above which evapotranspiration runs at its potential; below it falls in proportion (Manabe beta) | ECO: Manabe (1969): 0.75 |
+| E_BARE | 0.4 | - | evapotranspiration of bare ground against a full plant cover (cover = grass + shrub + tree, at most 1) | ECO: transpiration is ~60% of land evapotranspiration (Schlesinger & Jasechko 2014): bare soil dries only its top few cm |
+| K_PERC | 3 | mm/day | drainage from a saturated soil to groundwater; it goes as (soil water / capacity)^PERC_EXP | ECO/HT: drainage falls steeply as soil dries (Campbell 1974); groundwater recharge is ~10-30% of rain in humid regions (Doll & Fiedler 2008) |
+| PERC_EXP | 4 | - | exponent of drainage on soil wetness | ECO/HT: conductivity falls as a high power of water content (Campbell 1974: 2b + 3 ~ 10 for loam); lower here because the bucket is the whole root zone |
+| GW_TAU | 120 | days | groundwater residence time in a cell: each update WC_EVERY / GW_TAU of the shallow store feeds the cell's streams, and of the deep store flows on to the cell it drains to (or into the river or lake there) | ECO: baseflow recession constants of 50-200 days (Tallaksen 1995); water moves downslope cell by cell, so a valley gathers its hillsides' groundwater over years |
+| GW_DEEP | 0.3 | - | share of the water draining from the soil (and from ponds' floors) that recharges the deep, regional groundwater, which flows on underground cell by cell down the drainage; the rest recharges the shallow, local groundwater that feeds the cell's own small streams (baseflow) | ECO: most groundwater discharges within its local flow system; a smaller share joins regional systems that emerge in valley bottoms and lowlands (Toth 1963); HT: a cell is several km across, so its own streams take most |
+| GW_CAP | 1500 | mm | most deep groundwater a cell holds before its water table reaches the surface; the rest emerges (seepage, springs) | ECO/HT: an aquifer of 10-20 m and 10-20% drainable porosity holds 1-4 m of water; springs and seeps emerge where flow converges and the water table meets the ground (Toth 1963) |
+| SPRING_MIN | 2 | mm/day | a groundwater seep (emerging flow) at least this strong is a drinkable spring | HT: a few mm a day over a cell is a permanent trickle; weaker seeps only keep the ground wet |
+| POND_CAP | 250 | mm | most water a pond site holds (mm over its whole cell) before it spills downhill (fill-and-spill) | ECO: prairie potholes and pans are 0.5-2 m deep (Hayashi et al. 2016): with POND_FRAC a full pond is 1 m deep on average, 2 m at its deepest (a paraboloid); fill-and-spill (Spence & Woo 2003) |
+| POND_FRAC | 0.25 | - | share of a pond site's cell a full pond covers; its wetted area goes as the square root of the water it holds | ECO: area ~ volume^(1/2) for a paraboloid basin (Hayashi & van der Kamp 2000); HT: wetlands cover a few to tens of % of pothole country |
+| POND_WET | 10 | mm | water at a pond site (mm over its whole cell) from which the pond is drinkable | HT: the pond then covers 5% of the cell, ~20 cm deep on average |
+| POND_SEEP | 2 | mm/day | seepage from a pond's wetted floor into the soil and groundwater | ECO: depression-focused recharge under prairie wetlands ~1-5 mm a day (Hayashi, van der Kamp & Rudolph 1998) |
+| E_OPEN | 1.3 | x | open-water evaporation (ponds over their wetted area, lakes) against the potential evapotranspiration | ECO: Penman's E0: grass loses 0.6-0.8 of what open water does (Penman 1948) |
+| QMEAN_YEARS | 10 | years | years over which a river's mean discharge (its channel's size, against which it floods) follows the flow it carries | ECO: channels adjust their size to the flows they carry over years to decades (Leopold, Wolman & Miller 1964) |
+| LAKE_STAGE | 500 | mm | a lake's stage above its outlet's sill (its level at creation) when it receives its mean inflow; its outlet carries in proportion to the stage (a linear reservoir whose outlet is sized for the lake's mean flow) | ECO/HT: outlet channels are sized by the flows they carry, as river channels are (Leopold, Wolman & Miller 1964); lakes rise a few dm to m in floods; a lake below its sill does not spill |
+| WC_SPINUP | 2 | years | years of weather the water cycle runs at world creation (average years), so soil, snow, groundwater and rivers start in their seasonal state | HT: groundwater is first set to the steady state of the first year's recharge, then a second year settles the seasons and gives each river its mean discharge |
+
+## 32. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

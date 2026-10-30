@@ -136,37 +136,46 @@ public class HydrologyTests
             if (w.Cell[i] == (byte)Realm.Land && w.Alluvium[i] > 3 * K.ALLUV_D) Assert.True(w.Fert[i] >= 0.1f + 0.9f * K.ALLUV_FERT, $"cell {i}: fertility {w.Fert[i]}");
     }
 
-    [Fact] // floods: in a wet year the rivers top their banks; the floodplain is wet, drinkable and gets the river's nutrient
-           // (taken from the river); in a drought nothing floods
+    [Fact] // floods (the water cycle): when a wet year's runoff raises a river's discharge far enough over its mean, it tops its
+           // banks; the floodplain is wet, drinkable, soaked (from the river's water) and gets the river's nutrient (taken from
+           // the river); in a drought nothing floods
     public void WetYearsFloodTheFloodplain()
     {
         var w = new World(16, 7);
         Terrain.Build(w);
-        int n = Map.FW * Map.FW;
-        w.RainAnom = -0.6f; Ponds.Update(w);
-        Assert.Equal(0, Ponds.Flooded(w));
+        WaterCycle.Init(w);
+        int n = Map.FW * Map.FW, perYear = Nature.SeasonLength / K.WC_EVERY;
+        void Advance(int updates)
+        {
+            for (int u = 0; u < updates; u++)
+            {
+                w.Step += K.WC_EVERY;
+                if (Climate.On) for (int y = 0; y < Map.FW; y++) Climate.TempRow(w, y);
+                WaterCycle.Update(w);
+            }
+        }
+        w.RainAnom = -0.6f;
+        int most = 0;
+        for (int u = 0; u < perYear; u++) { Advance(1); most = Math.Max(most, Ponds.Flooded(w)); }
+        Assert.Equal(0, most);
         for (int i = 0; i < n; i++) w.Nutrient[i] = w.Cell[i] == (byte)Realm.Land ? 0.2f : 1.2f;
         double before = 0; for (int i = 0; i < n; i++) before += w.Nutrient[i];
-        w.RainAnom = 0.6f; Ponds.Update(w);
-        int fl = Ponds.Flooded(w);
+        w.RainAnom = 0.6f;
+        int fl = 0;
+        for (int u = 0; u < perYear && fl <= 50; u++) { Advance(1); fl = Ponds.Flooded(w); }
         Assert.True(fl > 50, $"{fl} cells flooded in a wet year");
         double after = 0;
         for (int i = 0; i < n; i++)
         {
             after += w.Nutrient[i];
             if (w.Wet[i] != 3) continue;
-            Assert.True(w.Cell[i] == (byte)Realm.Land && w.FloodFrom[i] >= 0);
+            int d = w.FloodFrom[i];
+            Assert.True(w.Cell[i] == (byte)Realm.Land && d >= 0);
+            Assert.True(w.DischargeMean[d] > 0f && w.Cell[d] != (byte)Realm.Land);
             Assert.Equal(0f, w.DistDrink[i]);
             Assert.True(w.Nutrient[i] > 0.2f, $"flooded cell {i} nutrient {w.Nutrient[i]}");
+            Assert.Equal(1f, w.Moisture[i], 4);   // a flooded cell's soil is soaked
         }
         Assert.Equal(before, after, 1);
-        // a flooded cell's soil is soaked
-        using var sim = new Simulation(16, 7, 1, empty: true);
-        var s = sim.W;
-        s.RainAnom = 0.6f; Ponds.Update(s);
-        int f = Array.IndexOf(s.Wet, (byte)3);
-        Assert.True(f >= 0);
-        Fields.Row(s, f / Map.FW);
-        Assert.Equal(1f, s.Moisture[f]);
     }
 }

@@ -41,11 +41,15 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // The water cycle (2026-10-30) re-pinned it: soil moisture is now the soil's water over its capacity (rain and snow
+        // in, evapotranspiration and drainage out), ponds and floods follow the water's stores, and the world spins up two
+        // years of weather before it starts, so the same seed grows different fields; Climate = 0 still skips every
+        // temperature rule (no snow, evaporation at T_REF). It was 0x52A982E9B31E42C1 at Revision Q (commit 4583355).
         // Revision Q (hydrology) re-pinned it: the terrain itself changed (rain-routed rivers, a relief worked by erosion
         // with alluvium on it, basin ponds, floods), so the same seed grows different fields; Climate = 0 still skips every
         // climate rule. It was 0x18289DE28D12409D at Revision P with continuous water depth (commit dde4d60), and
         // 0x3BF8C06B3FB53E61 at Revision N (commit 2baed5e); same seed, map and steps.
-        Assert.Equal(0x52A982E9B31E42C1UL, h);
+        Assert.Equal(0x96B0BD81ECCC9233UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
@@ -259,13 +263,14 @@ public class ClimateTests
         });
     }
 
-    [Fact] // a fields-only world: trees thin out with height where it is cold, and the land as a whole is as wet as without a climate
+    [Fact] // a fields-only world: trees thin out with height where it is cold; the climate moves no water in or out of the land
     public void VegetationFollowsTemperatureAndWaterIsConserved()
     {
-        (double moist, float[] tree, float[] tlapse, World w) Run(float climate) => With(climate, () =>
+        (double moist, double rain, double et, double residual) Run(float climate) => With(climate, () =>
         {
             using var sim = new Simulation(64, 9, 2, empty: true);
             var w = sim.W; double m = 0; int samples = 0;
+            double store0 = WaterCycle.LandStore(w);
             for (int k = 0; k < 6000; k++)
             {
                 sim.Step();
@@ -276,15 +281,19 @@ public class ClimateTests
                     m += s / n; samples++;
                 }
             }
-            return (m / samples, (float[])w.Tree.Clone(), (float[])w.TLapse.Clone(), w);
+            double res = w.WbRain - w.WbET - w.WbPondEvap - w.WbToLakes - (WaterCycle.LandStore(w) - store0);
+            return (m / samples, w.WbRain, (w.WbET + w.WbPondEvap) / w.WbRain, res / w.WbRain);
         });
-        // the normaliser keeps the land's water exactly in a year of average rain; a single wet or dry year (Weather) presses
-        // the two worlds against the cap of 1 differently, by a few % once rain gathers the water (Revision P), so the
-        // water is checked without year-to-year swings
-        float drought = Nature.Drought; Nature.Drought = 0f;
+        // the water cycle (2026-10-30) replaced the normaliser that kept the soil as wet with a climate as without one: now
+        // the same rain falls with and without a climate (where it falls follows the winds, not the temperature), every
+        // drop of it is accounted for (rain = evapotranspiration + flow to the lakes + what the land holds), and what the
+        // climate changes is how much of it warm air takes back: at the default strength the world is cooler than T_REF
+        // on average, so less evaporates and the soil is wetter
         var off = Run(0f); var on = Run(K.CLIMATE);
-        Nature.Drought = drought;
-        Assert.InRange(on.moist / off.moist, 0.98, 1.02);
+        Assert.Equal(1.0, on.rain / off.rain, 6);
+        Assert.True(Math.Abs(on.residual) < 1e-5 && Math.Abs(off.residual) < 1e-5, $"budget off by {on.residual:E1} / {off.residual:E1} of the rain");
+        Assert.True(on.et < off.et, $"evaporated share {on.et:P1} with the (cooler) climate, {off.et:P1} at T_REF everywhere");
+        Assert.True(on.moist > off.moist, $"moisture {on.moist:F3} with the climate, {off.moist:F3} without");
         // a treeline: on land made alike everywhere (the same wet soil and sparse young woodland, no fire and no drought
         // years), at fixed latitude, trees spread less on high ground with a climate, and alike without one
         double Treeline(float climate) => With(climate, () =>
@@ -297,10 +306,9 @@ public class ClimateTests
                 for (int i = 0; i < FW * FW; i++)
                 {
                     if (w.Cell[i] != (byte)Realm.Land) continue;
-                    w.MoistBase[i] = 1f; w.Fert[i] = 0.7f; w.Nutrient[i] = 0.55f;
+                    w.Rain[i] = 4f; w.SoilWater[i] = w.SoilCap[i]; w.Fert[i] = 0.7f; w.Nutrient[i] = 0.55f;   // wet soil: rain enough to keep it full
                     w.Tree[i] = 0.05f; w.Sapling[i] = 0.05f; w.Shrub[i] = 0.2f; w.Pool[(int)Pool.Grass][i] = 0.3f;
                 }
-                Climate.Normalise(w);
                 for (int k = 0; k < 6000; k++) sim.Step();
                 var cells = new System.Collections.Generic.List<int>();
                 for (int y = 0; y < FW; y++)
@@ -329,11 +337,11 @@ public class ClimateTests
         {
             using var sim = new Simulation(64, 4, 1, empty: true);
             var w = sim.W;
-            w.RainAnom = 0.5f;   // a wet year: ponds full
+            // the ponds the spin-up years filled (WaterCycle.Init)
             Array.Fill(w.Temp, 10f);
             Ponds.Update(w);
             int full = Ponds.Full(w);
-            Assert.True(full > 0, "no full ponds in a wet, mild year");
+            Assert.True(full > 0, "no full ponds in a mild year");
             Array.Fill(w.Temp, -5f);
             Ponds.Update(w);
             Assert.Equal(0, Ponds.Full(w));
