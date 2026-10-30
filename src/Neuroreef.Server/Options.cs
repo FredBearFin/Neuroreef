@@ -18,7 +18,7 @@ public sealed class Options
     public double CheckpointMinutes = 30;
     public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots = K.BRANCH_CAPACITY;
     // the map of a prehistory and of the world (a prehistory evolves in a region; the world you watch is a valley)
-    public int PreMap = 512, WorldMap = 256;
+    public int PreMap = 512, WorldMap = 512;   // the world is as big as the prehistory by default: a quarter of the area spread its survivors too thin (2026-10-30)
     public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;
     public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
@@ -104,7 +104,7 @@ public sealed class Options
   --branch-slots N      prehistory: animal slots per branch (default 49152; memory grows with it)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
   --map valley|region|continent        map of the prehistory (default region)
-  --world-map valley|region|continent  map of the world you watch (default valley)
+  --world-map valley|region|continent  map of the world you watch (default region, as big as the prehistory)
   --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
   --mating-drive X      strength of the breeding instinct (default 1)
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
