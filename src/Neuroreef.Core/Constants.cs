@@ -245,6 +245,7 @@ public static class K
     [K("Clades", "an extinct clade's slot is reused only after this many steps", "steps", "-")] public const int CLADE_RECYCLE = 20000;
 
     // ---------------------------------------------------------------- 6. reproduction
+    [K("Reward", "energy spent on its choices (strikes, calls, moving, heat) counts against the reward at this share of the weight energy eaten counts for it", "-", "ECO: animals learn by net energy gain (optimal foraging; Stephens & Krebs 1986); 1 = a unit spent weighs as a unit eaten. 2026-10-30: without it, calling (19-24% of basal) rose from ~38% to ~65% of steps by learning")] public const float R_SPEND = 1f;
     [K("Reproduction", "lowest breeding condition a body can have: it breeds once its reserve is above this share (B_BREEDE gene)", "xEmax", "ECO: income breeders breed on what they eat as they go, capital breeders on stored reserves (Jonsson 1997; Stephens et al. 2009); was the fixed READY_ENERGY = 0.6 until 2026-10-30")] public const float READY_LO = 0.25f;
     [K("Reproduction", "highest breeding condition a body can have", "xEmax", "ECO: as READY_LO")] public const float READY_HI = 0.9f;
     [K("Reproduction", "newborn energy (paid by parent at conception)", "xEmax child", "V1")] public const float F_BIRTH = 0.40f;

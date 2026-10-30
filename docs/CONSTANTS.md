@@ -304,7 +304,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 20. Reproduction
+## 20. Reward
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| R_SPEND | 1 | - | energy spent on its choices (strikes, calls, moving, heat) counts against the reward at this share of the weight energy eaten counts for it | ECO: animals learn by net energy gain (optimal foraging; Stephens & Krebs 1986); 1 = a unit spent weighs as a unit eaten. 2026-10-30: without it, calling (19-24% of basal) rose from ~38% to ~65% of steps by learning |
+
+## 21. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -314,7 +320,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 21. Care
+## 22. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -323,7 +329,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 22. Disease
+## 23. Disease
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -336,7 +342,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
 | DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
 
-## 23. Weather
+## 24. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -344,7 +350,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 24. Vegetation
+## 25. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -395,7 +401,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 25. Fire
+## 26. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -410,7 +416,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 26. Climate
+## 27. Climate
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -441,7 +447,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TT_STEP | 0.25 | K | temperature step of the response tables | - |
 | TT_N | 512 | - | entries of each response table | - |
 
-## 27. Heat
+## 28. Heat
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -469,6 +475,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 28. Organisms
+## 29. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).
