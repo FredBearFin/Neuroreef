@@ -315,6 +315,7 @@ public class AppearanceTests
     {
         var w = new World(4, 1);
         Array.Fill(w.Cell, (byte)Realm.Deep);
+        Array.Fill(w.Depth, K.SHALLOW * 5f);
         var genome = new sbyte[G.LEN];
         genome[G.B_LEGS] = 127; genome[G.B_FINS] = genome[G.B_WINGS] = -127;
         w.Evo.MutRate = w.Evo.MutBody = 0;
@@ -323,6 +324,8 @@ public class AppearanceTests
         genome[G.B_FINS] = 127;
         int swimmer = Life.Found(w, 0, genome, true, 2, 0, 0, Realm.Water);
         Assert.True(swimmer >= 0);
-        Assert.True(w.CellAllows(World.FIdx(w.X[swimmer], w.Y[swimmer]), w.RealmOf(swimmer) & Realm.Water));
+        Assert.True(w.CellAllows(swimmer, World.FIdx(w.X[swimmer], w.Y[swimmer]), w.RealmOf(swimmer) & Realm.Water));
+        Array.Fill(w.Cell, (byte)Realm.Land);
+        Assert.Equal(-1, Life.Found(w, 0, genome, true, 3, habitat: Realm.Water));
     }
 }

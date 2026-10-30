@@ -222,13 +222,13 @@ public static class Life
         x = y = 0; return false;
     }
 
-    static bool RandomSite(World w, int i, uint key, out float x, out float y)
+    static bool RandomSite(World w, int i, Realm realm, uint key, out float x, out float y)
     {
         for (int t = 0; t < 64; t++)
         {
             x = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 100u + (uint)t * 2) * Map.W;
             y = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 101u + (uint)t * 2) * Map.W;
-            if (w.CellAllows(i, World.FIdx(x, y))) return true;
+            if (w.CellAllows(i, World.FIdx(x, y), realm)) return true;
         }
         x = y = 0; return false;
     }
@@ -262,7 +262,7 @@ public static class Life
                 x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
                 ok = w.CellAllows(c, World.FIdx(x, y), realm);
             }
-        if (!ok && !RandomSite(w, c, key, out x, out y)) { FreeSlot(w, c); return -1; }
+        if (!ok && !RandomSite(w, c, realm, key, out x, out y)) { FreeSlot(w, c); return -1; }
         Place(w, c, clade, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
         w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
         if (adult) { w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9)); w.Grown[c] = 1f; }
