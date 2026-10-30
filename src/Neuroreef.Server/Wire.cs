@@ -15,7 +15,8 @@ public static class Wire
     public static int FD => Map.FW / 2;              // field frame side (2x2 averaged)
     public static readonly string[] FieldLayers =
         { "grass", "shrub", "tree", "browse", "fruit", "seed", "nectar", "root", "carrion", "dung+litter", "wood",
-          "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen" };
+          "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen",
+          "plant height", "toxin", "thorns", "drought tolerance", "fleshy fruit", "leaf-on", "flora" };   // Revision S: the plants' genes
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -82,7 +83,39 @@ public static class Wire
             11 => P[(int)Pool.Algae][i], 12 => P[(int)Pool.Phyto][i], 13 => MathF.Tanh(P[(int)Pool.Detritus][i]),
             14 => w.Fire[i] > 0 ? 1f : 0f, 15 => MathF.Tanh(w.Scent[i] * 4f), 16 => w.Moisture[i], 17 => w.Nutrient[i] / K.N_MAX, 18 => w.Poll[i], 19 => w.Wet[i] == 2 ? 1f : 0f,
             20 => (w.Temp[i] + 40f) / 90f, 21 => w.Temp[i] < 0f ? 1f : 0f,   // air temperature (-40..50 °C) and frost or ice (Revision O)
+            >= 22 and <= 28 => PlantLayer(w, layer - 22, i),
             _ => 0f,
+        };
+    }
+
+    /// <summary>The plants' layers (Revision S): tallest plant (log scale, 5 cm..40 m), cover-weighted toxin, thorns and drought
+    /// tolerance of the slots, the fleshy share of the fruit there, the leafy share of the cover, and the founding lineage of
+    /// the plant with most cover (a hue, 0..1).</summary>
+    static float PlantLayer(World w, int k, int i)
+    {
+        if (w.Cell[i] != (byte)Realm.Land) return 0f;
+        var t = w.Flora;
+        float c = 0f, v = 0f, best = 0f, hmax = 0f; int top = 0;
+        for (int s = 0; s < 4; s++)
+        {
+            int g = w.POcc[i * 4 + s]; if (g == 0) continue;
+            float b = s == 0 ? w.Pool[(int)Pool.Grass][i] : s == 1 ? w.Shrub[i] : s == 2 ? w.Tree[i] : w.Sapling[i];
+            if (b <= 0f) continue;
+            float x = k switch
+            {
+                1 => t.Level(g, PT.TOXIN) / 15f, 2 => t.Level(g, PT.THORN) / 15f, 3 => t.Level(g, PT.DROUGHT) / 15f,
+                5 => (w.PFlags[i] & (1 << s)) != 0 ? 1f : 0f, _ => 0f,
+            };
+            c += b; v += b * x;
+            if (s < 3 && b > best) { best = b; top = g; }
+            if (s < 3 && b > 0.02f) hmax = MathF.Max(hmax, t.P(g, Ph.H));
+        }
+        return k switch
+        {
+            0 => hmax > 0f ? Math.Clamp((MathF.Log10(hmax) - K.H_LO) / K.H_SPAN, 0f, 1f) : 0f,
+            4 => w.FruitG[i] != 0 ? t.Level(w.FruitG[i], PT.FRUIT) / 15f : 0f,
+            6 => top != 0 ? (t.Lineage[top] % K.PLANT_FOUNDERS + 1) / (float)(K.PLANT_FOUNDERS + 1) : 0f,
+            _ => c > 0f ? v / c : 0f,
         };
     }
 
