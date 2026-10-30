@@ -87,7 +87,7 @@ scene.add(N.mesh, F.mesh);
 let nn = 0, nf = 0;
 const labels = [], col = new THREE.Color(), f2 = (v) => v.toFixed(2).replace(/^0/, '');
 tiles.forEach((tl, i) => {
-  const b = tl.body, loco = (b.loco = locoOf(b.legs, b.fins, b.wings)), mass = massOf(b.m01 * 255 - 128);
+  const b = tl.body, mass = massOf(b.m01 * 255 - 128), loco = (b.loco = locoOf(b.legs, b.fins, b.wings, mass));
   const sc = trueSize ? bodySize(mass) : Math.max(0.9, Math.min(2.4, bodySize(mass)));
   const y = loco === 'Swim' ? 0.45 * sc : loco === 'Fly' && !rest ? 0.5 + 0.8 * sc : 0;
   col.setHex(tl.color);

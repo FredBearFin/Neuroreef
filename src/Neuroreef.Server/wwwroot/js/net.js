@@ -95,15 +95,17 @@ export function agentAt(a, k, world, out) {
   out.fur = (b[o + 25] >> 4) / 15; out.append = (b[o + 25] & 15) / 15;   // fur and appendages, 0..1 (Revision O)
   const appearance = out.appearance ||= new Float32Array(16);
   for (let j = 0; j < 16; j++) appearance[j] = (dv.getInt8(o + 26 + j) + 127) / 254;
-  out.loco = LOCO[out.locoCode] || locoOf(out.legs, out.fins, out.wings);
+  out.loco = LOCO[out.locoCode] || locoOf(out.legs, out.fins, out.wings, out.mass);
   return out;
 }
 
 export const LOCO = ['Walk', 'Wade', 'Swim', 'Fly', 'Sessile'];
 
-/** Locomotion from the organs, as the sim decides it (Body.cs): 'Fly', 'Wade', 'Walk', 'Swim' or 'Sessile'. */
-export function locoOf(legs, fins, wings) {
-  if (wings >= 0.5) return 'Fly';
+/** Locomotion from the organs, as the sim decides it (Body.cs): 'Fly', 'Wade', 'Walk', 'Swim' or 'Sessile'.
+ *  A body flies when its wings can lift it: wings x WING_LIFT (1.6) >= mass^(1/3) (wing loading), so no body
+ *  heavier than about 4 flies. */
+export function locoOf(legs, fins, wings, mass = 1) {
+  if (wings * 1.6 >= Math.cbrt(mass)) return 'Fly';
   const walk = legs >= 0.3, swim = fins >= 0.3;
   return walk && swim ? 'Wade' : walk ? 'Walk' : swim ? 'Swim' : 'Sessile';
 }

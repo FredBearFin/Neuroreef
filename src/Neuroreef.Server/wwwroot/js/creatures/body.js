@@ -16,6 +16,8 @@ export function massOf(g) { return 0.1 * Math.pow(40 / 0.1, (g + 128) / 255); } 
 export function bodySize(mass) { return 1.5 * Math.cbrt(mass); }
 
 const sphere = (w, h) => soup(new THREE.SphereGeometry(1, w, h));
+/** A sphere with its poles on the x axis, so its rings run along the trunk (the torso profile is shaped along x). */
+const sphereX = (w, h) => { const g = new THREE.SphereGeometry(1, w, h); g.rotateZ(Math.PI / 2); return soup(g); };
 /** A cone along +x: base (radius 1) at x = 0, tip at x = 1; open at the base. */
 const coneX = (seg) => { const g = cone(seg); g.rotateZ(-Math.PI / 2); return soup(g); };
 /** A cone along -x: base at x = 0, tip at x = -1. */
@@ -47,7 +49,7 @@ export function bodyGeometry(detail = 'near') {
   const near = detail === 'near';
   const parts = [];
   const add = (pos, part, side = 0, along = 0) => parts.push({ pos, part, side, along });
-  add(near ? sphere(10, 7) : sphere(6, 4), P.BODY);
+  add(near ? sphereX(8, 9) : sphereX(6, 4), P.BODY);
   add(near ? sphere(7, 5) : sphere(4, 3), P.HEAD);
   // up to four pairs of eyes and of side fins (aAux.y = pair index); the genes decide how many show
   if (near) for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(sphere(4, 3), P.EYE, s, j);
@@ -57,12 +59,13 @@ export function bodyGeometry(detail = 'near') {
     add(coneX(6), P.JAW);
     for (const s of [1, -1]) for (const a of [0.2, 0.5, 0.8]) { add(spike(3, true), P.TEETH_U, s, a); add(spike(3), P.TEETH_L, s, a); }
   }
-  for (const x of (near ? [-0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75] : [-0.6, 0, 0.6])) {
-    for (let j = 0; j < (near ? 8 : 4); j++) add(spike(3), P.FUR, j * Math.PI * 2 / (near ? 8 : 4), x);
-  }
-  for (const x of [-0.7, -0.35, 0, 0.35, 0.7]) for (const side of [-1, 1]) add(spike(3), P.APPEND, side, x);
+  // fur is drawn as volume (the body inflates in the shader); a few short tufts break the outline near the camera
+  if (near) for (const x of [-0.6, -0.3, 0, 0.3, 0.6]) for (let j = 0; j < 6; j++) add(spike(3), P.FUR, j * Math.PI * 2 / 6, x);
+  // appendages: a pair of ears (the tail and limbs lengthen with the gene in the shader)
+  for (const side of [-1, 1]) add(spike(near ? 4 : 3), P.APPEND, side, 0);
   // up to four pairs of legs (aAux.y = pair index, front first); the leg-pairs gene decides how many show
-  const leg = near ? legGeo(4, 2) : flat([[-1, 0], [1, 0], [0, -1]], 'xy');
+  const leg = near ? legGeo(6, 2) :   // two segments: the middle ring is the knee
+    flat([[-1, 0], [1, 0], [0, -1]], 'xy');
   for (let i = 0; i < MAX_PAIRS; i++) for (const s of [1, -1]) add(leg, P.LEG, s, i);
   const fin = near ? flat(SIDE_FIN, 'xz') : flat([[0.25, 0], [-0.5, 1], [-0.45, 0]], 'xz');
   for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(fin, P.FIN_SIDE, s, j);
