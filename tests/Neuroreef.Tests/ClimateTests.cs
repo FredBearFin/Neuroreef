@@ -41,7 +41,7 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
-        Assert.Equal(0x3BF8C06B3FB53E61UL, h);   // Revision N (commit 2baed5e), same seed, map and steps
+        Assert.Equal(0x18289DE28D12409DUL, h);   // Revision P with continuous water depth (algae light falls with depth; was 0x3BF8C06B3FB53E61 at Revision N, commit 2baed5e), same seed, map and steps
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

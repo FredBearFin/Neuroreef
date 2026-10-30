@@ -84,7 +84,7 @@ public static class Terrain
             if (e < w.SeaLevel) w.Depth[i] = w.SeaLevel - e;
             else if (acc[i] > K.RIVER_ACC * (n / 65536f)) w.Depth[i] = K.SHALLOW * 0.5f;
             else w.Depth[i] = 0;
-            w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] < K.SHALLOW ? Realm.Shallow : Realm.Deep);
+            w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
         }
 
         Distance(w.Cell, (byte)Realm.Water, w.DistWater);
@@ -134,7 +134,7 @@ public static class Terrain
                 if (w.Cell[i] != (byte)Realm.Land)
                 {
                     P[(int)Pool.Phyto][i] = 0.3f;
-                    if (w.Cell[i] == (byte)Realm.Shallow) P[(int)Pool.Algae][i] = 0.4f;
+                    P[(int)Pool.Algae][i] = 0.4f * MathK.Exp(-w.Depth[i] / K.SHALLOW);
                     P[(int)Pool.Detritus][i] = 0.1f;
                     continue;
                 }
