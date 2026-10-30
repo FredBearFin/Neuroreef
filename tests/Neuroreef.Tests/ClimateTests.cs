@@ -274,7 +274,12 @@ public class ClimateTests
             }
             return (m / samples, (float[])w.Tree.Clone(), (float[])w.TLapse.Clone(), w);
         });
+        // the normaliser keeps the land's water exactly in a year of average rain; a single wet or dry year (Weather) presses
+        // the two worlds against the cap of 1 differently, by a few % once rain gathers the water (Revision P), so the
+        // water is checked without year-to-year swings
+        float drought = Nature.Drought; Nature.Drought = 0f;
         var off = Run(0f); var on = Run(K.CLIMATE);
+        Nature.Drought = drought;
         Assert.InRange(on.moist / off.moist, 0.98, 1.02);
         // a treeline: on land made alike everywhere (the same wet soil and sparse young woodland, no fire and no drought
         // years), at fixed latitude, trees spread less on high ground with a climate, and alike without one

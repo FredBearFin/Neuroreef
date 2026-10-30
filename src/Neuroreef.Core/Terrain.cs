@@ -127,6 +127,7 @@ public static class Terrain
             // the ground's own lie (near water, in valleys) at the rest; the land as a whole stays as wet as before
             var rain = new float[FW * FW];
             Climate.Rainfall(w, rain);
+            var before = (float[])w.MoistBase.Clone();   // the land's wetness with no climate: its total is kept
             double ms = 0; int nl = 0;
             for (int i = 0; i < FW * FW; i++) if (w.Cell[i] == (byte)Realm.Land) { ms += w.MoistBase[i]; nl++; }
             float mean = nl > 0 ? (float)(ms / nl) : 0.5f;
@@ -137,7 +138,7 @@ public static class Terrain
                 w.MoistBase[i] = Math.Clamp(0.05f + (mean - 0.05f) * rel, 0.05f, 1f);
                 w.Moisture[i] = w.MoistBase[i];
             }
-            Climate.Normalise(w); Ponds.Update(w);   // evaporation normalised to the moisture base; ponds refilled with it
+            Climate.Normalise(w, before); Ponds.Update(w);   // evaporation normalised to keep the no-climate total; ponds refilled with it
         }
 
         // Initial vegetation: a mosaic of grassland, shrubland and woodland, and plankton in the water.

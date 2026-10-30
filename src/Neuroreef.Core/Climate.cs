@@ -128,15 +128,16 @@ public static class Climate
         for (int i = 0; i < FW * FW; i++) rain[i] = w.Cell[i] == (byte)Realm.Land && mean > 0 ? rain[i] / mean : 0f;
     }
 
-    /// <summary>Terrain.Build, once the moisture base is known: the evaporation normaliser Z.</summary>
-    public static void Normalise(World w)
+    /// <summary>Terrain.Build, once the moisture base is known: the evaporation normaliser Z. reference: the moisture base the
+    /// land would have with no climate (before Rainfall moved it), whose yearly total the climate keeps.</summary>
+    public static void Normalise(World w, float[]? reference = null)
     {
         int n = Map.FW * Map.FW;
         if (!On) { w.ClimateZ = 1f; return; }
         // Z: the evaporation factor's normaliser, chosen so that the land as a whole is as moist over a year as it is with
         // no climate (soil moisture capped at 1 included): climate moves water around the map, it does not add or remove
-        // it. The year is sampled at 8 phases of the moisture and temperature seasons; Z is found by bisection.
-        const int PH = 8;
+        // it. The year is sampled at PH phases of the moisture and temperature seasons; Z is found by bisection.
+        const int PH = 32;   // phases of the year (8 were too few once rain made some soils swing against the cap of 1)
         int FW = Map.FW, landN = 0;
         for (int i = 0; i < n; i++) if (w.Cell[i] == (byte)Realm.Land) landN++;
         if (landN == 0) { w.ClimateZ = 1f; return; }
@@ -156,11 +157,32 @@ public static class Climate
                     float b = Nature.Climate * K.A_SEAS * s * MathF.Sin(ph);
                     float m = w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season);
                     mb[q] = m; ev[q] = Evap[Idx(MathF.FusedMultiplyAdd(b, w.Cont[i], a) - w.TLapse[i])];
-                    target += Math.Clamp(m, 0f, 1f); q++;
+                    float m0 = reference == null ? m : reference[i] * (1f + K.A_SEASON * Nature.Seasons * season);
+                    target += Math.Clamp(m0, 0f, 1f); q++;
                 }
             }
         }
-        double Mean(double z) { double t = 0; for (int k = 0; k < q; k++) t += Math.Clamp(mb[k] * ev[k] / z, 0.0, 1.0); return t; }
+        // wet and dry years (Weather: the year's rain anomaly, SD RAIN_SD x Drought) at one SD either way, with and without
+        // the climate alike: against the cap of 1 they do not cancel, and more so where rain gathers the water
+        float sd = K.RAIN_SD * Nature.Drought;
+        target = 0; q = 0;
+        for (int y = 0; y < FW; y++)
+            for (int i = y * FW, e = i + FW; i < e; i++)
+            {
+                if (w.Cell[i] != (byte)Realm.Land) continue;
+                for (int p = 0; p < PH; p++, q++)
+                {
+                    float season = MathF.Sin(2f * MathF.PI * (p + 0.5f) / PH - 2f * MathF.PI * y / FW);
+                    float m0 = (reference == null ? w.MoistBase[i] : reference[i]) * (1f + K.A_SEASON * Nature.Seasons * season);
+                    target += 0.5 * (Math.Clamp(m0 * (1f - sd), 0f, 1f) + Math.Clamp(m0 * (1f + sd), 0f, 1f));
+                }
+            }
+        double Mean(double z)
+        {
+            double t = 0;
+            for (int k = 0; k < q; k++) { double x = mb[k] * ev[k] / z; t += 0.5 * (Math.Clamp(x * (1 - sd), 0.0, 1.0) + Math.Clamp(x * (1 + sd), 0.0, 1.0)); }
+            return t;
+        }
         double lo = 0.05, hi = 20;
         for (int it = 0; it < 50; it++) { double mid = Math.Sqrt(lo * hi); if (Mean(mid) > target) lo = mid; else hi = mid; }
         w.ClimateZ = (float)Math.Sqrt(lo * hi);

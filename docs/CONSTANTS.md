@@ -421,6 +421,14 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | CLIMATE | 0.3 | - | default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget | HT: Revision O; 1 = Earth-like contrasts. Sanity runs at 8,000 steps: 0.6 left 0 and 243 organisms in two branches, 0.3 left 670 and 944, 0 left 728 and 4,106 |
+| RAIN_W | 0.7 | - | share of the soil's wetness that follows where rain falls (the rest follows the ground: near water, in valleys) | HT: Revision P; before, soil wetness came from the ground and noise only, and 80% of the land was in the driest two fifths |
+| RAIN_L | 30 | cells | cells over land over which wind-borne air loses all but 1/e of its water (1/this rains out per cell) | HT: rain falls off inland over hundreds of km (continental interiors are dry) |
+| RAIN_OROG | 40 | - | extra rain-out per unit rise of the ground under the wind (share of the relief) | ECO: orographic rain: windward slopes are wet, lee slopes dry (rain shadows; Roe 2005) |
+| RAIN_EVAP | 0.2 | - | how fast air over water takes up water, per cell | HT |
+| RAIN_RECYCLE | 0.01 | - | water the land gives back to the air per cell (evapotranspiration) | ECO: about 40% of land rain is recycled from the land (Trenberth 1999) |
+| RAIN_DRY | 0.3 | - | rain at the dry belts (near 30° and the poles), against the equator's 1 | ECO: zonal mean rain ~0.3-0.4 of the equator's in the subtropical highs and at the poles (Peixoto & Oort 1992) |
+| RAIN_MID | 0.35 | - | extra rain of the mid-latitude belt near 55° | ECO: a second maximum ~0.5-0.6 of the equator's (Peixoto & Oort 1992) |
+| RAIN_BELT | 14 | ° | width (degrees of latitude) of the equatorial and mid-latitude rain belts | ECO |
 | T_REF | 20 | °C | reference temperature (the temperature of a world with no climate; plant curves, decomposition and evaporation are 1 here) | - |
 | T_EQ | 27 | °C | annual mean sea-level temperature at the equator | ECO: observed zonal mean ~27 °C (North 1975) |
 | DT_EP | 40 | K | equator-to-pole temperature drop, x sin² latitude | ECO: the second Legendre term of North's (1975) energy-balance climate, ~40 K |
