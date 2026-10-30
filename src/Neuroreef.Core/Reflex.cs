@@ -36,7 +36,10 @@ public static class Reflex
     /// <summary>The reflex inputs from the features.</summary>
     public static void Inputs(ReadOnlySpan<float> f, Span<float> c, float drive = 1f)
     {
-        c[HUNGRY_FOOD] = f[F.HUNGER] * f[F.FOOD_HERE];
+        // appetite (Revision P): an animal with food at hand eats while its gut has room, at full strength until its
+        // reserve is SATIETY from full, fading as it tops up (intake is set by gut fill and energy status; Forbes 2007).
+        // Before, it scaled with hunger alone: adults half full stood on food and ate on fewer than half the steps
+        c[HUNGRY_FOOD] = (1f - f[F.FULL]) * MathF.Min(1f, f[F.HUNGER] / K.SATIETY) * f[F.FOOD_HERE];
         c[HUNGRY] = f[F.HUNGER];
         c[THIRSTY] = f[F.THIRST];
         c[THIRSTY_AT_WATER] = f[F.THIRST] * MathF.Max(0f, (f[F.WATER_CLOSE] - 0.75f) * 4f);   // within about 2 cells of water

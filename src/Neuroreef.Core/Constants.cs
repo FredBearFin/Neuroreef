@@ -139,6 +139,7 @@ public static class K
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
     [K("Brain", "reflex input weight scale (int8 / 16, as the output layer)", "-", "-")] public const float RSCALE = 1f / 16f;
+    [K("Brain", "appetite is full while the reserve is more than this share below full (hunger above it), and fades to none as it tops up", "xEmax", "ECO: voluntary intake is limited by gut fill and energy status, not by energy deficit alone (Forbes 2007); measured 2026-10-30: adults on food ate on 47% of steps and sat at 20-60% reserve, so females were ready to breed 12% of the time")] public const float SATIETY = 0.2f;
     [K("Brain", "founder strength of each starter-kit reflex (x/16): at full need, 120/16 = 7.5 against the calm bias of -4 gives about 97%", "int8", "designed: the innate starter kit (DESIGN §7.7, Revision D); the user (2026-10-30): the base instincts should be very strong, \"like primary colours\" (was 80, 88% against a bias of -3)")] public const int KIT_W = 120;
     [K("Brain", "elite archive size per species", "genomes", "HT (Revision M: 64 before; a genome is now ~83 KB)")] public const int ARCHIVE = 16;
     [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;

@@ -124,7 +124,7 @@ public class EcologyTests
         Body.Express(w, i);
         Brain.InitLife(w, i);
         var f = new float[F.N]; var y = new float[G.NIN]; var z = new float[P.N]; var g = new float[P.N]; var d = new float[P.N];
-        f[F.BIAS] = 1f; f[F.HUNGER] = 0.1f; f[F.FOOD_HERE] = 1f;   // barely hungry: the feeding instinct is weak, so what changes is learned
+        f[F.BIAS] = 1f; f[F.HUNGER] = 0.03f; f[F.FOOD_HERE] = 1f;   // barely hungry (all but sated): the feeding instinct is weak, so what changes is learned
         float Prob() { Brain.Forward(w, i, f, y, z, g); return g[P.EAT]; }
         float p0 = Prob();
         var rs = new Rng.Seq(5);

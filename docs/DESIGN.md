@@ -51,6 +51,12 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   swimmers from 0 to 15 of 36, the big-brained ancestor from 1 to 4 of 9. Over 10,000 steps most worlds keep 1-5 lineages
   of a few dozen to a thousand animals; deaths are mostly starvation (about 60%) and kills (25%, most within a lineage,
   learned or evolved, not designed).
+- *Appetite and diet choice.* With food at hand an animal eats while its gut has room, at full strength until its
+  reserve is within SATIETY = 20% of full (it scaled with hunger alone, so adults half full stood on food and ate on
+  47% of steps). And the food it bites is the one giving the most energy it can use this step, a bite no bigger than
+  its gut passes in a step (optimal diet theory, Charnov 1976): a heap of dung or litter no longer beats a little good
+  food and clogs the gut (gut food was 0.53 E/M against a best diet food of ~1.9). Births over 3,000 steps rose by
+  10-55% in three worlds.
 - *Calmer newborns.* Every discrete action of a newborn brain started near 5% a step (FOUNDER_BIAS -48), so naive
   animals struck whatever was in reach every ~20 steps and founding groups killed each other (one lineage: 30% of its
   deaths by its own kind). All actions now start near 2% (FOUNDER_BIAS -64), the same for every action; the instincts

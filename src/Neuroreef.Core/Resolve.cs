@@ -67,12 +67,16 @@ public static class Resolve
         if (preyEat) acts |= BIT_STRIKE;
         if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
         {
+            // which food: the most energy it can actually use this step, a bite no bigger than what its gut passes in a
+            // step (Revision P): when the gut is the bottleneck, rich food beats a heap of poor food (optimal diet
+            // theory, Charnov 1976). Before, a big heap of dung or litter won and filled the gut with food a third as rich
             int best = -1; float bv = 0;
+            float pass = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL);
             for (int p = 0; p < Pools.NFIELD; p++)
             {
                 float e = diet[p];
                 if (e <= 0) continue;
-                float v = e * Pools.Rho[p] * MathF.Min(1f, w.Pool[p][cell]);
+                float v = e * Pools.Rho[p] * MathF.Min(pass, w.Pool[p][cell]);
                 if (v > bv) { bv = v; best = p; }
             }
             if (best >= 0)
