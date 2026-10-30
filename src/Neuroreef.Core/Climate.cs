@@ -31,7 +31,7 @@ public static class Climate
     /// <summary>Decomposition x Q10_ROT^((T - T_REF) / 10) (Lloyd & Taylor 1994).</summary>
     public static readonly float[] Rot = Table(t => MathF.Pow(K.Q10_ROT, (t - K.T_REF) / 10f));
 
-    static float Es(float t) => 0.6108f * MathF.Exp(17.27f * t / (t + 237.3f));
+    internal static float Es(float t) => 0.6108f * MathF.Exp(17.27f * t / (t + 237.3f));
 
     static float[] Table(Func<float, float> f)
     {

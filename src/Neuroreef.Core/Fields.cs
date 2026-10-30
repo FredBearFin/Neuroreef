@@ -21,8 +21,8 @@ public static class Fields
         int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW, row = y * FW;
         // climate (Revision O): this row's temperature for this step; with Climate = 0 every factor below is skipped
         bool clim = Climate.On;
-        float ta = 0f, tb = 0f, invZ = 1f;
-        if (clim) { Climate.RowParams(w, y, out ta, out tb); invZ = 1f / w.ClimateZ; }
+        float ta = 0f, tb = 0f;
+        if (clim) Climate.RowParams(w, y, out ta, out tb);
         float[] Tmp = w.Temp;
         for (int x = 0; x < FW; x++)
         {
@@ -79,14 +79,9 @@ public static class Fields
                 continue;
             }
 
-            // land producers (DESIGN §10.2)
-            float W = clim
-                // warm air dries the soil, cold air keeps it moist (Budyko-style, Tetens vapour pressure), normalised so
-                // the land as a whole is as wet as without a climate
-                ? Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom) * (Climate.Evap[ti] * invZ), 0f, 1f)
-                : Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom), 0f, 1f);
-            if (w.Wet[i] == 3) W = 1f;   // a flooded floodplain (Revision Q, Ponds.Update) is soaked
-            w.Moisture[i] = W;
+            // land producers (DESIGN §10.2). Soil moisture is the soil's water over what it can hold, from the water
+            // cycle (WaterCycle.Row: rain and snowmelt in, evapotranspiration and drainage out; floods soak it)
+            float W = w.Moisture[i];
             float nut = N / (N + K.K_N);
             float grow = W * nut;
             // water limits each layer differently: grass grows at any moisture, shrubs above W_SHRUB, trees above W_TREE

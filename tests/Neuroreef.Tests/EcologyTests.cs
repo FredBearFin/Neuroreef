@@ -627,11 +627,12 @@ public class EcologyTests
         Assert.True(created - founders <= conceived + lays, $"created {created - founders}, conceived {conceived}, lays {lays}");
     }
 
-    [Fact] // Revision K: seasonal ponds fill when the ground is wet and dry when it is dry; drinking water is measured to them
+    [Fact] // Revision K, the water cycle: ponds fill from their basins' runoff in a wet year and dry in a drought (bar those that
+           // groundwater feeds); drinking water is measured to them
     public void PondsFillInTheWetAndDryInTheDry()
     {
-        // the law of season and rain alone (Revision O: with a climate, warm ponds also evaporate and cold ones freeze;
-        // ClimateTests covers that)
+        // the law of rain and runoff alone (with a climate, warm ponds also evaporate faster and cold ones freeze;
+        // ClimateTests and WaterCycleTests cover that)
         float climate = Nature.Climate; Nature.Climate = 0f;
         try { PondsFillCore(); } finally { Nature.Climate = climate; }
     }
@@ -639,18 +640,20 @@ public class EcologyTests
     static void PondsFillCore()
     {
         using var sim = new Simulation(1024, 4, 1, empty: true);
-        var w = sim.W; int n = Map.FW * Map.FW;
+        var w = sim.W; int n = Map.FW * Map.FW, perYear = Nature.SeasonLength / K.WC_EVERY;
+        void Year(float anom) { w.RainAnom = anom; for (int u = 0; u < perYear; u++) { w.Step += K.WC_EVERY; WaterCycle.Update(w); } }
         int sites = 0; for (int c = 0; c < n; c++) sites += w.PondSite[c];
         Assert.True(sites > 0, "no pond sites");
-        w.RainAnom = 0.5f;   // a wet year
-        Ponds.Update(w);
-        Assert.True(Ponds.Full(w) > sites / 2, $"{Ponds.Full(w)} of {sites} ponds full in a wet year");   // the season runs by latitude: the driest rows stay dry
+        int Ponded() { int k = 0; for (int c = 0; c < n; c++) if (w.PondSite[c] != 0 && w.Wet[c] == 2) k++; return k; }
+        Year(0.5f);   // a wet year
+        int wet = Ponded();
+        Assert.True(wet > sites / 3, $"{wet} of {sites} ponds full in a wet year");
         float far = 0; for (int c = 0; c < n; c++) { Assert.True(w.DistDrink[c] <= w.DistWater[c] + 1f, $"cell {c}: drink {w.DistDrink[c]}, water {w.DistWater[c]}"); far = MathF.Max(far, w.DistWater[c] - w.DistDrink[c]); }
         Assert.True(far > 5f, "ponds bring no water closer");
-        w.RainAnom = -0.5f;  // a drought
-        Ponds.Update(w);
-        Assert.Equal(0, Ponds.Full(w));
-        for (int c = 0; c < n; c++) Assert.Equal(w.DistWater[c], w.DistDrink[c]);
+        Year(-0.5f);  // a drought
+        int dry = Ponded();
+        Assert.True(dry < 0.8 * wet, $"{dry} ponds after a drought, {wet} after a wet year");
+        for (int c = 0; c < n; c++) if (w.Wet[c] != 0) Assert.Equal(0f, w.DistDrink[c]);
     }
 
     [Fact] // Revision K: green food and prey relieve thirst, dry seed much less; big bodies and the water-economy gene dry out slower

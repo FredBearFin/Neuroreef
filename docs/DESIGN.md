@@ -51,6 +51,46 @@ EcologyTests' ancestor-viability check now measures a clade by most of its found
 (on the new land, three first founders varied just below FORAGE_MARGIN).
 Simplifications: the plate boundaries are fixed over deep time; the plateau limit is a cap, not crustal flow; and the
 plates' scale (GEO_KM 5,000 km) is not the climate's or the animals'.
+**A running water cycle** (2026-10-30; the user: "a real, running water cycle ... physics, not designed rules"). Before,
+soil moisture was a fixed map scaled by season and the year's rain (MoistBase x season x (1 + RainAnom) x evaporation),
+ponds filled when that wetness passed POND_FILL, floods when it passed each cell's FloodWet, and rivers had their fixed
+generation flow. Now water is stores and fluxes (WaterCycle.cs; Water cycle constants), updated every WC_EVERY = 50
+steps (rows in parallel, then a serial topological routing pass):
+- *Rain and snow.* Rain = P_MEAN x the rain pattern (Climate.Rainfall, with RAIN_LOCAL of it spread over the land of its
+  latitude as recycled convective rain) x the moisture season by latitude x (1 + RainAnom). At or below T_SNOW it is
+  snow, which melts by degree-days (DDF); a pack over SNOW_MAX is a glacier and its surplus runs off.
+- *Soil (Manabe bucket).* Capacity SOIL_CAP, up to twice that on alluvium. Rain on the saturated share runs off (VIC
+  curve, INFIL_B); evapotranspiration = PET(T) (Tetens, 0 at or below 0 °C) x plant cover x min(1, wetness / BETA_FC);
+  drainage ~ wetness^4 recharges groundwater. **Moisture = soil water / capacity** (plants, fire and thirst read it);
+  MoistBase now only seeds the first vegetation.
+- *Groundwater.* Shallow (local) groundwater feeds each cell's own streams; GW_DEEP of recharge goes to a deep
+  (regional) store that flows cell by cell down the drainage and emerges above GW_CAP: springs (drinkable, Wet = 2).
+- *Routing, rivers, floods.* Runoff, baseflow and seeps run down the generation drainage (Hydrology.Route receivers,
+  stored at Init) to the lakes. A river floods its floodplain cell when its discharge reaches FloodWet x its mean
+  discharge (a slow, QMEAN_YEARS mean: the channel's size); the flood soaks the soil from the river's water.
+- *Ponds and lakes.* Pond sites fill from their catchment's runoff and rain (fill-and-spill), and lose water by open
+  water evaporation and seepage over a wetted area ~ sqrt(volume) (Hayashi & van der Kamp 2000); drinkable from POND_WET.
+  Lakes keep their extent (changing Cell at runtime would touch realm checks, DistWater and DistLand); each lake's level
+  is tracked: inflow + rain - evaporation (over a wetted area that shrinks as it falls), spilling above its sill
+  through an outlet sized for its mean inflow (LAKE_STAGE).
+- *Start.* WaterCycle.Init (Simulation, after Terrain.Build) runs WC_SPINUP = 2 average years (groundwater set to the
+  steady state of the first year's recharge), then sets each river's and lake's mean flow. Checkpoint version 14.
+Measured (default 1024 map, empty world, two years, seeds 3 and 7): the land budget (rain = ET + pond evaporation +
+flow to the lakes + storage change) closes to ~1e-9 of the rain; the lakes' to ~1e-6. Of the rain (844-976 mm a year
+on the land), 47-49% goes back to the air and 50-53% to the lakes (Earth's land: ~60/40). Land-mean moisture 0.46-0.53
+over the seasons (it was 0.43-0.55), 0.33-0.60 within latitude bands. Big river mouths swing 0.6-1.9x their mean
+discharge (0.46-2.8x at Climate 1, with snowmelt peaks; land-mean snow up to ~400 mm there, ~0 at the default 0.3).
+Floods 0-365 cells (before 2-441). Ponds with water: 800-870 of 1,026 sites (seed 3) and ~1,700 of 1,811 (seed 7),
+falling a few % in the dry season and much more in a drought, against 672-1,026 and 771-1,811 before; 320-490 spring
+cells. **Drinkable water is closer: land is 6.5-7.1 cells from it on average, against ~11 before**, because most
+ponds now hold water all year (the rain's season is only +-A_SEASON, so basins get runoff year round) and springs add
+water away from lakes; expect fewer thirst deaths. Cost: +0.12-0.18 ms a step (fire and water phase), ~0.4-0.5 s more at
+world creation; steps/s are unchanged within noise.
+Tested (tests/WaterCycleTests.cs): the budget closes at climate 0, 0.3 and 1; a rainless season dries the soil below
+60% while every river cell keeps flowing; snow lies through a cold spell, melts at exactly DDF per degree-day and peaks
+the rivers above a warm season's flow; ponds fill in a wet year and empty in a drought; the water cycle gives the same
+bits on 1 and 3 threads.
+
 **Memory that matters: local senses and path integration** (2026-10-30; the user: "make an animal's memory useful,
 by taking away its omniscient senses and giving it a self-motion sense"). Before the change SEEK_WATER and SEEK_LAND
 steered down a map-wide distance field (DistDrink, DistLand), so an animal knew the way to water from anywhere, and a

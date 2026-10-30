@@ -116,7 +116,7 @@ public sealed class World
     public readonly byte[] Cell;           // Realm bits of the cell (Land, Shallow, Deep)
     public readonly float[] DistWater, DistLand;   // in cells
     public readonly byte[] PondSite;               // 1 = a basin that can hold a seasonal pond (Revision K)
-    public readonly byte[] Wet;                    // drinkable water now: 1 = lake, sea or river, 2 = a full pond, 3 = a flooded floodplain
+    public readonly byte[] Wet;                    // drinkable water now: 1 = lake, sea or river, 2 = a pond holding water or a spring, 3 = a flooded floodplain (Ponds.Update)
     public readonly float[] DistDrink;             // cells to the nearest drinkable water (lakes, full ponds and floods)
     // hydrology (Revision Q), fixed at Terrain.Build: the rain each cell gathers from above (in cells of mean rain),
     // the depth of alluvium left on it, and the wetness (season x year) at which its river floods it (+inf: never)
@@ -128,6 +128,22 @@ public sealed class World
     public readonly float[] TLapse, Cont;
     public float ClimateZ = 1f;                    // normaliser of the evaporation factor: the land as moist over a year as with no climate
     public float SeaLevel;
+    // ---- water cycle (WaterCycle.cs): stores in mm of water over a cell, fluxes in mm x cells per update (WC_EVERY steps).
+    // Fixed at WaterCycle.Init: the rain pattern (relative to the land mean; a lake cell holds its row's land mean), soil
+    // capacity, the drainage receivers and their topological order (outlets first), the lake each cell drains to
+    // finally and the lake (connected open water below lake level) each lake cell belongs to, with its area and depth.
+    public readonly float[] Rain, SoilCap;
+    public readonly int[] Recv, DrainOrder, Outlet, LakeOf;
+    public readonly float[] LakeArea, LakeDepth, LakeQm, LakeGross;   // per lake id: cells, deepest water (mm), mean and this update's gross inflow (rivers + rain)
+    public int LakeCount;
+    // changing: soil water, snowpack, shallow (local) and deep (regional) groundwater, pond water, this update's surface runoff, discharge leaving each cell,
+    // its slow mean, groundwater emerging at the surface this update; each lake's level against its level at creation (mm)
+    public readonly float[] SoilWater, Snow, Ground, Deep, PondWater, Runoff, Discharge, DischargeMean, Seep, LakeLevel, LakeIn;
+    public readonly double[] WcRow;               // per-row sums of one update's fluxes (parallel rows, summed in row order)
+    public bool WaterOn;                          // WaterCycle.Init has run: moisture, ponds and floods come from the water cycle
+    // whole-run water budget of the land (every cell not a lake), mm x cells: rain in; out by evapotranspiration, by pond
+    // evaporation and into the lakes. Lakes: rain, inflow, evaporation, spill. Reset at the end of Init.
+    public double WbRain, WbET, WbPondEvap, WbToLakes, WbLakeRain, WbLakeEvap, WbLakeSpill;
     // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
     public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
     public long RainYear = -1;             // year RainAnom belongs to
@@ -211,6 +227,11 @@ public sealed class World
         DistWater = new float[n]; DistLand = new float[n]; PondSite = new byte[n]; Wet = new byte[n]; DistDrink = new float[n];
         Flow = new float[n]; Alluvium = new float[n]; FloodWet = new float[n]; Array.Fill(FloodWet, float.PositiveInfinity); FloodFrom = new int[n]; Array.Fill(FloodFrom, -1);
         Rock = new byte[n];
+        Rain = new float[n]; SoilCap = new float[n]; Recv = new int[n]; DrainOrder = new int[n]; Outlet = new int[n]; LakeOf = new int[n];
+        LakeArea = new float[n]; LakeDepth = new float[n]; LakeQm = new float[n]; LakeGross = new float[n];
+        SoilWater = new float[n]; Snow = new float[n]; Ground = new float[n]; Deep = new float[n]; PondWater = new float[n]; Runoff = new float[n];
+        Discharge = new float[n]; DischargeMean = new float[n]; Seep = new float[n]; LakeLevel = new float[n]; LakeIn = new float[n];
+        WcRow = new double[Map.FW * WaterCycle.NSUM];
 
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];
