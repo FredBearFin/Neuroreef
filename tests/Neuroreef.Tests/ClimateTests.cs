@@ -41,7 +41,11 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
-        Assert.Equal(0x18289DE28D12409DUL, h);   // Revision P with continuous water depth (algae light falls with depth; was 0x3BF8C06B3FB53E61 at Revision N, commit 2baed5e), same seed, map and steps
+        // Revision Q (hydrology) re-pinned it: the terrain itself changed (rain-routed rivers, a relief worked by erosion
+        // with alluvium on it, basin ponds, floods), so the same seed grows different fields; Climate = 0 still skips every
+        // climate rule. It was 0x18289DE28D12409D at Revision P with continuous water depth (commit dde4d60), and
+        // 0x3BF8C06B3FB53E61 at Revision N (commit 2baed5e); same seed, map and steps.
+        Assert.Equal(0x52A982E9B31E42C1UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

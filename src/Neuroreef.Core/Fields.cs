@@ -85,6 +85,7 @@ public static class Fields
                 // the land as a whole is as wet as without a climate
                 ? Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom) * (Climate.Evap[ti] * invZ), 0f, 1f)
                 : Math.Clamp(w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season) * (1f + w.RainAnom), 0f, 1f);
+            if (w.Wet[i] == 3) W = 1f;   // a flooded floodplain (Revision Q, Ponds.Update) is soaked
             w.Moisture[i] = W;
             float nut = N / (N + K.K_N);
             float grow = W * nut;

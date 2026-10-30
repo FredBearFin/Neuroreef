@@ -18,7 +18,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | GW | 64 | cells | spatial-hash grid side | - |
 | CAPACITY | 16384 | slots | default agent slots (animals, eggs, embryos) | HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB |
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
-| RIVER_ACC | 900 | cells | catchment (cells) above which a cell is river | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
 | T_SEASON | 3000 | steps | season period (one year), by default | ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K) |
 | A_SEASON | 0.45 | - | season amplitude on moisture | V1 |
@@ -486,6 +485,28 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 29. Organisms
+## 29. Hydrology
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| RIVER_ACC | 900 | cells | rain-weighted catchment (cells of mean land rain, x map cells / 65,536) above which a land cell is river | HT: was 900 cells of any rain before Revision Q; rivers start where enough rain gathers |
+| FLOW_EPS | 1E-06 | elev | least rise per cell across a filled basin or flat (Priority-Flood+epsilon), so every cell drains | -: numerical (Barnes, Lehman & Mulla 2014); far below any real slope |
+| ERODE_ITERS | 20 | passes | passes of routing, stream-power incision and deposition at world generation | HT: enough to cut the main valleys; about 15 ms a pass at the default map (1024), 80 ms at 2048 |
+| ERODE_K | 0.007 | /pass | stream-power erodibility per pass: dh = -ERODE_K A^ERODE_M S (A in cells of mean rain) | HT: measured at the default map, channels on slopes are cut ~20 m on average and up to ~300 m, hillsides ~6 m (mostly creep) |
+| ERODE_M | 0.5 | - | drainage-area exponent of stream power and of carrying capacity (slope exponent 1) | ECO: m/n ~0.5 (Howard 1994; Whipple & Tucker 1999); observed river concavity 0.4-0.6 (Whipple 2004) |
+| CREEP_K | 0.01 | /pass | hillslope creep per pass: dh = CREEP_K x (sum of the 4 neighbours' heights - 4 h) | ECO/HT: linear soil creep (Culling 1960; Roering et al. 1999), the hillslope half of every landscape-evolution model; rounds the finest noise over the passes |
+| CARRY_K | 0.3 | /pass | carrying capacity: a stream carries at most CARRY_K A^ERODE_M S of sediment per pass | ECO/HT: transport capacity grows with stream power (Willgoose et al. 1991); well above ERODE_K, so steep channels carry what they cut (detachment-limited uplands) and flats drop it; at 0.03 the whole network was transport-limited and channels filled up instead of cutting |
+| DEPOSIT_FRAC | 0.3 | - | share of a load above capacity dropped in each cell it passes | HT: a deposition length of a few cells (Davy & Lague 2009) |
+| ALLUV_FERT | 0.5 | - | most fertility alluvium adds to a cell's soil (Fert + ALLUV_FERT x (1 - exp(-alluvium / ALLUV_D)), at most 1) | ECO: alluvial soils (fluvisols) are young, fine, mineral-rich and among the most fertile (FAO WRB 2015; the Nile, Indus and Mekong floodplains) |
+| ALLUV_D | 0.003 | elev | alluvium depth at which its fertility is 1 - 1/e of ALLUV_FERT | HT: about 3 m (relief H_RELIEF over the elevation range) |
+| BASIN_MIN | 0.001 | elev | a land cell at least this far below the rim of the closed basin it lies in is a pond site (a seasonal wetland) | ECO/HT: about 3 m; rain gathers and stands in closed basins (pans, playas, prairie potholes), seasonally where evaporation outpaces it |
+| RIVER_D | 0.5 | xSHALLOW | river depth at RIVER_ACC, x SHALLOW (rivers stay wadeable: at most SHALLOW) | HT: 0.5 before Revision Q for every river |
+| RIVER_DEPTH_EXP | 0.4 | - | exponent of river depth (and stage) on discharge | ECO: at-a-station and downstream hydraulic geometry, depth ~ Q^0.4 (Leopold & Maddock 1953) |
+| BANKFULL | 1.35 | x | discharge, against its mean, at which a river tops its banks (wetness = season x this year's rain) | ECO: bankfull flow recurs every 1-2 years (Leopold, Wolman & Miller 1964; Williams 1978): the wet season of an average year (1 + A_SEASON) just tops it |
+| FLOOD_R | 3 | cells | floodplain: cells at most this many flow steps upstream of the river they drain into | HT: floodplains are a few channel widths to tens of km wide |
+| FLOOD_HAND | 0.5 | xSHALLOW | floodplain: cells at most this high above that river, x SHALLOW | HT: bounds the search; the stage decides which of them flood |
+| FLOOD_MIX | 0.5 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each pond update (POND_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993) |
+
+## 30. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

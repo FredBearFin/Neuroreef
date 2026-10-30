@@ -36,6 +36,28 @@ public static class Terrain
         };
     }
 
+    /// <summary>The raw relief of a world (Elev normalised to 0..1) and its lake level, before water has worked on it.</summary>
+    public static void Relief(World w)
+    {
+        var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
+        Heights(w, Fbm(ref r, 3, 6));
+    }
+
+    /// <summary>
+    /// The rain that runs over the land (Revision Q): Climate.Rainfall over the land as it lies with only its lakes
+    /// (relative to the land's mean, 1). Where rain falls follows the winds and the ground, not the climate's strength
+    /// (Rainfall does not read it), so a seed makes the same land, rivers and valleys at any climate setting; the
+    /// setting changes temperature and, as before, how much the soil's wetness follows the rain. Sets Cell to the lakes and land.
+    /// </summary>
+    public static float[] RunoffRain(World w)
+    {
+        int n = Map.FW * Map.FW;
+        for (int i = 0; i < n; i++) w.Cell[i] = (byte)(w.Elev[i] < w.SeaLevel ? (w.SeaLevel - w.Elev[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep) : Realm.Land);
+        var rain = new float[n];
+        Climate.Rainfall(w, rain);
+        return rain;
+    }
+
     public static void Build(World w)
     {
         int FW = Map.FW, n = FW * FW;
@@ -43,7 +65,22 @@ public static class Terrain
         var elevN = Fbm(ref r, 3, 6);
         var moistN = Fbm(ref r, 4, 4);
         var vegN = Fbm(ref r, 6, 3);
+        Heights(w, elevN);
 
+        // Hydrology (Revision Q): rain falls on the land as it lies with its lakes, runs downhill (Priority-Flood
+        // routing), cuts the ground and lays down what it carries (Hydrology.Erode). Rivers are the cells that gather
+        // the most rain; nothing else decides where they are.
+        var rain0 = RunoffRain(w);
+        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS);
+        var net = new Hydrology.Net(n);
+        Hydrology.Route(w.Elev, w.SeaLevel, rain0, net);
+        Array.Copy(net.Flow, w.Flow, n);
+        BuildWater(w, net, moistN, vegN);
+    }
+
+    static void Heights(World w, Func<float, float, float> elevN)
+    {
+        int FW = Map.FW, n = FW * FW;
         float mn = 1, mx = 0;
         for (int y = 0; y < FW; y++)
             for (int x = 0; x < FW; x++)
@@ -57,48 +94,39 @@ public static class Terrain
         var sorted = (float[])w.Elev.Clone();
         Array.Sort(sorted);
         w.SeaLevel = sorted[(int)(Nature.Water * n)];
+    }
 
-        // Rivers: D8 flow accumulation, processed from the highest cell down.
-        var idx = new int[n];
-        for (int i = 0; i < n; i++) idx[i] = i;
-        var keys = (float[])w.Elev.Clone();
-        Array.Sort(keys, idx);
-        var acc = new float[n];
-        for (int k = n - 1; k >= 0; k--)
-        {
-            int i = idx[k]; acc[i] += 1;
-            int x = i % FW, y = i / FW, best = -1; float be = w.Elev[i];
-            for (int dy = -1; dy <= 1; dy++)
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    if (dx == 0 && dy == 0) continue;
-                    int j = World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
-                    if (w.Elev[j] < be) { be = w.Elev[j]; best = j; }
-                }
-            if (best >= 0) acc[best] += acc[i];
-        }
-
+    // rivers, lakes, ponds, soil and the first vegetation on the worked relief
+    static void BuildWater(World w, Hydrology.Net net, Func<float, float, float> moistN, Func<float, float, float> vegN)
+    {
+        int FW = Map.FW, n = FW * FW;
+        float riverAcc = K.RIVER_ACC * (n / 65536f);
         for (int i = 0; i < n; i++)
         {
             float e = w.Elev[i];
             if (e < w.SeaLevel) w.Depth[i] = w.SeaLevel - e;
-            else if (acc[i] > K.RIVER_ACC * (n / 65536f)) w.Depth[i] = K.SHALLOW * 0.5f;
+            // depth ~ discharge^0.4 (Leopold & Maddock 1953), wadeable at most
+            else if (w.Flow[i] > riverAcc) w.Depth[i] = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathF.Pow(w.Flow[i] / riverAcc, K.RIVER_DEPTH_EXP));
             else w.Depth[i] = 0;
             w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
         }
+        Hydrology.Floodplain(w, net);
 
         Distance(w.Cell, (byte)Realm.Water, w.DistWater);
         Distance(w.Cell, (byte)Realm.Land, w.DistLand);
         Climate.Build(w);   // height, continentality and the temperature now (Revision O); draws no random numbers
 
         // Pond sites (Revision K, ecology review): land basins, the lowest point in their neighbourhood, away from
-        // standing water; each holds rain in the wet season and dries out in the dry one (Ponds.Update).
+        // standing water; each holds rain in the wet season and dries out in the dry one (Ponds.Update). Revision Q: also
+        // every cell of a closed basin the running water has left (the routing fills it to its rim: it is where rain gathers
+        // and stands), as seasonal wetlands, pans and playas do.
         uint ps = Rng.Hash(w.Seed, 0, 0, Rs.Pond);
         for (int y = 0; y < FW; y++)
             for (int x = 0; x < FW; x++)
             {
                 int i = y * FW + x;
                 if (w.Cell[i] != (byte)Realm.Land || w.DistWater[i] < K.POND_GAP) continue;
+                if (net.Fill[i] - w.Elev[i] >= K.BASIN_MIN && Rng.U(ps, 0, (uint)i, 0) < MathF.Min(1f, Nature.Ponds)) { w.PondSite[i] = 1; continue; }
                 bool low = true;
                 for (int dy = -K.POND_R; dy <= K.POND_R && low; dy++)
                     for (int dx = -K.POND_R; dx <= K.POND_R; dx++)
@@ -119,6 +147,8 @@ public static class Terrain
                 float valley = 1f - MathF.Min(1f, MathF.Max(0f, (w.Elev[i] - w.SeaLevel) / (1f - w.SeaLevel)));
                 w.MoistBase[i] = Math.Clamp(0.15f + 0.45f * wet + 0.25f * valley + 0.35f * (m - 0.5f) * 2f, 0.05f, 1f);
                 w.Fert[i] = Math.Clamp(0.3f + 0.7f * (m - 0.25f) * 1.6f, 0.1f, 1f);
+                // alluvium (Revision Q): sediment laid down by running water makes young, rich soil
+                if (w.Cell[i] == (byte)Realm.Land) w.Fert[i] = MathF.Min(1f, w.Fert[i] + K.ALLUV_FERT * (1f - MathK.Exp(-w.Alluvium[i] / K.ALLUV_D)));
                 w.Moisture[i] = w.MoistBase[i];
             }
         if (Climate.On)
