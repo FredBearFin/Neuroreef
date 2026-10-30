@@ -192,7 +192,7 @@ public class DecisionTests
     }
 
     [Fact] // far from water an animal cannot steer toward it unless it remembers where it drank
-    public void FarWaterIsFoundOnlyFromMemory()
+    public void FarWaterIsFoundFromMemoryOrTheGroundUnderfoot()
     {
         // near water (3 cells): the local sense shows the way
         var (wn, n) = ThirstyWalker(3);
@@ -200,15 +200,35 @@ public class DecisionTests
         Assert.True(nvx < 0f && MathF.Abs(nvy) < 1e-6f, $"near water: way ({nvx}, {nvy})");
         Assert.True(TurnAfterDecide(wn, n) > 0.9f * wn.PTurn[n], "near water it does not turn toward it");
 
-        // far from water (100 cells, beyond SENSE_WATER) with no memory: no way is known, and it hardly turns
+        // far from water (100 cells, beyond SENSE_WATER) with no memory, on ground alike all round (as damp, flat): no way
+        // is known, and it hardly turns
         var (w, i) = ThirstyWalker(100);
         int cell = World.FIdx(w.X[i], w.Y[i]);
         Assert.True(w.DistDrink[cell] > K.SENSE_WATER);
+        void Ground(World g, int c, float dmx, float dmy, float dex, float dey)
+        {
+            int FW = Map.FW, x = c % FW, y = c / FW;
+            int Nb(int dx, int dy) => World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
+            foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1), (0, 0) })
+            {
+                g.Moisture[Nb(dx, dy)] = 0.5f + dmx * dx + dmy * dy;
+                g.Elev[Nb(dx, dy)] = 0.5f + dex * dx + dey * dy;
+            }
+        }
+        Ground(w, cell, 0f, 0f, 0f, 0f);
         PathMemory.WaterWay(w, i, cell, out float vx, out float vy);
         Assert.Equal(0f, vx); Assert.Equal(0f, vy);
         float blind = TurnAfterDecide(w, i);
         Assert.Equal(0f, w.Feat[i * F.N + F.DRINK_NEAR]);
         Assert.True(MathF.Abs(blind) < 0.25f * w.PTurn[i], $"with no memory it turned {blind}");
+
+        // what it feels underfoot: damper ground to the -x side leads that way; on ground as damp all round, downhill (+y)
+        Ground(w, cell, -0.05f, 0f, 0f, 0f);
+        PathMemory.WaterWay(w, i, cell, out vx, out vy);
+        Assert.True(vx < 0f && MathF.Abs(vy) < 1e-6f, $"damp ground to -x: way ({vx}, {vy})");
+        Ground(w, cell, 0f, 0f, 0f, -0.01f);
+        PathMemory.WaterWay(w, i, cell, out vx, out vy);
+        Assert.True(vy > 0f && MathF.Abs(vx) < 1e-6f, $"downhill to +y: way ({vx}, {vy})");
 
         // the same animal remembering that it drank 400 units to the -x side: it heads there
         var (wm, m) = ThirstyWalker(100);

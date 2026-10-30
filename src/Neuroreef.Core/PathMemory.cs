@@ -61,7 +61,8 @@ public static class PathMemory
 
     /// <summary>
     /// The way to water this animal can know: down the distance to drinkable water when water lies within SENSE_WATER
-    /// cells (it senses it); beyond that, toward where it last drank, if it remembers; else none (0, 0).
+    /// cells (it senses it); beyond that, toward where it last drank, if it remembers; else up the dampness of the ground,
+    /// or downhill where the ground is as damp all round.
     /// </summary>
     public static void WaterWay(World w, int i, int cell, out float vx, out float vy)
     {
@@ -73,7 +74,16 @@ public static class PathMemory
             return;
         }
         if ((w.MemHas[i] & Mem.Drink) != 0) { vx = w.MemDrinkX[i]; vy = w.MemDrinkY[i]; return; }
-        vx = vy = 0f;
+        // no water in range and none remembered: follow what it can feel underfoot. Ground grows damper toward water, as
+        // animals smell and feel (elephants find water from km away by it; Polansky et al. 2015), and where the ground
+        // gives no clue water gathers downhill. Both are read from its own and the neighbouring cells only
+        var m = w.Moisture;
+        vx = m[Neighbour(cell, 1, 0)] - m[Neighbour(cell, -1, 0)];
+        vy = m[Neighbour(cell, 0, 1)] - m[Neighbour(cell, 0, -1)];
+        if (vx * vx + vy * vy >= K.DAMP_CUE * K.DAMP_CUE) return;
+        var e = w.Elev;
+        vx = e[Neighbour(cell, -1, 0)] - e[Neighbour(cell, 1, 0)];
+        vy = e[Neighbour(cell, 0, -1)] - e[Neighbour(cell, 0, 1)];
     }
 
     /// <summary>The way to land when land lies within SENSE_WATER cells, else none.</summary>
