@@ -14,6 +14,7 @@ public sealed class Telemetry
     // ---- running counters (cumulative)
     public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants, Infections;
     public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, SpendHeat, RewardSum, CareGiven;
+    public readonly long[] InfByRoute = new long[4];   // new infections by how they were caught: contact, ground, food, water (Revision R)
     public long SlotShortage, FullSteps;
     public ulong LastFullStep = ulong.MaxValue;
     public long Splits;                     // speciation events (DESIGN §7.9)
@@ -47,7 +48,8 @@ public sealed class Telemetry
     public const int G_STEP = 0, G_POOLS = 1, G_SHRUB = G_POOLS + Pools.NFIELD, G_TREE = G_SHRUB + 1, G_SAPLING = G_TREE + 1,
         G_NUT_LAND = G_SAPLING + 1, G_NUT_WATER = G_NUT_LAND + 1, G_FIRE = G_NUT_WATER + 1, G_BURNING = G_FIRE + 1, G_ALIVE = G_BURNING + 1,
         G_SEASON = G_ALIVE + 1, G_RAIN = G_SEASON + 1,
-        G_TEMP = G_RAIN + 1, G_TMIN = G_TEMP + 1, G_TMAX = G_TMIN + 1, G_FROZEN = G_TMAX + 1, G_END = G_FROZEN + 1;   // land temperature: mean, lowest, highest, share frozen (Revision O)
+        G_TEMP = G_RAIN + 1, G_TMIN = G_TEMP + 1, G_TMAX = G_TMIN + 1, G_FROZEN = G_TMAX + 1,
+        G_PG = G_FROZEN + 1, G_END = G_PG + Pathogens.NCOL;   // pathogen census (Revision R, Pathogens.Census)   // land temperature: mean, lowest, highest, share frozen (Revision O)
 
     public readonly float[] Ring;          // RING * Len
     public readonly float[] LongRing;      // LONG_RING * Len: one sample in LONG_EVERY, for runs of weeks
@@ -109,6 +111,7 @@ public sealed class Telemetry
         for (int p = 0; p < Pools.NFIELD; p++) names.Add("pool." + Pools.Names[p]);
         names.AddRange(new[] { "cover.shrub", "cover.tree", "cover.sapling", "nutrient.land", "nutrient.water", "fire.ignited", "fire.burning", "agents.alive", "season", "rain.anomaly",
             "temp.land", "temp.min", "temp.max", "frozen.land" });
+        foreach (var c in Pathogens.ColNames) names.Add("pathogen." + c);
         OffGlobal = 0;
         OffSpecies = names.Count;
         PerSpecies = S_END;
@@ -242,6 +245,7 @@ public sealed class Telemetry
         a[G_RAIN] = w.RainAnom;
         a[G_TEMP] = (float)(tl / Math.Max(1, land)); a[G_TMIN] = land > 0 ? tmn : 0f; a[G_TMAX] = land > 0 ? tmx : 0f;
         a[G_FROZEN] = frozen / (float)Math.Max(1, land);
+        Pathogens.Census(w, a, G_PG);
 
         // per-animal statistics
         for (int i = 0; i < w.Cap; i++)
@@ -253,7 +257,8 @@ public sealed class Telemetry
             _cnt[s]++;
             a[o + S_COUNT]++;
             if (st == St.Juvenile) a[o + S_JUV]++;
-            if (w.Infect[i] > 0) a[o + S_SICK]++;
+            bool sick = w.PgLoad[i] > 0f;
+            if (sick) a[o + S_SICK]++;
             // is it evolving? mean strength of the starter-kit reflex genes (founders start near KIT_W)
             int kb = i * G.LEN + G.REFLEX; float ks = 0;
             foreach (var (c, p) in Reflex.Kit) ks += w.Genome[kb + p * G.NC + c];
@@ -290,7 +295,7 @@ public sealed class Telemetry
             a[o + S_TRAITS + T_BREEDE] += w.PReadyE[i];
             a[o + S_TRAITS + T_FINN] += w.PFinPairs[i];
             a[o + S_TRAITS + T_EYEN] += w.PEyePairs[i];
-            a[o + S_TRAITS + T_VIR] += w.Virulence[i];                // summed over the infected (others are 0)
+            if (sick) a[o + S_TRAITS + T_VIR] += w.PgGene[i * PG.N + PG.TOX] * (1f / 255f);   // toxin gene, summed over the infected (Revision R)
             a[o + S_GEN] += w.Gen[i];
             a[o + S_ENERGY] += w.Energy[i] / w.EmaxOf(i);
             a[o + S_REWARD] += w.RewardMean[i];

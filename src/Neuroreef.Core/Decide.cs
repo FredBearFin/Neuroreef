@@ -94,7 +94,7 @@ public static class Decide
 
         // ---- perception of other organisms (spatial hash, radius 1 or 2 cells). Kin are others that look like
         // this organism; every other organism is sensed through raw quantities, with no designed category
-        float kinSum = 0, kinCx = 0, kinCy = 0, kinHx = 0, kinHy = 0, sepX = 0, sepY = 0, crowd = 0, otherSum = 0, virSum = 0;
+        float kinSum = 0, kinCx = 0, kinCy = 0, kinHx = 0, kinHy = 0, sepX = 0, sepY = 0, crowd = 0, otherSum = 0, dose = 0, srcShed = 0;
         Near kin = new() { D = 1e9f, J = -1 }, o1 = new() { D = 1e9f, J = -1 }, o2 = new() { D = 1e9f, J = -1 },
              mate = new() { D = 1e9f, J = -1 }, strike = new() { D = 1e9f, J = -1 }, strikeBig = new() { D = 1e9f, J = -1 },
              strikeKin = new() { D = 1e9f, J = -1 };
@@ -119,7 +119,9 @@ public static class Decide
             byte sj = w.StageOf[j];
             bool active = sj >= St.Juvenile;
             bool alike = Body.LooksAlike(w, i, j);
-            if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; strainSrc = j; }
+            // contact route (Revision R): any animal in reach that sheds, of any kind; whether its strain can grow here is the strain's host range
+            float shedJ = w.PgShed[j];
+            if (active && shedJ > 0f && d <= reach + w.PReach[j]) { infNear++; dose += shedJ; if (shedJ > srcShed) { srcShed = shedJ; strainSrc = j; } }
             if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
             if (alike)
             {
@@ -469,7 +471,7 @@ public static class Decide
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
         w.IInfNear[i] = (byte)Math.Min(255, infNear);
-        w.IVirNear[i] = infNear > 0 ? virSum / infNear : 0f;
+        w.IDose[i] = dose;
         w.IStrainSrc[i] = strainSrc;
         w.IScanning[i] = (byte)(g[P.SCAN] > 0.5f ? 1 : 0);
         // what it heard, for the translator: its focal caller's utterance and where it came from

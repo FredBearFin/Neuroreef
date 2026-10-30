@@ -45,7 +45,7 @@ public static class Life
         w.Serial[c] = w.NextSerial++;
         w.Children[c] = 0; w.Matured[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
         w.IActs[c] = 0; w.ITarget[c] = -1; w.IMate[c] = -1; w.IScanning[c] = 0; w.ISpeed[c] = 0; w.IHeading[c] = w.Heading[c];
-        w.Infect[c] = 0; w.Immune[c] = 0; w.Virulence[c] = 0; w.IInfNear[c] = 0; w.IVirNear[c] = 0; w.IStrainSrc[c] = -1; w.CareLeft[c] = 0; w.CareStep[c] = 0;
+        Pathogens.Clear(w, c); w.CareLeft[c] = 0; w.CareStep[c] = 0;
         if (mother >= 0)
         {
             w.MotherSlot[c] = mother; w.MotherSerial[c] = w.Serial[mother];
@@ -271,7 +271,7 @@ public static class Life
         return c;
     }
 
-    /// <summary>LIFECYCLE phase: eggs and embryos, hatching, metamorphosis, disease, parental care. Serial. Nothing is
+    /// <summary>LIFECYCLE phase: eggs and embryos, hatching, metamorphosis, disease (Pathogens.Host), parental care, the pathogen reservoir. Serial. Nothing is
     /// ever added here: every run, prehistory or live, is births and deaths only after its founders (NR-313).</summary>
     public static void Run(World w, int[] activeCount)
     {
@@ -304,7 +304,7 @@ public static class Life
                 continue;
             }
             int si = w.Spc[i];
-            if (Disease(w, i, si)) continue;          // died of it
+            if (Pathogens.Host(w, i, si)) continue;   // died of disease (Revision R)
             if (st == St.Juvenile) Care(w, i, si);
             activeCount[si]++;
             if (st == St.Juvenile && w.Grown[i] >= 1f)              // mature on reaching adult size
@@ -314,63 +314,7 @@ public static class Life
                 if (m >= 0) w.Matured[m]++;
             }
         }
-    }
-
-    /// <summary>
-    /// Disease (DESIGN §9.6): pathogens are caught by contact with infected organisms that look alike (counted by
-    /// DECIDE), so they spread in crowds and fade in sparse populations. Each infection carries its own virulence v,
-    /// inherited from the strain caught and mutated (VIR_MUT): a more virulent strain spreads better per contact but
-    /// costs and kills its host more, so virulence evolves. The host's immunity gene lowers both infection and death.
-    /// Infection lasts DIS_STEPS; recovery gives immunity for DIS_IMMUNE. Returns true if the organism died.
-    /// </summary>
-    static bool Disease(World w, int i, int s)
-    {
-        uint seed = w.Seed, step = (uint)w.Step;
-        float protect = 1f - K.IMMUNE_PROTECT * w.PImmune[i];
-        if (w.Infect[i] > 0)
-        {
-            w.Infect[i] -= 1;
-            if (w.Infect[i] <= 0) { w.Infect[i] = 0; w.Virulence[i] = 0; w.Immune[i] = K.DIS_IMMUNE; return false; }
-            float hunger = Math.Clamp(1f - w.Energy[i] / w.EmaxOf(i), 0f, 1f);
-            if (Rng.U(seed, step, (uint)i, Rs.Disease + 1) < K.DIS_MORT * w.Virulence[i] * (1f + hunger) * protect) { Resolve.Die(w, i, Cause.Disease, -1); return true; }
-            return false;
-        }
-        if (w.Immune[i] > 0) { w.Immune[i] -= 1; return false; }
-        int n = w.IInfNear[i];
-        float v = n > 0 ? w.IVirNear[i] : 1f;
-        // matching alleles: a strain infects a host whose recognition genes match its key (Red Queen, Hamilton 1980)
-        int src = w.IStrainSrc[i];
-        bool fromContact = n > 0 && src >= 0 && w.Infect[src] > 0;
-        float match = fromContact ? Match(w, src, i) : 1f;
-        float beta = K.DIS_BETA * Nature.Disease * 1.5f * v / (0.5f + v) * protect * match;     // transmission saturates with virulence
-        float escape = 1f;
-        for (; n > 0; n--) escape *= 1f - beta;
-        float pContact = 1f - escape, pSpill = K.DIS_SPILL * Nature.Disease * protect;
-        float u = Rng.U(seed, step, (uint)i, Rs.Disease);
-        if (u < pContact + pSpill)
-        {
-            float v0 = u < pContact ? w.IVirNear[i] : 1f;           // a strain caught from a neighbour, or a new one from the reservoir
-            w.Infect[i] = K.DIS_STEPS;
-            w.Virulence[i] = Math.Clamp(v0 * MathK.Exp(K.VIR_MUT * Rng.N(seed, step, (uint)i, Rs.Disease + 2)), 0.05f, 10f);
-            // the strain's key: the contact's (or, from the reservoir, the host's own type), mutated
-            for (int k = 0; k < G.NMHC; k++)
-            {
-                // from the reservoir: the strain that just succeeded on this host, so it fits its type
-                float key = (u < pContact && fromContact ? w.Strain[src * G.NMHC + k] : w.Genome[i * G.LEN + G.B_MHC + k])
-                            + Rng.N(seed, step, (uint)i, Rs.Disease + 100u + (uint)k) * K.MHC_MUT;
-                w.Strain[i * G.NMHC + k] = (sbyte)Math.Clamp((int)MathF.Round(key), -127, 127);
-            }
-            w.T.Infections[s]++;
-        }
-        return false;
-    }
-
-    /// <summary>How well the strain carried by s matches host h's recognition genes (1 = perfect).</summary>
-    static float Match(World w, int s, int h)
-    {
-        float d2 = 0; int gh = h * G.LEN + G.B_MHC;
-        for (int k = 0; k < G.NMHC; k++) { float d = (w.Strain[s * G.NMHC + k] - w.Genome[gh + k]) * (1f / 127f); d2 += d * d; }
-        return MathK.Exp(-d2 / G.NMHC / (K.MHC_W * K.MHC_W));
+        Pathogens.Field(w);   // the environmental reservoir: river flow and decay (Revision R)
     }
 
     /// <summary>

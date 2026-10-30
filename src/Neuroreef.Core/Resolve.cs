@@ -70,7 +70,7 @@ public static class Resolve
             if (w.Thirst[i] > 0f) metrics?.Allow(P.DRINK);
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
-            if (rel > 0f) { metrics?.Apply(P.DRINK); PathMemory.Drank(w, i); }
+            if (rel > 0f) { metrics?.Apply(P.DRINK); PathMemory.Drank(w, i); Pathogens.Drank(w, i, cell); }   // waterborne pathogens (Revision R)
         }
 
         static bool Move(World w, int i, float x, float y, float h, float speed, out float nx, out float ny, out float fraction)
@@ -142,6 +142,7 @@ public static class Resolve
                     else if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
                     r += Ingest(w, i, best, bite, diet[best], emax, cell);
+                    Pathogens.Ate(w, i, cell);   // what lies on the food is swallowed with it: the faecal-oral route (Revision R)
                 }
             }
         }
@@ -209,7 +210,6 @@ public static class Resolve
         // cost of transport: ~M^0.7 x speed (Taylor et al. 1982); equal to the old M*v^2 rule at M=1 and full walking speed
         // (a heavy coat adds to it, Revision O)
         float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f) * (1f + K.INS_MOVE * w.PInsul[i]);
-        bool sick = w.Infect[i] > 0;
         // a juvenile runs every unit of its brain from birth, so it pays for all of them; only the body's share scales
         // with its size (audit 2026-10-30: a young brain was charged at body scale; real infant brains cost more, not less)
         float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF;
@@ -224,7 +224,7 @@ public static class Resolve
             core = Heat.Core(top, w.PEndo[i]);
             rateT = Heat.Rate(core);
         }
-        float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
+        float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (1f + Pathogens.Sickness(w, i));   // the pathogen's take and the immune response (Revision R)
         // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
         // that would reach adult size at PMature, times how full its reserve is (the reserve density of a dynamic energy
         // budget: growth draws on the reserve continuously, Kooijman 2010), keeping GROW_RESERVE of it against
@@ -282,7 +282,7 @@ public static class Resolve
         if (evap > 0f && !waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.EVAP_REL * K.C_THIRST * Nature.Thirst * evap / (K.C_BASAL * mass));
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
-        w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
+        w.Pain[i] = MathF.Max(Pathogens.Malaise(w, i), w.Pain[i] - K.PAIN_DECAY);   // a sick animal feels unwell (immune response, damage)
         // energy spent counts against the reward as energy eaten counts for it (Revision P): the learner feels the net
         // gain, so a habit that costs and earns nothing (calling on 65-80% of steps) is not reinforced for free.
         // Basal cost is not counted: nothing it does changes it
@@ -628,6 +628,7 @@ public static class Resolve
         w.T.DeathsByAge[s * 4 + cls]++;
         if (cls > 0) w.T.AgeAtDeath[s] += w.Age[i];
         if (st >= St.Juvenile) Life.ToArchive(w, i);
+        Pathogens.OnDeath(w, i);   // its pathogens stay where it died (Revision R)
         Life.FreeSlot(w, i);
     }
 }
