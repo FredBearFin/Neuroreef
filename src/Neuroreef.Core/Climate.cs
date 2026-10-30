@@ -90,6 +90,44 @@ public static class Climate
         for (int y = 0; y < Map.FW; y++) TempRow(w, y);
     }
 
+    /// <summary>
+    /// Where rain falls (Revision P), relative to the land's mean (1): air takes up water over lakes and seas, the
+    /// prevailing wind of its latitude carries it over land, and it rains out as it goes, the more where the ground
+    /// rises under it (orographic rain: wet windward slopes, dry rain shadows behind) and less far inland; the land
+    /// gives some back (RAIN_RECYCLE). The belts of the general circulation set how much falls at each latitude: wet
+    /// where air rises at the equator and near 55°, dry where it sinks near 30° and at the poles (Hadley, Ferrel and
+    /// polar cells; trade winds from the east below 30°, westerlies to 60°, polar easterlies above). Rows are
+    /// latitudes on the torus; each row is marched twice around so the air arriving at its start is already settled.
+    /// </summary>
+    public static void Rainfall(World w, float[] rain)
+    {
+        int FW = Map.FW;
+        float sea = w.SeaLevel;
+        double sum = 0; int nLand = 0;
+        for (int y = 0; y < FW; y++)
+        {
+            float s = MathF.Abs(MathF.Sin(2f * MathF.PI * y / FW));
+            float lat = MathF.Asin(MathF.Min(1f, s)) * (180f / MathF.PI);
+            int dir = lat < 30f ? -1 : lat < 60f ? 1 : -1;
+            float belt = K.RAIN_DRY + (1f - K.RAIN_DRY) * MathF.Exp(-lat * lat / (K.RAIN_BELT * K.RAIN_BELT))
+                       + K.RAIN_MID * MathF.Exp(-(lat - 55f) * (lat - 55f) / (K.RAIN_BELT * K.RAIN_BELT));
+            float q = 0f; int x = 0; float hPrev = 0f;
+            for (int k = 0; k < 2 * FW; k++, x = World.WrapI(x + dir, FW))
+            {
+                int i = y * FW + x;
+                float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea);
+                if (w.Cell[i] != (byte)Realm.Land) { q += (1f - q) * K.RAIN_EVAP; hPrev = 0f; continue; }
+                float lift = MathF.Max(0f, h - hPrev) * K.RAIN_OROG;
+                float r = MathF.Min(q, q * (1f / K.RAIN_L + lift));
+                q += (1f - q) * K.RAIN_RECYCLE - r;
+                hPrev = h;
+                if (k >= FW) { rain[i] = r * belt; sum += rain[i]; nLand++; }
+            }
+        }
+        float mean = nLand > 0 ? (float)(sum / nLand) : 1f;
+        for (int i = 0; i < FW * FW; i++) rain[i] = w.Cell[i] == (byte)Realm.Land && mean > 0 ? rain[i] / mean : 0f;
+    }
+
     /// <summary>Terrain.Build, once the moisture base is known: the evaporation normaliser Z.</summary>
     public static void Normalise(World w)
     {

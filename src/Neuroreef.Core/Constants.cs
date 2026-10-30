@@ -335,6 +335,14 @@ public static class K
 
     // ---------------------------------------------------------------- 9. climate (Revision O): temperature from sun, height, season and water
     [K("Climate", "default climate strength (Nature.Climate): T = T_REF + Climate x (T_phys - T_REF); 0 = no climate, everywhere T_REF and no heat budget", "-", "HT: Revision O; 1 = Earth-like contrasts. Sanity runs at 8,000 steps: 0.6 left 0 and 243 organisms in two branches, 0.3 left 670 and 944, 0 left 728 and 4,106")] public const float CLIMATE = 0.3f;
+    [K("Climate", "share of the soil's wetness that follows where rain falls (the rest follows the ground: near water, in valleys)", "-", "HT: Revision P; before, soil wetness came from the ground and noise only, and 80% of the land was in the driest two fifths")] public const float RAIN_W = 0.7f;
+    [K("Climate", "cells over land over which wind-borne air loses all but 1/e of its water (1/this rains out per cell)", "cells", "HT: rain falls off inland over hundreds of km (continental interiors are dry)")] public const float RAIN_L = 30f;
+    [K("Climate", "extra rain-out per unit rise of the ground under the wind (share of the relief)", "-", "ECO: orographic rain: windward slopes are wet, lee slopes dry (rain shadows; Roe 2005)")] public const float RAIN_OROG = 40f;
+    [K("Climate", "how fast air over water takes up water, per cell", "-", "HT")] public const float RAIN_EVAP = 0.2f;
+    [K("Climate", "water the land gives back to the air per cell (evapotranspiration)", "-", "ECO: about 40% of land rain is recycled from the land (Trenberth 1999)")] public const float RAIN_RECYCLE = 0.01f;
+    [K("Climate", "rain at the dry belts (near 30° and the poles), against the equator's 1", "-", "ECO: zonal mean rain ~0.3-0.4 of the equator's in the subtropical highs and at the poles (Peixoto & Oort 1992)")] public const float RAIN_DRY = 0.3f;
+    [K("Climate", "extra rain of the mid-latitude belt near 55°", "-", "ECO: a second maximum ~0.5-0.6 of the equator's (Peixoto & Oort 1992)")] public const float RAIN_MID = 0.35f;
+    [K("Climate", "width (degrees of latitude) of the equatorial and mid-latitude rain belts", "°", "ECO")] public const float RAIN_BELT = 14f;
     [K("Climate", "reference temperature (the temperature of a world with no climate; plant curves, decomposition and evaporation are 1 here)", "°C", "-")] public const float T_REF = 20f;
     [K("Climate", "annual mean sea-level temperature at the equator", "°C", "ECO: observed zonal mean ~27 °C (North 1975)")] public const float T_EQ = 27f;
     [K("Climate", "equator-to-pole temperature drop, x sin² latitude", "K", "ECO: the second Legendre term of North's (1975) energy-balance climate, ~40 K")] public const float DT_EP = 40f;

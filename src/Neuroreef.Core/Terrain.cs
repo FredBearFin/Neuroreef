@@ -121,7 +121,24 @@ public static class Terrain
                 w.Fert[i] = Math.Clamp(0.3f + 0.7f * (m - 0.25f) * 1.6f, 0.1f, 1f);
                 w.Moisture[i] = w.MoistBase[i];
             }
-        if (Climate.On) { Climate.Normalise(w); Ponds.Update(w); }   // evaporation normalised to the moisture base; ponds refilled with it
+        if (Climate.On)
+        {
+            // where rain falls (Revision P): the soil's wetness follows the rain (Climate.Rainfall) at RAIN_W of it, and
+            // the ground's own lie (near water, in valleys) at the rest; the land as a whole stays as wet as before
+            var rain = new float[FW * FW];
+            Climate.Rainfall(w, rain);
+            double ms = 0; int nl = 0;
+            for (int i = 0; i < FW * FW; i++) if (w.Cell[i] == (byte)Realm.Land) { ms += w.MoistBase[i]; nl++; }
+            float mean = nl > 0 ? (float)(ms / nl) : 0.5f;
+            for (int i = 0; i < FW * FW; i++)
+            {
+                if (w.Cell[i] != (byte)Realm.Land) continue;
+                float rel = K.RAIN_W * rain[i] + (1f - K.RAIN_W) * w.MoistBase[i] / mean;
+                w.MoistBase[i] = Math.Clamp(0.05f + (mean - 0.05f) * rel, 0.05f, 1f);
+                w.Moisture[i] = w.MoistBase[i];
+            }
+            Climate.Normalise(w); Ponds.Update(w);   // evaporation normalised to the moisture base; ponds refilled with it
+        }
 
         // Initial vegetation: a mosaic of grassland, shrubland and woodland, and plankton in the water.
         var P = w.Pool;
