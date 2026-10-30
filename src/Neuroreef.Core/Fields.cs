@@ -138,6 +138,62 @@ public static class Fields
         }
     }
 
+    /// <summary>
+    /// The energy per step that an animal with this diet could take from cell i, year in and year out, without eating the
+    /// plants down: each pool's growth from Row at the stock where it grows fastest (half of the room it can fill, the
+    /// maximum sustained yield of logistic growth, Schaefer 1954), seasonal pools at their yearly mean (1/pi of the
+    /// peak), litter and detritus at their inflow; times the pool's energy and the diet's efficiency. Carrion, dung and
+    /// meat come from animals and are not counted. Used to found each lineage with what its home range can feed.
+    /// </summary>
+    public static float Yield(World w, int i, ReadOnlySpan<float> diet)
+    {
+        const float SEASON_MEAN = 1f / MathF.PI;   // mean of max(sin, 0) over a year
+        var Pl = w.Pool;
+        float N = w.Nutrient[i], plants = Nature.Plants;
+        float temp = K.T_REF;
+        bool clim = Climate.On;
+        if (clim)
+        {
+            Climate.RowParams(w, i / Map.FW, out float ta, out float tb);
+            temp = MathF.FusedMultiplyAdd(tb, w.Cont[i], ta) - w.TLapse[i];
+        }
+        float y = 0f;
+        if (w.Cell[i] != (byte)Realm.Land)
+        {
+            float lim = N / (N + K.K_N);
+            float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
+            float al = w.Cell[i] == (byte)Realm.Shallow ? (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe : 0f;
+            float ph = K.R_PH * plants * lim * 0.25f * fe;
+            y += diet[(int)Pool.Algae] * Pools.Rho[(int)Pool.Algae] * al;
+            y += diet[(int)Pool.Phyto] * Pools.Rho[(int)Pool.Phyto] * ph;
+            y += diet[(int)Pool.Detritus] * Pools.Rho[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + K.M_PH * Pl[(int)Pool.Phyto][i]);
+            return y;
+        }
+        float W = w.Moisture[i], nut = N / (N + K.K_N);
+        float grow = W * nut;
+        if (clim) grow *= Climate.FGrass[Climate.Idx(temp)];
+        float g = Pl[(int)Pool.Grass][i], s = w.Shrub[i], t = w.Tree[i];
+        float room = MathF.Max(0f, 1f - s - t), lightG = 1f - 0.85f * t - 0.35f * s;
+        float dG = K.R_G * plants * grow * lightG * 0.25f * room * room;
+        float dB = K.R_B * plants * grow * 0.5f * (s + K.B_TREE * t);
+        float dF = K.R_F * plants * t * SEASON_MEAN * grow;
+        float dSd = K.R_SD * plants * (g + 0.5f * t) * SEASON_MEAN * (0.3f + grow);
+        float dNc = K.R_NC * plants * (0.5f * g + s) * SEASON_MEAN * grow;
+        float dR = K.R_R * plants * (g + s) * grow * 0.25f;
+        float dL = K.C_LIT * (g + 0.5f * s + 0.3f * t);
+        y += diet[(int)Pool.Grass] * Pools.Rho[(int)Pool.Grass] * dG;
+        y += diet[(int)Pool.Browse] * Pools.Rho[(int)Pool.Browse] * dB;
+        y += diet[(int)Pool.Fruit] * Pools.Rho[(int)Pool.Fruit] * dF;
+        y += diet[(int)Pool.Seed] * Pools.Rho[(int)Pool.Seed] * dSd;
+        y += diet[(int)Pool.Nectar] * Pools.Rho[(int)Pool.Nectar] * dNc;
+        y += diet[(int)Pool.Root] * Pools.Rho[(int)Pool.Root] * dR;
+        y += diet[(int)Pool.Litter] * Pools.Rho[(int)Pool.Litter] * dL;
+        return y;
+    }
+
+    /// <summary>Is this a pool that Yield counts (it grows from plants, or from their fall)?</summary>
+    public static bool Grows(int p) => p <= (int)Pool.Phyto || p == (int)Pool.Litter || p == (int)Pool.Detritus;
+
     /// <summary>Nutrient change of cell i due to its neighbour j (reads only the current buffer).</summary>
     static float Transport(World w, int i, int j, bool iWet)
     {

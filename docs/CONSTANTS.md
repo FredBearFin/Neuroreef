@@ -130,7 +130,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WMAX | 7.9 | - | max |weight| (genome + learned) | - |
 | FOUNDER_W | 12 | int8 | founder memory-layer (W1) weight range: round(U(-1,1)*FOUNDER_W) | HT |
 | FOUNDER_W2 | 4 | int8 | founder output-layer (W2) weight range | HT |
-| FOUNDER_BIAS | -48 | int8 | founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain) | HT |
+| FOUNDER_BIAS | -64 | int8 | founder output bias (x/16): every primitive of every species starts near 2% (calm newborn brain) | HT: was -48 (5%) until 2026-10-30, when naive animals struck whatever was in reach every ~20 steps and founding groups killed each other |
 | FOUNDER_BIAS_CALL | -80 | int8 | founder output bias of each of the 8 call primitives (x/16): together about 5%, like one primitive | HT: calm newborn brain (Revision M) |
 | FOUNDER_BIAS_NOISE | 4 | int8 | random spread of the founder output bias | HT |
 | FOUNDER_W_SD | 2 | int8 | standing variation of founders' brain and reflex bytes around their ancestor's (SD) | ECO: members of one population share an inherited nervous system with small heritable variation; half the founder output-weight range (Revision H) |
@@ -156,7 +156,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MUT_BIG_SHARE | 0.05 | - | share of mutations that are large jumps | V1 |
 | MUT_BIG | 16 | int8 | large mutation sigma | V1 |
 | RSCALE | 0.0625 | - | reflex input weight scale (int8 / 16, as the output layer) | - |
-| KIT_W | 80 | int8 | founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88% | designed: the innate starter kit (DESIGN §7.7, Revision D) |
+| KIT_W | 120 | int8 | founder strength of each starter-kit reflex (x/16): at full need, 120/16 = 7.5 against the calm bias of -4 gives about 97% | designed: the innate starter kit (DESIGN §7.7, Revision D); the user (2026-10-30): the base instincts should be very strong, "like primary colours" (was 80, 88% against a bias of -3) |
 | ARCHIVE | 16 | genomes | elite archive size per species | HT (Revision M: 64 before; a genome is now ~83 KB) |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 
@@ -175,6 +175,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | GROUP_SIZE | 8 | agents | founders start in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
 | GROUP_SPREAD | 10 | units | radius of a founder group | HT |
+| HOME_R_MAX | 0.33 | - | largest radius of a founding lineage's home range, as a share of the map side (a big body's range widens up to this until it can feed FOUND_MIN founders) | HT: a third of the map; home ranges grow about in proportion to body mass (Kelt & Van Vuren 2001) |
 | HOME_R | 0.12 | - | radius of an ancestor's home range, as a share of the map side | Revision N (the user): each lineage starts in its own part of the map; species have homelands and meet as they spread |
 | HOME_TRIES | 24 | - | random sites tried when choosing a home range (the one farthest from the others is taken) | HT |
 | BANK_LIVING | 48 | genomes | genomes per species stored in a gene bank (living sample) | HT (Revision M: 96 before) |
@@ -198,6 +199,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_STRIKE_ABS | 0.15 | xbasal | basal cost per unit of weaponry | ECO: jaws, teeth and claws are costly tissue |
 | ARMOUR_MAX | 3 | - | largest armour a gene can give | - |
 | STRIKE_MAX | 2 | - | largest weaponry (strike) a gene can give | - |
+| TAU_FERM | 2 | - | fermentation time scale of fibre, in units of M^0.25 retention: the share fermented is 1 - exp(-M^0.25 / this), relative to M = 1 | ECO: Jarman-Bell principle (Demment & Van Soest 1985; Clauss et al. 2013): fibre digestibility rises from ~25% in small to ~60% in large herbivores; 2 gives x0.63 at M = 0.1, x1.5 at 10, x1.8 at 40 |
 | DIET_BUDGET | 1 | - | length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it | ECO: digestive specialisation trades off breadth against efficiency |
 | LITTER_MAX | 12 | young | largest litter a gene can give | - |
 | NEWBORN_MIN | 0.01 | M | smallest newborn (or egg) mass | ECO: eggs and young have a physical smallest size (Revision M) |
@@ -289,7 +291,11 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ANCESTORS_LAND | 6 | ancestors | ancestors that start on land | user choice |
 | ANCESTORS_WATER | 4 | ancestors | ancestors that start in water | user choice |
 | ANCESTOR_COUNT | 600 | organisms | founding organisms per ancestor | HT |
-| FOUND_AREA | 4 | - | founders per ancestor are ANCESTOR_COUNT x min(1, map area / continent area x this) | HT: a valley (1/16 of a continent) is stocked with 1/4 as many founders, so it does not start overstuffed (Revision M) |
+| FOUND_FILL | 0.5 | - | a lineage starts with this share of the animals its home range's plants can feed at its body size and brain | ECO: founding at half the carrying capacity, where logistic growth is fastest, leaves room to grow without starting in famine (2026-10-30: a fixed 600 per ancestor started big bodies at many times their food, and 70% of founders starved) |
+| FIELD_METAB | 1.5 | xbasal | a day of living costs this many times the basal cost (moving, growing, breeding, keeping warm) | measured: this world's own animals spend 1.45x basal over the first 3000 steps (2026-10-30, seed 7: basal 0.92, move 0.12, growth 0.16, breeding 0.15, heat 0.10); free-living mammals 2-3x (Nagy 1987) |
+| FORAGE_MARGIN | 3 | - | an ancestor must be able to eat this many days' need per step of eating (one bite of a half-grazed cell, or its gut's rate) | measured: random founders eat on 25-50% of steps (2026-10-30), so a forager must gain at least 2-4x its need per bite to live |
+| ANCESTOR_TRIES | 64 | - | random ancestor bodies tried per ancestor for one its home range can feed | HT: enough that almost every ancestor finds a viable body |
+| FOUND_MIN | 50 | organisms | the smallest founding group an ancestor must be able to feed (FOUND_FILL x capacity) | ECO: the 50 of the 50/500 rule for a minimum viable population (Franklin 1980); smaller founding groups go extinct by chance (Allee effect) |
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
 | MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |

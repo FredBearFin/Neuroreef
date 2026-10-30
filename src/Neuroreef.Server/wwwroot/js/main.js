@@ -13,6 +13,7 @@ let clades = [], pendingClades = null;   // the live clade table (32 slots; unus
 
 link.listen('meta', (m) => {
   meta = m;
+  $('s-seed').textContent = m.seed;
   if (!world) {
     world = new World3D($('gl'), meta);
     panels = new Panels(meta, link);

@@ -6,7 +6,7 @@ namespace Neuroreef.Server;
 /// <summary>Command-line options. Every option is listed in Usage.</summary>
 public sealed class Options
 {
-    public uint Seed = 1;
+    public uint Seed;   // 0 until chosen: --seed N, or a fresh random one for every new world (Parse)
     public int Capacity = K.CAPACITY;
     public int Threads = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 8));
     public int Port = 5800;
@@ -80,7 +80,8 @@ public sealed class Options
   --load-bank FILE      begin the world with the brains in this gene bank
   --branches N          prehistory branches (default 3)
   --prehistory-steps N  length of the prehistory (default 500000 steps = 500 million symbolic years)
-  --seed N              world and run seed (default 1)
+  --seed N              world and run seed: the same N gives the same map, ancestors and names
+                        (default: a new random seed every time; it is printed at start)
   --capacity N          agent slots of the world (default 65536)
   --threads N           worker threads (default: cores - 1, max 8)
   --port N              web console port (default 5800)
@@ -177,6 +178,9 @@ public sealed class Options
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");
             }
         }
+        // every new world is different: its map, its ancestors' bodies and brains and their names all come from the
+        // seed, so with no --seed it is drawn at random (a saved world or prehistory resumes with its own seed)
+        while (o.Seed == 0) o.Seed = (uint)System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, int.MaxValue);
         if (o.Evolve)
         {
             string dir = AppContext.BaseDirectory;

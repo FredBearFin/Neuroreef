@@ -3,6 +3,41 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Revision P: worlds start as food allows, and every world is new** (2026-10-30; the user: "why were so many spawning
+in? ... how are they getting so much food?", "within 10,000 steps [one] kills everything else", "it starts the
+ancestors as preforms ... it's supposed to be randomly generated every time"). Measured before the change (default
+world, seed 7): every ancestor started with a fixed 600 founders whatever its size; 6,000 founders fell to about 400 by
+step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at step 10,000. Causes and changes:
+- *A new seed every world.* The program always used seed 1, so every world had the same map, ancestors and names. With
+  no --seed, a new world now draws a random seed (printed at start and shown in the console's bar; `--seed N` makes the
+  same world again; a saved world or prehistory resumes with its own).
+- *Founders set by food.* Each lineage starts with FOUND_FILL (half) of what its home range can feed at its body size,
+  brain and diet: the range's sustained plant yield (Fields.Yield: each pool's growth at the stock where it grows
+  fastest, seasonal pools at their yearly mean) over a day of living, FIELD_METAB = 1.5 x basal (measured in this world:
+  basal 0.92, moving 0.12, growth 0.16, breeding 0.15, heat 0.10). The setup's "founders" is now only an upper limit.
+  A large body's home range widens (up to HOME_R_MAX) until it can feed FOUND_MIN founders, as home ranges grow with
+  body mass.
+- *Ancestors that can live where they live.* Of up to ANCESTOR_TRIES random bodies, an ancestor is the first whose home
+  range can feed FOUND_MIN founders and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
+  digestion rate, must give FORAGE_MARGIN days' need (a Holling type II limit). Nothing chooses a diet or a size: a
+  20-unit nectar eater, a water animal with a grass diet or a meat-eater with nothing to eat is simply never an ancestor.
+- *Food sensed as worth to the eater.* FOOD_HERE (and the food gradient) was the cell's food against the best food the
+  diet could ever give, so a nectar eater in a meadow sensed ~0.02 and its eating instinct hardly fired: hungry
+  founders stood on food and starved. It is now one bite's energy against a step's need, 1 - exp(-bite/need).
+  Prey is valued the same way (a bite of its edible tissue).
+- *Fibre is fermented, and fermenting takes time (the Jarman-Bell principle).* A gut holds ~M of food while food passes
+  at ~M^0.75, so food stays M^0.25 longer in a bigger gut. The efficiency on fibrous foods (grass, browse, roots, dung,
+  litter, wood) is multiplied by (1 - exp(-M^0.25/TAU_FERM)) / (1 - exp(-1/TAU_FERM)): x0.63 at M = 0.1, x1.5 at 10,
+  x1.8 at 40 (never above DigMax). Before, digestion did not depend on size, so the smallest, fastest-breeding body won
+  everywhere (with one ancestor per size class, a mass-0.2 lineage filled the map and every other class died out).
+  Now small bodies do best on rich food (seed, fruit, nectar, meat) and big ones on grass and leaves: size niches
+  follow from the physics, with no size given to any niche.
+- *Calmer newborns.* Every discrete action of a newborn brain started near 5% a step (FOUNDER_BIAS -48), so naive
+  animals struck whatever was in reach every ~20 steps and founding groups killed each other (one lineage: 30% of its
+  deaths by its own kind). All actions now start near 2% (FOUNDER_BIAS -64), the same for every action; the instincts
+  (eat, drink, mate, flee...) were made stronger in the same change, at full need about 97% instead of 88% (KIT_W 120;
+  the user: base instincts should be very strong, "like primary colours"); evolution can change any of them.
+
 **Size classes with floors** (the user, 2026-10-30): a body-plan gene B_FLOOR puts each lineage in one of FLOOR_CLASSES = 4
 size classes whose smallest body is 0.1, 1, 3 or 10 (Body.Floors). Mass still evolves continuously above the floor, up
 to MASS_HI. The class gene is copied exactly (founder variation and ordinary mutation leave it alone) and steps up or down
@@ -168,7 +203,7 @@ capacity"; the population laws reviewed by the ecologist)
   could evolve (random brains eat too rarely), so x2 is the tested value.
 - MASS_LO = 0.1 (0.01 gave tiny bodies 32x the numbers from the same food; smaller consumers are the fields), and
   newborns and eggs are at least NEWBORN_MIN = 0.01.
-- Founders per ancestor scale with map area (FOUND_AREA), as founding from a bank does.
+- Founders per ancestor are set by the food in their home range (Revision P; FOUND_FILL, FIELD_METAB), at most the setup's limit.
 - Voices: 8 call primitives (CALL_0..7) and 8 hearing senses (HEAR_0..7: how loud each sound was within the
   perception radius last step, from any direction), and two steering primitives, toward and away from the loudest
   call. No sound has a built-in meaning, and nothing rewards calling: a call costs C_CALL x basal and is heard by
@@ -779,7 +814,7 @@ reflex genes set to KIT_W (+ the usual small random spread):
 - an armed, larger meat-eater near (O1 or O2: close × meat × armed × larger) → FLEE_NEAREST and FLEE_LARGEST
 - young × far from mother → FOLLOW_MOTHER
 
-At full need a kit reflex gives about 88% (5 against the calm bias of −3). This is the one designed
+At full need a kit reflex gives about 97% (7.5 against the calm bias of −4; Revision P: the user asked for base instincts "like primary colours"; it was 88%). This is the one designed
 behaviour in the model, chosen by the user on 2026-10-28. Everything above it stays emergent: what to
 eat, herding, hunting, mating, timing. The kit genes are ordinary genes, so evolution can strengthen,
 weaken or lose them. All other reflex links start small and random.

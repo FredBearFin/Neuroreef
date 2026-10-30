@@ -116,10 +116,10 @@ public static class Life
         return true;
     }
 
-    /// <summary>A site its realm allows within the home range (radius HOME_R x map side) around (hx, hy); wider if none is found.</summary>
-    public static bool HomeSite(World w, Realm realm, float hx, float hy, uint key, out float x, out float y)
+    /// <summary>A site its realm allows within the home range (radius r, by default HOME_R x map side) around (hx, hy); wider if none is found.</summary>
+    public static bool HomeSite(World w, Realm realm, float hx, float hy, uint key, out float x, out float y, float r = 0f)
     {
-        float r = K.HOME_R * Map.W;
+        if (r <= 0f) r = K.HOME_R * Map.W;
         for (int t = 0; t < 96; t++)
         {
             float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 300u + (uint)t * 2) * 2f * MathF.PI;
@@ -128,6 +128,62 @@ public static class Life
             if (w.CellAllows(World.FIdx(x, y), realm)) return true;
         }
         return RandomSite(w, realm, key, out x, out y);
+    }
+
+    /// <summary>
+    /// How many animals like organism c a home range of radius r around (hx, hy) can feed: the sustained energy yield of
+    /// the cells its realm allows (Fields.Yield, for its diet), over what one of them burns in a day of living
+    /// (FIELD_METAB x its basal cost, brain included). None if its gut cannot pass enough of the best of those foods to
+    /// pay for a day even when there is plenty (digestion rate x energy x efficiency below the need).
+    /// </summary>
+    public static float RangeCapacity(World w, int c, float hx, float hy, float r)
+    {
+        var realm = w.RealmOf(c);
+        var diet = w.DietOf(c);
+        float need = K.FIELD_METAB * MathF.Max(w.PBasal[c], 1e-6f);
+        float cs = Map.W / (float)Map.FW;
+        int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
+        double y = 0; int n = 0;
+        Span<double> stock = stackalloc double[Pools.NFIELD];
+        for (int dy = -rc; dy <= rc; dy++)
+            for (int dx = -rc; dx <= rc; dx++)
+            {
+                if ((dx * dx + dy * dy) * cs * cs > r * r) continue;
+                int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
+                if (!w.CellAllows(cell, realm)) continue;
+                y += Fields.Yield(w, cell, diet); n++;
+                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell];
+            }
+        if (n == 0) return 0f;
+        // how fast it can eat: one bite a step, of what stands in a cell once grazed to half (the stock of the
+        // maximum sustained yield), and no faster than its gut passes food (a Holling type II limit). It must
+        // cover FORAGE_MARGIN days of need, as a naive forager spends most steps doing other things than eating
+        float rate = 0f;
+        for (int p = 0; p < Pools.NFIELD; p++)
+        {
+            if (diet[p] <= 0 || !Fields.Grows(p)) continue;
+            float pass = MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(stock[p] / n));
+            rate = MathF.Max(rate, diet[p] * Pools.Rho[p] * pass);
+        }
+        if (rate < K.FORAGE_MARGIN * need) return 0f;
+        return (float)(y / need);
+    }
+
+    /// <summary>
+    /// The home range of a founding lineage like organism c (Revision P): from HOME_R of the map side, widened step by
+    /// step up to HOME_R_MAX until it can feed FOUND_MIN founders at FOUND_FILL. A big body needs a big range, as home
+    /// ranges grow about in proportion to body mass (Kelt &amp; Van Vuren 2001). Returns the radius; cap its capacity.
+    /// </summary>
+    public static float RangeFor(World w, int c, float hx, float hy, out float cap)
+    {
+        float r = K.HOME_R * Map.W;
+        cap = RangeCapacity(w, c, hx, hy, r);
+        while (cap > 0f && K.FOUND_FILL * cap < K.FOUND_MIN && r < K.HOME_R_MAX * Map.W)
+        {
+            r = MathF.Min(r * 1.25f, K.HOME_R_MAX * Map.W);
+            cap = RangeCapacity(w, c, hx, hy, r);
+        }
+        return r;
     }
 
     public static bool RandomSite(World w, Realm realm, uint key, out float x, out float y)

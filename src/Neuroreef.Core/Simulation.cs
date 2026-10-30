@@ -73,22 +73,67 @@ public sealed class Simulation : IDisposable
             if (!Life.PickHome(w, realm, 0x60000u + (uint)a * 977u, homes, out float hx, out float hy)) continue;
             // the ancestor's one brain and body (Revision H: unrelated random brains per founder made crossover
             // scramble networks, a hidden cost only sex paid); each founder varies around it
+            // An ancestor is a lineage that can live where it lives: of up to ANCESTOR_TRIES random bodies, the first
+            // whose home range can feed a founding group (FOUND_MIN) at its size, brain and diet, else the best fed.
+            // Nothing says which diet or size: a water animal that eats grass, or a meat-eater with nothing to eat,
+            // is simply not among the ancestors (2026-10-30: such ancestors starved in the first few hundred steps)
             var anc = new sbyte[G.LEN];
-            Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)a);
-            Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, a, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES);   // ancestors spread over the size classes
+            int bestT = 0; float bestCap = -1f;
+            for (int t = 0; t < K.ANCESTOR_TRIES; t++)
+            {
+                Ancestor(anc, seed, a, t, land, big);
+                float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, key + 0x70000u + (uint)t, out _);
+                if (cap > bestCap) { bestCap = cap; bestT = t; }
+                if (cap >= K.FOUND_MIN) break;
+            }
+            Ancestor(anc, seed, a, bestT, land, big);
             int units = Body.Units(anc[G.B_BRAIN]);
-            // founders scale with the map's area, as founding from a bank does: a valley is not stocked like a continent
-            float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);
-            int founders = Math.Max(K.MIN_SPLIT, (int)MathF.Round(w.Evo.Founders * MathF.Min(1f, area * K.FOUND_AREA)));
+            // founders: FOUND_FILL of what its home range (widened for a big body, Life.RangeFor) can feed at this
+            // body's size, brain and diet, at least one group and at most Founders, spread over that range
+            float cap0 = ProbeCapacity(w, clade, anc, realm, hx, hy, key + 0x70000u + (uint)bestT, out float range);
+            int founders = Math.Min(w.Evo.Founders, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap0)));
             for (int k = 0; k < founders; k++, key++)
             {
-                if (k % K.GROUP_SIZE == 0 && !Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy)) break;
+                if (k % K.GROUP_SIZE == 0 && !Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
                 anc.CopyTo(tmpl, 0);
                 Brain.VaryBrain(tmpl, seed, key, units);
                 Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
                 Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
             }
         }
+    }
+
+    /// <summary>Random ancestor genome number t of ancestor a (t = 0 is the first draw, as before 2026-10-30).</summary>
+    void Ancestor(sbyte[] anc, uint seed, int a, int t, bool land, bool big)
+    {
+        var w = W;
+        int draw = a + t * 0x10000;
+        Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)draw);
+        Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, draw, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES);   // ancestors spread over the size classes
+    }
+
+    /// <summary>What a home range can feed of animals with this genome, and the range's radius: one is made, measured and removed again.</summary>
+    static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range)
+    {
+        range = K.HOME_R * Map.W;
+        if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
+        int c = Life.Found(w, clade, genome, true, key, gx, gy);
+        if (c < 0) return 0f;
+        range = Life.RangeFor(w, c, hx, hy, out float cap);
+        Life.FreeSlot(w, c);
+        w.T.Created[clade]--;
+        return cap;
+    }
+
+    /// <summary>
+    /// How many founders a lineage starts with: FOUND_FILL of what its home range can feed (Life.RangeCapacity), at
+    /// least one group and at most the given limit. A large body or a costly brain starts with fewer, a small one with
+    /// more, as populations are set by food (Damuth 1981: density falls as M^-3/4).
+    /// </summary>
+    static int FedFounders(World w, int c, float hx, float hy, int limit, out float range)
+    {
+        range = Life.RangeFor(w, c, hx, hy, out float cap);
+        return Math.Min(limit, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap)));   // a clade with fewer than a group keeps them all
     }
 
     /// <summary>The clades of a gene bank, each founded with as many organisms as it had (up to ANCESTOR_COUNT x 2), in groups.</summary>
@@ -109,7 +154,7 @@ public sealed class Simulation : IDisposable
             // a smaller map holds fewer: founders scale with its area (a valley gets 1/16 of a continent's)
             float area = Map.W * (float)Map.W / (K.WORLD * (float)K.WORLD);
             int n = Math.Min(c.Count, Math.Max(20, (int)(K.ANCESTOR_COUNT * 2 * area)));
-            float gx = 0, gy = 0;
+            float gx = 0, gy = 0, range = K.HOME_R * Map.W;
             // the clade's home range in the new world, away from the others' (Revision N)
             var home = RealmOfGenome(src[0]);
             if (!Life.PickHome(w, home, 0x61000u + (uint)c.Slot * 977u, homes, out float hx, out float hy)) continue;
@@ -120,9 +165,10 @@ public sealed class Simulation : IDisposable
                 {
                     // the group's site follows the realm its genes give, within the clade's home range
                     var realm = RealmOfGenome(g);
-                    if (!Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy)) break;
+                    if (!Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
                 }
-                Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
+                int f = Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
+                if (k == 0 && f >= 0) n = FedFounders(w, f, hx, hy, n, out range);   // no more than its home range can feed
             }
         }
         w.CladeScratch.Version++;

@@ -30,18 +30,26 @@ public static class Decide
         return l.ToArray();
     }
 
-    /// <summary>Value of the best digestible food in a cell, normalised to the animal's best possible food (0..1).</summary>
-    public static float FoodValue(World w, ReadOnlySpan<float> diet, float best, int cell)
+    /// <summary>
+    /// What eating here is worth to this animal (0..1): the energy of one bite of the best food in the cell it can
+    /// digest, against what it burns per step (FIELD_METAB x basal), as 1 - exp(-bite / need). A bite that pays for a
+    /// step reads 0.63. (Before 2026-10-30 it was measured against the best food the diet could ever give, so a
+    /// nectar eater in a meadow sensed almost nothing, its eating instinct hardly fired, and founders starved on food.)
+    /// </summary>
+    public static float FoodValue(World w, ReadOnlySpan<float> diet, float bite, float need, int cell)
     {
         float v = 0;
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             float e = diet[p];
             if (e <= 0) continue;
-            v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(1f, w.Pool[p][cell]));
+            v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite, w.Pool[p][cell]));
         }
-        return v / best;
+        return Worth(v, need);
     }
+
+    /// <summary>The worth of an energy gain against a step's need: 1 - exp(-gain / need).</summary>
+    public static float Worth(float gain, float need) => 1f - MathF.Exp(-gain / need);
 
     static int CellAt(int c, int dx, int dy)
         => World.WrapI(c / Map.FW + dy, Map.FW) * Map.FW + World.WrapI(c % Map.FW + dx, Map.FW);
@@ -155,15 +163,16 @@ public static class Decide
         // hunger is diet-neutral (Revision K): the food an organism senses is whatever its gut digests, plants on the
         // ground or another organism nearby (worth its tissue at this organism's meat efficiency)
         float meatEff = diet[(int)Pool.Meat];
-        float bestFood = MathF.Max(1e-6f, meatEff * K.RHO_MEAT);
-        for (int p = 0; p < Pools.NFIELD; p++) bestFood = MathF.Max(bestFood, diet[p] * Pools.Rho[p]);
-        float fh = FoodValue(w, diet, bestFood, cell);
-        float fgx = FoodValue(w, diet, bestFood, CellAt(cell, 2, 0)) - FoodValue(w, diet, bestFood, CellAt(cell, -2, 0));
-        float fgy = FoodValue(w, diet, bestFood, CellAt(cell, 0, 2)) - FoodValue(w, diet, bestFood, CellAt(cell, 0, -2));
+        float mfp = MathK.Pow(w.MassOf(i) / w.PM[i], K.EXP_BASAL);
+        float bite = w.PBite[i] * mfp, need = MathF.Max(1e-7f, K.FIELD_METAB * w.PBasal[i] * mfp);
+        float fh = FoodValue(w, diet, bite, need, cell);
+        float fgx = FoodValue(w, diet, bite, need, CellAt(cell, 2, 0)) - FoodValue(w, diet, bite, need, CellAt(cell, -2, 0));
+        float fgy = FoodValue(w, diet, bite, need, CellAt(cell, 0, 2)) - FoodValue(w, diet, bite, need, CellAt(cell, 0, -2));
         byte eatPrey = 0;
         if (o1.J >= 0 && meatEff > 0)
         {
-            float prey = meatEff * K.RHO_MEAT * MathF.Min(1f, w.ApparentMass(o1.J)) / bestFood;   // value of eating it
+            // value of eating it: a bite of its edible tissue, on the same scale as the plants
+            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.C_CARC * w.ApparentMass(o1.J)), need);
             float close = 1f - o1.D / R;
             fgx += prey * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += prey * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
             if (o1.J == strike.J && prey > fh) { fh = prey; eatPrey = 1; }                         // in reach and worth more than the plants

@@ -113,7 +113,7 @@ public static class K
     [K("Brain", "max |weight| (genome + learned)", "-", "-")] public const float WMAX = 7.9f;
     [K("Brain", "founder memory-layer (W1) weight range: round(U(-1,1)*FOUNDER_W)", "int8", "HT")] public const int FOUNDER_W = 12;
     [K("Brain", "founder output-layer (W2) weight range", "int8", "HT")] public const int FOUNDER_W2 = 4;
-    [K("Brain", "founder output bias (x/16): every primitive of every species starts near 5% (calm newborn brain)", "int8", "HT")] public const int FOUNDER_BIAS = -48;
+    [K("Brain", "founder output bias (x/16): every primitive of every species starts near 2% (calm newborn brain)", "int8", "HT: was -48 (5%) until 2026-10-30, when naive animals struck whatever was in reach every ~20 steps and founding groups killed each other")] public const int FOUNDER_BIAS = -64;
     [K("Brain", "founder output bias of each of the 8 call primitives (x/16): together about 5%, like one primitive", "int8", "HT: calm newborn brain (Revision M)")] public const int FOUNDER_BIAS_CALL = -80;
     [K("Brain", "random spread of the founder output bias", "int8", "HT")] public const int FOUNDER_BIAS_NOISE = 4;
     [K("Brain", "standing variation of founders' brain and reflex bytes around their ancestor's (SD)", "int8", "ECO: members of one population share an inherited nervous system with small heritable variation; half the founder output-weight range (Revision H)")] public const float FOUNDER_W_SD = 2f;
@@ -139,7 +139,7 @@ public static class K
     [K("Brain", "share of mutations that are large jumps", "-", "V1")] public const float MUT_BIG_SHARE = 0.05f;
     [K("Brain", "large mutation sigma", "int8", "V1")] public const float MUT_BIG = 16f;
     [K("Brain", "reflex input weight scale (int8 / 16, as the output layer)", "-", "-")] public const float RSCALE = 1f / 16f;
-    [K("Brain", "founder strength of each starter-kit reflex (x/16): at full need, 80/16 = 5 against the calm bias of -3 gives about 88%", "int8", "designed: the innate starter kit (DESIGN §7.7, Revision D)")] public const int KIT_W = 80;
+    [K("Brain", "founder strength of each starter-kit reflex (x/16): at full need, 120/16 = 7.5 against the calm bias of -4 gives about 97%", "int8", "designed: the innate starter kit (DESIGN §7.7, Revision D); the user (2026-10-30): the base instincts should be very strong, \"like primary colours\" (was 80, 88% against a bias of -3)")] public const int KIT_W = 120;
     [K("Brain", "elite archive size per species", "genomes", "HT (Revision M: 64 before; a genome is now ~83 KB)")] public const int ARCHIVE = 16;
     [K("Brain", "archive score weight per offspring that reached maturity", "-", "HT")] public const float SCORE_MATURED = 3f;
     [K("Prehistory", "length of a prehistory run", "steps", "HT")] public const int PREHISTORY_STEPS = 500000;
@@ -148,6 +148,7 @@ public static class K
     [K("Prehistory", "agent slots per branch", "slots", "HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds)")] public const int BRANCH_CAPACITY = 16384;
     [K("Brain", "founders start in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder group", "units", "HT")] public const float GROUP_SPREAD = 10f;
+    [K("Brain", "largest radius of a founding lineage's home range, as a share of the map side (a big body's range widens up to this until it can feed FOUND_MIN founders)", "-", "HT: a third of the map; home ranges grow about in proportion to body mass (Kelt & Van Vuren 2001)")] public const float HOME_R_MAX = 0.33f;
     [K("Brain", "radius of an ancestor's home range, as a share of the map side", "-", "Revision N (the user): each lineage starts in its own part of the map; species have homelands and meet as they spread")] public const float HOME_R = 0.12f;
     [K("Brain", "random sites tried when choosing a home range (the one farthest from the others is taken)", "-", "HT")] public const int HOME_TRIES = 24;
     [K("Brain", "genomes per species stored in a gene bank (living sample)", "genomes", "HT (Revision M: 96 before)")] public const int BANK_LIVING = 48;
@@ -170,6 +171,7 @@ public static class K
     [K("Body", "basal cost per unit of weaponry", "xbasal", "ECO: jaws, teeth and claws are costly tissue")] public const float COST_STRIKE_ABS = 0.15f;
     [K("Body", "largest armour a gene can give", "-", "-")] public const float ARMOUR_MAX = 3f;
     [K("Body", "largest weaponry (strike) a gene can give", "-", "-")] public const float STRIKE_MAX = 2f;
+    [K("Body", "fermentation time scale of fibre, in units of M^0.25 retention: the share fermented is 1 - exp(-M^0.25 / this), relative to M = 1", "-", "ECO: Jarman-Bell principle (Demment & Van Soest 1985; Clauss et al. 2013): fibre digestibility rises from ~25% in small to ~60% in large herbivores; 2 gives x0.63 at M = 0.1, x1.5 at 10, x1.8 at 40")] public const float TAU_FERM = 2f;
     [K("Body", "length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it", "-", "ECO: digestive specialisation trades off breadth against efficiency")] public const float DIET_BUDGET = 1.0f;
     [K("Body", "largest litter a gene can give", "young", "-")] public const int LITTER_MAX = 12;
     [K("Body", "smallest newborn (or egg) mass", "M", "ECO: eggs and young have a physical smallest size (Revision M)")] public const float NEWBORN_MIN = 0.01f;
@@ -229,7 +231,11 @@ public static class K
     [K("Clades", "ancestors that start on land", "ancestors", "user choice")] public const int ANCESTORS_LAND = 6;
     [K("Clades", "ancestors that start in water", "ancestors", "user choice")] public const int ANCESTORS_WATER = 4;
     [K("Clades", "founding organisms per ancestor", "organisms", "HT")] public const int ANCESTOR_COUNT = 600;
-    [K("Clades", "founders per ancestor are ANCESTOR_COUNT x min(1, map area / continent area x this)", "-", "HT: a valley (1/16 of a continent) is stocked with 1/4 as many founders, so it does not start overstuffed (Revision M)")] public const float FOUND_AREA = 4f;
+    [K("Clades", "a lineage starts with this share of the animals its home range's plants can feed at its body size and brain", "-", "ECO: founding at half the carrying capacity, where logistic growth is fastest, leaves room to grow without starting in famine (2026-10-30: a fixed 600 per ancestor started big bodies at many times their food, and 70% of founders starved)")] public const float FOUND_FILL = 0.5f;
+    [K("Clades", "a day of living costs this many times the basal cost (moving, growing, breeding, keeping warm)", "xbasal", "measured: this world's own animals spend 1.45x basal over the first 3000 steps (2026-10-30, seed 7: basal 0.92, move 0.12, growth 0.16, breeding 0.15, heat 0.10); free-living mammals 2-3x (Nagy 1987)")] public const float FIELD_METAB = 1.5f;
+    [K("Clades", "an ancestor must be able to eat this many days' need per step of eating (one bite of a half-grazed cell, or its gut's rate)", "-", "measured: random founders eat on 25-50% of steps (2026-10-30), so a forager must gain at least 2-4x its need per bite to live")] public const float FORAGE_MARGIN = 3f;
+    [K("Clades", "random ancestor bodies tried per ancestor for one its home range can feed", "-", "HT: enough that almost every ancestor finds a viable body")] public const int ANCESTOR_TRIES = 64;
+    [K("Clades", "the smallest founding group an ancestor must be able to feed (FOUND_FILL x capacity)", "organisms", "ECO: the 50 of the 50/500 rule for a minimum viable population (Franklin 1980); smaller founding groups go extinct by chance (Allee effect)")] public const int FOUND_MIN = 50;
     [K("Clades", "steps between speciation checks", "steps", "-")] public const int SPEC_EVERY = 2000;
     [K("Clades", "smallest cluster that can become a species", "organisms", "ECO: a viable population")] public const int MIN_SPLIT = 40;
     [K("Clades", "two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes)", "-", "designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species")] public const float SPLIT_VIS = 1f;

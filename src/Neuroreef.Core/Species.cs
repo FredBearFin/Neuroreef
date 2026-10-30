@@ -34,6 +34,8 @@ public static class Pools
     // the most energy an animal can get from each food, a specialist's assimilation (Revision M, ecology review:
     // Van Soest 1994; Robbins 1993): grass browse fruit seed nectar root algae phyto carrion dung litter wood detritus meat blood
     public static readonly float[] DigMax = { 0.5f, 0.5f, 0.8f, 0.75f, 0.95f, 0.6f, 0.6f, 0.7f, 0.85f, 0.3f, 0.25f, 0.15f, 0.4f, 0.9f, 0.9f };
+    /// <summary>Foods whose energy is mostly in fibre, digested by fermentation (grass, browse, roots, dung, litter, wood).</summary>
+    public static bool Fibrous(int p) => p == (int)Pool.Grass || p == (int)Pool.Browse || p == (int)Pool.Root || p == (int)Pool.Dung || p == (int)Pool.Litter || p == (int)Pool.Wood;
     public static bool IsDead(int p) => p >= (int)Pool.Carrion && p <= (int)Pool.Detritus;
     public static bool IsWaterPool(int p) => p == (int)Pool.Algae || p == (int)Pool.Phyto || p == (int)Pool.Detritus;
 }

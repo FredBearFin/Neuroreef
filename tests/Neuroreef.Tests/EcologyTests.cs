@@ -182,7 +182,7 @@ public class EcologyTests
         Assert.True(bank.Total > 100);
         using var sim2 = new Simulation(8192, 3, 2, bank);
         Assert.False(sim2.W.Prehistory);
-        Assert.True(sim2.W.AliveCount > 1000);
+        Assert.True(sim2.W.AliveCount > 100, $"{sim2.W.AliveCount} founded");   // as many as each clade's home range can feed (Revision P)
     }
 
     // ---- reproduction from genes (NR-311): a scripted scene, intents set by hand, then RESOLVE and LIFECYCLE
@@ -479,7 +479,7 @@ public class EcologyTests
         Body.Express(w, i);
         float basal0 = w.PBasal[i], v0 = w.PVmax[i], grass0 = w.PDiet[(int)Pool.Grass], seed0 = w.PDiet[(int)Pool.Seed];
         // the budget is on gene shares; each food's assimilation is the share times its DigMax (Revision M)
-        float Sh(int p) => w.PDiet[p] / Pools.DigMax[p] * 0.95f;
+        float Sh(int p) => w.PDiet[p] / Pools.DigMax[p] * 0.95f / (Pools.Fibrous(p) ? Body.Ferment(w.PM[i]) : 1f);   // fibre: less the size's fermentation (Revision P)
         float sum0 = 0; for (int p = 0; p < Pools.N; p++) sum0 += Sh(p) * Sh(p);
         Assert.InRange(MathF.Sqrt(sum0), K.DIET_BUDGET - 0.02f, K.DIET_BUDGET + 0.02f);   // L2 budget
         w.Genome[G.B_DIET + (int)Pool.Grass] = 127;        // specialise on grass

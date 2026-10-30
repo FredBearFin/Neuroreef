@@ -91,10 +91,10 @@ function defs() {
     ] },
     { g: 'Life', note: 'how it starts; everything after is evolution', rows: [
       { key: 'ancestorsLand', label: 'Ancestors on land', min: 0, max: 12, step: 1, val: V.ancestorsLand, fmt: (v) => v,
-        help: 'Random first species. Each is born with the drives (hunger, thirst, fatigue, fear, breeding) and is good at 1–3 random foods: any food, plants or meat.' },
+        help: 'Random first species. Each is born with the drives (hunger, thirst, fatigue, fear, breeding) and is good at 1–3 random foods: any food, plants or meat. Each world draws new ancestors, names and a new map from a random seed, and only bodies that can feed themselves where they start become ancestors.' },
       { key: 'ancestorsWater', label: 'Ancestors in water', min: 0, max: 12, step: 1, val: V.ancestorsWater, fmt: (v) => v, help: 'At most 16 ancestors in all.' },
-      { key: 'founders', label: 'Founders per ancestor', min: 100, max: 1500, step: 50, val: V.founders, fmt: (v) => v,
-        help: 'Animals each ancestor starts with. Fewer start faster but risk dying out by chance.' },
+      { key: 'founders', label: 'Most founders per ancestor', min: 100, max: 3000, step: 50, val: V.founders, fmt: (v) => v,
+        help: 'The food decides: each ancestor starts with half of what its home range can feed at its size and brain (big bodies start with dozens, small ones with hundreds), never more than this.' },
       { key: 'bigBrains', label: 'Big-brained ancestors', min: 0, max: 8, step: 1, val: V.bigBrains, fmt: (v) => v == 0 ? 'none' : v == 1 ? '1: the voiced one' : v,
         help: `The first lives on land and is the only one born with a voice: your "human" species. More alternate water and land. The others start with up to ${info.refUnits} brain units and no voice (a voice is a gene: it could still evolve).` },
       { key: 'bigBrainUnits', label: 'Their brain size', min: info.refUnits, max: info.maxUnits, step: 2, val: V.bigBrainUnits, fmt: (v) => v + ' units',

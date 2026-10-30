@@ -159,7 +159,16 @@ public static class Body
         // the gene share of the digestive budget (a specialist's 0.95) times the most any animal can get from that food
         // (Revision M, ecology review: herbivores assimilate 20-60% of plant food, carnivores ~80%; Van Soest 1994, Robbins 1993)
         for (int p = 0; p < Pools.N; p++) dst[p] = MathF.Min(0.95f, dst[p] * k) / 0.95f * Pools.DigMax[p];
+        // fibre is digested by fermentation, which takes time: gut capacity grows as M while the rate food passes
+        // grows as M^0.75, so food stays M^0.25 longer in a bigger gut and more of its fibre is fermented (the
+        // Jarman-Bell principle; Demment & Van Soest 1985). The share fermented is 1 - exp(-M^0.25 / TAU_FERM), against
+        // its value at M = 1: a small animal gets less from grass and leaves, a big one more (never above DigMax)
+        float ferm = Ferment(w.PM[i]);
+        for (int p = 0; p < Pools.N; p++) if (Pools.Fibrous(p)) dst[p] = MathF.Min(Pools.DigMax[p], dst[p] * ferm);
     }
+
+    /// <summary>Fibre fermented by a body of mass m, against a body of mass 1 (Jarman-Bell; TAU_FERM).</summary>
+    public static float Ferment(float m) => (1f - MathF.Exp(-MathK.Pow(m, 0.25f) / K.TAU_FERM)) / (1f - MathF.Exp(-1f / K.TAU_FERM));
 
     /// <summary>Can an organism living in this realm get at this pool?</summary>
     public static bool Reachable(Realm realm, int p) => p switch
