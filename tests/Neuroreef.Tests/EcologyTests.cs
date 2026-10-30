@@ -708,4 +708,17 @@ public class EcologyTests
             if (cnt[a] > 0 && cnt[b] > 0) { float dx = World.Delta1(mx[a] - mx[b]), dy = World.Delta1(my[a] - my[b]); closest = MathF.Min(closest, MathF.Sqrt(dx * dx + dy * dy)); }
         Assert.True(closest > K.HOME_R * Map.W, $"two home ranges are only {closest:F0} apart");
     }
+
+    [Fact] // the user (2026-10-30): body mass comes in clear size classes, 3 per decade from MASS_LO
+    public void BodiesComeInSizeClasses()
+    {
+        var classes = new System.Collections.Generic.SortedSet<float>();
+        for (int b = -128; b <= 127; b++) classes.Add(MathF.Round(Body.SizeClass(G.GeneLog((sbyte)b, K.MASS_LO, K.MASS_HI)) * 1000f) / 1000f);
+        Assert.Equal(new[] { 0.1f, 0.215f, 0.464f, 1f, 2.154f, 4.642f, 10f, 21.544f, 46.416f }, classes.ToArray());
+        // a body's mass is always one of them, and a gradual gene change moves it a whole class at a time
+        var w = new World(16, 1);
+        w.Genome[G.B_MASS] = 0; Body.Express(w, 0); float m0 = w.PM[0];
+        w.Genome[G.B_MASS] = 3; Body.Express(w, 0);
+        Assert.True(w.PM[0] == m0 || MathF.Abs(w.PM[0] / m0 - 2.154f) < 0.01f || MathF.Abs(m0 / w.PM[0] - 2.154f) < 0.01f);
+    }
 }

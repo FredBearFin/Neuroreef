@@ -34,6 +34,18 @@ public static class Body
 
     /// <summary>An organ size gene, 0..1.</summary>
     public static float Organ(sbyte b) => (b + 127) / 254f;
+
+    /// <summary>
+    /// Body mass comes in size classes (the user, 2026-10-30: "animals are in very clear size classes"): the nearest of
+    /// MASS_LO x 10^(k / SIZE_CLASSES_PER_DECADE), k = 0, 1, ... up to MASS_HI. Three per decade is a 2.15x step, about the
+    /// mass ratio between coexisting species (Hutchinson 1959). The mass gene still mutates gradually; the body changes a
+    /// whole class only when the gene crosses the midpoint between two classes.
+    /// </summary>
+    public static float SizeClass(float m)
+    {
+        float k = MathF.Round(MathF.Log10(m / K.MASS_LO) * K.SIZE_CLASSES_PER_DECADE);
+        return MathF.Min(K.MASS_HI, K.MASS_LO * MathF.Pow(10f, k / K.SIZE_CLASSES_PER_DECADE));
+    }
     /// <summary>Memory units in use from the brain-size gene: log scale BRAIN_MIN..G.NH, so a mutation changes a brain
     /// by a share of its size, as with body mass (Revision M: on a linear scale of 256 units, ordinary founder variation
     /// swung a 12-unit brain by tens of units).</summary>
@@ -45,7 +57,7 @@ public static class Body
     {
         int g = i * G.LEN;
         var gn = w.Genome;
-        float m = G.GeneLog(gn[g + G.B_MASS], K.MASS_LO, K.MASS_HI);
+        float m = SizeClass(G.GeneLog(gn[g + G.B_MASS], K.MASS_LO, K.MASS_HI));
         float fs = Mul(gn[g + G.B_SPEED], K.BODY_RANGE_TRAIT);
         float fsi = Mul(gn[g + G.B_SIGHT], K.BODY_RANGE_TRAIT);
         float armour = Organ(gn[g + G.B_ARMOUR]) * K.ARMOUR_MAX;

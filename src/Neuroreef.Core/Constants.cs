@@ -160,7 +160,8 @@ public static class K
 
     // ---------------------------------------------------------------- 5c. bodies from genes (DESIGN §6.3, Revision F)
     [K("Body", "smallest body mass a mass gene can give", "M", "ECO: Revision M, ecology review: the agents are animals with brains; smaller consumers live in the fields (algae, decomposers). 0.01 gave tiny bodies 32x the numbers from the same food")] public const float MASS_LO = 0.1f;
-    [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units)")] public const float MASS_HI = 40f;
+    [K("Body", "largest body mass a mass gene can give", "M", "ECO: a large mammal-sized organism (relative units); 10^(5/3) so it is a size class (Revision O: 40 before)")] public const float MASS_HI = 46.415888f;
+    [K("Body", "size classes per decade of body mass: the body takes the nearest class (0.1, 0.22, 0.46, 1, 2.2, 4.6, 10, 22, 46)", "-", "designed: the user (2026-10-30) asked for clear size classes; 3 per decade is a 2.15x step, near the 2.2x mass ratio between coexisting species (Hutchinson 1959)")] public const float SIZE_CLASSES_PER_DECADE = 3f;
     [K("Body", "organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth)", "-", "-")] public const float LIMB_MIN = 0.3f;
     [K("Body", "basal cost per unit of fin size, or of leg size per pair of legs", "xbasal", "ECO: locomotor muscle is maintained at a cost")] public const float COST_LIMB = 0.15f;
     [K("Body", "basal cost per unit of wing size, times mass^(1/3)", "xbasal", "ECO: flight power rises faster than mass, so flight favours the small")] public const float COST_WING = 0.5f;

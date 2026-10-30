@@ -3,6 +3,11 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Size classes** (the user, 2026-10-30): body mass takes the nearest of MASS_LO x 10^(k/3): 0.1, 0.22, 0.46, 1, 2.2,
+4.6, 10, 22, 46 (MASS_HI 46.4). The 2.15x step is near the mass ratio between coexisting species (Hutchinson 1959).
+The mass gene still mutates gradually; the body changes a whole class when the gene crosses a midpoint. Every rule
+(food, metabolism, heat, speed, display) uses the class mass; the split test compares size classes.
+
 **Changes in Revision O: climate and body heat** (the user, 2026-10-30: "I don't want you to specifically create
 biozones ... come up with a logical system for how the world works ... simulate some physics ... and then this should
 get created by itself ... heat tolerance genes, those should theoretically evolve through the simulation ... It's not
