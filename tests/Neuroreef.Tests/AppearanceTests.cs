@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(13, Checkpoint.Version);
+            Assert.Equal(14, Checkpoint.Version);
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);
