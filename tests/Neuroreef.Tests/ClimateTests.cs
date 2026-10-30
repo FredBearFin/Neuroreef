@@ -267,6 +267,7 @@ public class ClimateTests
     }
 
     [Fact] // a fields-only world: trees thin out with height where it is cold; the climate moves no water in or out of the land
+    [BigWorld]   // the treeline compares thirds of one latitude band: on a 256 map the band is too few cells to average out
     public void VegetationFollowsTemperatureAndWaterIsConserved()
     {
         (double moist, double rain, double et, double residual) Run(float climate) => With(climate, () =>
