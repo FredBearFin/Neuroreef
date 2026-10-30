@@ -192,7 +192,10 @@ public static class Decide
         bool flier = w.LocoOf(i) == Loco.Fly;
         float ins = w.PInsul[i];
         f[F.HEAT_NEED] = w.HeatNeed[i];
-        f[F.AIR_T] = Math.Clamp((Heat.Operative(w, cell, ins, inWater && !flier) - K.T_BODY) / K.AIR_T_SCALE, -1f, 1f);
+        float opHere = Heat.Operative(w, cell, ins, inWater && !flier);
+        f[F.AIR_T] = Math.Clamp((opHere - K.T_BODY) / K.AIR_T_SCALE, -1f, 1f);
+        // a cold-blooded body is slow in the cold: muscle power follows the square root of its chemistry's rate (Revision P)
+        float musc = Climate.On ? MathF.Sqrt(Heat.Rate(Heat.Core(opHere, w.PEndo[i]))) : 1f;
         // ---- hearing (Revision M, N): every utterance made last step within the caller's range (a louder, bigger caller
         // carries further), from any direction, louder the closer; each sound as loud as its loudest caller
         Span<float> hear = stackalloc float[F.NSOUND];
@@ -406,6 +409,7 @@ public static class Decide
         }
         bool rest = (acts & (1u << (P.REST - P.FIRST_ACTION))) != 0;
         float spd = vmax * Math.Clamp(0.45f + 0.55f * g[P.SPRINT] - 0.45f * g[P.HOLD], 0f, 1f) * (1f - g[P.SCAN]) * (1f - 0.5f * w.Fatigue[i]);
+        spd *= musc;
         if (rest || w.LocoOf(i) == Loco.Sessile) spd = 0f;
 
         // ---- intents

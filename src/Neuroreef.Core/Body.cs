@@ -64,6 +64,7 @@ public static class Body
         // body heat (Revision O): fur keeps heat in; appendages (ears, limbs, tail) shed it when the body is warm
         float ins = Organ(gn[g + G.B_INSUL]), app = Organ(gn[g + G.B_APPEND]);
         w.PInsul[i] = ins; w.PAppend[i] = app;
+        w.PEndo[i] = Organ(gn[g + G.B_ENDO]);
         w.PVoice[i] = voice;
         // vocal learning (Revision N): how strongly matching a remembered tutor reinforces its own calls, and for how
         // much of its life it memorises tutors (Doupe & Kuhl 1999; Brainard & Doupe 2002). No upkeep cost of its own:

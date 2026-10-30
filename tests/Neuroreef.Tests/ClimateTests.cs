@@ -142,7 +142,7 @@ public class ClimateTests
     }
 
     /// <summary>One adult walker standing still in cell 0 of a bare world with this air temperature.</summary>
-    static (World w, int i) Animal(float temp, sbyte waterGene = -127, sbyte fur = -89, sbyte mass = 0)
+    static (World w, int i) Animal(float temp, sbyte waterGene = -127, sbyte fur = -89, sbyte mass = 0, sbyte endo = 127)
     {
         var w = new World(8, 1);
         Array.Fill(w.Temp, temp);
@@ -151,7 +151,7 @@ public class ClimateTests
         Brain.RandomGenome(w.GenomeOf(i), 1, 0, 1);
         int g = i * G.LEN;
         w.Genome[g + G.B_LEGS] = 100; w.Genome[g + G.B_FINS] = -127; w.Genome[g + G.B_WINGS] = -127;
-        w.Genome[g + G.B_WATER] = waterGene; w.Genome[g + G.B_INSUL] = fur; w.Genome[g + G.B_APPEND] = -51; w.Genome[g + G.B_MASS] = mass;
+        w.Genome[g + G.B_WATER] = waterGene; w.Genome[g + G.B_INSUL] = fur; w.Genome[g + G.B_APPEND] = -51; w.Genome[g + G.B_MASS] = mass; w.Genome[g + G.B_ENDO] = endo;   // warm-blooded unless asked
         w.Spc[i] = 0; w.StageOf[i] = St.Adult; w.Sp[0].Used = true; w.Sp[0].Alive = true;
         Body.Express(w, i); Brain.InitLife(w, i);
         w.X[i] = 1f; w.Y[i] = 1f; w.Energy[i] = w.EmaxOf(i); w.Age[i] = 1f;
@@ -173,6 +173,30 @@ public class ClimateTests
             else Assert.Equal(0.0, w.T.SpendHeat[0]);
             Assert.True(t < 0 ? w.HeatNeed[i] > 0f : w.HeatNeed[i] == 0f);
         }
+    }
+
+    [Fact] // Revision P: a cold-blooded body pays nothing to keep warm, but in the cold it burns less, digests less and is
+           // slower (metabolic theory: x exp(E/k (1/T_BODY - 1/T))); a warm-blooded one pays heat; at T_BODY both are alike
+    public void ColdBloodedBodiesFollowTheirSurroundings()
+    {
+        With(K.CLIMATE, () =>
+        {
+            Assert.Equal(1f, Heat.Rate(K.T_BODY), 5);
+            Assert.InRange(Heat.Rate(20f), 0.18f, 0.28f);                    // ~0.23 at 20 °C (E = 0.65 eV)
+            Assert.Equal(10f, Heat.Core(10f, 0f)); Assert.Equal(K.T_BODY, Heat.Core(10f, 1f)); Assert.Equal(K.T_BODY, Heat.Core(45f, 0f));
+            (double basal, double heat, float gut) Run(sbyte endo)
+            {
+                var (w, i) = Animal(0f, endo: endo);
+                w.Gut[i] = 1f; w.GutEnergy[i] = 1f;
+                Resolve.Run(w, 1, 0);
+                return (w.T.SpendBasal[0], w.T.SpendHeat[0], w.Gut[i]);
+            }
+            var cold = Run(-127); var warm = Run(127);
+            Assert.Equal(0.0, cold.heat);
+            Assert.True(warm.heat > 0.0, "a warm-blooded body near 0 °C made no heat");
+            Assert.InRange(cold.basal / warm.basal, 0.03, 0.25);                  // ~0.07 at a few °C
+            Assert.True(cold.gut > warm.gut, $"the cold gut digested as fast ({cold.gut} vs {warm.gut})");
+        });
     }
 
     [Fact] // sweating makes an animal thirsty only above its upper critical temperature, and the water-economy gene does not save it
@@ -312,7 +336,7 @@ public class ClimateTests
     public void MhcStaysLast()
     {
         Assert.Equal(G.BODY + G.NBODY, G.B_MHC + G.NMHC);
-        Assert.True(G.B_INSUL < G.B_MHC && G.B_APPEND < G.B_MHC && G.B_APPEND == G.B_INSUL + 1);
+        Assert.True(G.B_INSUL < G.B_MHC && G.B_APPEND < G.B_MHC && G.B_APPEND == G.B_INSUL + 1 && G.B_ENDO < G.B_MHC);
         Assert.Equal(F.N, F.Names.Length); Assert.Equal(P.N, P.Names.Length);
         Assert.Equal("WARMER", P.Names[P.WARMER]); Assert.Equal("COOLER", P.Names[P.COOLER]);
         Assert.True(P.COOLER < P.NSTEER && P.HOLD >= P.NSTEER && P.EAT == P.FIRST_ACTION);

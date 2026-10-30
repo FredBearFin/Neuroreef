@@ -32,6 +32,25 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   everywhere (with one ancestor per size class, a mass-0.2 lineage filled the map and every other class died out).
   Now small bodies do best on rich food (seed, fruit, nectar, meat) and big ones on grass and leaves: size niches
   follow from the physics, with no size given to any niche.
+- *Warm- and cold-blooded bodies (endothermy gene B_ENDO, 0..1).* Every animal was an endotherm at T_BODY = 38 °C, so
+  "fish" in 10-20 °C water spent 40-96% more than basal on heat, and no water lineage lived (0 of 36 in 9 worlds). Now a
+  body's core is Heat.Core = T_op + e (T_BODY - T_op) (T_BODY above it): a cold-blooded body (e = 0) takes its
+  surroundings' temperature and pays nothing to keep warm, but its chemistry runs at the Boltzmann-Arrhenius rate of
+  metabolic theory, exp(E/k (1/T_BODY - 1/T_core)) with E_ACT = 0.65 eV (Gillooly et al. 2001): basal cost and digestion
+  x0.23 at 20 °C, muscle speed by its square root. Ancestors draw e at random; nothing ties it to water or land. In the
+  first runs almost every viable swimmer was cold-blooded, as fish are. "warm-bloodedness" is a trait in the charts.
+- *Viability counts what a body really pays where it lives.* A range counts only the cells its locomotion lives in
+  (water for a swimmer, land for a walker, both and shallows for a wader, anything for a flier); a day costs FIELD_METAB
+  x basal at its core temperature plus the heat it must make there (Heat.Balance); and a brain may take at most
+  BRAIN_SHARE_MAX = 25% of the basal cost (humans ~20%; Aiello & Wheeler 1995): the 256-unit brain drew 0.1-0.4 bodies
+  it could not pay for and died in 9 worlds of 9.
+- *The young grow continuously.* A juvenile grew only from energy above half its reserve, and the young lived near 40%
+  full: at 400 steps they had built 12% of their adult tissue. It now grows at its top rate times its reserve density
+  (a dynamic energy budget, Kooijman 2010), keeping GROW_RESERVE = 20% against starving.
+- Measured over 9 worlds x 10 ancestors (512 map, 2,000 steps): ancestors with at least 10 alive went from 28 to 50 of 90,
+  swimmers from 0 to 15 of 36, the big-brained ancestor from 1 to 4 of 9. Over 10,000 steps most worlds keep 1-5 lineages
+  of a few dozen to a thousand animals; deaths are mostly starvation (about 60%) and kills (25%, most within a lineage,
+  learned or evolved, not designed).
 - *Calmer newborns.* Every discrete action of a newborn brain started near 5% a step (FOUNDER_BIAS -48), so naive
   animals struck whatever was in reach every ~20 steps and founding groups killed each other (one lineage: 30% of its
   deaths by its own kind). All actions now start near 2% (FOUNDER_BIAS -64), the same for every action; the instincts

@@ -186,15 +186,33 @@ public static class Heat
     /// (none under water), and the shortfalls beyond the caps (cold, hot).
     /// </summary>
     public static void Balance(float mass, float ins, float app, float top, bool immersed, float h, float basal,
-        out float thermo, out float evap, out float cold, out float hot)
+        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY)
     {
         Conductance(mass, ins, app, immersed, out float cmin, out float cmax);
-        float dT = K.T_BODY - top;
+        float dT = core - top;
         thermo = 0; evap = 0; cold = 0; hot = 0;
         float lossMin = cmin * dT;
         if (lossMin > h) { float need = lossMin - h; thermo = MathF.Min(need, K.SUMMIT * basal); cold = need - thermo; return; }
         float lossMax = cmax * dT;
         if (lossMax < h) { float need = h - lossMax; evap = immersed ? 0f : MathF.Min(need, K.EVAP_MAX * basal); hot = need - evap; }
+    }
+
+    /// <summary>
+    /// Core temperature (°C) of a body with endothermy e at operative temperature top (Revision P): a warm-blooded body
+    /// (e = 1) keeps T_BODY, a cold-blooded one (e = 0) takes its surroundings' temperature, others between. Above
+    /// T_BODY every body is as warm as its surroundings would make it, and must shed heat as an endotherm does.
+    /// </summary>
+    public static float Core(float top, float e) => top >= K.T_BODY ? K.T_BODY : top + e * (K.T_BODY - top);
+
+    /// <summary>
+    /// How fast a body's chemistry runs at core temperature t against T_BODY: the Boltzmann-Arrhenius factor
+    /// exp(E/k (1/T_BODY - 1/t)) of metabolic theory (Gillooly et al. 2001; E = E_ACT): ~0.23 at 20 °C, 1 at T_BODY.
+    /// Basal cost and digestion scale by it; muscle power by its square root.
+    /// </summary>
+    public static float Rate(float t)
+    {
+        const float kB = 8.617e-5f;   // Boltzmann's constant, eV/K
+        return MathF.Exp(K.E_ACT / kB * (1f / (K.T_BODY + 273.15f) - 1f / (MathF.Max(t, K.T_CORE_MIN) + 273.15f)));
     }
 
     /// <summary>Lower and upper critical temperatures (operative, °C) of a body making heat h: the thermoneutral zone.</summary>

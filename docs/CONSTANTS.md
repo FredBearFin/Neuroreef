@@ -84,7 +84,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLY_COST | 0.5 | - | movement cost factor for flyers (per distance, against running) | ECO: flying costs less per distance than running at equal mass (Schmidt-Nielsen 1972); wing upkeep is in basal cost |
 | DRINK_RATE | 0.25 | /step | drinking: thirst removed per step | HT |
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
-| GROW_RESERVE | 0.5 | xEmax | a juvenile grows only from energy above this share of its reserve | ECO: growth is fuelled by surplus after maintenance; hungry young grow slowly (Revision D) |
+| GROW_RESERVE | 0.2 | xEmax | a juvenile keeps this share of its reserve against starving; above it, it grows at its top rate times how full the reserve is | ECO: growth draws on the reserve in proportion to its density (dynamic energy budget, Kooijman 2010); hungry young grow slowly (Revision D; Revision P: was a threshold of 0.5, below which the young, living near 40% full, hardly grew) |
 
 ## 7. Food
 
@@ -149,7 +149,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.04017E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.04016E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -294,6 +294,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_FILL | 0.5 | - | a lineage starts with this share of the animals its home range's plants can feed at its body size and brain | ECO: founding at half the carrying capacity, where logistic growth is fastest, leaves room to grow without starting in famine (2026-10-30: a fixed 600 per ancestor started big bodies at many times their food, and 70% of founders starved) |
 | FIELD_METAB | 1.5 | xbasal | a day of living costs this many times the basal cost (moving, growing, breeding, keeping warm) | measured: this world's own animals spend 1.45x basal over the first 3000 steps (2026-10-30, seed 7: basal 0.92, move 0.12, growth 0.16, breeding 0.15, heat 0.10); free-living mammals 2-3x (Nagy 1987) |
 | FORAGE_MARGIN | 3 | - | an ancestor must be able to eat this many days' need per step of eating (one bite of a half-grazed cell, or its gut's rate) | measured: random founders eat on 25-50% of steps (2026-10-30), so a forager must gain at least 2-4x its need per bite to live |
+| BRAIN_SHARE_MAX | 0.25 | - | the largest share of an ancestor's basal cost its brain may take | ECO: brain tissue takes at most ~20-25% of basal metabolism (humans ~20%; Aiello & Wheeler 1995; Mink et al. 1981); 2026-10-30: the big-brained ancestor drew a 0.1-0.4 body whose 256-unit brain cost more than the body, and died in 9 worlds of 9 |
 | ANCESTOR_TRIES | 64 | - | random ancestor bodies tried per ancestor for one its home range can feed | HT: enough that almost every ancestor finds a viable body |
 | FOUND_MIN | 50 | organisms | the smallest founding group an ancestor must be able to feed (FOUND_FILL x capacity) | ECO: the 50 of the 50/500 rule for a minimum viable population (Franklin 1980); smaller founding groups go extinct by chance (Allee effect) |
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
@@ -441,6 +442,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
+| E_ACT | 0.65 | eV | activation energy of metabolism: basal cost and digestion of a body whose core is colder than T_BODY slow as exp(E/k (1/T_BODY - 1/T)) | ECO: 0.6-0.7 eV across animals, plants and microbes (Gillooly et al. 2001; Brown et al. 2004): x0.23 at 20 °C, x0.48 at 28 °C |
+| T_CORE_MIN | 1 | °C | coldest core temperature the metabolic rate follows (below it a cold-blooded body barely runs) | HT: near freezing; most ectotherms are torpid below ~2 °C |
 | T_BODY | 38 | °C | body temperature of every animal (an endotherm; no heat is stored from step to step) | ECO: mammals 36-39 °C, birds ~40 °C; a step is hours, longer than the thermal time constant of bodies up to tens of kg (Bakken 1976) |
 | K_COND | 0.0625 | xC_BASAL/K | dry conductance of a bare body of M=1, per unit core area M^(2/3), in units of C_BASAL per K | HT: a bare M=1 body is thermoneutral down to 38 - 16 = 22 °C (a naked mammal's lower critical temperature, Scholander et al. 1950) |
 | R_INS | 4 | - | insulation: fur of thickness i divides the core's conductance by 1 + R_INS x i | ECO: arctic fur cuts conductance ~5x against tropical mammals (Scholander et al. 1950) |

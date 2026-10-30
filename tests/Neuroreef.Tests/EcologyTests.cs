@@ -517,7 +517,7 @@ public class EcologyTests
         var w = new World(256, 16); Terrain.Build(w);
         int a = Make(w, 0, 0), b = Make(w, 0, 1);       // two juveniles
         w.StageOf[a] = w.StageOf[b] = St.Juvenile; w.Grown[a] = w.Grown[b] = 0.2f;
-        w.Energy[a] = 0.3f * w.EmaxOf(a);                // below GROW_RESERVE: maintenance only
+        w.Energy[a] = 0.15f * w.EmaxOf(a);               // below GROW_RESERVE: maintenance only
         w.Energy[b] = w.EmaxOf(b);                       // plenty spare
         Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);

@@ -129,15 +129,27 @@ public static class Resolve
         float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f) * (1f + K.INS_MOVE * w.PInsul[i]);
         bool sick = w.Infect[i] > 0;
         float fullBasal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL);
-        float basal = fullBasal * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
-        // growth: a juvenile builds tissue from its spare energy (no free mass, DESIGN §9.1). It grows at most at
-        // the rate that would reach adult size at PMature, and only from energy above GROW_RESERVE of its reserve:
-        // a well-fed youngster grows fast, a hungry one slowly, a starving one not at all
+        // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
+        // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
+        bool immersed = waterCell && loco != Loco.Fly;
+        float top = K.T_REF, core = K.T_BODY, rateT = 1f;
+        if (Climate.On)
+        {
+            top = Heat.Operative(w, cell, w.PInsul[i], immersed);
+            core = Heat.Core(top, w.PEndo[i]);
+            rateT = Heat.Rate(core);
+        }
+        float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (sick ? 1f + K.DIS_COST * w.Virulence[i] : 1f);
+        // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
+        // that would reach adult size at PMature, times how full its reserve is (the reserve density of a dynamic energy
+        // budget: growth draws on the reserve continuously, Kooijman 2010), keeping GROW_RESERVE of it against
+        // starving: a well-fed youngster grows fast, a hungry one slowly, a starving one not at all. (Until Revision P
+        // it grew only from energy above half its reserve; the young lived near 40% full and hardly grew.)
         float grow = 0;
         if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
         {
             float tissue = K.C_CARC * w.PM[i] * (1f - w.PBirth[i]) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
-            grow = Math.Clamp(w.Energy[i] - K.GROW_RESERVE * emax, 0f, tissue / w.PMature[i]);
+            grow = Math.Clamp(MathF.Min(tissue / w.PMature[i] * w.Energy[i] / emax, w.Energy[i] - K.GROW_RESERVE * emax), 0f, tissue / w.PMature[i]);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
         }
         // body heat (Revision O): the heat it makes (basal and movement) against what its body loses at the operative
@@ -145,9 +157,9 @@ public static class Resolve
         float thermo = 0f, evap = 0f, shortCold = 0f, shortHot = 0f;
         if (Climate.On)
         {
-            bool immersed = waterCell && loco != Loco.Fly;
-            float top = Heat.Operative(w, cell, w.PInsul[i], immersed);
-            Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot);
+            Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core);
+            // a body kept below T_BODY that makes more heat than it loses just runs a little warmer: it need not shed it
+            if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
             w.TOp[i] = top;
             w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
             // what it cannot cover strains it; a body recovers from a little strain each step
@@ -163,7 +175,7 @@ public static class Resolve
 
         if (w.Gut[i] > 1e-7f)
         {
-            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL));
+            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
             float frac = d / w.Gut[i];
             float de = w.GutEnergy[i] * frac, dung = w.GutWaste[i] * frac, seedy = w.GutSeedy[i] * frac;
             w.Energy[i] += de;

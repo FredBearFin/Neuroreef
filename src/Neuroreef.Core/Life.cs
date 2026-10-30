@@ -138,12 +138,23 @@ public static class Life
     /// </summary>
     public static float RangeCapacity(World w, int c, float hx, float hy, float r)
     {
-        var realm = w.RealmOf(c);
+        // where it can forage is where it moves well: a swimmer in water, a walker on land, a wader on both and in
+        // the shallows, a flier anywhere (a swimmer can crawl ashore, but cannot live there)
+        var realm = (Loco)w.PLoco[c] switch
+        {
+            Loco.Swim => Realm.Water,
+            Loco.Walk => Realm.Land,
+            Loco.Wade => Realm.Land | Realm.Shallow,
+            _ => w.RealmOf(c),
+        };
         var diet = w.DietOf(c);
         float need = K.FIELD_METAB * MathF.Max(w.PBasal[c], 1e-6f);
+        // a brain the body cannot pay for: more than BRAIN_SHARE_MAX of its basal cost
+        float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[c] / K.BRAIN_REF;
+        if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) return 0f;
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
-        double y = 0; int n = 0;
+        double y = 0, heatNeed = 0; int n = 0;
         Span<double> stock = stackalloc double[Pools.NFIELD];
         for (int dy = -rc; dy <= rc; dy++)
             for (int dx = -rc; dx <= rc; dx++)
@@ -153,8 +164,12 @@ public static class Life
                 if (!w.CellAllows(cell, realm)) continue;
                 y += Fields.Yield(w, cell, diet); n++;
                 for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell];
+                if (Climate.On) heatNeed += DayNeed(w, c, cell);
             }
         if (n == 0) return 0f;
+        // with a climate, a day here costs what this body pays at the temperature around it (Revision P): its basal
+        // cost at its core temperature, and the heat it must make to keep its core where its endothermy holds it
+        if (Climate.On) need = MathF.Max(1e-6f, (float)(heatNeed / n));
         // how fast it can eat: one bite a step, of what stands in a cell once grazed to half (the stock of the
         // maximum sustained yield), and no faster than its gut passes food (a Holling type II limit). It must
         // cover FORAGE_MARGIN days of need, as a naive forager spends most steps doing other things than eating
@@ -167,6 +182,16 @@ public static class Life
         }
         if (rate < K.FORAGE_MARGIN * need) return 0f;
         return (float)(y / need);
+    }
+
+    /// <summary>A day of living for organism c in a cell: FIELD_METAB x basal at its core temperature, plus the heat it must make (Revision P).</summary>
+    static float DayNeed(World w, int c, int cell)
+    {
+        bool immersed = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
+        float top = Heat.Operative(w, cell, w.PInsul[c], immersed), core = Heat.Core(top, w.PEndo[c]);
+        float basal = w.PBasal[c] * Heat.Rate(core);
+        Heat.Balance(w.PM[c], w.PInsul[c], w.PAppend[c], top, immersed, basal, w.PBasal[c], out float thermo, out _, out float cold, out _, core);
+        return K.FIELD_METAB * basal + thermo + cold;   // heat it cannot make counts as a cost too: it must not live there
     }
 
     /// <summary>
