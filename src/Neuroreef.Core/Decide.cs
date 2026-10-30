@@ -199,8 +199,12 @@ public static class Decide
         bool inWater = (w.Cell[cell] & (byte)Realm.Water) != 0;
         f[F.IN_WATER] = inWater ? 1f : 0f;
         f[F.DEPTH] = Math.Clamp(w.Depth[cell] / (K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE)), 0f, 1f);
-        f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / 8f);   // drinkable water: lakes and full ponds
-        f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / 8f);
+        f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / K.SENSE_WATER);   // drinkable water: lakes and full ponds
+        f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / K.SENSE_WATER);
+        // path integration (Revision P): the remembered way back to where it last drank and where it last fed well
+        byte has = w.MemHas[i];
+        PathMemory.Senses((has & Mem.Drink) != 0, w.MemDrinkX[i], w.MemDrinkY[i], fx, fy, f, F.DRINK_AHEAD);
+        PathMemory.Senses((has & Mem.Fed) != 0, w.MemFedX[i], w.MemFedY[i], fx, fy, f, F.FED_AHEAD);
         float fireNear = (w.Fire[cell] > 0 || w.Fire[CellAt(cell, 2, 0)] > 0 || w.Fire[CellAt(cell, -2, 0)] > 0 || w.Fire[CellAt(cell, 0, 2)] > 0 || w.Fire[CellAt(cell, 0, -2)] > 0) ? 1f : 0f;
         f[F.FEAR] = MathF.Min(1f, MathK.Tanh(w.Scent[cell] * 4f) + fireNear);
         f[F.CROWD] = MathK.Tanh(crowd * 0.5f);
@@ -406,8 +410,14 @@ public static class Decide
         else if (kinSum > 0) Add(g[P.SEEK_MATE], kinCx, kinCy);
         else Add(g[P.SEEK_MATE], fx, fy);
         Add(g[P.CLIMB_FOOD], fgx, fgy);
-        Add(g[P.SEEK_WATER], w.DistDrink[CellAt(cell, -1, 0)] - w.DistDrink[CellAt(cell, 1, 0)], w.DistDrink[CellAt(cell, 0, -1)] - w.DistDrink[CellAt(cell, 0, 1)]);
-        Add(g[P.SEEK_LAND], w.DistLand[CellAt(cell, -1, 0)] - w.DistLand[CellAt(cell, 1, 0)], w.DistLand[CellAt(cell, 0, -1)] - w.DistLand[CellAt(cell, 0, 1)]);
+        // water and land are sensed only within SENSE_WATER cells (Revision P: before, a map-wide distance field showed the
+        // way from anywhere); beyond it SEEK_WATER heads for where it last drank, if it remembers, so the thirst instinct
+        // can use what it has learned of the land
+        PathMemory.WaterWay(w, i, cell, out float wvx, out float wvy);
+        Add(g[P.SEEK_WATER], wvx, wvy);
+        PathMemory.LandWay(w, cell, out float lvx, out float lvy);
+        Add(g[P.SEEK_LAND], lvx, lvy);
+        if ((has & Mem.Fed) != 0) Add(g[P.RETURN_FED], w.MemFedX[i], w.MemFedY[i]);
         Add(g[P.AVOID_FEAR], w.Scent[CellAt(cell, -1, 0)] - w.Scent[CellAt(cell, 1, 0)], w.Scent[CellAt(cell, 0, -1)] - w.Scent[CellAt(cell, 0, 1)]);
         float wa = hd + (Rng.U(seed, step / 16u, (uint)i, Rs.Wander) - 0.5f) * 2.0f;   // slowly changing direction
         Add(g[P.WANDER], MathK.Cos(wa), MathK.Sin(wa));

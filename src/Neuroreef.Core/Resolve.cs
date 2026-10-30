@@ -47,6 +47,7 @@ public static class Resolve
             spd *= fraction;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
         }
+        PathMemory.Integrate(w, i, World.Delta1(nx - w.X[i]), World.Delta1(ny - w.Y[i]));   // its own sense of how it moved (Revision P)
         w.X[i] = nx; w.Y[i] = ny;
         w.Heading[i] = h; w.Speed[i] = spd;
         if (metrics != null && w.Gain[i * P.N + P.SPRINT] > 0.5f && spd > 0f)
@@ -62,7 +63,7 @@ public static class Resolve
             if (w.Thirst[i] > 0f) metrics?.Allow(P.DRINK);
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
-            if (rel > 0f) metrics?.Apply(P.DRINK);
+            if (rel > 0f) { metrics?.Apply(P.DRINK); PathMemory.Drank(w, i); }
         }
 
         static bool Move(World w, int i, float x, float y, float h, float speed, out float nx, out float ny, out float fraction)
@@ -134,6 +135,8 @@ public static class Resolve
                     else if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
                     r += Ingest(w, i, best, bite, diet[best], emax, cell);
+                    // a bite worth FED_WELL steps' need marks a place worth coming back to (Revision P)
+                    if (diet[best] * Pools.Rho[best] * bite >= K.FED_WELL * K.FIELD_METAB * w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL)) PathMemory.Fed(w, i);
                 }
             }
         }

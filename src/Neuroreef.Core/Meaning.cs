@@ -1,5 +1,5 @@
 // The translator's open-ended reading of the voices (Revision M). Not a rule: nothing here is read by the simulation.
-// A sound's (or a whole utterance's, Revision N) meaning is not chosen from designed categories. It is whichever of the caller's 66 senses differ most
+// A sound's (or a whole utterance's, Revision N) meaning is not chosen from designed categories. It is whichever of the caller's 73 senses differ most
 // from the clade's usual senses when the sound is made, and whichever behaviours the caller's clade turns to on
 // hearing it. Each sense and each behaviour has a plain-language phrase so the console can say what it found.
 
@@ -87,6 +87,12 @@ public static class Meaning
         S(F.FOC_LIKE_ME, "hearing what it says itself", "hearing something it does not say", "same,copy,yes,agree", "different,no");
         S(F.HEAT_NEED, "cold (shivering)", "hot (panting)", "cold,freezing,shiver,chilly,brr", "hot,sweating,panting,overheated");
         S(F.AIR_T, "warm here", "cold here", "warm,sun,sunny,heat,summer", "cold,ice,snow,frost,winter,shade");
+        S(F.DRINK_AHEAD, "the water it remembers is ahead", "the water it remembers is behind", "water ahead,this way to water", "back to water,water behind");
+        S(F.DRINK_LEFT, "the water it remembers is to the left", "the water it remembers is to the right", "left", "right");
+        S(F.DRINK_NEAR, "near where it last drank", "far from where it last drank", "drink,watering hole,spring", "far from water,lost");
+        S(F.FED_AHEAD, "the feeding place it remembers is ahead", "the feeding place it remembers is behind", "food ahead,this way to food", "food behind");
+        S(F.FED_LEFT, "the feeding place it remembers is to the left", "the feeding place it remembers is to the right", "", "");
+        S(F.FED_NEAR, "near where it last fed well", "far from where it last fed well", "pasture,feeding ground,home", "far from home");
 
         string[] v =
         {
@@ -94,7 +100,7 @@ public static class Meaning
             "flee the nearest animal", "cut off the nearest animal", "circle the nearest animal",
             "gather together", "spread apart", "move the same way", "follow mother", "look for a mate", "head for food",
             "head for water", "head for land", "move away from the danger smell", "wander", "go toward the caller", "move away from the caller",
-            "look where the caller looks", "go somewhere warmer", "go somewhere cooler", "stand still", "look around", "sprint", "eat", "attack", "drink", "mate", "rest", "mark the ground", "lay eggs", "bury seed",
+            "look where the caller looks", "go somewhere warmer", "go somewhere cooler", "go back to where it fed", "stand still", "look around", "sprint", "eat", "attack", "drink", "mate", "rest", "mark the ground", "lay eggs", "bury seed",
         };
         for (int p = 0; p < v.Length; p++) Verbs[p] = v[p];
         for (int k = 0; k < F.NSOUND; k++) Verbs[P.CALL_0 + k] = $"call sound {k + 1}";

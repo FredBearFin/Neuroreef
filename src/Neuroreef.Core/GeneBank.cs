@@ -14,7 +14,7 @@ namespace Neuroreef;
 
 public static class GeneBank
 {
-    public const ushort Version = 11;   // 11: wiring-gain gene (Revision P)     // 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
+    public const ushort Version = 12;   // 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
 
     public sealed class CladeInfo
     {

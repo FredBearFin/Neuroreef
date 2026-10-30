@@ -149,7 +149,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.03676E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.01445E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -486,6 +486,15 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 29. Organisms
+## 29. Memory
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| SENSE_WATER | 8 | cells | farthest an animal senses drinkable water or land: SEEK_WATER and SEEK_LAND point the way only within it, and WATER_CLOSE and LAND_CLOSE fade to 0 at it | HT: 8 cells = 32 units = MAX_SIGHT, the farthest any eye in this world sees, and the range WATER_CLOSE already faded over; cues of distant water (sight, humidity, odour) carry a few body-lengths to a few km, not across a landscape (Dusenbery 1992). Before 2026-10-30 the way to water was a map-wide distance field |
+| PI_ERR | 0.2 | - | path-integration error: each step's estimate of its own displacement is off by a random vector of SD PI_ERR x the distance moved (each axis) | ECO: odometer and compass errors of path integration add up with the way travelled, so a remembered place drifts as the square root of the distance (Mueller & Wehner 1988; Cheung et al. 2007); HT: a step is hours of travel, so one step is one leg of ~10-20% error |
+| MEM_NEAR | 32 | units | distance of a remembered place at which its NEAR sense reads 0.5 (NEAR = 1 / (1 + d / MEM_NEAR); 0 when nothing is remembered) | -: MAX_SIGHT, so NEAR reads 0.5 at the edge of sight |
+| FED_WELL | 1 | steps | a meal is remembered as 'fed well' when one bite's energy is at least this many steps' need (FIELD_METAB x basal) | HT: a bite that pays for its step, FOOD_HERE 0.63; a patch richer than the cost of being there is worth coming back to (Charnov 1976) |
+
+## 30. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

@@ -284,7 +284,7 @@ public class AppearanceTests
         var w = VisibleWorld();
         using var bank = new MemoryStream();
         GeneBank.Save(w, bank);
-        Assert.Equal(11, GeneBank.Version);
+        Assert.Equal(12, GeneBank.Version);
         bank.Position = 0;
         var loaded = GeneBank.Load(bank);
         foreach (var genome in loaded.Genomes[0])
@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(11, Checkpoint.Version);
+            Assert.Equal(12, Checkpoint.Version);
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);

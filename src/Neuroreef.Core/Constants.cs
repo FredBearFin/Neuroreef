@@ -396,4 +396,10 @@ public static class K
     [K("Heat", "founders' fur (insulation gene)", "0..1", "HT: with FOUND_APP and M=1 thermoneutral ~15-32 °C around T_REF")] public const float FOUND_INS = 0.15f;
     [K("Heat", "founders' appendages (appendage gene)", "0..1", "HT")] public const float FOUND_APP = 0.3f;
     [K("Heat", "AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1", "K", "-")] public const float AIR_T_SCALE = 30f;
+
+    // ---------------------------------------------------------------- 11. local senses and path integration (Revision P)
+    [K("Memory", "farthest an animal senses drinkable water or land: SEEK_WATER and SEEK_LAND point the way only within it, and WATER_CLOSE and LAND_CLOSE fade to 0 at it", "cells", "HT: 8 cells = 32 units = MAX_SIGHT, the farthest any eye in this world sees, and the range WATER_CLOSE already faded over; cues of distant water (sight, humidity, odour) carry a few body-lengths to a few km, not across a landscape (Dusenbery 1992). Before 2026-10-30 the way to water was a map-wide distance field")] public const float SENSE_WATER = 8f;
+    [K("Memory", "path-integration error: each step's estimate of its own displacement is off by a random vector of SD PI_ERR x the distance moved (each axis)", "-", "ECO: odometer and compass errors of path integration add up with the way travelled, so a remembered place drifts as the square root of the distance (Mueller & Wehner 1988; Cheung et al. 2007); HT: a step is hours of travel, so one step is one leg of ~10-20% error")] public const float PI_ERR = 0.2f;
+    [K("Memory", "distance of a remembered place at which its NEAR sense reads 0.5 (NEAR = 1 / (1 + d / MEM_NEAR); 0 when nothing is remembered)", "units", "-: MAX_SIGHT, so NEAR reads 0.5 at the edge of sight")] public const float MEM_NEAR = 32f;
+    [K("Memory", "a meal is remembered as 'fed well' when one bite's energy is at least this many steps' need (FIELD_METAB x basal)", "steps", "HT: a bite that pays for its step, FOOD_HERE 0.63; a patch richer than the cost of being there is worth coming back to (Charnov 1976)")] public const float FED_WELL = 1f;
 }

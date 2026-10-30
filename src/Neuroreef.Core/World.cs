@@ -19,6 +19,10 @@ public sealed class World
     public readonly float[] Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer;
     public readonly float[] Grown;         // share of its growable tissue a juvenile has built (0 at birth, 1 = adult size; DESIGN §9.1)
     public readonly float[] Reward, RewardMean, PendingR, LastFear;
+    // ---- agents: path integration (Revision P), written by RESOLVE (own slot): the remembered vector (world units) from the
+    // animal to where it last drank and to where it last fed well, kept up to date from its own (noisy) sense of how it moved
+    public readonly float[] MemDrinkX, MemDrinkY, MemFedX, MemFedY;
+    public readonly byte[] MemHas;         // Mem.Drink: it remembers a place it drank; Mem.Fed: a place it fed well
     // ---- agents: identity
     public readonly byte[] Spc, StageOf, Sex, Flags;
     public readonly ushort[] Gen;
@@ -135,7 +139,8 @@ public sealed class World
     /// <summary>Approximate memory per agent slot (bytes), for the setup screen's estimate.</summary>
     public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (2 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 432
         + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4    // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
-        + 5 * 4;                                 // Revision O: fur, appendages, heat strain, heat need, operative temperature
+        + 5 * 4                                  // Revision O: fur, appendages, heat strain, heat need, operative temperature
+        + 4 * 4 + 1;                             // Revision P: remembered drink and feeding vectors
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
@@ -154,6 +159,7 @@ public sealed class World
         Grown = new float[c];
         Thirst = new float[c]; Fatigue = new float[c]; Age = new float[c]; Pain = new float[c]; Cooldown = new float[c]; Timer = new float[c];
         Reward = new float[c]; RewardMean = new float[c]; PendingR = new float[c]; LastFear = new float[c];
+        MemDrinkX = new float[c]; MemDrinkY = new float[c]; MemFedX = new float[c]; MemFedY = new float[c]; MemHas = new byte[c];
         Spc = new byte[c]; StageOf = new byte[c]; Sex = new byte[c]; Flags = new byte[c];
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
         MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
@@ -292,4 +298,10 @@ public sealed class World
     public void FireSwap() { (Fire, FireN) = (FireN, Fire); }
 
     public Span<sbyte> GenomeOf(int i) => new Span<sbyte>(Genome, i * G.LEN, G.LEN);
+}
+
+/// <summary>Bits of World.MemHas: what an animal remembers the way back to (Revision P).</summary>
+public static class Mem
+{
+    public const byte Drink = 1, Fed = 2;
 }

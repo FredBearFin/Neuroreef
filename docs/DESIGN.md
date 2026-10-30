@@ -3,6 +3,31 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Memory that matters: local senses and path integration** (2026-10-30; the user: "make an animal's memory useful,
+by taking away its omniscient senses and giving it a self-motion sense"). Before the change SEEK_WATER and SEEK_LAND
+steered down a map-wide distance field (DistDrink, DistLand), so an animal knew the way to water from anywhere, and a
+memory of where water was could add nothing.
+- *Water and land are sensed only nearby.* SEEK_WATER and SEEK_LAND point the way only when water (or land) lies within
+  SENSE_WATER = 8 cells (32 units, MAX_SIGHT, the range WATER_CLOSE and LAND_CLOSE already faded over); beyond it they
+  give no direction.
+- *Path integration (dead reckoning).* Each animal keeps a vector back to where it last drank and one to where it last
+  fed well (a bite worth FED_WELL steps' need), updated in RESOLVE from its own movement (PathMemory.cs). Its estimate of
+  each step's move is off by a random vector of SD PI_ERR x the distance moved, so the remembered place drifts as the
+  square root of the way travelled, as in desert ants (Mueller & Wehner 1988; Cheung et al. 2007). A newborn remembers
+  nothing. Six new senses (DRINK_AHEAD/LEFT/NEAR, FED_AHEAD/LEFT/NEAR: the bearing against its heading, and
+  1 / (1 + d / MEM_NEAR), 0 when nothing is remembered) and one new steering primitive, RETURN_FED, which the brain
+  (or an evolved reflex) can learn to use. Gene bank and checkpoint version 12.
+- *The thirst instinct can use memory.* The innate THIRSTY -> SEEK_WATER link is unchanged; beyond sensing range
+  SEEK_WATER now heads for where the animal last drank, if it remembers. An animal that never drank, or whose pond has
+  dried, is on its own.
+Tested (tests/DecisionTests.cs): 100 cells from water, a thirsty walker with no memory turns less than a quarter of its
+turn rate; with a stored drink vector it turns at full rate toward it. Over 60 steps the integrated vector stays within
+4 SD of the true way back, and is never exact. Not yet measured: how this changes thirst deaths and ranging in a living
+world (expect more thirst deaths at first, as the founders no longer find water from anywhere).
+Other senses that still read more than an animal could know, left for now: FOLLOW_MOTHER and MOTHER_FAR give the way to a
+young animal's mother at any distance; a mate's readiness, another's diet (NEAREST_MEAT) and weakness are read from its
+internal state rather than from signals.
+
 **Brains that remember** (2026-10-30; the user: "why do big brains die so much, why are they not smarter"). Measured
 before the change: a 256-unit brain held about 7 steps of its past, no more than a 24-unit brain, and learned a
 delayed-cue task worse. Its many recurrent inputs drowned its senses, and its learning step grew with its size.

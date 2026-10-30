@@ -38,6 +38,7 @@ public static class Life
         w.Grown[c] = 0;
         w.Thirst[c] = 0; w.Fatigue[c] = 0; w.Age[c] = 0; w.Pain[c] = 0; w.Cooldown[c] = 0; w.Timer[c] = 0; w.LastFear[c] = 0;
         w.ThermStrain[c] = 0; w.HeatNeed[c] = 0; w.TOp[c] = K.T_REF;
+        PathMemory.Clear(w, c);   // a newborn remembers no place yet (Revision P)
         // sex: the mother's sex-ratio gene gives the chance of a daughter (0 = female)
         float pFemale = mother >= 0 && w.PHerm[mother] == 0 ? w.PSexRatio[mother] : 0.5f;
         w.Sex[c] = (byte)(Rng.U(seed, step, (uint)c, Rs.Sex) < pFemale ? 0 : 1);

@@ -159,4 +159,94 @@ public class DecisionTests
 
         Assert.True(Fields.Yield(w, shallow, diet) > Fields.Yield(w, deep, diet));
     }
+
+    // ---- Revision P: local senses and path integration
+
+    /// <summary>An all-land world whose only drinkable water is the column x = 0, and one walker whose brain does nothing
+    /// but SEEK_WATER, facing +y at field column `col`.</summary>
+    static (World world, int slot) ThirstyWalker(int col)
+    {
+        var (w, i) = Walker();
+        int FW = Map.FW;
+        for (int c = 0; c < FW * FW; c++) { int x = c % FW; w.DistDrink[c] = Math.Min(x, FW - x); }
+        int g = i * G.LEN;
+        w.Genome[g + G.SIGMA] = -128;
+        for (int p = 0; p < P.N; p++)
+        {
+            int row = g + G.W2 + p * G.NIN;
+            for (int k = 0; k < G.NIN; k++) w.Genome[row + k] = 0;
+            w.Genome[row + G.NH + F.BIAS] = (sbyte)(p == P.SEEK_WATER ? 127 : -127);
+        }
+        for (int k = G.REFLEX; k < G.LEN; k++) w.Genome[g + k] = 0;
+        Body.Express(w, i); Brain.InitLife(w, i);
+        w.X[i] = col * K.FCELL + 2f; w.Y[i] = 2f * K.FCELL + 2f; w.Heading[i] = MathF.PI / 2f;
+        w.Energy[i] = w.EmaxOf(i); w.Thirst[i] = 0.8f;
+        Simulation.BuildFor(w);
+        return (w, i);
+    }
+
+    static float TurnAfterDecide(World w, int i)
+    {
+        Decide.Run(w, i, new Decide.ProbeBuf());
+        return w.IHeading[i] - MathF.PI / 2f;   // > 0: turned toward -x, where the water is
+    }
+
+    [Fact] // far from water an animal cannot steer toward it unless it remembers where it drank
+    public void FarWaterIsFoundOnlyFromMemory()
+    {
+        // near water (3 cells): the local sense shows the way
+        var (wn, n) = ThirstyWalker(3);
+        PathMemory.WaterWay(wn, n, World.FIdx(wn.X[n], wn.Y[n]), out float nvx, out float nvy);
+        Assert.True(nvx < 0f && MathF.Abs(nvy) < 1e-6f, $"near water: way ({nvx}, {nvy})");
+        Assert.True(TurnAfterDecide(wn, n) > 0.9f * wn.PTurn[n], "near water it does not turn toward it");
+
+        // far from water (100 cells, beyond SENSE_WATER) with no memory: no way is known, and it hardly turns
+        var (w, i) = ThirstyWalker(100);
+        int cell = World.FIdx(w.X[i], w.Y[i]);
+        Assert.True(w.DistDrink[cell] > K.SENSE_WATER);
+        PathMemory.WaterWay(w, i, cell, out float vx, out float vy);
+        Assert.Equal(0f, vx); Assert.Equal(0f, vy);
+        float blind = TurnAfterDecide(w, i);
+        Assert.Equal(0f, w.Feat[i * F.N + F.DRINK_NEAR]);
+        Assert.True(MathF.Abs(blind) < 0.25f * w.PTurn[i], $"with no memory it turned {blind}");
+
+        // the same animal remembering that it drank 400 units to the -x side: it heads there
+        var (wm, m) = ThirstyWalker(100);
+        PathMemory.Drank(wm, m); wm.MemDrinkX[m] = -400f; wm.MemDrinkY[m] = 0f;
+        float remembered = TurnAfterDecide(wm, m);
+        Assert.True(remembered > 0.9f * wm.PTurn[m], $"with memory it turned {remembered}");
+        // and senses it: the remembered water is to its left (it faces +y), not ahead, far away
+        Assert.Equal(0f, wm.Feat[m * F.N + F.DRINK_AHEAD], 4);
+        Assert.Equal(1f, wm.Feat[m * F.N + F.DRINK_LEFT], 4);
+        Assert.Equal(1f / (1f + 400f / K.MEM_NEAR), wm.Feat[m * F.N + F.DRINK_NEAR], 4);
+    }
+
+    [Fact] // the drink vector follows the animal's own movement, with an error that grows with the way travelled
+    public void PathIntegrationFollowsOwnMovementWithNoise()
+    {
+        var (w, i) = Walker();
+        w.X[i] = 100f; w.Y[i] = 100f;
+        PathMemory.Drank(w, i);
+        float x0 = w.X[i], y0 = w.Y[i];
+        double sumD2 = 0;
+        for (int k = 0; k < 60; k++)
+        {
+            w.Step = (ulong)k + 1;
+            w.IActs[i] = 0; w.IHeading[i] = 0.3f + 0.02f * k; w.ISpeed[i] = 1f; w.Energy[i] = w.EmaxOf(i); w.Thirst[i] = 0f;
+            Resolve.Run(w, 1, 0);
+            sumD2 += 1.0;
+        }
+        float tx = World.Delta1(x0 - w.X[i]), ty = World.Delta1(y0 - w.Y[i]);   // the true way back
+        float ex = w.MemDrinkX[i] - tx, ey = w.MemDrinkY[i] - ty, err = MathF.Sqrt(ex * ex + ey * ey);
+        float sd = K.PI_ERR * (float)Math.Sqrt(sumD2);   // per-axis SD of the summed error
+        Assert.True(MathF.Sqrt(tx * tx + ty * ty) > 50f);
+        Assert.True(err > 0f, "path integration is exact");
+        Assert.True(err < 4f * sd, $"error {err} against expected SD {sd}");
+        // drinking resets it
+        PathMemory.Drank(w, i);
+        Assert.Equal(0f, w.MemDrinkX[i]); Assert.Equal(Mem.Drink, w.MemHas[i] & Mem.Drink);
+        // and a newborn remembers nothing
+        PathMemory.Clear(w, i);
+        Assert.Equal(0, w.MemHas[i]);
+    }
 }
