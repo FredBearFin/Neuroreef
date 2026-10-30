@@ -42,7 +42,7 @@ public static class Reflex
         c[HUNGRY_FOOD] = (1f - f[F.FULL]) * MathF.Min(1f, f[F.HUNGER] / K.SATIETY) * f[F.FOOD_HERE];
         c[HUNGRY] = f[F.HUNGER];
         c[THIRSTY] = f[F.THIRST];
-        c[THIRSTY_AT_WATER] = f[F.THIRST] * MathF.Max(0f, (f[F.WATER_CLOSE] - 0.75f) * 4f);   // within about 2 cells of water
+        c[THIRSTY_AT_WATER] = f[F.THIRST] * Math.Clamp((f[F.WATER_CLOSE] - 0.625f) * (16f / 3f), 0f, 1f);   // full within drinking reach (1.5 cells: a walker at a lake's edge), none from 3 cells
         c[TIRED_SAFE] = f[F.FATIGUE] * (1f - f[F.FEAR]);
         c[DANGER] = MathF.Max(Threat(f, F.O1_CLOSE), Threat(f, F.O2_CLOSE));
         c[LOST] = f[F.JUVENILE] * f[F.MOTHER_FAR];

@@ -100,9 +100,9 @@ public sealed class Options
   --checkpoint FILE     evolve: where to save and resume the whole state (default prehistory.nrck)
   --checkpoint-minutes N   evolve: minutes between saves (default 30)
   --no-checkpoint       evolve: never save or resume the whole state
-  --big-brains N        prehistory: how many of the 10 ancestors in each branch start big-brained (default 2:
-                        one on land, one in water; 0 = none)
-  --big-brain-units N   prehistory: memory units of a big-brained ancestor (default 36; others start with up to 12)
+  --big-brains N        prehistory: how many of the 10 ancestors in each branch start big-brained (default 1,
+                        on land; 0 = none)
+  --big-brain-units N   prehistory: memory units of a big-brained ancestor (default 256; others start with up to 24)
   --founders N          prehistory: founders per ancestor (default 600)
   --branch-slots N      prehistory: animal slots per branch (default 49152; memory grows with it)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)

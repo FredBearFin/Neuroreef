@@ -22,6 +22,13 @@ public static class Resolve
             if (w.StageOf[i] < St.Juvenile || (w.Flags[i] & Flag.Newborn) != 0) continue;
             One(w, i);
         }
+        // what others did to it this step (strikes, matings, a mother's feeding) is credited to this step's action, whether
+        // it was resolved before or after them; read inside One it landed in this step or the next by the visiting order
+        for (int i = 0; i < cap; i++)
+        {
+            if (w.PendingR[i] == 0f || w.StageOf[i] < St.Juvenile || (w.Flags[i] & Flag.Newborn) != 0) continue;
+            w.Reward[i] += w.PendingR[i]; w.PendingR[i] = 0f;
+        }
     }
 
     static void One(World w, int i)
@@ -32,7 +39,7 @@ public static class Resolve
         uint seed = w.Seed, step = (uint)w.Step;
         float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
         var diet = w.DietOf(i);
-        float r = w.PendingR[i]; w.PendingR[i] = 0;
+        float r = 0f;   // what others do to it is added after all have moved (Run)
         float spent = 0f;   // energy spent this step on what it chose to do (strikes, calls, moving, keeping warm), Revision P
         uint acts = w.IActs[i];
         bool rest = (acts & BIT_REST) != 0;
@@ -135,8 +142,6 @@ public static class Resolve
                     else if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
                     r += Ingest(w, i, best, bite, diet[best], emax, cell);
-                    // a bite worth FED_WELL steps' need marks a place worth coming back to (Revision P)
-                    if (diet[best] * Pools.Rho[best] * bite >= K.FED_WELL * K.FIELD_METAB * w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL)) PathMemory.Fed(w, i);
                 }
             }
         }
@@ -205,7 +210,10 @@ public static class Resolve
         // (a heavy coat adds to it, Revision O)
         float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f) * (1f + K.INS_MOVE * w.PInsul[i]);
         bool sick = w.Infect[i] > 0;
-        float fullBasal = w.PBasal[i] * MathK.Pow(mf, K.EXP_BASAL);
+        // a juvenile runs every unit of its brain from birth, so it pays for all of them; only the body's share scales
+        // with its size (audit 2026-10-30: a young brain was charged at body scale; real infant brains cost more, not less)
+        float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF;
+        float fullBasal = (w.PBasal[i] - brainBasal) * MathK.Pow(mf, K.EXP_BASAL) + brainBasal;
         // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
         // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
         bool immersed = waterCell && loco != Loco.Fly;
@@ -275,14 +283,11 @@ public static class Resolve
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
         w.Pain[i] = MathF.Max(sick ? K.DIS_PAIN : 0f, w.Pain[i] - K.PAIN_DECAY);   // an infected animal feels unwell
-        float fear = w.Feat[i * F.N + F.FEAR];
-        r -= K.R_FEAR * MathF.Max(0f, fear - w.LastFear[i]);
         // energy spent counts against the reward as energy eaten counts for it (Revision P): the learner feels the net
         // gain, so a habit that costs and earns nothing (calling on 65-80% of steps) is not reinforced for free.
         // Basal cost is not counted: nothing it does changes it
         r -= K.R_SPEND * K.R_INTAKE * (spent + moveCost + thermo) / emax;
-        w.LastFear[i] = fear;
-        w.Reward[i] = r;
+        w.Reward[i] = r;   // a rise in fear is added when it is sensed, next step (Decide.Run)
         T.RewardSum[s] += r;
 
         // ---- 8. death
@@ -389,11 +394,11 @@ public static class Resolve
         var utt = new Span<byte>(w.Call, cb, F.MAX_SYL);
         int nsyl = w.PVoice[i] < K.VOICE_MIN ? 0 : Voice.Order(w, i, acts, utt);
         if (nsyl == 0) utt.Clear();
+        utt.CopyTo(new Span<byte>(w.LastUtt, cb, F.MAX_SYL));   // its own utterance last step: silence too
         float vmatch = 0f;
         if (nsyl > 0)
         {
             w.Energy[i] -= K.C_CALL * K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * (1f - K.CALL_SYL + K.CALL_SYL * nsyl);
-            utt.CopyTo(new Span<byte>(w.LastUtt, cb, F.MAX_SYL));
             // matching its tutors reinforces only in its sensitive period, as song practice does in young songbirds; the
             // adult song is set (Revision P: rewarded for life, voiced animals came to call on ~80% of steps, ~20% of basal)
             if (w.PImit[i] > 0f && w.Evo.VocalLearning && w.Age[i] < w.PImitAge[i] * w.PLife[i]) vmatch = Match(w, i, utt);
@@ -440,6 +445,8 @@ public static class Resolve
         w.Gut[i] += mass; w.GutEnergy[i] += e; w.GutWaste[i] += mass * (1f - eff);
         if (pool == (int)Pool.Fruit || pool == (int)Pool.Seed) w.GutSeedy[i] += mass * (1f - eff);
         w.T.Intake[w.Spc[i] * Pools.N + pool] += e;
+        // a meal worth FED_WELL steps' need marks a place worth coming back to, plant, meat or blood (Revision P)
+        if (e >= K.FED_WELL * K.FIELD_METAB * w.PBasal[i] * MathK.Pow(w.MassOf(i) / w.PM[i], K.EXP_BASAL)) PathMemory.Fed(w, i);
         return K.R_INTAKE * e / emax + K.R_DRINK * rel;
     }
 

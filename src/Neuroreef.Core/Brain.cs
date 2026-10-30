@@ -59,7 +59,11 @@ public static class Brain
         {
             if (k == units * G.NIN && k < G.W2) { k = G.W2 - 1; continue; }
             if (k == G.BODY) { k = G.BODY + G.NBODY - 1; continue; }
-            g[k] = (sbyte)Math.Clamp((int)MathF.Round(g[k] + Rng.N(seed, 0, key, Rs.Founder + 20000u + (uint)k) * K.FOUNDER_W_SD), -127, 127);
+            // an output weight from memory unit h past BRAIN_START varies as little as it starts (x BRAIN_START / h), so
+            // standing variation does not undo the calm start of a big brain (audit 2026-10-30: output noise 1.13, not 0.50)
+            int col = k >= G.W2 && k < G.W2 + G.W2N ? (k - G.W2) % G.NIN : G.NIN;
+            float hs = col < G.NH ? (float)K.BRAIN_START / MathF.Max(K.BRAIN_START, col + 1) : 1f;
+            g[k] = (sbyte)Math.Clamp((int)MathF.Round(g[k] + Rng.N(seed, 0, key, Rs.Founder + 20000u + (uint)k) * K.FOUNDER_W_SD * hs), -127, 127);
         }
     }
 
@@ -146,7 +150,8 @@ public static class Brain
     {
         float r = w.Reward[i];
         float adv = r - w.RewardMean[i];
-        w.RewardMean[i] += K.RBAR_RATE * (r - w.RewardMean[i]);
+        // a young animal's baseline is the plain mean of what it has felt so far, not a slow drift up from 0
+        w.RewardMean[i] += MathF.Max(K.RBAR_RATE, 1f / (1f + w.Age[i])) * (r - w.RewardMean[i]);
         int t = (int)(w.Step & 0x3FFFFFFF);
         w.HistA[i * BLOCK + ((t - 1 + i) & (BLOCK - 1))] = adv;
         if (((t + i) & (BLOCK - 1)) == 0) ApplyBlock(w, i);

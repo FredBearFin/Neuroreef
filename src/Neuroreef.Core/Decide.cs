@@ -78,15 +78,12 @@ public static class Decide
         var diet = w.DietOf(i);
         uint seed = w.Seed, step = (uint)w.Step;
         var rs = new Rng.Seq(Rng.Hash(seed, step, (uint)i, Rs.Explore));
-        // ---- learning update due from the last step's reward
-        Brain.Learn(w, i);
-        if (((int)w.Step + i) % 32 == 1) Brain.Relax(w, i);
 
         float x = w.X[i], y = w.Y[i], hd = w.Heading[i];
         float fx = MathK.Cos(hd), fy = MathK.Sin(hd);
         float myMass = w.ApparentMass(i);
         bool scanning = w.IScanning[i] != 0;
-        float R = w.PSight[i] * (scanning ? 1.3f : 1f);
+        float R = MathF.Min(K.MAX_SIGHT, w.PSight[i] * (scanning ? 1.3f : 1f));   // the neighbour search reaches MAX_SIGHT, no further
         float R2 = R * R;
         float fovCos = scanning ? -2f : w.PFovCos[i];
         int cell = World.FIdx(x, y);
@@ -168,7 +165,10 @@ public static class Decide
         if (mom >= 0)
         {
             mdx = World.Delta1(w.X[mom] - x); mdy = World.Delta1(w.Y[mom] - y);
-            f[F.MOTHER_FAR] = MathF.Min(1f, MathF.Sqrt(mdx * mdx + mdy * mdy) / R);
+            float md = MathF.Sqrt(mdx * mdx + mdy * mdy);
+            f[F.MOTHER_FAR] = MathF.Min(1f, md / R);
+            // it knows her by sight, sound and smell, all within MAX_SIGHT; further off it has lost her and knows no way back
+            if (md > K.MAX_SIGHT) { f[F.MOTHER_FAR] = 1f; mdx = mdy = 0f; }
         }
         f[F.MATE_CLOSE] = mate.J >= 0 ? 1f - mate.D / R : 0f;
         if (o1.J >= 0) Other(w, i, o1, R, vmax, fx, fy, myMass, f, F.O1_CLOSE);
@@ -324,6 +324,12 @@ public static class Decide
         if (w.PImit[i] > 0f && ((long)w.Step + i) % K.TMPL_HALF == 0)
             for (int k = i * Voice.NTMPL, ke = k + Voice.NTMPL; k < ke; k++) w.Tmpl[k] >>= 1;
 
+        // ---- learning update due from the last step's reward, with the rise in fear its move led to (sensed only now)
+        w.Reward[i] -= K.R_FEAR * MathF.Max(0f, f[F.FEAR] - w.LastFear[i]);
+        w.LastFear[i] = f[F.FEAR];
+        Brain.Learn(w, i);
+        if (((int)w.Step + i) % 32 == 1) Brain.Relax(w, i);
+
         // ---- brain
         Span<float> yv = stackalloc float[G.NIN];
         Span<float> z = stackalloc float[P.N];
@@ -343,18 +349,21 @@ public static class Decide
             float ge;
             if (p < P.FIRST_ACTION)
             {
+                // learning sees the noise drawn, not the clamped change: near 0 the clamp cuts the downward half, and its
+                // mean would credit a gain with rewards it did not cause (audit 2026-10-30: +0.06 at sigma 0.16, g 0.02)
                 float n = (rs.Next() + rs.Next() + rs.Next() - 1.5f) * 2f;
                 ge = Math.Clamp(g[p] + sigma * n, 0f, 1f);
+                delta[p] = sigma * n;
             }
             else
             {
                 bool fire = rs.Next() < g[p];
                 ge = fire ? 1f : 0f;
                 if (fire) { acts |= 1u << (p - P.FIRST_ACTION); metrics?.Attempt(p); }
+                delta[p] = ge - g[p];
             }
             if (metrics != null && p == P.SCAN && ge > 0.5f) metrics.Add(ref metrics.ScanActive);
             if (metrics != null && p == P.SPRINT && g[p] > 0.5f) metrics.Add(ref metrics.SprintRequested);
-            delta[p] = ge - g[p];
             g[p] = ge;
         }
         // one utterance (Revision N): of the sounds the brain chose to make, at most MAX_SYL, each once, in the order of
@@ -419,8 +428,11 @@ public static class Decide
         Add(g[P.SEEK_LAND], lvx, lvy);
         if ((has & Mem.Fed) != 0) Add(g[P.RETURN_FED], w.MemFedX[i], w.MemFedY[i]);
         Add(g[P.AVOID_FEAR], w.Scent[CellAt(cell, -1, 0)] - w.Scent[CellAt(cell, 1, 0)], w.Scent[CellAt(cell, 0, -1)] - w.Scent[CellAt(cell, 0, 1)]);
-        float wa = hd + (Rng.U(seed, step / 16u, (uint)i, Rs.Wander) - 0.5f) * 2.0f;   // slowly changing direction
-        Add(g[P.WANDER], MathK.Cos(wa), MathK.Sin(wa));
+        // a correlated random walk: a compass direction drawn every 16 steps, blended into the next. (It was an offset to
+        // the current heading held for 16 steps, so the animal turned the same way each step and walked in circles.)
+        uint wb = (step + (uint)i) / 16u; float wt = ((step + (uint)i) & 15u) / 16f;
+        float wa0 = Rng.U(seed, wb, (uint)i, Rs.Wander) * 2f * MathF.PI, wa1 = Rng.U(seed, wb + 1u, (uint)i, Rs.Wander) * 2f * MathF.PI;
+        Add(g[P.WANDER], (1f - wt) * MathK.Cos(wa0) + wt * MathK.Cos(wa1), (1f - wt) * MathK.Sin(wa0) + wt * MathK.Sin(wa1));
         if (loud > 0) { Add(g[P.TOWARD_CALL], callDx, callDy); Add(g[P.AWAY_CALL], -callDx, -callDy); }
         if (foc >= 0) Add(g[P.FOLLOW_GAZE], gzx, gzy);   // turn the way the focal caller is facing (gaze following)
         if (Climate.On)
