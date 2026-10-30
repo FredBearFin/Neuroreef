@@ -36,6 +36,7 @@ public static class Resolve
         uint acts = w.IActs[i];
         bool rest = (acts & BIT_REST) != 0;
         bool scanning = w.IScanning[i] != 0;
+        var metrics = Decide.Metrics;
 
         // ---- 1. move (realm rule, DESIGN §9.2)
         float h = w.IHeading[i], spd = w.ISpeed[i];
@@ -47,6 +48,8 @@ public static class Resolve
         }
         w.X[i] = nx; w.Y[i] = ny;
         w.Heading[i] = h; w.Speed[i] = spd;
+        if (metrics != null && w.Gain[i * P.N + P.SPRINT] > 0.5f && spd > 0f)
+            metrics.Add(ref metrics.SprintMoved);
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool waterCell = (w.Cell[cell] & (byte)Realm.Water) != 0;
 
@@ -55,8 +58,10 @@ public static class Resolve
         // ---- 2. drink
         if ((acts & BIT_DRINK) != 0 && w.DistDrink[cell] <= 1.5f)
         {
+            if (w.Thirst[i] > 0f) metrics?.Allow(P.DRINK);
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
+            if (rel > 0f) metrics?.Apply(P.DRINK);
         }
 
         static bool Move(World w, float x, float y, float h, float speed, Realm realm, out float nx, out float ny, out float fraction)
@@ -99,8 +104,10 @@ public static class Resolve
         // ---- 3. eat (DESIGN §9.3)
         float gutCap = w.PGut[i] * mf;
         // eating another organism is attacking it (DESIGN §9.3, Revision K): the same strike, chosen by hunger
+        bool strikeAttempt = (acts & BIT_STRIKE) != 0;
         bool preyEat = (acts & BIT_EAT) != 0 && w.IEatPrey[i] != 0 && (acts & BIT_STRIKE) == 0 && w.PStrike[i] > 0;
-        if (preyEat) acts |= BIT_STRIKE;
+        if (preyEat) { acts |= BIT_STRIKE; metrics?.Allow(P.EAT); }
+        else if ((acts & BIT_EAT) != 0 && scanning && metrics != null) metrics.Add(ref metrics.ScanBlockedEats);
         if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && (w.Cell[cell] & (byte)Realm.Deep) != 0))
         {
             int best = -1; float bv = 0;
@@ -116,6 +123,7 @@ public static class Resolve
                 float bite = MathF.Min(MathF.Min(w.PBite[i] * MathK.Pow(mf, K.EXP_BASAL), w.Pool[best][cell]), gutCap - w.Gut[i]);
                 if (bite > 0)
                 {
+                    metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
                     w.Pool[best][cell] -= bite;
                     if (best == (int)Pool.Browse) w.Sapling[cell] = MathF.Max(0, w.Sapling[cell] - 0.5f * bite);
                     else if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
@@ -131,11 +139,17 @@ public static class Resolve
             int v = w.ITarget[i];
             if (v >= 0 && w.StageOf[v] != St.Dead && w.StageOf[v] != St.Embryo)
             {
+                if (strikeAttempt) metrics?.Allow(P.STRIKE);
                 w.Energy[i] -= K.C_STRIKE * mass;                       // no target, no strike (DESIGN §5)
                 T.Strikes[s]++;
                 float dx = World.Delta1(w.X[v] - w.X[i]), dy = World.Delta1(w.Y[v] - w.Y[i]);
                 float reachAll = w.PReach[i] + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(v));
-                if (dx * dx + dy * dy <= reachAll * reachAll) r += Strike(w, i, v, gutCap, emax);
+                if (dx * dx + dy * dy <= reachAll * reachAll)
+                {
+                    if (strikeAttempt) metrics?.Apply(P.STRIKE);
+                    if (preyEat) metrics?.Apply(P.EAT);
+                    r += Strike(w, i, v, gutCap, emax);
+                }
             }
         }
 
@@ -144,18 +158,34 @@ public static class Resolve
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
 
         // ---- 6a. voice (Revision M): a sound costs a little energy, and is heard by everyone near on the next step
-        Voices(w, i, s, Speak(w, i, acts, mass), acts);
+        int callType = Speak(w, i, acts, mass);
+        if (metrics != null)
+            for (int p = P.CALL_0; p < P.N; p++)
+            {
+                uint bit = 1u << (p - P.FIRST_ACTION);
+                if ((acts & bit) == 0) continue;
+                if (w.PVoice[i] >= K.VOICE_MIN) metrics.Allow(p);
+                if (callType >= 0)
+                    for (int k = 0; k < F.MAX_SYL; k++)
+                        if (w.Call[i * F.MAX_SYL + k] == p - P.CALL_0 + 1) { metrics.Apply(p); break; }
+            }
+        Voices(w, i, s, callType, acts);
 
         // ---- 6. mark and scent, cache
         float carn = diet[(int)Pool.Meat];
         float scent = K.C_SCENT * carn * ((acts & BIT_MARK) != 0 ? K.MARK_GAIN : 1f);
         if ((acts & BIT_MARK) != 0 && carn <= 0) scent = K.C_SCENT * 0.5f;   // anyone can mark, faintly
+        float scentBefore = w.Scent[cell];
+        if ((acts & BIT_MARK) != 0) metrics?.Allow(P.MARK);
         w.Scent[cell] = MathF.Min(4f, w.Scent[cell] + scent);
+        if ((acts & BIT_MARK) != 0 && w.Scent[cell] > scentBefore) metrics?.Apply(P.MARK);
         if ((acts & BIT_CACHE) != 0 && w.GutSeedy[i] > 0 && !waterCell)
         {
+            metrics?.Allow(P.CACHE);
             float m = 0.5f * w.GutSeedy[i], frac = m / MathF.Max(w.Gut[i], 1e-6f);
             w.Pool[(int)Pool.Seed][cell] += m;
             w.Gut[i] -= m; w.GutEnergy[i] *= 1f - frac; w.GutWaste[i] *= 1f - frac; w.GutSeedy[i] -= m;
+            metrics?.Apply(P.CACHE);
         }
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
@@ -206,7 +236,9 @@ public static class Resolve
         T.SpendBasal[s] += basal; T.SpendMove[s] += moveCost; T.SpendGrowth[s] += grow;
         float fat0 = w.Fatigue[i];
         float sprint = w.Gain[i * P.N + P.SPRINT];
+        if (rest && fat0 > 0f) metrics?.Allow(P.REST);
         w.Fatigue[i] = Math.Clamp(w.Fatigue[i] + K.C_FATIGUE * sprint * spd / vmax - K.C_RECOVER * (rest ? 3f : 1f), 0f, 1f);
+        if (rest && w.Fatigue[i] < fat0) metrics?.Apply(P.REST);
         r += K.R_REST * MathF.Max(0f, fat0 - w.Fatigue[i]);
 
         if (w.Gut[i] > 1e-7f)
@@ -473,9 +505,11 @@ public static class Resolve
         float rr = w.PReach[i] * 2f + 0.5f;
         if (dx * dx + dy * dy > rr * rr) return 0;
         if (w.FreeTop == 0) { w.T.SlotShortage++; if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; } return 0; }     // no room for young: nothing happens, nothing is paid
+        Decide.Metrics?.Allow(P.MATE);
         w.Energy[i] -= K.C_MATE * w.PM[i]; w.Energy[j] -= K.C_MATE * w.PM[j];
         w.PendingR[j] += K.R_MATE;
         w.T.Matings[w.Spc[i]]++;
+        Decide.Metrics?.Apply(P.MATE);
         float rew = K.R_MATE;
         bool hi = w.PHerm[i] != 0, hj = w.PHerm[j] != 0, herm = hi && hj;
         // with one hermaphrodite, the separate-sexed partner keeps its role; a hermaphrodite meeting a male is the mother
@@ -503,8 +537,11 @@ public static class Resolve
     static float Lay(World w, int i, int cell)
     {
         if (w.PSexual[i] != 0) return 0;
+        Decide.Metrics?.Allow(P.LAY);
         w.T.Lays[w.Spc[i]]++;
-        return Conceive(w, i, -1, w.PLitter[i]);
+        float reward = Conceive(w, i, -1, w.PLitter[i]);
+        if (reward > 0f) Decide.Metrics?.Apply(P.LAY);
+        return reward;
     }
 
     /// <summary>
