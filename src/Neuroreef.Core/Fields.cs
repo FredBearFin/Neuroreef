@@ -60,7 +60,8 @@ public static class Fields
             {
                 // water producers (DESIGN §10.3)
                 float lim = N / (N + K.K_N);
-                float ga = (w.Cell[i] == (byte)Realm.Shallow) ? K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim : 0f;
+                float light = MathK.Exp(-w.Depth[i] / K.SHALLOW);
+                float ga = (K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim) * light;
                 float gp = K.R_PH * Nature.Plants * lim * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
                 if (clim)
                 {
@@ -162,7 +163,7 @@ public static class Fields
         {
             float lim = N / (N + K.K_N);
             float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
-            float al = w.Cell[i] == (byte)Realm.Shallow ? (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe : 0f;
+            float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / K.SHALLOW);
             float ph = K.R_PH * plants * lim * 0.25f * fe;
             y += diet[(int)Pool.Algae] * Pools.Rho[(int)Pool.Algae] * al;
             y += diet[(int)Pool.Phyto] * Pools.Rho[(int)Pool.Phyto] * ph;

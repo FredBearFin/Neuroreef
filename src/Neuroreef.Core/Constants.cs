@@ -31,7 +31,7 @@ public static class K
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
     [K("World", "spatial-hash grid side", "cells", "-")] public const int GW = WORLD / HCELL;
-    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB")] public const int CAPACITY = 8192;
+    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB")] public const int CAPACITY = 16384;
     [K("World", "share of cells below lake level", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "catchment (cells) above which a cell is river", "cells", "HT")] public const int RIVER_ACC = 900;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
@@ -185,6 +185,7 @@ public static class K
 
     [K("Body", "a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading)", "-", "ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings")] public const float WING_LIFT = 1.6f;
     [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
+    [K("Body", "additional maximum water depth per unit fin size, in SHALLOW-depth units", "x", "HT")] public const float SWIM_DEPTH_RANGE = 14f;
     [K("Body", "a legless body crawls on land at this share of its top speed", "-", "ECO: worms, snakes and stranded fish move slowly without legs")] public const float CRAWL = 0.05f;
     [K("Body", "energy of one call, as a share of basal metabolism at the caller's mass", "xbasal", "ECO: vocalising costs a few times resting metabolism for its duration (Ophir et al. 2010); a call is a short burst")] public const float C_CALL = 0.5f;
     [K("Body", "a voice organ below this makes no sound", "-", "HT: a little voice is no voice; above founder variation around a mute ancestor")] public const float VOICE_MIN = 0.25f;

@@ -14,7 +14,7 @@ namespace Neuroreef;
 
 public static class GeneBank
 {
-    public const ushort Version = 9;   // 9: inherited appearance genes; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
+    public const ushort Version = 10;   // 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
 
     public sealed class CladeInfo
     {

@@ -4,6 +4,7 @@
 
 using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Neuroreef;
 
@@ -16,6 +17,20 @@ public static class Decide
         public readonly float[] X = new float[F.N], Hid = new float[G.NH], Z = new float[P.N], Gn = new float[P.N];
         public uint Acts; public float Reward, RewardMean;
     }
+
+    public sealed class DecisionMetrics
+    {
+        public readonly long[] Attempts = new long[P.N], Eligible = new long[P.N], Effective = new long[P.N];
+        public long Decisions, CapHits, O1Changed, O2Changed, MateChanged, StrikeChanged,
+            ScanActive, ScanBlockedEats, SprintRequested, SprintMoved;
+
+        internal void Attempt(int p) => Interlocked.Increment(ref Attempts[p]);
+        internal void Allow(int p) => Interlocked.Increment(ref Eligible[p]);
+        internal void Apply(int p) => Interlocked.Increment(ref Effective[p]);
+        internal void Add(ref long n) => Interlocked.Increment(ref n);
+    }
+
+    public static DecisionMetrics? Metrics { get; set; }
 
     struct Near { public float D, Dx, Dy; public int J; }
 
@@ -58,6 +73,8 @@ public static class Decide
     {
         byte stg = w.StageOf[i];
         if (stg < St.Juvenile) return;
+        var metrics = Metrics;
+        if (metrics != null) metrics.Add(ref metrics.Decisions);
         var diet = w.DietOf(i);
         uint seed = w.Seed, step = (uint)w.Step;
         var rs = new Rng.Seq(Rng.Hash(seed, step, (uint)i, Rs.Explore));
@@ -88,50 +105,49 @@ public static class Decide
         float reach = w.PReach[i];
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         int nOff = R > K.HCELL ? 25 : 9;
-        int seen = 0, infNear = 0, strainSrc = -1;
-        for (int o = 0; o < nOff && seen < K.MAX_NEIGH; o++)
+        Span<int> neighbours = stackalloc int[K.MAX_NEIGH];
+        Span<uint> priorities = stackalloc uint[K.MAX_NEIGH];
+        int seen = SelectNeighbours(w, i, step, hcx, hcy, nOff, neighbours, priorities, out int candidates);
+        int infNear = 0, strainSrc = -1;
+        for (int q = 0; q < seen; q++)
+        {
+            int j = neighbours[q];
+            float ddx = World.Delta1(w.X[j] - x), ddy = World.Delta1(w.Y[j] - y);
+            float d2 = ddx * ddx + ddy * ddy;
+            if (d2 > R2 || d2 < 1e-8f) continue;
+            float d = MathF.Sqrt(d2);
+            if (d > reach && (ddx * fx + ddy * fy) / d < fovCos) continue;
+            float close = 1f - d / R;
+            crowd += close;
+            byte sj = w.StageOf[j];
+            bool active = sj >= St.Juvenile;
+            bool alike = Body.LooksAlike(w, i, j);
+            if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; strainSrc = j; }
+            if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+            if (alike)
             {
-                int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
-                int a = w.CellStart[hc], b = w.CellStart[hc + 1];
-                for (int q = a; q < b && seen < K.MAX_NEIGH; q++)
-                {
-                    int j = w.Sorted[q];
-                    if (j == i) continue;
-                    seen++;                                                  // examined (the cap bounds the work)
-                    float ddx = World.Delta1(w.X[j] - x), ddy = World.Delta1(w.Y[j] - y);
-                    float d2 = ddx * ddx + ddy * ddy;
-                    if (d2 > R2 || d2 < 1e-8f) continue;
-                    float d = MathF.Sqrt(d2);
-                    if (d > reach && (ddx * fx + ddy * fy) / d < fovCos) continue;     // outside field of view
-                    float close = 1f - d / R;
-                    crowd += close;
-                    byte sj = w.StageOf[j];
-                    bool active = sj >= St.Juvenile;
-                    // disease passes between organisms in contact that look alike (a pathogen adapted to a host kind)
-                    bool alike = Body.LooksAlike(w, i, j);
-                    if (active && w.Infect[j] > 0 && d <= reach + w.PReach[j] && alike) { infNear++; virSum += w.Virulence[j]; strainSrc = j; }
-                    if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    if (alike)
-                    {
-                        // kin is not sensed as an "other", but a strike can still fall on it (cannibalism)
-                        if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(j)) && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                        if (!active) continue;                               // an own-kind egg is not counted as kin around it
-                        kinSum += close; kinCx += ddx; kinCy += ddy;
-                        kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
-                        if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
-                        if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                        continue;
-                    }
-                    // any other organism, or an egg of another kind
-                    otherSum += close;
-                    float mj = w.ApparentMass(j);
-                    if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    if (mj > o2Mass) { o2Mass = mj; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
-                    float reachJ = reach + 0.5f + 0.4f * MathK.Cbrt(mj);
-                    if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                    if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
-                }
+                if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(j)) && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                if (!active) continue;
+                kinSum += close; kinCx += ddx; kinCy += ddy;
+                kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
+                if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
+                if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                continue;
             }
+            otherSum += close;
+            float mj = w.ApparentMass(j);
+            if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+            if (mj > o2Mass) { o2Mass = mj; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
+            float reachJ = reach + 0.5f + 0.4f * MathK.Cbrt(mj);
+            if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+            if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
+        }
+        if (metrics != null)
+        {
+            if (candidates > K.MAX_NEIGH)
+                CompareUncappedTargets(w, i, x, y, fx, fy, R, R2, fovCos, ready, reach, nOff,
+                    o1, o2, mate, strike, strikeBig, strikeKin, metrics);
+        }
         // ---- features (DESIGN §4)
         Span<float> f = stackalloc float[F.N];
         float emax = w.EmaxOf(i);
@@ -182,6 +198,7 @@ public static class Decide
         f[F.FOOD_GRAD] = MathK.Tanh(MathF.Sqrt(fgx * fgx + fgy * fgy) * 3f);
         bool inWater = (w.Cell[cell] & (byte)Realm.Water) != 0;
         f[F.IN_WATER] = inWater ? 1f : 0f;
+        f[F.DEPTH] = Math.Clamp(w.Depth[cell] / (K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE)), 0f, 1f);
         f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / 8f);   // drinkable water: lakes and full ponds
         f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / 8f);
         float fireNear = (w.Fire[cell] > 0 || w.Fire[CellAt(cell, 2, 0)] > 0 || w.Fire[CellAt(cell, -2, 0)] > 0 || w.Fire[CellAt(cell, 0, 2)] > 0 || w.Fire[CellAt(cell, 0, -2)] > 0) ? 1f : 0f;
@@ -329,8 +346,10 @@ public static class Decide
             {
                 bool fire = rs.Next() < g[p];
                 ge = fire ? 1f : 0f;
-                if (fire) acts |= 1u << (p - P.FIRST_ACTION);
+                if (fire) { acts |= 1u << (p - P.FIRST_ACTION); metrics?.Attempt(p); }
             }
+            if (metrics != null && p == P.SCAN && ge > 0.5f) metrics.Add(ref metrics.ScanActive);
+            if (metrics != null && p == P.SPRINT && g[p] > 0.5f) metrics.Add(ref metrics.SprintRequested);
             delta[p] = ge - g[p];
             g[p] = ge;
         }
@@ -442,6 +461,132 @@ public static class Decide
             f.CopyTo(probe.X); new ReadOnlySpan<float>(w.Hidden, i * G.NH, G.NH).CopyTo(probe.Hid);
             z.CopyTo(probe.Z); probe.Acts = acts; probe.Reward = w.Reward[i]; probe.RewardMean = w.RewardMean[i];
         }
+    }
+
+    static int SelectNeighbours(World w, int i, uint step, int hcx, int hcy, int nOff,
+        Span<int> slots, Span<uint> priorities, out int candidates)
+    {
+        int count = 0;
+        candidates = 0;
+        for (int o = 0; o < nOff; o++)
+        {
+            int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
+            for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
+            {
+                int j = w.Sorted[q];
+                if (j == i) continue;
+                candidates++;
+                if (candidates <= K.MAX_NEIGH)
+                {
+                    slots[count++] = j;
+                }
+                else
+                {
+                    if (candidates == K.MAX_NEIGH + 1)
+                    {
+                        for (int k = 0; k < count; k++) priorities[k] = Rng.Hash(w.Seed, step, w.Serial[i], w.Serial[slots[k]]);
+                        for (int k = count / 2 - 1; k >= 0; k--) HeapDown(slots, priorities, count, k);
+                    }
+                    uint priority = Rng.Hash(w.Seed, step, w.Serial[i], w.Serial[j]);
+                    if (Before(priority, j, priorities[0], slots[0]))
+                    {
+                        slots[0] = j; priorities[0] = priority;
+                        HeapDown(slots, priorities, count, 0);
+                    }
+                }
+            }
+        }
+        if (candidates <= K.MAX_NEIGH) return count;
+        // When the cap binds, keep the 64 lowest stable priorities and process them in priority order.
+        for (int k = 1; k < count; k++)
+        {
+            int slot = slots[k], j = k;
+            uint priority = priorities[k];
+            while (j > 0 && Before(priority, slot, priorities[j - 1], slots[j - 1]))
+            {
+                slots[j] = slots[j - 1]; priorities[j] = priorities[j - 1];
+                j--;
+            }
+            slots[j] = slot; priorities[j] = priority;
+        }
+        return count;
+    }
+
+    static void HeapDown(Span<int> slots, Span<uint> priorities, int count, int k)
+    {
+        while (true)
+        {
+            int child = 2 * k + 1;
+            if (child >= count) return;
+            if (child + 1 < count && Before(priorities[child], slots[child], priorities[child + 1], slots[child + 1])) child++;
+            if (!Before(priorities[k], slots[k], priorities[child], slots[child])) return;
+            Swap(slots, priorities, k, child);
+            k = child;
+        }
+    }
+
+    static bool Before(uint pa, int a, uint pb, int b) => pa < pb || (pa == pb && a < b);
+
+    static void Swap(Span<int> slots, Span<uint> priorities, int a, int b)
+    {
+        (slots[a], slots[b]) = (slots[b], slots[a]);
+        (priorities[a], priorities[b]) = (priorities[b], priorities[a]);
+    }
+
+    static void CompareUncappedTargets(World w, int i, float x, float y, float fx, float fy, float R, float R2,
+        float fovCos, bool ready, float reach, int nOff, Near o1, Near o2, Near mate, Near strike, Near strikeBig,
+        Near strikeKin, DecisionMetrics metrics)
+    {
+        int seen = 0;
+        Near allO1 = new() { D = 1e9f, J = -1 }, allO2 = new() { D = 1e9f, J = -1 },
+            allMate = new() { D = 1e9f, J = -1 }, allStrike = new() { D = 1e9f, J = -1 },
+            allStrikeBig = new() { D = 1e9f, J = -1 }, allStrikeKin = new() { D = 1e9f, J = -1 };
+        float o2Mass = -1f, strikeBigMass = -1f;
+        int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
+        for (int o = 0; o < nOff; o++)
+        {
+            int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
+            for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
+            {
+                int j = w.Sorted[q];
+                if (j == i) continue;
+                seen++;
+                float dx = World.Delta1(w.X[j] - x), dy = World.Delta1(w.Y[j] - y), d2 = dx * dx + dy * dy;
+                if (d2 > R2 || d2 < 1e-8f) continue;
+                float d = MathF.Sqrt(d2);
+                if (d > reach && (dx * fx + dy * fy) / d < fovCos) continue;
+                byte stage = w.StageOf[j];
+                bool active = stage >= St.Juvenile, alike = Body.LooksAlike(w, i, j);
+                if (ready && active && d < allMate.D && ValidPartner(w, i, j))
+                    allMate = new Near { D = d, Dx = dx, Dy = dy, J = j };
+                if (alike)
+                {
+                    if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(j)) && d < allStrikeKin.D)
+                        allStrikeKin = new Near { D = d, Dx = dx, Dy = dy, J = j };
+                    continue;
+                }
+                if (d < allO1.D) allO1 = new Near { D = d, Dx = dx, Dy = dy, J = j };
+                float mass = w.ApparentMass(j);
+                if (mass > o2Mass) { o2Mass = mass; allO2 = new Near { D = d, Dx = dx, Dy = dy, J = j }; }
+                float reachJ = reach + 0.5f + 0.4f * MathK.Cbrt(mass);
+                if (d <= reachJ && d < allStrike.D) allStrike = new Near { D = d, Dx = dx, Dy = dy, J = j };
+                if (d <= reachJ && mass > strikeBigMass)
+                {
+                    strikeBigMass = mass;
+                    allStrikeBig = new Near { D = d, Dx = dx, Dy = dy, J = j };
+                }
+            }
+        }
+        if (seen <= K.MAX_NEIGH) return;
+        metrics.Add(ref metrics.CapHits);
+        if (o1.J != allO1.J) metrics.Add(ref metrics.O1Changed);
+        if (o2.J != allO2.J) metrics.Add(ref metrics.O2Changed);
+        int chosenMate = mate.J >= 0 && mate.D <= reach + 1f ? mate.J : -1;
+        int fullMate = allMate.J >= 0 && allMate.D <= reach + 1f ? allMate.J : -1;
+        if (chosenMate != fullMate) metrics.Add(ref metrics.MateChanged);
+        int chosenStrike = w.PParasite[i] != 0 ? strikeBig.J : strike.J >= 0 ? strike.J : strikeKin.J;
+        int fullStrike = w.PParasite[i] != 0 ? allStrikeBig.J : allStrike.J >= 0 ? allStrike.J : allStrikeKin.J;
+        if (chosenStrike != fullStrike) metrics.Add(ref metrics.StrikeChanged);
     }
 
     /// <summary>Operative temperature an animal would be in at a cell (in the water if the cell is water and it does not fly).</summary>

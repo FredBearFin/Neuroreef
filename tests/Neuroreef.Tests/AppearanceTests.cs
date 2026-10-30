@@ -284,27 +284,27 @@ public class AppearanceTests
         var w = VisibleWorld();
         using var bank = new MemoryStream();
         GeneBank.Save(w, bank);
-        Assert.Equal(9, GeneBank.Version);
+        Assert.Equal(10, GeneBank.Version);
         bank.Position = 0;
         var loaded = GeneBank.Load(bank);
         foreach (var genome in loaded.Genomes[0])
             Assert.Contains(Enumerable.Range(0, 2), i => w.GenomeOf(i).SequenceEqual(genome));
         Assert.Equal(2, loaded.Genomes[0].Count);
-        bank.Position = 4; bank.WriteByte(8); bank.Position = 0;
+        bank.Position = 4; bank.WriteByte(9); bank.Position = 0;
         Assert.Throws<InvalidDataException>(() => GeneBank.Load(bank));
         string path = Path.Combine(Directory.GetCurrentDirectory(), ".appearance-" + Guid.NewGuid().ToString("N"));
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(9, Checkpoint.Version);
+            Assert.Equal(10, Checkpoint.Version);
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);
             Assert.Equal(Frame(w), Frame(restored));
-            using (var file = File.OpenWrite(path)) { file.Position = 4; file.WriteByte(8); }
+            using (var file = File.OpenWrite(path)) { file.Position = 4; file.WriteByte(9); }
             Assert.Throws<InvalidDataException>(() => Checkpoint.WorldHeader(path));
             Assert.Throws<InvalidDataException>(() => Checkpoint.LoadWorld(restored, path));
-            using (var file = File.Create(path)) { file.Write("NRCK"u8); file.WriteByte(8); file.WriteByte(0); }
+            using (var file = File.Create(path)) { file.Write("NRCK"u8); file.WriteByte(9); file.WriteByte(0); }
             Assert.Throws<InvalidDataException>(() => Checkpoint.PrehistoryHeader(path));
         }
         finally { File.Delete(path); File.Delete(path + ".tmp"); }

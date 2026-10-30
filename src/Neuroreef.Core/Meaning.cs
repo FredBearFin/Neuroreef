@@ -66,6 +66,7 @@ public static class Meaning
         S(F.FOOD_HERE, "food here", "no food here", "food,eat,grass,fruit,meat,dinner,lunch,meal", "barren");
         S(F.FOOD_GRAD, "food nearby in one direction", "no food nearby", "this way,over there,find food,forage", "");
         S(F.IN_WATER, "in water", "on land", "swim,swimming,wet,lake,sea", "dry,ground");
+        S(F.DEPTH, "deep water here", "shallow water here", "deep,deeper,deep water", "shallow,shore,shallower");
         S(F.WATER_CLOSE, "water nearby", "far from water", "water,drink,pond,river", "desert,drought");
         S(F.LAND_CLOSE, "land nearby", "far from land", "shore,land,beach", "");
         S(F.FEAR, "smell of danger or fire", "no smell of danger", "fire,smoke,smell,scent,danger,burn", "safe,calm");

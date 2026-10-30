@@ -161,7 +161,7 @@ public static class Life
             {
                 if ((dx * dx + dy * dy) * cs * cs > r * r) continue;
                 int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
-                if (!w.CellAllows(cell, realm)) continue;
+                if (!w.CellAllows(c, cell, realm)) continue;
                 y += Fields.Yield(w, cell, diet); n++;
                 for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell];
                 if (Climate.On) heatNeed += DayNeed(w, c, cell);
@@ -222,6 +222,17 @@ public static class Life
         x = y = 0; return false;
     }
 
+    static bool RandomSite(World w, int i, uint key, out float x, out float y)
+    {
+        for (int t = 0; t < 64; t++)
+        {
+            x = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 100u + (uint)t * 2) * Map.W;
+            y = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 101u + (uint)t * 2) * Map.W;
+            if (w.CellAllows(i, World.FIdx(x, y))) return true;
+        }
+        x = y = 0; return false;
+    }
+
     /// <summary>
     /// Create one founder organism of a clade at step 0 (or from a gene bank). With an empty genome, a random brain
     /// and a random land ancestor's body (tests). With a group centre (gx, gy), it is placed within GROUP_SPREAD of
@@ -249,9 +260,9 @@ public static class Life
                 float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 200u + (uint)t * 2) * 2f * MathF.PI;
                 float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * K.GROUP_SPREAD;
                 x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
-                ok = w.CellAllows(World.FIdx(x, y), realm);
+                ok = w.CellAllows(c, World.FIdx(x, y), realm);
             }
-        if (!ok && !RandomSite(w, realm, key, out x, out y)) { FreeSlot(w, c); return -1; }
+        if (!ok && !RandomSite(w, c, key, out x, out y)) { FreeSlot(w, c); return -1; }
         Place(w, c, clade, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
         w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
         if (adult) { w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9)); w.Grown[c] = 1f; }
@@ -393,13 +404,13 @@ public static class Life
         w.T.Births[w.Spc[i]]++;
         // a hatchling that cannot live where it hatched (its genes gave it another realm than its mother's) moves to the nearest allowed cell
         int cell = World.FIdx(w.X[i], w.Y[i]);
-        if (!w.CellAllows(cell, w.RealmOf(i)))
+        if (!w.CellAllows(i, cell))
         {
             for (int t = 0; t < 24; t++)
             {
                 float a = t * 0.785f, d = 2f + t * 0.5f;
                 float x = World.Wrap(w.X[i] + MathK.Cos(a) * d), y = World.Wrap(w.Y[i] + MathK.Sin(a) * d);
-                if (w.CellAllows(World.FIdx(x, y), w.RealmOf(i))) { w.X[i] = x; w.Y[i] = y; return; }
+                if (w.CellAllows(i, World.FIdx(x, y))) { w.X[i] = x; w.Y[i] = y; return; }
             }
             Resolve.Die(w, i, Cause.Orphan, -1);
         }
