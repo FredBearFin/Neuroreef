@@ -66,6 +66,7 @@ public static class Program
             if (!resuming) o.ApplyNature(prehistory: true);   // a resumed one takes its map and nature from its checkpoint
             return Headless.Evolve(o);
         }
+        if (o.ValidateSeeds > 0) { o.ApplyNature(prehistory: false); return Validate.Run(o, bank); }
         if (o.Headless) { o.ApplyNature(prehistory: false); return Headless.Run(o, bank); }
         // a new prehistory: let the person choose its size first, so nothing is allocated that the machine cannot hold
         bool newPrehistory = bank == null && !o.RandomBrains && !o.ResumePrehistory;

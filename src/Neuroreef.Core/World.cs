@@ -65,6 +65,9 @@ public sealed class World
     public readonly float[] VMean;         // running mean of that match
     public readonly byte[] Tmpl;           // Cap * Voice.NTMPL  remembered tutors' syllable pairs: (start or previous sound) -> next sound, counts
     public readonly float[] Hidden;        // Cap * G.NH
+    /// <summary>Control experiment (--validate): when true, every animal's recurrent state (Hidden) is zeroed before its
+    /// brain runs each step, so it keeps its genome and learned weights but remembers no past activity. Default off.</summary>
+    public bool MemoryReset;
     public readonly float[] Gain;          // Cap * P.N     last gains (after exploration)
     public readonly float[] Feat;          // Cap * F.N     last features (for probe/telemetry)
     // ---- agents: intents written by DECIDE (own slot only)

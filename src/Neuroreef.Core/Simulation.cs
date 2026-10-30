@@ -43,7 +43,13 @@ public sealed class Simulation : IDisposable
         }
         Life.Run(W, _active);   // clears newborn flags, counts
 
-        _decideJob = (lo, hi) => { for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe); };
+        _decideJob = (lo, hi) =>
+        {
+            // the memory-reset control (World.MemoryReset, off by default): forget the last step's activity of the
+            // units in use (Brain.Forward zeroes the rest itself); weights and learning traces are kept
+            if (W.MemoryReset) for (int i = lo; i < hi; i++) Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]);
+            for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe);
+        };
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
         _pool = new Workers(Math.Max(1, threads));
     }

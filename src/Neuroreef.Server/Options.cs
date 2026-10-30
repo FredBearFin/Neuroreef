@@ -24,6 +24,9 @@ public sealed class Options
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
     public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f, Climate = K.CLIMATE;
     public int SeasonLength = K.T_SEASON;
+    // --validate N (Validate.cs): N seeds, each run normally and with the memory-reset control
+    public int ValidateSeeds, BigBrainMin = 64;
+    public bool SeedSet;
 
     /// <summary>Apply the nature settings and the map for what is about to be built (not when resuming a save).</summary>
     public void ApplyNature(bool prehistory)
@@ -103,8 +106,8 @@ public sealed class Options
   --founders N          prehistory: founders per ancestor (default 600)
   --branch-slots N      prehistory: animal slots per branch (default 49152; memory grows with it)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
-  --map valley|region|continent        map of the prehistory (default continent)
-  --world-map valley|region|continent  map of the world you watch (default continent, as big as the prehistory)
+  --map valley|region|continent|supercontinent        map of the prehistory (default continent; 256/512/1024/2048 units)
+  --world-map valley|region|continent|supercontinent  map of the world you watch (default continent, as big as the prehistory)
   --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
   --mating-drive X      strength of the breeding instinct (default 1)
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
@@ -118,6 +121,10 @@ public sealed class Options
   --report N            headless: report interval in steps (default 2000)
   --csv FILE            headless: write the telemetry ring as CSV at the end
   --empty               headless: plants only, no animals (checks the vegetation laws on their own)
+  --validate N          headless experiment: N seeds (from --seed, default 1), each world run twice for --steps steps
+                        (default 5000): normally, and with every animal's recurrent memory zeroed each step (learned
+                        weights kept). Prints survival of lineages and big-brained lineages, population, brain size, steps/s
+  --big-brain-min N     validate: memory units from which a lineage or animal counts as big-brained (default 64)
   --print-constants     print docs/CONSTANTS.md and exit
 ";
 
@@ -130,7 +137,7 @@ public sealed class Options
             string Next() => i + 1 < a.Length ? a[++i] : throw new ArgumentException("missing value after " + s);
             switch (s)
             {
-                case "--seed": o.Seed = uint.Parse(Next()); break;
+                case "--seed": o.Seed = uint.Parse(Next()); o.SeedSet = true; break;
                 case "--capacity": o.Capacity = Math.Clamp(int.Parse(Next()), 1024, World.MaxSlots); break;
                 case "--threads": o.Threads = int.Parse(Next()); break;
                 case "--port": o.Port = int.Parse(Next()); break;
@@ -173,6 +180,8 @@ public sealed class Options
                 case "--climate": o.Climate = F(Next()); break;
                 case "--world-mutation": o.WorldMut = F(Next()); break;
                 case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); o.NoSetup = true; break;
+                case "--validate": o.ValidateSeeds = Math.Max(1, int.Parse(Next())); o.Headless = true; break;
+                case "--big-brain-min": o.BigBrainMin = Math.Clamp(int.Parse(Next()), K.BRAIN_MIN, G.NH); break;
                 case "--print-constants": o.PrintConstants = true; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");
