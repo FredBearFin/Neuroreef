@@ -24,7 +24,7 @@ public static class Terrain
         }
     }
 
-    static Func<float, float, float> Fbm(ref Rng.Seq r, int baseL, int oct)
+    internal static Func<float, float, float> Fbm(ref Rng.Seq r, int baseL, int oct)
     {
         var ns = new Noise[oct];
         for (int o = 0; o < oct; o++) ns[o] = new Noise(baseL << o, ref r);
@@ -36,12 +36,9 @@ public static class Terrain
         };
     }
 
-    /// <summary>The raw relief of a world (Elev normalised to 0..1) and its lake level, before water has worked on it.</summary>
-    public static void Relief(World w)
-    {
-        var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
-        Heights(w, Fbm(ref r, 3, 6));
-    }
+    /// <summary>The raw relief of a world (Elev normalised to 0..1), its rock and its lake level, before the fine passes of
+    /// running water have worked on it: the deep-time genesis of Geology.Form (Revision R).</summary>
+    public static void Relief(World w) => Geology.Form(w);
 
     /// <summary>
     /// The rain that runs over the land (Revision Q): Climate.Rainfall over the land as it lies with only its lakes
@@ -62,35 +59,30 @@ public static class Terrain
     {
         int FW = Map.FW, n = FW * FW;
         var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
-        var elevN = Fbm(ref r, 3, 6);
         var moistN = Fbm(ref r, 4, 4);
         var vegN = Fbm(ref r, 6, 3);
-        Heights(w, elevN);
+        // Geology (Revision R): plates, uplift and tens of millions of years of erosion make the relief and its rock
+        Geology.Form(w);
 
         // Hydrology (Revision Q): rain falls on the land as it lies with its lakes, runs downhill (Priority-Flood
         // routing), cuts the ground and lays down what it carries (Hydrology.Erode). Rivers are the cells that gather
-        // the most rain; nothing else decides where they are.
+        // the most rain; nothing else decides where they are. Revision R: hard rock cuts slower.
         var rain0 = RunoffRain(w);
-        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS);
+        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w));
         var net = new Hydrology.Net(n);
         Hydrology.Route(w.Elev, w.SeaLevel, rain0, net);
         Array.Copy(net.Flow, w.Flow, n);
         BuildWater(w, net, moistN, vegN);
     }
 
-    static void Heights(World w, Func<float, float, float> elevN)
+    /// <summary>Normalise Elev to 0..1 and set the lake level: the Nature.Water quantile of elevation.</summary>
+    internal static void LakeLevel(World w)
     {
-        int FW = Map.FW, n = FW * FW;
-        float mn = 1, mx = 0;
-        for (int y = 0; y < FW; y++)
-            for (int x = 0; x < FW; x++)
-            {
-                float e = elevN(x / (float)FW, y / (float)FW);
-                w.Elev[y * FW + x] = e; mn = MathF.Min(mn, e); mx = MathF.Max(mx, e);
-            }
-        for (int i = 0; i < n; i++) w.Elev[i] = (w.Elev[i] - mn) / (mx - mn);
-
-        // Lake level: the LAKE_SHARE quantile of elevation.
+        int n = Map.FW * Map.FW;
+        float mn = float.MaxValue, mx = float.MinValue;
+        for (int i = 0; i < n; i++) { mn = MathF.Min(mn, w.Elev[i]); mx = MathF.Max(mx, w.Elev[i]); }
+        float sc = 1f / MathF.Max(1e-12f, mx - mn);
+        for (int i = 0; i < n; i++) w.Elev[i] = (w.Elev[i] - mn) * sc;
         var sorted = (float[])w.Elev.Clone();
         Array.Sort(sorted);
         w.SeaLevel = sorted[(int)(Nature.Water * n)];
@@ -146,7 +138,8 @@ public static class Terrain
                 float wet = MathK.Exp(-w.DistWater[i] / 10f);
                 float valley = 1f - MathF.Min(1f, MathF.Max(0f, (w.Elev[i] - w.SeaLevel) / (1f - w.SeaLevel)));
                 w.MoistBase[i] = Math.Clamp(0.15f + 0.45f * wet + 0.25f * valley + 0.35f * (m - 0.5f) * 2f, 0.05f, 1f);
-                w.Fert[i] = Math.Clamp(0.3f + 0.7f * (m - 0.25f) * 1.6f, 0.1f, 1f);
+                // parent material (Revision R): the soil weathers from the rock beneath it; FERT_VAR of local variation on top
+                w.Fert[i] = Math.Clamp(Rock.Fert[w.Rock[i]] + K.FERT_VAR * 2f * (m - 0.5f), 0.1f, 1f);
                 // alluvium (Revision Q): sediment laid down by running water makes young, rich soil
                 if (w.Cell[i] == (byte)Realm.Land) w.Fert[i] = MathF.Min(1f, w.Fert[i] + K.ALLUV_FERT * (1f - MathK.Exp(-w.Alluvium[i] / K.ALLUV_D)));
                 w.Moisture[i] = w.MoistBase[i];

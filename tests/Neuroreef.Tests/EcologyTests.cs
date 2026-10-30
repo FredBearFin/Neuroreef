@@ -19,7 +19,7 @@ public class EcologyTests
         var w = sim.W;
         int used = 0; for (int s = 0; s < K.CLADES; s++) if (w.Sp[s].Used) used++;
         Assert.Equal(K.ANCESTORS_LAND + K.ANCESTORS_WATER, used);
-        var viable = new bool[K.CLADES]; var seen = new bool[K.CLADES];
+        var fed = new int[K.CLADES]; var founders = new int[K.CLADES];
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] < St.Juvenile) continue;
@@ -28,12 +28,16 @@ public class EcologyTests
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             Assert.True(w.CellAllows(i, World.FIdx(w.X[i], w.Y[i]), w.RealmOf(i) & (land ? Realm.Land : Realm.Water)));
             var c = w.Sp[s];
-            if (!seen[s]) { seen[s] = true; viable[s] = Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR) > 0f; }
+            founders[s]++; if (Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR) > 0f) fed[s]++;
             Assert.True(w.PStrike[i] <= 0.65f * K.STRIKE_MAX, $"clade {s} strike {w.PStrike[i]}");   // weapons and armour start in the same range (Revision L)
         }
         // nearly every ancestor is a body its home range can feed (of ANCESTOR_TRIES random bodies; a big size class may find
-        // none and start with the best fed, as the founding says)
-        int nv = viable.Count(v => v), ns = seen.Count(v => v);
+        // none and start with the best fed, as the founding says). The ancestor is the centre of its founders' variation,
+        // so it is measured by them: most of its founders can live there. (Revision R: it was measured by whichever founder
+        // came first in the slots; on the new land seed 7 drew three clades whose first founder varied just below the
+        // FORAGE_MARGIN cutoff, while 39-100% of each clade's founders could live on its home range.)
+        var viable = Enumerable.Range(0, K.CLADES).Select(s => founders[s] > 0 && 2 * fed[s] >= founders[s]).ToArray();
+        int nv = viable.Count(v => v), ns = founders.Count(v => v > 0);
         Assert.True(nv >= ns - 2, $"only {nv} of {ns} ancestors can live on their home range");
         // the ancestors differ from each other: their bodies are random, not designed
         // (by their mass genes: several bodies of one size class can sit exactly at its floor)

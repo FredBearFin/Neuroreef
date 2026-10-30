@@ -15,7 +15,8 @@ public class HydrologyTests
         Terrain.Relief(w);
         var rain = Terrain.RunoffRain(w);
         var h0 = (float[])w.Elev.Clone();
-        var b = Hydrology.Erode(w.Elev, w.SeaLevel, rain, w.Alluvium, K.ERODE_ITERS);
+        // Revision R: the relief is the geological genesis, and its rock sets how fast each cell cuts, as in Terrain.Build
+        var b = Hydrology.Erode(w.Elev, w.SeaLevel, rain, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w));
         return (w, h0, rain, b);
     }
 
@@ -91,25 +92,35 @@ public class HydrologyTests
         Assert.True(w.Depth[big] > w.Depth[small]);
     }
 
-    [Fact] // stream power: channels on slopes are cut down more than twice as far as hillsides; what is cut is laid down or reaches a lake
+    [Fact] // stream power: channels are cut down more than twice as far as hillsides; what is cut is laid down or reaches a lake
     public void ErosionLowersChannelsAndConservesSediment()
     {
-        var (w, h0, rain, b) = Worked(1);
+        // Revision R: on a relief already graded by deep time (Geology) the fine passes are transport-limited: the slopes
+        // send down more than the valleys carry, and the valley floors fill (alluvial rivers). The incision itself is
+        // tested alone, with no deposition and no creep: pure detachment-limited stream power on the same relief
+        var w = new World(16, 1);
+        Terrain.Relief(w);
+        var rain = Terrain.RunoffRain(w);
+        var h0 = (float[])w.Elev.Clone();
         int n = Map.FW * Map.FW;
         var raw = new Hydrology.Net(n);
         Hydrology.Route(h0, w.SeaLevel, rain, raw);
-        double chan = 0, hill = 0, lost = 0; int nc = 0, nh = 0;
+        var cutOnly = (float[])h0.Clone();
+        Hydrology.Erode(cutOnly, w.SeaLevel, rain, new float[n], K.ERODE_ITERS, drop: 0f, kCreep: 0f, kRock: Geology.Erodibility(w));
+        double chan = 0, hill = 0; int nc = 0, nh = 0;
         for (int i = 0; i < n; i++)
         {
-            lost += h0[i] - w.Elev[i];
             if (h0[i] < w.SeaLevel || raw.Fill[i] > h0[i]) continue;   // lakes and closed basins
-            if (raw.Flow[i] > K.RIVER_ACC) { chan += h0[i] - w.Elev[i]; nc++; }
-            else if (raw.Flow[i] < 4f) { hill += h0[i] - w.Elev[i]; nh++; }
+            if (raw.Flow[i] > K.RIVER_ACC) { chan += h0[i] - cutOnly[i]; nc++; }
+            else if (raw.Flow[i] < 4f) { hill += h0[i] - cutOnly[i]; nh++; }
         }
         chan /= nc; hill /= nh;
         Assert.True(nc > 100 && nh > 1000, $"{nc} channel and {nh} hillside cells");
         Assert.True(chan > 0f && chan > 2 * hill, $"channels lowered {chan * K.H_RELIEF:F1} m, hillsides {hill * K.H_RELIEF:F1} m");
-        // mass: the land lost exactly what went into the lakes (stream load and creep); the rest moved and stayed
+        // the whole model: the land lost exactly what went into the lakes (stream load and creep); the rest moved and stayed
+        var (v, v0, _, b) = Worked(1);
+        double lost = 0;
+        for (int i = 0; i < n; i++) lost += v0[i] - v.Elev[i];
         Assert.True(b.Eroded > 0 && b.Deposited > 0 && b.Deposited < b.Eroded);
         Assert.Equal(1.0, lost / b.ToLakes, 2);
     }

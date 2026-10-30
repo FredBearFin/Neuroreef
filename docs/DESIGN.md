@@ -3,6 +3,54 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Land formed by geology (Revision R)** (2026-10-30; the user: "the land should be FORMED by geological processes at
+world creation, not drawn from fractal noise"). Before, the relief was fBm noise, the lakes its lowest 10%, and 20
+erosion passes cut it. Now Geology.Form (Geology.cs) makes it in deep time, and Terrain.Build finishes it with the same
+fine Hydrology.Erode passes and the rest of BuildWater as before.
+- *Plates.* 5-9 plates on the torus: a weighted, warped Voronoi tessellation. Each plate has a velocity (1-8 cm/yr and a
+  slow spin) and a crust 30-45 km thick. At a convergent boundary, crusts within GEO_SUBDUCT of each other collide and
+  thicken a belt on both sides. Otherwise the thinner plate sinks: the thicker one carries a volcanic arc 200 km in,
+  and the sinking one gets a flexural moat. Divergent boundaries thin the crust into rifts, which stop sinking at
+  20 km of crust. Only the closing or opening part of the relative motion works the crust, so transforms do little.
+  Thickening follows mass balance (T c / (sqrt(pi) W) across a belt), and Airy isostasy turns it into rock uplift
+  (x0.15). Each plate starts at the Airy height of its own crust.
+- *Rock.* Old thick plates (40 km or more) expose crystalline basement; younger ones carry 1.5 km of sedimentary cover.
+  Arcs and fast rift axes are volcanic. Erosion strips cover before it cuts bedrock, and sediment laid down becomes
+  cover. Erodibility (Stock & Montgomery 1999) is 1, 0.5 and 0.25 /Myr for sedimentary, volcanic and crystalline rock.
+  World.Rock holds the surface kind, and the fine passes cut it at those ratios (Hydrology.Erode's new kRock).
+  Fertility comes from the parent rock: crystalline 0.4, sedimentary 0.6, volcanic 0.85 (andosols), +-FERT_VAR of local
+  variation, plus alluvium as before. It replaces the old noise fertility.
+- *Deep time.* 200 steps over 60 Myr on a coarse grid of FW/2 cells. Each step applies uplift, then stream power above
+  a threshold (implicit, Braun & Willett 2013) over Priority-Flood routing of Climate.Rainfall (re-read every 25 steps
+  as the relief grows). Then come transport and deposition as in Hydrology.Erode, hillslope diffusion, and flexural
+  isostasy (the ground rises by 0.82 of what is worn off, spread over 150 km). Lakes, the Nature.Water quantile
+  throughout, are the base level. The result is upsampled (Catmull-Rom), and roughness of 6% of the coarse cell-to-cell
+  relief is added on top. Checkpoint version 14.
+What did not work on the way: (1) With no limit, a big river dumped its load in one cell and built sediment towers 15 km
+high; a deposit may now not rise above the lowest cell that feeds it. (2) With no plateau limit, rebound lifted eroded
+peaks to 10-17 km and squashed the rest of the land under them; nothing now rises above GEO_H_MAX = 5 km. (3) Plains
+were worn down to lake level. Their lakes then broke into thousands of puddles, and rivers fell to 0.02-0.5% of the
+map. The fixes were flexural rebound, relief-proportional roughness only, and (4) an erosion threshold GEO_PSI. Without
+the threshold, 60 Myr stripped the platform cover from all but the river beds, and 75% of the land was bare basement.
+Measured (default map, seeds 1, 2, 3, 7, 11; before -> after):
+- Relief above the lakes: mean 0.93-1.26 -> 0.84-1.15 km, SD 540-650 -> 710-900 m, p90 1.8-2.1 -> 2.0-2.7 km.
+- Land above 1500 m: 21-38% -> 17-31%. Mean slope: 39-51 -> 98-121 m/cell (mountains are steeper and plains flatter).
+- Convergent belts are 19-29% of the map and stand 1.3-2.1 km high, against 0.6-0.75 km in plate interiors. They hold
+  64-95% of the highest tenth of the land.
+- Rift belts are 5-10% of the map, stand -0.17 to +0.16 km, and are 46-71% lake. Lakes are 10.3-10.4% of the map.
+- Surface rock on land: crystalline 46-57%, sedimentary 39-50%, volcanic 4-6%. At the end of deep time, dh/dt is
+  5-18% of the uplift in the uplifting belts (near steady state).
+- Rivers 0.82-1.05% -> 0.50-0.95% of the map. Alluvial land 10-12% -> 9-11%. Land fertility 0.56-0.66 -> 0.54-0.58.
+- Drinkable water is 11-14 -> 13-15 cells away on average. Pond sites 650-1900 -> 94-1260 cells: a fluvially graded
+  landscape has few closed hollows.
+- Generation time: 0.7-1.2 -> 1.6-2.1 s at the 1024 map, and 3.3-3.7 -> 7.5-8.5 s at 2048 (rivers 0.43-0.64 -> 0.30-0.61%).
+  These were measured on 4 cores while another job shared the machine.
+On this graded relief the fine passes are transport-limited: valley floors fill (+5-50 m, seed 1) and slopes lose ~10 m. So
+HydrologyTests now tests incision alone (no deposition or creep) and the full model's mass budget.
+EcologyTests' ancestor-viability check now measures a clade by most of its founders, not by the first in the slots
+(on the new land, three first founders varied just below FORAGE_MARGIN).
+Simplifications: the plate boundaries are fixed over deep time; the plateau limit is a cap, not crustal flow; and the
+plates' scale (GEO_KM 5,000 km) is not the climate's or the animals'.
 **Memory that matters: local senses and path integration** (2026-10-30; the user: "make an animal's memory useful,
 by taking away its omniscient senses and giving it a self-motion sense"). Before the change SEEK_WATER and SEEK_LAND
 steered down a map-wide distance field (DistDrink, DistLand), so an animal knew the way to water from anywhere, and a

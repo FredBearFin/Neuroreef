@@ -41,11 +41,12 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
-        // Revision Q (hydrology) re-pinned it: the terrain itself changed (rain-routed rivers, a relief worked by erosion
-        // with alluvium on it, basin ponds, floods), so the same seed grows different fields; Climate = 0 still skips every
-        // climate rule. It was 0x18289DE28D12409D at Revision P with continuous water depth (commit dde4d60), and
-        // 0x3BF8C06B3FB53E61 at Revision N (commit 2baed5e); same seed, map and steps.
-        Assert.Equal(0x52A982E9B31E42C1UL, h);
+        // Revision R (geology) re-pinned it: the land is now formed by plates and deep-time erosion instead of fBm noise,
+        // with rock and parent-material fertility, so the same seed grows different fields; Climate = 0 still skips every
+        // climate rule. It was 0x52A982E9B31E42C1 at Revision Q (hydrology, commit 4583355), 0x18289DE28D12409D at
+        // Revision P with continuous water depth (commit dde4d60), and 0x3BF8C06B3FB53E61 at Revision N (commit 2baed5e);
+        // same seed, map and steps.
+        Assert.Equal(0x47BA1DC94894B8A4UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

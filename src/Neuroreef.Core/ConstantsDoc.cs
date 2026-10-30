@@ -19,7 +19,7 @@ public static class ConstantsDoc
         sb.Append("Document NR-CT-001, Revision B. **Generated** from `src/Neuroreef.Core/Constants.cs` and `Species.cs` by\n");
         sb.Append("`Neuroreef.exe --print-constants`; do not edit by hand. A test fails if this file and the code disagree (NR-106).\n\n");
         sb.Append("Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponent from the literature;\n");
-        sb.Append("**HT** hand-tuned in headless runs; **-** derived.\n\n");
+        sb.Append("**GEO** geological or geophysical value from the literature; **HT** hand-tuned in headless runs; **-** derived.\n\n");
         var fields = typeof(K).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
         string? group = null;
         int gi = 0;

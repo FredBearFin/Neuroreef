@@ -4,7 +4,7 @@ Document NR-CT-001, Revision B. **Generated** from `src/Neuroreef.Core/Constants
 `Neuroreef.exe --print-constants`; do not edit by hand. A test fails if this file and the code disagree (NR-106).
 
 Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponent from the literature;
-**HT** hand-tuned in headless runs; **-** derived.
+**GEO** geological or geophysical value from the literature; **HT** hand-tuned in headless runs; **-** derived.
 
 
 ## 1. World
@@ -517,6 +517,50 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLOOD_HAND | 0.5 | xSHALLOW | floodplain: cells at most this high above that river, x SHALLOW | HT: bounds the search; the stage decides which of them flood |
 | FLOOD_MIX | 0.5 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each pond update (POND_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993) |
 
-## 31. Organisms
+## 31. Geology
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| GEO_PLATES_LO | 5 | plates | fewest tectonic plates on the map (the count is drawn uniformly from GEO_PLATES_LO to GEO_PLATES_HI) | GEO: Earth has 7 major and ~8 secondary plates (Bird 2003); the map is a continent's worth of them |
+| GEO_PLATES_HI | 9 | plates | most tectonic plates on the map | GEO: as GEO_PLATES_LO |
+| GEO_KM | 5000 | km | side of the map as the plates see it | GEO/HT: a few plates of 1,500-3,000 km (Bird 2003) on a coarse grid that resolves a rift (GEO_W_RIFT) in 2-3 cells; not the climate's pole-to-pole rows nor the animals' walking scale (the world's scales are not one) |
+| GEO_SIZE_VAR | 0.5 | - | spread of plate sizes: each plate's Voronoi weight is up to this share of the mean plate spacing | GEO: plate areas span orders of magnitude (Bird 2003; Morra et al. 2013) |
+| GEO_WARP | 0.3 | - | bending of plate boundaries: the Voronoi is drawn on positions warped by up to this share of the map (low-frequency noise) | HT: real boundaries curve and kink; a warp of the plates' outline, not relief |
+| GEO_V_LO | 10 | km/Myr | slowest plate | GEO: plate speeds 1-8 cm/yr (DeMets, Gordon & Argus 2010, MORVEL); 1 cm/yr = 10 km/Myr |
+| GEO_V_HI | 80 | km/Myr | fastest plate | GEO: as GEO_V_LO |
+| GEO_SPIN | 0.005 | rad/Myr | largest spin of a plate about its centre (drawn in ±this) | GEO: Euler-pole rotation rates 0.1-1 °/Myr (DeMets et al. 2010); 0.3 °/Myr |
+| GEO_T_LO | 30 | km | thinnest plate crust | GEO: continental crust is 30-45 km thick, mean ~40 (Christensen & Mooney 1995) |
+| GEO_T_HI | 45 | km | thickest plate crust | GEO: as GEO_T_LO |
+| GEO_T_CRATON | 40 | km | plates at least this thick are old shields: crystalline basement at the surface; thinner, younger plates carry sedimentary cover | GEO: shields expose Precambrian basement; platforms are covered by younger strata (Sloss 1963; Durrheim & Mooney 1991) |
+| GEO_COVER | 1.5 | km | sedimentary cover on a young platform at the start | GEO: platform cover is 1-3 km thick (the Russian and North American platforms; Sloss 1963) |
+| GEO_T_MIN | 20 | km | thinnest crust a rift or a foredeep can stretch to; it stops sinking there | GEO: continental rifts thin the crust by a stretching factor of ~1.5-2 before breakup (McKenzie 1978) |
+| GEO_SUBDUCT | 6 | km | at a convergent boundary, plates whose crust differs by more than this subduct (the thinner sinks, the thicker carries an arc); closer ones collide | HT: thinner, denser lithosphere sinks under buoyant thick crust (ocean-continent: the Andes); equal buoyant crusts collide (the Himalaya) |
+| GEO_AIRY | 0.15 | - | Airy isostasy: rock uplift per unit of crustal thickening, (rho_m - rho_c) / rho_m | GEO: crust 2,800 kg/m3 floating on mantle 3,300 (Airy 1855; Turcotte & Schubert 2002) |
+| GEO_W_OROGEN | 300 | km | half-width of a collision belt (thickening x exp(-(d/W)^2) on each side) | GEO: collision orogens are 200-1,000 km wide (the Alps ~200, the Himalaya-Tibet ~1,000) |
+| GEO_W_ARC | 100 | km | half-width of a volcanic arc, and of the trench moat in front of it | GEO: arc volcanic fronts are ~50-150 km wide (Gill 1981) |
+| GEO_ARC_D | 200 | km | distance of the arc behind the plate boundary (the arc-trench gap) | GEO: arc-trench gaps are 100-300 km (Dickinson 1973) |
+| GEO_ARC_SHARE | 0.3 | - | share of the convergence an arc takes up as thickening (shortening and magma), against a collision belt's all | GEO/HT: at ocean-continent margins most convergence is subducted; arcs thicken by magmatic addition and some shortening (Isacks 1988; Reymer & Schubert 1984) |
+| GEO_FOREDEEP | 0.3 | - | depth of the trench moat on the sinking plate, as a share of the arc's thickening | GEO: a flexural moat in front of a load is about a third of its height (Turcotte & Schubert 2002, §3.17) |
+| GEO_W_RIFT | 100 | km | half-width of a rift (thinning x exp(-(d/W)^2) on each side) | GEO: rift basins are 40-100 km wide, rift zones up to ~200 (the East African and Baikal rifts; Ebinger 1989) |
+| GEO_OBLIQUE | 0.34 | - | a boundary is transform where the plates' closing or opening is under this share of their relative motion (within ~20° of it) | HT: strike-slip boundaries carry little convergence (the San Andreas: ~10%, transpression) |
+| GEO_H_MAX | 5 | km | highest ground uplift can raise: above it a thickened crust spreads under its own weight instead of rising | GEO: orogenic plateaus stand at most ~5 km (Tibet, the Altiplano at ~4); a thicker crust flows apart (Molnar & Lyon-Caen 1988) |
+| GEO_REBOUND | 0.82 | - | flexural isostasy: the ground rises by this share of the rock eroded from it (and sinks so under sediment laid on it), spread over GEO_FLEX | GEO: rho_crust / rho_mantle = 2,700 / 3,300; why old mountains outlast their erosion (Molnar & England 1990; Watts 2001) |
+| GEO_FLEX | 150 | km | radius over which the lithosphere spreads the isostatic response to a load (two box blurs) | GEO: flexural wavelengths of continental lithosphere are 100-300 km for elastic thicknesses of 10-40 km (Watts 2001) |
+| GEO_MYR | 60 | Myr | length of the deep time over which uplift and erosion work the land | GEO: active orogens come near a flux steady state in a few to ~10 Myr (Willett & Brandon 2002); this is several times that |
+| GEO_ITERS | 200 | steps | steps of uplift, stream power, transport and diffusion over GEO_MYR (on the coarse grid, FW / 2) | HT: 0.3 Myr a step; the incision is implicit, so the step is stable at any length |
+| GEO_RAIN_EVERY | 25 | steps | steps between re-reading where rain falls on the growing relief (Climate.Rainfall) | HT: rain follows the relief (orographic rain, rain shadows), which changes slowly |
+| GEO_PSI | 0.3 | km | erosion threshold: bedrock is cut only where sqrt(A) S exceeds this (A in km2) | GEO: channels incise only above a critical shear stress (Tucker 2004; Lague, Hovius & Davy 2005); a channel draining 10,000 km2 on a slope of 3 in 1,000; low plains stop wearing down and keep their cover (without it, 60 Myr stripped the platform cover from all but the river beds, and 75% of the land was bare basement) |
+| GEO_K_SED | 1 | /Myr | stream-power erodibility of soft sedimentary rock: dh/dt = -K sqrt(A) S (A in km2) | GEO: K spans ~0.1-100 /Myr for m = 0.5 from crystalline to weak sedimentary and volcaniclastic rock (Stock & Montgomery 1999) |
+| GEO_K_VOLC | 0.5 | /Myr | stream-power erodibility of volcanic rock | GEO: lavas, tuffs and breccias: between basement and soft strata (Stock & Montgomery 1999) |
+| GEO_K_CRYST | 0.25 | /Myr | stream-power erodibility of crystalline rock (granite, gneiss) | GEO: the hardest (Stock & Montgomery 1999); erodibility falls with tensile strength squared (Sklar & Dietrich 2001); the contrast is narrowed at cells tens of km wide, where jointing and weathering govern |
+| GEO_DIFF | 50 | km2/Myr | hillslope diffusivity on the coarse grid (sub-grid landsliding and creep) | HT: an effective diffusivity for cells tens of km wide, far above soil creep (~0.01 km2/Myr; Fernandes & Dietrich 1997) as in large-scale landscape models (Tucker & Bras 1998) |
+| GEO_SED_MIN | 0.02 | km | sediment thicker than this makes a cell's surface rock sedimentary | HT: 20 m of strata hides its bedrock |
+| GEO_ROUGH | 0.06 | - | sub-grid roughness: relief within a coarse cell, as a share of the relief between it and its neighbours | GEO/HT: topography is about self-similar over these scales (Turcotte 1997); roughness on top of the worked relief, not the relief |
+| FERT_CRYST | 0.4 | - | base fertility of soil on crystalline rock | ECO: granite and gneiss weather to acid, base-poor soils (FAO WRB 2015) |
+| FERT_VOLC | 0.85 | - | base fertility of soil on volcanic rock | ECO: volcanic ash and basalt weather to andosols, among the most fertile soils (Shoji, Nanzyo & Dahlgren 1993) |
+| FERT_SED | 0.6 | - | base fertility of soil on sedimentary rock | ECO: shales and limestones weather to moderately rich soils, sandstones to poor ones; their mean |
+| FERT_VAR | 0.15 | - | local variation of fertility about its parent material (±, from organic matter, drainage and soil age) | HT: was the whole fertility (noise) before Revision R |
+
+## 32. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

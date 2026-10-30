@@ -38,12 +38,15 @@ public static class Hydrology
     /// Route rain over h on the torus. Cells below sea are lakes, the outlets; if there are none the lowest cell is.
     /// Flow[i] = rain[i] + the Flow of every cell draining into i; at the lakes it sums to the whole map's rain.
     /// </summary>
-    public static void Route(float[] h, float sea, float[] rain, Net net)
+    public static void Route(float[] h, float sea, float[] rain, Net net) => Route(h, sea, rain, net, Map.FW, null, null);
+
+    /// <summary>Route on a torus of side FW (Geology's coarse grid); seen and pq are optional scratch reused across calls.</summary>
+    internal static void Route(float[] h, float sea, float[] rain, Net net, int FW, bool[]? seen, PriorityQueue<int, float>? pq)
     {
-        int FW = Map.FW, n = FW * FW;
+        int n = FW * FW;
         int[] recv = net.Recv, order = net.Order; float[] fill = net.Fill, flow = net.Flow;
-        var seen = new bool[n];
-        var pq = new PriorityQueue<int, float>(n);
+        if (seen == null) seen = new bool[n]; else Array.Clear(seen, 0, n);
+        if (pq == null) pq = new PriorityQueue<int, float>(n); else pq.Clear();
         int lo = 0;
         for (int i = 0; i < n; i++)
         {
@@ -74,10 +77,11 @@ public static class Hydrology
 
     /// <summary>
     /// Stream-power incision and deposition over iters passes, changing h in place (lakes, below sea, are base level and
-    /// do not change). alluv receives the depth of sediment left on each cell. Returns the mass budget.
+    /// do not change). alluv receives the depth of sediment left on each cell. kRock (Revision R, optional): each cell's
+    /// erodibility against soft sedimentary rock (Geology.Erodibility); hard rock cuts slower. Returns the mass budget.
     /// </summary>
     public static Budget Erode(float[] h, float sea, float[] rain, float[] alluv, int iters,
-        float kErode = K.ERODE_K, float kCarry = K.CARRY_K, float drop = K.DEPOSIT_FRAC, float kCreep = K.CREEP_K)
+        float kErode = K.ERODE_K, float kCarry = K.CARRY_K, float drop = K.DEPOSIT_FRAC, float kCreep = K.CREEP_K, float[]? kRock = null)
     {
         int FW = Map.FW, n = FW * FW;
         var net = new Net(n);
@@ -110,7 +114,9 @@ public static class Hydrology
                 int c = order[q], r = recv[c];
                 cut[c] = 0f;
                 if (r < 0 || h[c] <= h[r]) continue;        // a lake, or the floor of a closed basin: no slope to cut
-                float F = kErode * MathF.Pow(flow[c], K.ERODE_M) / Dist(c, r, FW);
+                // bedrock under alluvium is not cut until the alluvium is gone: sediment is soft (kRock 1)
+                float kr = kRock == null || alluv[c] > 0f ? 1f : kRock[c];
+                float F = kErode * kr * MathF.Pow(flow[c], K.ERODE_M) / Dist(c, r, FW);
                 float hn = (h[c] + F * h[r]) / (1f + F);
                 cut[c] = h[c] - hn; h[c] = hn;
             }
