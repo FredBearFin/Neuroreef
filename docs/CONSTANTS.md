@@ -57,20 +57,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | C_SIRE | 0.2 | - | cost to a hermaphrodite of siring, as a share of its own litter's cost (male function) | ECO: male function takes 10-30% of a simultaneous hermaphrodite's reproductive resources (Charnov 1982) |
 
-## 4. Disease
-
-| Name | Value | Unit | Meaning | Origin |
-|---|---|---|---|---|
-| MHC_W | 0.35 | - | match width: a strain infects a host whose recognition genes are within this RMS distance (/127) of its key | ECO: matching-alleles host-parasite genetics (Hamilton 1980; Lively 2010): rare host genotypes escape, which can favour sex |
-| MHC_MUT | 6 | int8 | mutation of a strain's key per transmission (SD) | ECO: pathogens evolve far faster than their hosts |
-
-## 5. Clades
+## 4. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | SPLIT_GAP | 3 | - | two forms are separate clades when, along the axis between their centres (visible traits), the gap is this many pooled SDs | ECO: genotypic clusters with few intermediates (Mallet 1995) |
 
-## 6. Allometry
+## 5. Allometry
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -85,7 +78,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
 | GROW_RESERVE | 0.2 | xEmax | a juvenile keeps this share of its reserve against starving; above it, it grows at its top rate times how full the reserve is | ECO: growth draws on the reserve in proportion to its density (dynamic energy budget, Kooijman 2010); hungry young grow slowly (Revision D; Revision P: was a threshold of 0.5, below which the young, living near 40% full, hardly grew) |
 
-## 7. Food
+## 6. Food
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -105,7 +98,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RHO_MEAT | 4 | E/M | energy density of body tissue (meat); also the cost of building tissue | ECO: tissue ~2-4x the stored reserve per unit mass |
 | RHO_BLOOD | 3 | E/M | energy density of blood | ECO: below tissue |
 
-## 8. Hunting
+## 7. Hunting
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -121,7 +114,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |
 
-## 9. Brain
+## 8. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -163,7 +156,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ARCHIVE | 16 | genomes | elite archive size per species | HT (Revision M: 64 before; a genome is now ~83 KB) |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 
-## 10. Prehistory
+## 9. Prehistory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -172,7 +165,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
 | BRANCH_CAPACITY | 16384 | slots | agent slots per branch | HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds) |
 
-## 11. Brain
+## 10. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -183,7 +176,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | HOME_TRIES | 24 | - | random sites tried when choosing a home range (the one farthest from the others is taken) | HT |
 | BANK_LIVING | 48 | genomes | genomes per species stored in a gene bank (living sample) | HT (Revision M: 96 before) |
 
-## 12. Body
+## 11. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -220,7 +213,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | VOICE_MIN | 0.25 | - | a voice organ below this makes no sound | HT: a little voice is no voice; above founder variation around a mute ancestor |
 | COST_VOICE | 0.03 | xbasal | basal cost of a full voice (larynx and its control) | ECO: small; vocal tissue and its neural control are a minor part of upkeep |
 
-## 13. Voice
+## 12. Voice
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -232,20 +225,20 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | IMIT_RBAR | 0.05 | /step of calling | rate of the running mean of an organism's own match to its template | HT: a baseline, as RBAR_RATE is for reward |
 | IMIT_AGE_LO | 0.1 | - | shortest sensitive period for memorising tutors, as a share of lifespan (the IMIT_AGE gene spans IMIT_AGE_LO..1) | ECO: songbirds memorise early in life, some species throughout (Brainard & Doupe 2002) |
 
-## 14. Food
+## 13. Food
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | SCAVENGE | 0.8 | - | share of its meat-digesting skill a meat-eater brings to carrion | ECO: almost all carnivores scavenge; wolves feed on a kill for days (DeVault et al. 2003) |
 
-## 15. Land
+## 14. Land
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | POND_R | 2 | cells | a pond site is the lowest cell within this many cells | ECO: about one basin per hundred square cells on rolling ground (prairie potholes, desert playas) |
 | POND_GAP | 6 | cells | pond sites are at least this far from a lake, sea or river | HT: a pond beside a lake adds nothing |
 
-## 16. Body
+## 15. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -266,7 +259,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_BRAIN | 0.25 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M) |
 | BRAIN_REF | 256 | units | reference brain size for the brain cost: the largest brain (G.NH) | Revision M: was 12, the old limit |
 
-## 17. Brain
+## 16. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -275,7 +268,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DRIVE_FEMALE | 0.6 | - | strength of the mating instinct in females, against males (1) | designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972) |
 | DRIVE_HERM | 0.8 | - | strength of the mating instinct in hermaphrodites, against males (1) | designed: between the two sexes |
 
-## 18. Body
+## 17. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -285,7 +278,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
-## 19. Clades
+## 18. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -304,13 +297,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 20. Reward
+## 19. Reward
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | R_SPEND | 1 | - | energy spent on its choices (strikes, calls, moving, heat) counts against the reward at this share of the weight energy eaten counts for it | ECO: animals learn by net energy gain (optimal foraging; Stephens & Krebs 1986); 1 = a unit spent weighs as a unit eaten. 2026-10-30: without it, calling (19-24% of basal) rose from ~38% to ~65% of steps by learning |
 
-## 21. Reproduction
+## 20. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -320,7 +313,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 22. Care
+## 21. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -329,20 +322,60 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 23. Disease
+## 22. Pathogens
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| DIS_BETA | 0.01 | /contact/step | probability per step of infection per infected conspecific in contact | ECO: with the infectious period below, R0 = 0.5 per steady contact: outbreaks need crowding (density-dependent transmission) |
-| DIS_STEPS | 50 | steps | infectious period | ECO: about 1.5% of the lifespan at M=1 (a 1-2 week infection in a 2-year life) |
-| DIS_IMMUNE | 600 | steps | immunity after recovery | ECO: acquired immunity lasts months (about 20% of the lifespan at M=1) |
-| DIS_SPILL | 1E-05 | /step | spillover from the environment (reservoir) per animal per step | ECO: rare sporadic infections seed outbreaks |
-| VIR_MUT | 0.1 | - | spread of a pathogen's virulence at each transmission (log-normal) | ECO: pathogens mutate as they spread; virulence evolves (Anderson & May 1982) |
-| DIS_COST | 0.4 | xbasal | extra basal cost while infected, per unit of virulence (fever, immune response) | ECO: fever raises metabolic rate ~10-13% per degree C; sickness costs 25-50% |
-| DIS_MORT | 0.002 | /step | probability per step of dying while infected (x(1 + hunger)) | ECO: about 10% case fatality over the infectious period |
-| DIS_PAIN | 0.3 | - | malaise felt while infected (as pain) | ECO: sickness behaviour |
+| PG_REP_LO | 0.03 | /step | within-host growth rate at gene 0 (log scale to PG_REP_HI) | ECO: in vivo doubling times run from hours (Salmonella in mouse tissues, Grant et al. 2008) to about a day (M. tuberculosis): ln2/0.03 = 23 steps (~5 days) |
+| PG_REP_HI | 0.5 | /step | within-host growth rate at gene 255 | ECO: ln2/0.5 = 1.4 steps (~7 h), a fast bacterial pathogen in a host |
+| PG_QS_LO | 0.01 | load | quorum-sensing threshold at gene 0 (log scale to PG_QS_HI), in load | ECO: QS switches at a cell density set by the signal's receptor affinity, which mutates readily (Miller & Bassler 2001) |
+| PG_QS_HI | 3 | load | quorum-sensing threshold at gene 255, in load (above 1 a host never holds a quorum: always stealthy) | ECO: QS-blind (lasR) mutants are common in chronic infections (Smith et al. 2006) |
+| PG_HILL | 4 | - | steepness (Hill coefficient) of the quorum switch: on = L^n / (L^n + threshold^n) | ECO: autoinduction makes QS a switch-like positive feedback (Miller & Bassler 2001); LuxR-type responses have Hill coefficients ~2-4 |
+| PG_STEALTH | 0.1 | - | share of toxin and shedding expressed below quorum (stealth mode) | ECO: QS controls most secreted virulence factors; QS-off cells make a small fraction (Pseudomonas lasR mutants, Rumbaugh et al. 2009) |
+| PG_DETECT | 0.3 | - | immune detection below quorum, relative to a quorate population | ECO: QS-regulated exoproducts are what the immune system mostly sees; innate receptors still see the cells (PAMPs, Janeway 1989) |
+| PG_DECAY_HI | 0.3 | /step | decay rate in the environment at persistence 0 (log scale to PG_DECAY_LO) | ECO: enveloped viruses and vegetative bacteria die within hours outside a host (half-life ~2 steps, ~10 h) |
+| PG_DECAY_LO | 0.0002 | /step | decay rate in the environment at persistence 255 | ECO: spores and helminth eggs survive years (half-life ~3,500 steps); anthrax spores decades (Walther & Ewald 2004) |
+| PG_DRY | 3 | x | extra decay on dry land (not water, pond or flood) over water | ECO: desiccation and UV kill enteric bacteria faster on dry surfaces than in water |
+| PG_PERS_COST | 0.5 | - | within-host growth lost at full persistence (spore coats and capsids cost replication) | ECO: survival-reproduction trade-off among phages (De Paepe & Taddei 2006); sporulation halts growth |
+| PG_BREADTH | 2 | - | host-match width gained at full host breadth (x(1 + this) of MHC_W) | ECO: multi-host pathogens are common (Woolhouse, Taylor & Haydon 2001) |
+| PG_GEN_COST | 0.5 | - | within-host growth lost at full host breadth (generalist cost) | ECO: a jack of all hosts is master of none (Leggett et al. 2013); specialists grow faster in their own host |
+| MHC_W | 0.35 | - | match width: a strain grows in a host whose recognition genes are within this RMS distance (/127) of its antigen | ECO: matching-alleles host-parasite genetics (Hamilton 1980; Lively 2010): rare host genotypes escape, which can favour sex |
+| MHC_MUT | 6 | int8 | mutation of a strain's antigen per transmission (SD) | ECO: pathogens evolve far faster than their hosts; antigenic drift (Smith et al. 2004) |
+| PG_MUT | 4 | of 255 | mutation of each trait gene per transmission (SD) | ECO: pathogens evolve far faster than their hosts; virulence evolves within decades (myxoma, Fenner 1983) |
+| PG_INOC | 0.01 | load | load at infection (the founding dose) | ECO: infections start from a small bottleneck of founders (Abel et al. 2015) |
+| PG_CLEAR | 0.002 | load | load below which an infection is cleared | HT: a fifth of the founding dose |
+| PG_KILL | 0.6 | /step | killing rate per unit immune effector at full detection | ECO: with PG_RISE an adaptive response clears a fast strain in ~1-2 weeks (30-70 steps); a strain growing too slowly to stimulate expansion above PG_E_DECAY persists (chronic carriage) |
+| PG_RISE | 0.3 | /step | most a specific immune response multiplies per step (clonal expansion, x stimulation x detection x (PG_NAIVE + effector)) | ECO: within-host dynamics dX/dt = rho X P/(P + phi) (Antia, Levin & May 1994); activated T cells divide every 6-8 h (De Boer et al. 2001), ~0.4-0.6 per 5-h step |
+| PG_NAIVE | 0.02 | - | naive precursors a specific response expands from (in effector units) | ECO: a few hundred naive precursors per antigen, against ~10^5-fold expansion at the peak (Blattman et al. 2002) |
+| PG_HALF | 0.01 | load | load at which immune stimulation is half its maximum | ECO: small antigen doses start an adaptive response (Bachmann & Jennings 2010); here the founding dose PG_INOC, so a stealthy strain is seen less but not ignored |
+| PG_E_DECAY | 0.02 | /step | decay of the immune effector per step (contraction) | ECO: effector T cells contract within days to weeks after the peak |
+| PG_IMM_BASE | 0.5 | - | immune stimulation of a host with no immunity gene (innate); the gene adds up to 1 | ECO: innate immunity alone controls many infections (Janeway & Medzhitov 2002) |
+| PG_MHC_DIV | 0.5 | - | gain in immune stimulation at full MHC diversity (the spread of its recognition genes) | ECO: MHC heterozygote advantage: more distinct alleles present more antigens (Doherty & Zinkernagel 1975; Penn, Damjanovich & Potts 2002) |
+| PG_CROSS_W | 0.25 | - | cross-immunity width: protection by memory falls as exp(-d^2/w^2) of antigen RMS distance (/127) | ECO: titres fall with antigenic distance; drifted influenza escapes old immunity (Smith et al. 2004) |
+| PG_MEM_DECAY | 0.0003 | /step | decay of immune memory per step | ECO: antibody half-lives of 1-10+ years (Amanna, Carlson & Slifka 2007): ~2,300 steps here |
+| PG_RECALL | 1 | - | immune effector at once on reinfection, per unit cross-immunity (the secondary response) | ECO: memory responses are faster and larger (Ahmed & Gray 1996) |
+| PG_DMG | 0.1 | /step | tissue damage per step per unit toxin x load (1 = death by disease) | ECO: virulence is damage from pathogen load and toxins (Casadevall & Pirofski 1999); untreated cholera can kill within a day of the first symptoms (Sack et al. 2004): a full-toxin strain at full load kills in ~11 steps (~2 days) |
+| PG_REPAIR | 0.01 | /step | repair of tissue damage per step at a full energy reserve (x reserve share: a starving host cannot repair) | ECO: malnutrition raises case fatality (Scrimshaw, Taylor & Gordon 1968) |
+| PG_COST_LOAD | 0.2 | xbasal | extra basal cost per unit load (what the pathogen takes) | ECO: parasites take a share of host resources |
+| PG_COST_IMM | 0.3 | xbasal | extra basal cost per unit immune effector (fever, immune response) | ECO: an immune response raises resting metabolism 10-30%; fever ~10-13% per °C (Lochmiller & Deerenberg 2000) |
+| PG_MALAISE | 0.5 | - | malaise felt (as pain) per unit immune effector; tissue damage adds to it | ECO: sickness behaviour is driven by cytokines of the immune response (Hart 1988) |
+| PG_SHED | 0.1 | /step | shedding per step per unit load (all routes) | HT |
+| PG_TOX_SHED | 2 | - | extra shedding per unit toxin (x(1 + this x toxin)) | ECO: toxins drive diarrhoea and coughing that carry pathogens out (cholera toxin; Ewald 1994): the virulence-transmission trade-off (Anderson & May 1982; Alizon et al. 2009) |
+| PG_DUNG | 3 | x | faeces concentrate the dung route's shedding (only while the host's gut passes waste) | ECO: enteric pathogens reach 10^6-10^9 per gram of faeces |
+| PG_INF | 100 | /dose | infection hazard per unit dose (x match x (1 - cross-immunity) x immunity gene's protection); a dose of 1 is a whole host's burden | ECO: exponential dose-response (Haas 1983); infective doses are 10^1-10^6 organisms (Kothary & Babu 2001) against 10^9-10^12 in a sick host, so ID50 here (0.7% of a burden) is on the high, hard-to-catch side |
+| PG_TOUCH | 0.02 | /step | share of a cell's reservoir picked up per step by an animal standing in it | HT |
+| PG_EAT | 0.2 | /bite | share of a cell's reservoir swallowed with a bite of food from it | HT: grazing and dung-eating are the faecal-oral route |
+| PG_DRINK | 0.2 | /drink | share of a water cell's reservoir swallowed with a drink | HT: a waterhole is where waterborne pathogens meet hosts (cholera, Ewald 1991) |
+| PG_FLOW | 0.5 | /step | share of a river cell's pathogens carried one cell downstream per step | ECO: rivers run far faster than a cell (16 m) per step (5 h); the downstream-first update moves a cell's load one cell per step at most |
+| PG_CARCASS | 1 | - | share of its load a dead host leaves in the ground where it died | ECO: carcasses are reservoirs (anthrax, Turner et al. 2014) |
+| PG_RES_MIN | 1E-05 | load | reservoir load below which a cell is clean | HT: picked up by touch it is a hazard of 2e-5 per step |
+| PG_FOUNDERS | 12 | strains | founding strains at world start, each a random genome in a few random cells | HT: replaces the old flat spillover; nothing seeds them again |
+| PG_SEED_CELLS | 500 | cells | cells each founding strain is laid in, at random over the map | HT: 12 x 500 cells is ~9% of a 256^2 field: environmental microbes are everywhere, most of them unable to grow in any host |
+| PG_SEED | 2 | load | load put in each founding cell | HT |
+| PG_STRAIN_D | 0.1 | - | two pathogens are one strain (for telemetry) within this RMS genome distance (traits /255, antigen /127) | HT: one transmission drifts a genome ~0.03 by PG_MUT and MHC_MUT, so a strain is about a dozen transmissions of drift |
+| PG_CLUSTERS | 256 | strains | most strains telemetry tells apart | HT |
 
-## 24. Weather
+## 23. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -350,7 +383,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 25. Vegetation
+## 24. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -401,7 +434,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 26. Fire
+## 25. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -416,7 +449,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 27. Climate
+## 26. Climate
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -455,7 +488,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TT_STEP | 0.25 | K | temperature step of the response tables | - |
 | TT_N | 512 | - | entries of each response table | - |
 
-## 28. Heat
+## 27. Heat
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -483,7 +516,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 29. Memory
+## 28. Memory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -493,7 +526,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MEM_NEAR | 32 | units | distance of a remembered place at which its NEAR sense reads 0.5 (NEAR = 1 / (1 + d / MEM_NEAR); 0 when nothing is remembered) | -: MAX_SIGHT, so NEAR reads 0.5 at the edge of sight |
 | FED_WELL | 1 | steps | a meal is remembered as 'fed well' when one bite's energy is at least this many steps' need (FIELD_METAB x basal) | HT: a bite that pays for its step, FOOD_HERE 0.63; a patch richer than the cost of being there is worth coming back to (Charnov 1976) |
 
-## 30. Hydrology
+## 29. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -514,7 +547,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLOOD_R | 3 | cells | floodplain: cells at most this many flow steps upstream of the river they drain into | HT: floodplains are a few channel widths to tens of km wide |
 | FLOOD_HAND | 0.5 | xSHALLOW | floodplain: cells at most this high above that river, x SHALLOW | HT: bounds the search; the stage decides which of them flood |
 
-## 31. Geology
+## 30. Geology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -558,13 +591,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FERT_SED | 0.6 | - | base fertility of soil on sedimentary rock | ECO: shales and limestones weather to moderately rich soils, sandstones to poor ones; their mean |
 | FERT_VAR | 0.15 | - | local variation of fertility about its parent material (±, from organic matter, drainage and soil age) | HT: was the whole fertility (noise) before Revision R |
 
-## 32. Hydrology
+## 31. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | FLOOD_MIX | 0.3 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each water-cycle update (WC_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993); 0.5 per 100 steps before the water cycle, the same rate per step at 50 |
 
-## 33. Water cycle
+## 32. Water cycle
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -595,6 +628,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAKE_STAGE | 500 | mm | a lake's stage above its outlet's sill (its level at creation) when it receives its mean inflow; its outlet carries in proportion to the stage (a linear reservoir whose outlet is sized for the lake's mean flow) | ECO/HT: outlet channels are sized by the flows they carry, as river channels are (Leopold, Wolman & Miller 1964); lakes rise a few dm to m in floods; a lake below its sill does not spill |
 | WC_SPINUP | 2 | years | years of weather the water cycle runs at world creation (average years), so soil, snow, groundwater and rivers start in their seasonal state | HT: groundwater is first set to the steady state of the first year's recharge, then a second year settles the seasons and gives each river its mean discharge |
 
-## 34. Organisms
+## 33. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

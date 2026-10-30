@@ -142,7 +142,15 @@ public class EcosystemTests
         Assert.Equal(ej, w.Energy[j]);
     }
 
-    [Fact] // DESIGN §9.6: matching alleles: a strain infects a host whose recognition genes match its key far more often
+    // Revision R re-wrote these two for the pathogen model (Pathogens.cs): an infection is now a pathogen load with its
+    // own genome, caught from a contact's shedding (IDose, IStrainSrc), not a timer caught from a count of sick contacts.
+    static void Shedder(World w, int src, sbyte[] antigen)
+    {
+        var g = new byte[PG.N]; g[PG.REP] = 128; g[PG.QS] = 0; g[PG.CONTACT] = 255;
+        Pathogens.Infect(w, src, g, 0, antigen, 0, false);
+    }
+
+    [Fact] // DESIGN §9.6, Revision R: matching alleles: a strain infects a host whose recognition genes match its antigen far more often
     public void StrainsInfectMatchingHostsMore()
     {
         int Infections(bool match)
@@ -150,19 +158,22 @@ public class EcosystemTests
             using var sim = new Simulation(16384, 64, 1, empty: true);
             var w = sim.W;
             int a = Animal(w, 0, true, 4), src = Animal(w, 0, true, 5);
-            w.Infect[src] = K.DIS_STEPS; w.Virulence[src] = 1f;
+            var key = new sbyte[G.NMHC];
             for (int k = 0; k < G.NMHC; k++)
             {
-                w.Strain[src * G.NMHC + k] = w.Genome[a * G.LEN + G.B_MHC + k];
-                if (!match) w.Strain[src * G.NMHC + k] = (sbyte)(w.Genome[a * G.LEN + G.B_MHC + k] > 0 ? -127 : 127);
+                key[k] = w.Genome[a * G.LEN + G.B_MHC + k];
+                if (!match) key[k] = (sbyte)(key[k] > 0 ? -127 : 127);
             }
+            Shedder(w, src, key);
             var act = new int[w.NS]; int n = 0;
             for (int t = 0; t < 3000; t++)
             {
-                w.IInfNear[a] = 3; w.IVirNear[a] = 1f; w.IStrainSrc[a] = src; w.Infect[src] = K.DIS_STEPS;
+                w.PgLoad[src] = 0.5f; w.ImmEff[src] = 0f; w.PgDamage[src] = 0f;
+                w.IDose[a] = 0.05f; w.IStrainSrc[a] = src; w.IDose[src] = 0f;
                 w.Energy[a] = w.EmaxOf(a); w.Energy[src] = w.EmaxOf(src);
                 Life.Run(w, act); w.Step++;
-                if (w.Infect[a] > 0) { n++; w.Infect[a] = 0; w.Immune[a] = 0; }
+                Array.Clear(w.ResLoad);
+                if (w.PgLoad[a] > 0) { n++; w.PgLoad[a] = 0; w.ImmEff[a] = 0; w.ImmMem[a] = 0; w.PgDamage[a] = 0; }
                 if (w.StageOf[a] == St.Dead) break;
             }
             return n;
@@ -171,24 +182,35 @@ public class EcosystemTests
         Assert.True(hit > 5 * Math.Max(1, miss), $"matching {hit}, mismatched {miss}");
     }
 
-    [Fact] // NR-329: contact with infected conspecifics infects; infection ends in recovery with immunity, or death
+    [Fact] // NR-329, Revision R: a shedding contact infects; the infection ends in recovery with antigen memory, or in death by disease
     public void DiseaseSpreadsByContactAndLeavesImmunity()
     {
         using var sim = new Simulation(16384, 63, 1, empty: true);
         var w = sim.W;
-        int a = Animal(w, 0, true, 4);
+        int a = Animal(w, 0, true, 4), src = Animal(w, 0, true, 6);
         w.Energy[a] = w.EmaxOf(a);
+        var key = new sbyte[G.NMHC];
+        for (int k = 0; k < G.NMHC; k++) key[k] = w.Genome[a * G.LEN + G.B_MHC + k];
+        Shedder(w, src, key);
         var act = new int[w.NS];
-        for (int t = 0; t < 400 && w.Infect[a] == 0; t++) { w.IInfNear[a] = 5; w.IVirNear[a] = 1f; Life.Run(w, act); w.Step++; }
-        Assert.True(w.Infect[a] > 0, "never infected despite contacts");
-        Assert.Equal(1, w.T.Infections[0]);
-        for (int t = 0; t < K.DIS_STEPS + 2 && w.StageOf[a] != St.Dead; t++) { w.IInfNear[a] = 0; w.Energy[a] = w.EmaxOf(a); Life.Run(w, act); w.Step++; }
-        if (w.StageOf[a] != St.Dead) { Assert.Equal(0f, w.Infect[a]); Assert.True(w.Immune[a] > 0); }
+        for (int t = 0; t < 400 && w.PgLoad[a] == 0; t++)
+        {
+            w.PgLoad[src] = 0.5f; w.ImmEff[src] = 0f; w.IDose[a] = 0.05f; w.IStrainSrc[a] = src;
+            Life.Run(w, act); w.Step++; Array.Clear(w.ResLoad);
+        }
+        Assert.True(w.PgLoad[a] > 0, "never infected despite contacts");
+        Assert.Equal(2, w.T.Infections[0]);   // the shedder (set up) and this one
+        for (int t = 0; t < 1000 && w.StageOf[a] != St.Dead && w.PgLoad[a] > 0; t++)
+        {
+            w.IDose[a] = 0; w.Energy[a] = w.EmaxOf(a);
+            Life.Run(w, act); w.Step++; Array.Clear(w.ResLoad);
+        }
+        if (w.StageOf[a] != St.Dead) { Assert.Equal(0f, w.PgLoad[a]); Assert.True(w.ImmMem[a] > 0); }
         else Assert.Equal(1, w.T.Deaths[0 * Cause.N + Cause.Disease]);
-        // with no contacts and no immunity, infection is rare (spillover only)
-        int b = Animal(w, 0, true, 5); w.Immune[b] = 0; int got = 0;
-        for (int t = 0; t < 200; t++) { w.IInfNear[b] = 0; Life.Run(w, act); w.Step++; if (w.Infect[b] > 0) got++; }
-        Assert.True(got == 0 || w.T.Infections[0] <= 2);
+        // with no contacts and a clean reservoir, nothing infects
+        int b = Animal(w, 0, true, 5); int got = 0;
+        for (int t = 0; t < 200; t++) { w.IDose[b] = 0; Array.Clear(w.ResLoad); Life.Run(w, act); w.Step++; if (w.PgLoad[b] > 0) got++; }
+        Assert.Equal(0, got);
     }
 
     [Fact] // NR-330: every year has its own rainfall; branches of one prehistory (same terrain seed) share the climate

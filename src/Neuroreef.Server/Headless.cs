@@ -323,6 +323,8 @@ public static class Headless
         if (T.FullSteps > 0.01 * Math.Max(1UL, sim.W.Step))
             o.AppendLine("INVALID: the slot cap, not food, limited this world on more than 1% of steps, so the cap chose who was born. Give it more slots or a smaller map.");
         o.AppendLine();
+        o.Append(Pathogens.Report(w));   // the pathogens' census, lineages and deaths by disease (Revision R)
+        o.AppendLine();
         o.Append(VoiceReport(w, 0, "the world"));   // whether any utterance has come to go with something (2026-10-30)
         return o.ToString();
     }

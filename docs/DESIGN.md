@@ -90,6 +90,53 @@ Tested (tests/WaterCycleTests.cs): the budget closes at climate 0, 0.3 and 1; a 
 60% while every river cell keeps flowing; snow lies through a cold spell, melts at exactly DDF per degree-day and peaks
 the rivers above a warm season's flow; ponds fill in a wet year and empty in a drought; the water cycle gives the same
 bits on 1 and 3 threads.
+**Pathogens that live and evolve (Revision R)** (2026-10-30; the user: "pathogens become living, evolving agents with no
+brain. They decide collectively through quorum sensing"). Before: an infection was a timer (DIS_STEPS) with a virulence
+number and a fixed death chance per step (DIS_MORT), caught from sick look-alikes or a flat spillover (DIS_SPILL).
+Measured before (seed 3, 3,000 steps): no deaths by disease. Now (Pathogens.cs; constants PG_*, one "Pathogens" block;
+§9.6 is superseded):
+- *A genome per infection*, 10 bytes plus the 4-byte antigen (World.PgGene, Strain): replication, toxin, four route
+  weights (contact, ground, water, dung), persistence, quorum threshold, host breadth, and the founding lineage. It mutates
+  on every transmission (PG_MUT, MHC_MUT). Trade-offs: persistence and breadth cost replication (De Paepe & Taddei 2006;
+  Leggett et al. 2013); toxin raises shedding (PG_TOX_SHED, Ewald 1994) and damages the host, ending the infection.
+  Breadth widens how far the antigen may sit from a host's MHC genes and still grow (host range, any species).
+- *Within the host*: load L grows logistically at r x fit and is killed by an immune effector that expands clonally
+  while it sees the pathogen (Antia, Levin & May 1994), helped by the immunity gene and MHC diversity. Clearance leaves
+  a memory of the antigen. Memory protects against later strains as exp(-d^2/PG_CROSS_W^2) of antigenic distance, both
+  against infection and as an immediate recalled response, and it decays over years. Death comes when damage (PG_DMG x
+  toxin x L, repaired in proportion to the energy reserve) reaches 1. Load and immune effort raise basal cost; the
+  immune response and damage are felt as malaise (pain).
+- *Quorum sensing*: signal ∝ L, switch L^4/(L^4 + threshold^4). Below its threshold a strain makes PG_STEALTH of its
+  toxin and shedding and is seen at PG_DETECT by the immune system. A threshold above 1 is never reached in one host.
+- *Reservoir*: a per-cell load and strain (World.ResLoad, ResGene, ResKey). One strain per cell; a deposit takes over the
+  cell with probability weighted by amount. It is fed by shedding (the ground, dung while the gut passes waste, the cell's
+  water or a neighbouring water cell) and by dead hosts. It decays by the strain's persistence, PG_DRY times faster on
+  dry land. River water carries PG_FLOW of its load a cell downstream per step, along receivers taken from World.Flow
+  (Hydrology is read, not changed). Hosts pick it up by standing in a cell, eating there or drinking there. At world
+  start PG_FOUNDERS random strains are laid in PG_SEED_CELLS random cells each; nothing seeds them again (the flat
+  spillover is gone). Contacts no longer need to look alike: any shedding animal in reach exposes, and the strain's fit
+  decides.
+- *Telemetry*: global columns pathogen.* (infected, strains clustered within PG_STRAIN_D, founding lineages, share
+  stealthy, mean traits, reservoir). The world report has a PATHOGENS section, including infections by route. Gene bank
+  unchanged; checkpoint version 14.
+Measured (default map, seed 3, 15,000 steps):
+- *Counts.* 44,891 infections: 25,095 with food, 10,597 by contact, 8,521 from the ground, 678 with water. **No deaths by
+  disease.** Infected hosts rose and fell in outbreaks, from 20 up to 904 at once, as the host population went from
+  ~1,900 to 8,800 and back. Strains went from 12 founders to 77-95 by steps 8,000-15,000. Only 2 of the 12 founding
+  lineages remain in hosts.
+- *Traits, mean over infected hosts, step 32 to 15,000.* Replication rate 0.13 -> 0.36. Toxin 0.51 -> 0.14-0.48,
+  falling between outbreaks. Quorum threshold 0.47 -> 2.2 load. Persistence 0.65 -> 0.96. Breadth 0.48 -> 0.44. Water
+  route share 0.28 -> 0.40. Dung route 0.18 -> 0.17.
+- *What happened: hide, not strike.* Thresholds climbed above 1, which no host can reach, so nearly 100% of infections
+  are stealthy at mean loads of 0.01-0.06 and never switch to toxin. Strains also became spore-like: the high
+  persistence costs them within-host growth (PG_PERS_COST). They live mostly in the ground and pass through hosts by
+  grazing.
+- *Why no deaths.* A strain that switched on, grew to high load and made toxin could kill (PG_DMG: ~11 steps at full
+  toxin and load), but no such strain spread here. PG_DMG was raised from 0.04 to 0.1 for this reason: at 0.04 no
+  strategy could ever have killed a fed host.
+- *Cost.* +0.3-0.45 ms per step in LIFECYCLE (0.15 ms before), about 1.5% of a step. Whole-run steps/s were within
+  machine noise: 27-47 before, 32-34 after.
+- *Not tested.* Other seeds and larger maps. Whether denser host populations select for "hide then strike".
 
 **Memory that matters: local senses and path integration** (2026-10-30; the user: "make an animal's memory useful,
 by taking away its omniscient senses and giving it a self-motion sense"). Before the change SEEK_WATER and SEEK_LAND
@@ -1163,6 +1210,9 @@ A body's own mass is its first defence: a small striker rarely hurts a large ani
 | Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. |
 
 ### 9.6 Disease (Revision C, NR-329; Revision G)
+
+*Superseded by Revision R (pathogen genomes, within-host dynamics, quorum sensing, reservoir; see the note at the top
+and Pathogens.cs). The text below describes the old model.*
 
 Pathogens spread by contact between organisms that look alike (kin, §4: within the sum of their reaches,
 counted in DECIDE). Each infection carries its own **virulence** v.

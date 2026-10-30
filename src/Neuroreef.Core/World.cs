@@ -54,12 +54,27 @@ public sealed class World
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
     public readonly float[] CareLeft;         // care a mother can still give this step
     public readonly uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
-    public readonly float[] Infect, Immune;   // steps left infectious / immune (0 = susceptible)
-    public readonly float[] Virulence;        // virulence of the pathogen strain an infected organism carries
-    public readonly float[] IVirNear;         // mean virulence of the infected contacts, from DECIDE
-    public readonly sbyte[] Strain;           // NMHC bytes per slot: the recognition key of the strain an organism carries
-    public readonly int[] IStrainSrc;         // an infected contact whose strain this organism is exposed to, from DECIDE (-1 none)
-    public readonly byte[] IInfNear;          // infected conspecifics in contact, counted by DECIDE (own slot only)
+    // ---- pathogens (Revision R, Pathogens.cs): every infection carries its own pathogen genome. Per host slot:
+    public readonly float[] PgLoad;           // pathogen load (0 = not infected; 1 = all a host can hold)
+    public readonly byte[] PgGene;            // Cap * PG.N: the genome of the strain it carries (traits 0..255, and its founding lineage)
+    public readonly sbyte[] Strain;           // Cap * NMHC: that strain's antigen, matched against host recognition genes (G.B_MHC)
+    public readonly float[] PgFit;            // how well that strain fits this host (antigen against its MHC, with the strain's breadth)
+    public readonly float[] ImmEff;           // immune effector level now (0 = none)
+    public readonly float[] ImmMem;           // strength of its immune memory (0..1), of the antigen in ImmKey
+    public readonly sbyte[] ImmKey;           // Cap * NMHC: the antigen of the last infection it cleared
+    public readonly float[] PgDamage;         // tissue damage (1 = death by disease)
+    public readonly float[] PgShed;           // what it sheds this step to each animal in contact (contact route), read by DECIDE
+    public readonly float[] IDose;            // contact dose from shedding animals in contact, from DECIDE (own slot only)
+    public readonly int[] IStrainSrc;         // the contact shedding most to it, whose strain it is exposed to, from DECIDE (-1 none)
+    public readonly byte[] IInfNear;          // shedding animals in contact, counted by DECIDE (own slot only)
+    // per field cell, the environmental reservoir: load, the strain it holds (one per cell), and the river network it flows
+    // down (receiver -1 = none; ResOrder lists the ResRivers river cells downstream first). ResNet: that network is built
+    public readonly float[] ResLoad;
+    public readonly byte[] ResGene;           // FW*FW * PG.N
+    public readonly sbyte[] ResKey;           // FW*FW * NMHC
+    public readonly int[] ResRecv, ResOrder;
+    public int ResRivers; public bool ResNet;
+    public readonly float[] PgCentre;         // PG_CLUSTERS * PG.D: strain centres, scratch for telemetry
     // ---- agents: brain
     public readonly sbyte[] Genome;        // Cap * G.LEN
     public readonly float[] W2f;           // Cap * G.W2N   working output weights = genome W2 + what was learned (not inherited)
@@ -165,7 +180,8 @@ public sealed class World
     public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (2 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 432
         + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4    // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
         + 5 * 4                                  // Revision O: fur, appendages, heat strain, heat need, operative temperature
-        + 4 * 4 + 1;                             // Revision P: remembered drink and feeding vectors
+        + 4 * 4 + 1                              // Revision P: remembered drink and feeding vectors
+        + PG.N + G.NMHC + 4 * 4;                 // Revision R: pathogen genome, immune memory key, 8 floats where 4 were
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
@@ -199,7 +215,10 @@ public sealed class World
         PInsul = new float[c]; PAppend = new float[c]; PEndo = new float[c]; PReadyE = new float[c]; PWire = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new ushort[c]; PHerm = new byte[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
-        CareLeft = new float[c]; CareStep = new uint[c]; Infect = new float[c]; Immune = new float[c]; IInfNear = new byte[c]; Virulence = new float[c]; IVirNear = new float[c]; Strain = new sbyte[c * G.NMHC]; IStrainSrc = new int[c];
+        CareLeft = new float[c]; CareStep = new uint[c];
+        PgLoad = new float[c]; PgGene = new byte[c * PG.N]; Strain = new sbyte[c * G.NMHC]; PgFit = new float[c]; ImmEff = new float[c]; ImmMem = new float[c];
+        ImmKey = new sbyte[c * G.NMHC]; PgDamage = new float[c]; PgShed = new float[c]; IDose = new float[c]; IStrainSrc = new int[c]; IInfNear = new byte[c];
+        PgCentre = new float[K.PG_CLUSTERS * PG.D];
         Genome = new sbyte[(long)c * G.LEN];
         W2f = new float[(long)c * G.W2N];
         Trace = new float[(long)c * G.W2N];
@@ -225,6 +244,7 @@ public sealed class World
         Temp = new float[n]; Array.Fill(Temp, K.T_REF); TLapse = new float[n]; Cont = new float[n];
         Elev = new float[n]; Depth = new float[n]; MoistBase = new float[n]; Fert = new float[n]; Cell = new byte[n];
         DistWater = new float[n]; DistLand = new float[n]; PondSite = new byte[n]; Wet = new byte[n]; DistDrink = new float[n];
+        ResLoad = new float[n]; ResGene = new byte[n * PG.N]; ResKey = new sbyte[n * G.NMHC]; ResRecv = new int[n]; ResOrder = new int[n];
         Flow = new float[n]; Alluvium = new float[n]; FloodWet = new float[n]; Array.Fill(FloodWet, float.PositiveInfinity); FloodFrom = new int[n]; Array.Fill(FloodFrom, -1);
         Rock = new byte[n];
         Rain = new float[n]; SoilCap = new float[n]; Recv = new int[n]; DrainOrder = new int[n]; Outlet = new int[n]; LakeOf = new int[n];

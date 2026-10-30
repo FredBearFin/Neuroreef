@@ -11,7 +11,7 @@ public static class Nature
     public static int SeasonLength = K.T_SEASON;   // steps per year
     public static float Drought = 1f;         // x RAIN_SD: how far a year's rainfall can swing (droughts and wet years)
     public static float Fire = 1f;            // x LAMBDA_FIRE: how often fires start
-    public static float Disease = 1f;         // x DIS_BETA and DIS_SPILL: how easily pathogens spread (0 = no disease)
+    public static float Disease = 1f;         // x PG_INF: how easily pathogens infect (0 = no disease)
     public static float Thirst = 1f;          // x C_THIRST: how fast animals dry out on land
     public static float Water = K.LAKE_SHARE; // share of the map under water
     public static float Ponds = 1f;           // share of land basins that hold seasonal ponds (0 = water only in lakes and rivers)

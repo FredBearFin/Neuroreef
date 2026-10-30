@@ -42,6 +42,7 @@ public sealed class Simulation : IDisposable
         {
             if (bank != null) FoundFromBank(bank, seed);
             else FoundAncestors(seed);
+            Pathogens.Seed(W);   // the founding pathogen strains, in the ground and water (Revision R)
         }
         Life.Run(W, _active);   // clears newborn flags, counts
 
