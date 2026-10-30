@@ -419,7 +419,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | PLANT_EVERY | 8 | steps | steps between two updates of a row of plants (stripes: rows y = step mod this), and dt of an update | HT: Revision S; plants change over hundreds of steps, a stripe costs 1/8 of the land per step |
-| PLANT_GCAP | 65536 | genotypes | genotype table capacity (id 0 = empty) | HT: ushort ids; 6 MB |
+| PLANT_GCAP | 65536 | genotypes | largest genotype table (id 0 = empty); a map gets one entry per field cell, between 4,096 and this | HT: ushort ids; 6 MB at most |
 | PLANT_FOUNDERS | 128 | genotypes | founding plant genotypes, every trait uniform at random, each its own lineage | HT: Revision S |
 | PLANT_DRAW | 6 | - | founders of a stratum drawn per cell, of which the best grower there takes it | ECO: community assembly as a filter of the regional pool by the site (Keddy 1992) |
 | PLANT_MU | 0.03 | /recruit | chance that a recruit's genotype has one trait one level up or down | HT: with crosses, a few new genotypes per row update |

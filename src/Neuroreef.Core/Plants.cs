@@ -40,15 +40,17 @@ public static class Ph
 /// <summary>The plant genotype table (struct of arrays, saved by Checkpoint like the World).</summary>
 public sealed class PlantTable
 {
-    public const int CAP = K.PLANT_GCAP, HCAP = 2 * CAP, NP = Ph.NP, NSTAT = 8;
-    public readonly ulong[] KeyLo = new ulong[CAP];        // traits 0..15, 4 bits each
-    public readonly ushort[] KeyHi = new ushort[CAP];      // traits 16..19
-    public readonly float[] Phe = new float[CAP * NP];     // expressed phenotype
-    public readonly ushort[] Lineage = new ushort[CAP], Parent = new ushort[CAP];
-    public readonly int[] Born = new int[CAP], Count = new int[CAP];
-    public readonly byte[] Used = new byte[CAP];
-    public readonly int[] Hash = new int[HCAP];            // open addressing (linear probing), id or 0; rebuilt by Census
-    public readonly int[] Free = new int[CAP]; public int FreeTop; public int Live;
+    public const int NP = Ph.NP, NSTAT = 8;
+    // capacity: one genotype per land slot a map can hold at most, between 4,096 and PLANT_GCAP (a small map needs no 6 MB table)
+    public readonly int Cap, HCap;
+    public readonly ulong[] KeyLo;         // traits 0..15, 4 bits each
+    public readonly ushort[] KeyHi;        // traits 16..19
+    public readonly float[] Phe;           // expressed phenotype
+    public readonly ushort[] Lineage, Parent;
+    public readonly int[] Born, Count;
+    public readonly byte[] Used;
+    public readonly int[] Hash;            // open addressing (linear probing), id or 0; rebuilt by Census
+    public readonly int[] Free; public int FreeTop; public int Live;
     // genotypes found in the parallel phase, PLANT_PEND per row per update, entered by Commit in row order
     public readonly int[] PendN, PendCell; public readonly byte[] PendSlot; public readonly ulong[] PendLo; public readonly ushort[] PendHi, PendParent;
     // per-row counters of the parallel phase (summed by Commit): adoptions, crosses, mutations, failed crosses, queue full,
@@ -62,10 +64,13 @@ public sealed class PlantTable
 
     public PlantTable(int fw)
     {
+        Cap = Math.Clamp((int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)(fw * fw)), 4096, K.PLANT_GCAP); HCap = 2 * Cap;
+        KeyLo = new ulong[Cap]; KeyHi = new ushort[Cap]; Phe = new float[Cap * NP]; Lineage = new ushort[Cap]; Parent = new ushort[Cap];
+        Born = new int[Cap]; Count = new int[Cap]; Used = new byte[Cap]; Hash = new int[HCap]; Free = new int[Cap];
         PendN = new int[fw]; PendCell = new int[fw * K.PLANT_PEND]; PendSlot = new byte[fw * K.PLANT_PEND];
         PendLo = new ulong[fw * K.PLANT_PEND]; PendHi = new ushort[fw * K.PLANT_PEND]; PendParent = new ushort[fw * K.PLANT_PEND];
         RowStat = new double[fw * NSTAT];
-        for (int i = CAP - 1; i >= 1; i--) Free[FreeTop++] = i;
+        for (int i = Cap - 1; i >= 1; i--) Free[FreeTop++] = i;
     }
 
     public int Level(int id, int t) => t < 16 ? (int)((KeyLo[id] >> (4 * t)) & 15) : (KeyHi[id] >> (4 * (t - 16))) & 15;
@@ -204,7 +209,7 @@ public static class Plants
 
     public static int Find(PlantTable t, ulong lo, ushort hi)
     {
-        int m = PlantTable.HCAP - 1, j = (int)(Mix(lo, hi) & (ulong)m);
+        int m = t.HCap - 1, j = (int)(Mix(lo, hi) & (ulong)m);
         while (true)
         {
             int id = t.Hash[j];
@@ -216,7 +221,7 @@ public static class Plants
 
     static void HashIn(PlantTable t, int id)
     {
-        int m = PlantTable.HCAP - 1, j = (int)(Mix(t.KeyLo[id], t.KeyHi[id]) & (ulong)m);
+        int m = t.HCap - 1, j = (int)(Mix(t.KeyLo[id], t.KeyHi[id]) & (ulong)m);
         while (t.Hash[j] != 0) j = (j + 1) & m;
         t.Hash[j] = id;
     }
@@ -788,10 +793,10 @@ public static class Plants
         Refs(C, w.GutSeedG); Refs(C, w.GutSeedDad); Refs(C, w.FurSeedG); Refs(C, w.FurSeedDad); Refs(C, w.PollenG);
         C[0] = 0;
         // lineage roots and parents are names only: they do not hold a genotype in the table
-        for (int id = 1; id < PlantTable.CAP; id++)
+        for (int id = 1; id < t.Cap; id++)
             if (t.Used[id] != 0 && C[id] == 0) { t.Used[id] = 0; t.Free[t.FreeTop++] = id; t.Live--; t.Freed++; }
         Array.Clear(t.Hash);
-        for (int id = 1; id < PlantTable.CAP; id++) if (t.Used[id] != 0) HashIn(t, id);
+        for (int id = 1; id < t.Cap; id++) if (t.Used[id] != 0) HashIn(t, id);
         t.History[t.HistN++ % t.History.Length] = t.Live;
         t.CensusSteps++;
     }
@@ -1063,7 +1068,7 @@ public static class Plants
     {
         var t = w.Flora; var sb = new System.Text.StringBuilder();
         int n = Map.FW * Map.FW;
-        sb.AppendLine($"FLORA at step {w.Step:N0}: {SlotGenotypes(w):N0} genotypes in plants, {t.Live:N0} in the table of {PlantTable.CAP - 1:N0} ({t.TableFull:N0} recruits kept their parent's genotype because it was full, {t.PendFull:N0} by the queue)");
+        sb.AppendLine($"FLORA at step {w.Step:N0}: {SlotGenotypes(w):N0} genotypes in plants, {t.Live:N0} in the table of {t.Cap - 1:N0} ({t.TableFull:N0} recruits kept their parent's genotype because it was full, {t.PendFull:N0} by the queue)");
         sb.AppendLine($"  establishments {t.Establish:N0}, crosses {t.Crosses:N0}, failed crosses {t.FailedCross:N0}, mutations {t.Mutations:N0}, genotypes created {t.Created:N0}, freed {t.Freed:N0}");
         sb.AppendLine($"  seed dispersed: wind {t.WindSeed:F1}, animal guts {t.GutSeed:F2}, caches {t.CacheSeed:F2}, burrs {t.BurrSeed:F3}; landed in water {t.WaterSeed:F2}");
         if (t.HistN > 0)

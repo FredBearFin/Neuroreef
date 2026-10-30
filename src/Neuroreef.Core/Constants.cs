@@ -345,7 +345,7 @@ public static class K
 
     // ---------------------------------------------------------------- 7b. plants (Revision S): evolving genotypes in four slots per land cell (Plants.cs)
     [K("Plants", "steps between two updates of a row of plants (stripes: rows y = step mod this), and dt of an update", "steps", "HT: Revision S; plants change over hundreds of steps, a stripe costs 1/8 of the land per step")] public const int PLANT_EVERY = 8;
-    [K("Plants", "genotype table capacity (id 0 = empty)", "genotypes", "HT: ushort ids; 6 MB")] public const int PLANT_GCAP = 65536;
+    [K("Plants", "largest genotype table (id 0 = empty); a map gets one entry per field cell, between 4,096 and this", "genotypes", "HT: ushort ids; 6 MB at most")] public const int PLANT_GCAP = 65536;
     [K("Plants", "founding plant genotypes, every trait uniform at random, each its own lineage", "genotypes", "HT: Revision S")] public const int PLANT_FOUNDERS = 128;
     [K("Plants", "founders of a stratum drawn per cell, of which the best grower there takes it", "-", "ECO: community assembly as a filter of the regional pool by the site (Keddy 1992)")] public const int PLANT_DRAW = 6;
     [K("Plants", "chance that a recruit's genotype has one trait one level up or down", "/recruit", "HT: with crosses, a few new genotypes per row update")] public const float PLANT_MU = 0.03f;
