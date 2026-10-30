@@ -388,36 +388,16 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | R_G | 0.01 | /step | grass growth | V1 |
-| W_SHRUB | 0.2 | - | soil moisture below which shrubs cannot grow (grass has none) | ECO: woody plants need wetter soils than grasses; savanna woody cover is capped by rainfall (Sankaran et al. 2005) |
-| W_TREE | 0.35 | - | soil moisture below which trees and saplings cannot grow | ECO: as W_SHRUB; trees need the most water |
-| GRASS_COMP | 0.7 | - | share of a sapling's water taken by grass roots at full grass cover | ECO: Walter's two-layer hypothesis: grass roots take the topsoil water tree seedlings need |
-| DROUGHT_T | 5 | x D_T | extra tree mortality at zero moisture (drought die-off), scaled by the shortfall below W_TREE | ECO: drought years kill trees |
-| WIND_SEED | 0.0004 | /step | long-distance (wind) seed rain: sapling establishment per unit of the world's mean tree cover | ECO: rare long-distance dispersal lets trees reach new ground |
-| SIGMA_G | 0.06 | - | grass spread from neighbours | V1 |
-| S_G | 0.05 | - | grass establishment from seed | HT |
-| G_RAIN | 0.002 | - | grass background seed rain | HT |
-| R_S | 0.003 | /step | shrub growth | ECO: shrub cover e-folds in ~1/4 year (year = T_SEASON) |
-| S_S | 0.01 | - | shrub invasion of grass | HT |
-| R_P | 0.0008 | /step | sapling recruitment | HT |
 | M_P | 0.001 | /step | sapling maturation | HT |
-| R_T | 0.0004 | /step | tree growth | HT |
-| D_T | 6E-05 | /step | tree mortality | HT |
-| SH_G | 0.0003 | /step | canopy shading of grass | HT |
-| SH_S | 0.0002 | /step | canopy shading of shrubs | HT |
 | K_N | 0.3 | - | nutrient half-saturation | HT |
 | R_B | 0.004 | /step | browse regrowth toward capacity | HT |
-| B_TREE | 0.6 | - | browse capacity per unit tree cover | HT |
-| R_F | 0.0025 | /step | fruit production | HT |
 | D_F | 0.004 | /step | fruit rot | HT |
-| R_SD | 0.0015 | /step | seed production | HT |
 | D_SD | 0.001 | /step | seed decay | HT |
-| R_NC | 0.004 | /step | nectar production | HT |
 | D_NC | 0.01 | /step | nectar decay | HT |
 | R_R | 0.0015 | /step | root growth | HT |
 | C_LIT | 0.0004 | /step | leaf senescence into litter | HT |
 | POLL_GAIN | 8 | - | pollination increment per unit nectar eaten | HT |
 | D_POLL | 0.005 | /step | pollination decay | HT |
-| DUNG_SAPLING | 0.5 | - | saplings planted per unit seed share in dung | HT |
 | R_A | 0.008 | /step | algae growth | HT |
 | M_A | 0.0015 | /step | algae death into detritus | HT |
 | R_PH | 0.003 | /step | phytoplankton growth | HT |
@@ -434,7 +414,110 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 25. Fire
+## 25. Plants
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| PLANT_EVERY | 8 | steps | steps between two updates of a row of plants (stripes: rows y = step mod this), and dt of an update | HT: Revision S; plants change over hundreds of steps, a stripe costs 1/8 of the land per step |
+| PLANT_GCAP | 65536 | genotypes | genotype table capacity (id 0 = empty) | HT: ushort ids; 6 MB |
+| PLANT_FOUNDERS | 128 | genotypes | founding plant genotypes, every trait uniform at random, each its own lineage | HT: Revision S |
+| PLANT_DRAW | 6 | - | founders of a stratum drawn per cell, of which the best grower there takes it | ECO: community assembly as a filter of the regional pool by the site (Keddy 1992) |
+| PLANT_MU | 0.03 | /recruit | chance that a recruit's genotype has one trait one level up or down | HT: with crosses, a few new genotypes per row update |
+| PLANT_PEND | 8 | - | new genotypes a row can queue per update (more keep their seed parent's) | HT |
+| PLANT_CENSUS | 64 | steps | steps between censuses that free genotypes nothing refers to | HT |
+| PLANT_SPINUP | 1 | years | years the plants (with weather, fields, fire and water, no animals) grow before step 0 | HT: Revision S; the founders' cover relaxes to what their genes can hold |
+| H_LO | -1.3 | log10 m | log10 of the height (m) at trait level 0 | ECO: herbs from 5 cm |
+| H_SPAN | 2.9 | log10 m | log10 span of height over the trait | ECO: up to 40 m trees |
+| H_HERB | 0.8 | m | height below which a plant is a herb | ECO: growth-form boundaries (Raunkiaer 1934) |
+| H_SHRUB | 5 | m | height below which a woody plant is a shrub (above, a tree) | ECO: as H_HERB |
+| H_REF | 0.3 | m | height whose relative growth rate is R_G | HT: a 30 cm herb grows as the old grass |
+| H_SAP | 2 | m | height of a sapling (growth rate, fire, browse) | ECO |
+| EXP_R0 | 0.82 | - | relative growth rate falls with height as H^-EXP_R0 | ECO: metabolic scaling of plant growth (Enquist et al. 1999); with this the old shrub and tree rates come back at 1.3 m and 15 m |
+| LES_A | 1.6 | x | leaf economics: photosynthetic return at LMA level 0 | ECO: leaf economics spectrum (Wright et al. 2004; Reich 2014) |
+| LES_B | 1.2 | x | fall of the return to LMA level 15 (1.6 - 1.2 = 0.4) | ECO: Wright et al. 2004 |
+| CLIT_EXP | 1.5 | - | leaf turnover C_LIT x 2^(CLIT_EXP (1 - 2 x_LMA)): leaf lifespan spans 2^3 over the trait | ECO: leaf lifespan spans ~10x across the spectrum (Wright et al. 2004) |
+| LEAF_EXP | 0.3 | - | leaf share of a plant falls as (H/H_REF)^-LEAF_EXP (turnover per unit cover) | ECO: leaf mass fraction declines with size (Niklas 1994); 1, 0.5 and 0.3 of the old grass, shrub and tree litter |
+| KL_A | 0.05 | - | light half-saturation at tough leaves | ECO: shade-tolerant leaves saturate at low light (Kitajima 1994) |
+| KL_B | 0.4 | - | extra light half-saturation of cheap leaves | ECO: Kitajima 1994 |
+| ROOT_OVL | 0.3 | - | water taken by the other slots per unit cover at equal rooting depth | ECO: two-layer root partitioning (Walter 1971); overlap falls with depth difference (Schenk & Jackson 2002) |
+| RHO_LO | 0.1 | - | root share of biomass at ROOT level 0 (food: Pool.Root) | ECO: root:shoot ratios 0.1-0.7 (Bloom, Chapin & Mooney 1985) |
+| RHO_SPAN | 0.6 | - | root share span over the trait | ECO: as RHO_LO |
+| W_SUP | 3 | - | water-limited growth at full soil water, x r0 (colimitation with carbon) | HT: carbon and water colimit (Farquhar & Richards 1984); 3 makes a mid plant mostly carbon-limited when wet |
+| WUE_GC | 0.35 | - | carbon gain lost at full water-use efficiency (stomata kept shut) | ECO: the WUE-assimilation trade-off (Cowan & Farquhar 1977) |
+| WMIN_0 | 0.1 | - | soil water at which growth stops, base | ECO: wilting point |
+| WMIN_H | 0.35 | - | extra stopping water for a tall plant, x x_H^0.8 | ECO: tall plants embolise first (Ryan & Yoder 1997; Koch et al. 2004) |
+| WMIN_D | 0.35 | - | stopping water a fully drought-tolerant plant saves | ECO: xylem safety (Choat et al. 2012) |
+| DRT_M | 0.7 | - | share of drought mortality drought tolerance saves | ECO: Choat et al. 2012 |
+| DRT_GC | 0.4 | - | carbon gain lost at full drought tolerance | ECO: the safety-efficiency trade-off (Gleason et al. 2016) |
+| DROUGHT_M | 0.15 | x r0 | drought mortality per step at zero water, x r0 | HT |
+| TOPT_LO | -2 | °C | best temperature of growth at TOPT level 0 | ECO: alpine and arctic plants (Körner 2003) |
+| TOPT_SPAN | 36 | K | span of the best temperature over the trait | ECO: up to 34 °C (tropical C4) |
+| T_WIDTH | 20 | K | temperature at which growth stops, away from the optimum | ECO: thermal performance curves (Kingsolver & Huey 2008) |
+| TFROST_HI | -3 | °C | frost that kills the leaves of the most warmth-loving plant | ECO: chilling-sensitive tropical plants (Sakai & Larcher 1987) |
+| TFROST_SPAN | 35 | K | extra frost a fully cold-adapted plant survives | ECO: Sakai & Larcher 1987: boreal plants survive -40 °C |
+| FROST_LOSS | 0.2 | - | share of leafy cover a frost kills per update | HT |
+| DECID_P | 0.6 | - | water x temperature factor below which a fully deciduous plant sheds its leaves | ECO: deciduousness as a response to an unfavourable season (Chabot & Hicks 1982; Kikuzawa 1991) |
+| DECID_HYST | 0.05 | - | hysteresis of leaf shedding and flushing | HT |
+| RELEAF | 0.1 | - | share of cover a new flush of leaves costs | ECO: Kikuzawa 1991 |
+| LEAFOFF_RESP | 0.2 | - | respiration and drought loss of a leafless plant, x a leafy one's | ECO: dormancy |
+| RESP | 0.15 | x r0 | respiration per step, x r0 x leaf return | ECO: about half of gross production is respired; here the net rate of a mid plant is r0 |
+| A_MIN | 0.05 | - | least share of production in growth | HT |
+| AR_LO | 0.05 | - | reproductive allocation at REPRO level 0 | ECO: r/K allocation (Grime 1977; Abrahamson 1980) |
+| AR_SPAN | 0.45 | - | span of reproductive allocation over the trait | ECO: annuals put up to half their production into seed |
+| PHEN_PEAK | 3.657 | - | peak of the flowering pulse PHEN_PEAK ((1 + cos)/2)^4, so its yearly mean is 1 | - |
+| REPRO_RATE | 0.01 | /step | production per unit leafy cover per step that reproduction draws on | ECO: production per unit leaf area is similar across growth forms (trees grow slowly as cover because most goes into wood); R_G of the old grass, so a mid tree fruits about as the old trees did |
+| SEED_REF | 0.0001 | cover | seed mass (cover units) at the middle of the SEED trait | HT |
+| SEED_SPAN | 3 | log10 | orders of magnitude of seed mass over the trait | ECO: seed mass spans 10^3 in a flora (Moles & Westoby 2004) |
+| EST_EXP | 0.4 | - | establishment per seed rises as (m_s/ref)^EST_EXP | ECO: the seed size-number trade-off (Smith & Fretwell 1974; Moles & Westoby 2004) |
+| BANKD_EXP | 0.3 | - | seed-bank decay falls as (m_s/ref)^BANKD_EXP (persistence) | ECO: Moles & Westoby 2004 |
+| PULP_MAX | 4 | - | pulp per unit seed at FRUIT level 15 | ECO: pulp:seed ratios (Howe & Smallwood 1982; Jordano 2000) |
+| WING_COST | 0.5 | - | extra cost per seed of full wings | ECO: Greene & Johnson 1993 |
+| HOOK_COST | 0.3 | - | extra cost per seed of full hooks | ECO: Sorensen 1986 |
+| V_T0 | 2 | m/s | terminal velocity of an unwinged reference seed | ECO: Greene & Johnson 1993 |
+| WING_K | 3 | - | wings cut terminal velocity by 1 + WING_K x | ECO: winged seeds fall at 0.5-1 m/s |
+| U_WIND | 3 | m/s | mean wind at release height | ECO: the ballistic model D = U H / v_t (Nathan et al. 2002) |
+| CELL_M | 25 | m | a field cell's side in metres, for dispersal distances | HT |
+| NB_MIN | 0.02 | - | least share of dry seed that leaves its cell (secondary dispersal by rain wash, ants, rolling) | ECO: secondary dispersal (Vander Wall & Longland 2004) |
+| WIND_BLOCK | 16 | cells | side of a block of long-distance seed (it lands spread over the 3x3 blocks around) | HT: a simple fat tail, deterministic and mass-conserving |
+| WIND_POLL | 0.4 | - | seed set from wind pollen per unit leafy cover of the same stratum next door | ECO: pollen limitation (Baker 1955; Knight et al. 2005) |
+| ANIMAL_POLL | 0.6 | - | seed set per unit pollination (Poll) by animals | ECO: Rathcke & Lacey 1985 |
+| D_PC | 24 | levels | genetic distance (sum of trait-level differences) of crosses: compatibility exp(-(D/D_PC)^4) x flowering overlap^2 | HT: about 1.2 levels per trait |
+| NECTAR_SHARE | 0.2 | - | share of reproductive allocation in nectar at NECTAR level 15 | ECO: nectar costs a few to 30% of reproduction (Southwick 1984; Pyke 1991) |
+| TOX_E | 0.7 | - | herbivore energy lost to full toxins | ECO: plant secondary compounds (Herms & Mattson 1992; Robbins 1987) |
+| TOX_FRUIT | 0.2 | - | share of the toxin in fruit pulp | ECO: ripe fruit is mostly undefended (Cipollini & Levey 1997) |
+| TOX_COST | 0.25 | - | share of production full toxins cost | ECO: growth-defence trade-off (Coley, Bryant & Chapin 1985) |
+| THORN_B | 0.6 | - | bite lost to full thorns, for a big bite | ECO: spines restrict bite size (Cooper & Owen-Smith 1986) |
+| B_HALF | 0.05 | bite | bite at which thorns cost half their full effect | HT: C_BITE at M=1 is 0.06 |
+| THORN_COST_W | 0.15 | - | share of production full thorns cost a woody plant | ECO: Hanley et al. 2007 |
+| THORN_COST_H | 0.05 | - | share of production full silica or hairs cost a herb | ECO: Massey et al. 2007 |
+| RESPROUT_MAX | 0.85 | - | share of above-ground fire loss a full resprouter grows back | ECO: resprouting (Bond & Midgley 2001; Pausas & Keeley 2014) |
+| RESPROUT_COST | 0.2 | - | share of production full resprouting (stored reserves) costs | ECO: Bond & Midgley 2001 |
+| BARK_MAX | 0.9 | - | stem survival of a fire with full bark | ECO: bark thickness and fire survival (Hoffmann et al. 2012) |
+| BARK_COST | 0.15 | - | share of production full bark costs | ECO: Hoffmann et al. 2012 |
+| FLAME_H | 2 | m | flame height per unit fuel | ECO: stems above the flames survive (Higgins, Bond & Trollope 2000) |
+| BANK_FIRE | 0.5 | - | share of the seed bank a fire leaves | ECO: buried seed survives fire |
+| NFIX_N | 0.6 | - | nutrient a full nitrogen fixer adds to what it reads | ECO: symbiotic fixation (Vitousek & Field 1999) |
+| NFIX_COST | 0.2 | - | share of production full fixation costs | ECO: Vitousek & Field 1999 |
+| NFIX_T | 18 | °C | temperature below which fixation costs more | ECO: fixers are rare in the cold (Houlton et al. 2008) |
+| NFIX_TW | 12 | K | cooling that doubles the cost of fixation | ECO: Houlton et al. 2008 |
+| NFIX_DIG | 0.2 | - | extra energy herbivores get from a full fixer's leaves | ECO: nitrogen-rich leaves |
+| DIG_LO | 1.25 | - | energy multiplier of the cheapest leaves | ECO: tough leaves are poor food (Coley 1983) |
+| DIG_SPAN | 0.5 | - | fall of the energy multiplier to the toughest leaves | ECO: Coley 1983 |
+| SELF_LO | 0.1 | - | seed set without pollen at SELF level 0 | ECO: self-compatibility (Baker 1955) |
+| SELF_SPAN | 0.8 | - | extra seed set without pollen at full selfing | ECO: Baker 1955 |
+| INBR_LO | 0.5 | - | inbreeding depression of selfed recruits of an outcrosser | ECO: Husband & Schemske 1996 |
+| INBR_SPAN | 0.3 | - | inbreeding depression purged by full selfing | ECO: Husband & Schemske 1996 |
+| LIFE_HERB | 3000 | steps | life expectancy of a reference herb (x (H/H_REF)^LIFE_EXP x (0.5 + LMA)) | HT: a year; a 15 m tree lives ~20x longer, close to the old tree mortality |
+| LIFE_EXP | 0.75 | - | life expectancy rises as H^LIFE_EXP | ECO: metabolic scaling of lifespan (Marba et al. 2007) |
+| B_SEED0 | 0.01 | cover | most cover recruited from a bank per update | HT |
+| EST0 | 0.005 | - | establishment per seed per update at full growth | HT: a bank of 0.05 cover of reference seed recruits ~90% of B_SEED0 |
+| BROWSE_H | 6 | m | height an animal browses up to | ECO: browsers reach ~5-6 m (du Toit 1990) |
+| BROWSE_LOSS | 0.5 | - | woody cover lost per unit browse eaten | HT: as the old sapling loss |
+| BURR_PICK | 0.002 | /step | share of a bank of full hooks caught in a coat per step, x M^(2/3) x (0.3 + fur) | ECO: epizoochory (Sorensen 1986; Couvreur et al. 2004) |
+| BURR_DROP | 0.03 | /step | share of seed in a coat that falls off per step | ECO: Couvreur et al. 2004 |
+| M_GAPE | 1 | M | body mass whose gape passes a reference seed whole | ECO: gape limits the seed size dispersed (Wheelwright 1985) |
+
+## 26. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -442,14 +525,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_SPREAD | 0.15 | - | spread probability per unit neighbour fuel | ECO: gives a fire return interval of ~2 years with no animals (savanna: 1-5 years) |
 | C_ASH | 0.5 | - | nutrient from burned biomass | HT |
 | FIRE_STEPS | 6 | steps | steps a cell burns | HT |
-| RESPROUT | 0.25 | - | share of grass and shrub cover that survives fire as rootstock and resprouts | ECO: savanna grasses and shrubs resprout |
 | FUEL_MIN | 0.25 | - | fuel below which fire cannot spread | HT |
 | FIRE_KILL | 0.3 | - | probability per step that an animal in a burning cell dies | HT |
 | C_SCENT | 0.02 | /step | scent deposit per unit carnivory | HT |
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 26. Climate
+## 27. Climate
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -488,7 +570,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TT_STEP | 0.25 | K | temperature step of the response tables | - |
 | TT_N | 512 | - | entries of each response table | - |
 
-## 27. Heat
+## 28. Heat
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -516,7 +598,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 28. Memory
+## 29. Memory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -526,7 +608,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | MEM_NEAR | 32 | units | distance of a remembered place at which its NEAR sense reads 0.5 (NEAR = 1 / (1 + d / MEM_NEAR); 0 when nothing is remembered) | -: MAX_SIGHT, so NEAR reads 0.5 at the edge of sight |
 | FED_WELL | 1 | steps | a meal is remembered as 'fed well' when one bite's energy is at least this many steps' need (FIELD_METAB x basal) | HT: a bite that pays for its step, FOOD_HERE 0.63; a patch richer than the cost of being there is worth coming back to (Charnov 1976) |
 
-## 29. Hydrology
+## 30. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -547,7 +629,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLOOD_R | 3 | cells | floodplain: cells at most this many flow steps upstream of the river they drain into | HT: floodplains are a few channel widths to tens of km wide |
 | FLOOD_HAND | 0.5 | xSHALLOW | floodplain: cells at most this high above that river, x SHALLOW | HT: bounds the search; the stage decides which of them flood |
 
-## 30. Geology
+## 31. Geology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -591,13 +673,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FERT_SED | 0.6 | - | base fertility of soil on sedimentary rock | ECO: shales and limestones weather to moderately rich soils, sandstones to poor ones; their mean |
 | FERT_VAR | 0.15 | - | local variation of fertility about its parent material (±, from organic matter, drainage and soil age) | HT: was the whole fertility (noise) before Revision R |
 
-## 31. Hydrology
+## 32. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | FLOOD_MIX | 0.3 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each water-cycle update (WC_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993); 0.5 per 100 steps before the water cycle, the same rate per step at 50 |
 
-## 32. Water cycle
+## 33. Water cycle
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -628,6 +710,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAKE_STAGE | 500 | mm | a lake's stage above its outlet's sill (its level at creation) when it receives its mean inflow; its outlet carries in proportion to the stage (a linear reservoir whose outlet is sized for the lake's mean flow) | ECO/HT: outlet channels are sized by the flows they carry, as river channels are (Leopold, Wolman & Miller 1964); lakes rise a few dm to m in floods; a lake below its sill does not spill |
 | WC_SPINUP | 2 | years | years of weather the water cycle runs at world creation (average years), so soil, snow, groundwater and rivers start in their seasonal state | HT: groundwater is first set to the steady state of the first year's recharge, then a second year settles the seasons and gives each river its mean discharge |
 
-## 33. Organisms
+## 34. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

@@ -1,7 +1,7 @@
 // FIELDS phase (DESIGN §10.2–10.6). Parallel over rows: every row reads the current buffers and
-// writes only its own cells of the next buffers (grass, shrub, tree, sapling, nutrient, scent) and its
-// own cells of the in-place pools. FIRE is serial (spread is directional). Producers, decomposition,
-// run-off, fire and scent live here.
+// writes only its own cells of the next buffers (nutrient, scent) and its own cells of the in-place pools.
+// FIRE is serial (spread is directional). Water producers, decomposition, run-off, fire and scent live here;
+// land plants are Plants.cs (Revision S), which runs after the swap.
 
 using System;
 
@@ -13,8 +13,6 @@ public static class Fields
     {
         int FW = Map.FW;
         var Pl = w.Pool;
-        float[] G = Pl[(int)Pool.Grass], GN = w.GrassN;
-        float[] Br = Pl[(int)Pool.Browse], Fr = Pl[(int)Pool.Fruit], Sd = Pl[(int)Pool.Seed], Nc = Pl[(int)Pool.Nectar], Rt = Pl[(int)Pool.Root];
         float[] Al = Pl[(int)Pool.Algae], Ph = Pl[(int)Pool.Phyto];
         float[] Ca = Pl[(int)Pool.Carrion], Du = Pl[(int)Pool.Dung], Li = Pl[(int)Pool.Litter], Wo = Pl[(int)Pool.Wood], De = Pl[(int)Pool.Detritus];
         float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / FW);
@@ -75,62 +73,10 @@ public static class Fields
                 De[i] += da + dp;
                 Nn -= (ga + gp) * K.C_NUTUSE;
                 w.NutrientN[i] = Math.Clamp(Nn, 0f, K.N_MAX);
-                GN[i] = 0; w.ShrubN[i] = 0; w.TreeN[i] = 0; w.SaplingN[i] = 0;
                 continue;
             }
 
-            // land producers (DESIGN §10.2). Soil moisture is the soil's water over what it can hold, from the water
-            // cycle (WaterCycle.Row: rain and snowmelt in, evapotranspiration and drainage out; floods soak it)
-            float W = w.Moisture[i];
-            float nut = N / (N + K.K_N);
-            float grow = W * nut;
-            // water limits each layer differently: grass grows at any moisture, shrubs above W_SHRUB, trees above W_TREE
-            float growS = MathF.Max(0f, (W - K.W_SHRUB) / (1f - K.W_SHRUB)) * nut;
-            float growT = MathF.Max(0f, (W - K.W_TREE) / (1f - K.W_TREE)) * nut;
-            if (clim)
-            {
-                // each layer grows between its lowest and highest temperature, best near its optimum (Yan & Hunt 1999);
-                // trees need the most warmth, which sets a treeline (Körner & Paulsen 2004)
-                grow *= Climate.FGrass[ti]; growS *= Climate.FShrub[ti]; growT *= Climate.FTree[ti];
-            }
-            float g = G[i], s = w.Shrub[i], t = w.Tree[i], p = w.Sapling[i];
-            float lightG = 1f - 0.85f * t - 0.35f * s, lightS = 1f - 0.70f * t;
-            float free = MathF.Max(0f, 1f - g - s - t);
-            float gbar = 0.25f * (G[xl] + G[xr] + G[up] + G[dn]);
-            float tbar = 0.25f * (w.Tree[xl] + w.Tree[xr] + w.Tree[up] + w.Tree[dn]);
-            float dG = K.R_G * Nature.Plants * grow * lightG * (g + K.S_G * Sd[i] + K.G_RAIN + K.SIGMA_G * MathF.Max(0f, gbar - g)) * free;
-            float dS = K.R_S * Nature.Plants * growS * lightS * (s + K.S_S * g) * MathF.Max(0f, 1f - s - t);   // shrubs overtop grass
-            // saplings: seed from nearby trees and, rarely, from far away by wind; grass roots take their water
-            float seedSrc = (tbar + t) * (0.2f + s) + K.WIND_SEED / K.R_P * w.TreeMean;
-            float dP = K.R_P * Nature.Plants * growT * (1f - K.GRASS_COMP * g) * seedSrc * MathF.Max(0f, 1f - p - t) - K.M_P * p;
-            float mature = K.M_P * p * (1f - t);
-            float drought = 1f + K.DROUGHT_T * MathF.Max(0f, K.W_TREE - W) / K.W_TREE;
-            float dT = mature + K.R_T * Nature.Plants * growT * t * (1f - t) - K.D_T * drought * t;
-            float shadeG = K.SH_G * t * g, shadeS = K.SH_S * t * s;
-            float gn = Math.Clamp(g + dG - shadeG - K.C_LIT * g, 0f, 1f);
-            float sn = Math.Clamp(s + dS - shadeS - K.C_LIT * 0.5f * s, 0f, 1f);
-            float tn = Math.Clamp(t + dT, 0f, 1f);
-            // light competition: trees overtop shrubs, shrubs overtop grass; the lowest layer gives way
-            if (tn > 1f) tn = 1f;
-            if (sn > 1f - tn) sn = 1f - tn;
-            if (gn > 1f - tn - sn) gn = MathF.Max(0f, 1f - tn - sn);
-            GN[i] = gn; w.ShrubN[i] = sn; w.TreeN[i] = tn;
-            w.SaplingN[i] = Math.Clamp(p + dP, 0f, 1f);
-            Wo[i] += K.D_T * drought * t;
-            Li[i] += K.C_LIT * (g + 0.5f * s + 0.3f * t) + shadeG + shadeS;
-
-            // food pools produced by the vegetation
-            float wetS = MathF.Max(season, 0f), dry = MathF.Max(-season, 0f), poll = w.Poll[i];
-            float bcap = s + K.B_TREE * t;
-            Br[i] = MathF.Max(0f, Br[i] + K.R_B * Nature.Plants * grow * (bcap - Br[i]));
-            float fr = K.R_F * Nature.Plants * t * wetS * (1f + poll) * grow;
-            Fr[i] += fr - K.D_F * Fr[i]; Li[i] += K.D_F * Fr[i];
-            float sd = K.R_SD * Nature.Plants * (g + 0.5f * t) * dry * (1f + poll) * (0.3f + grow);
-            Sd[i] = MathF.Max(0f, Sd[i] + sd - K.D_SD * Sd[i]);
-            Nc[i] = MathF.Max(0f, Nc[i] + K.R_NC * Nature.Plants * (0.5f * g + s) * wetS * grow - K.D_NC * Nc[i]);
-            Rt[i] = Math.Clamp(Rt[i] + K.R_R * Nature.Plants * (g + s) * grow * (1f - Rt[i]), 0f, 1f);
-
-            Nn -= (MathF.Max(0f, dG) + MathF.Max(0f, dS) + MathF.Max(0f, dT) + fr + sd) * K.C_NUTUSE;
+            // land: the plants (Plants.cs) take their nutrient after the swap
             w.NutrientN[i] = Math.Clamp(Nn, 0f, K.N_MAX);
         }
     }
@@ -144,7 +90,6 @@ public static class Fields
     /// </summary>
     public static float Yield(World w, int i, ReadOnlySpan<float> diet)
     {
-        const float SEASON_MEAN = 1f / MathF.PI;   // mean of max(sin, 0) over a year
         var Pl = w.Pool;
         float N = w.Nutrient[i], plants = Nature.Plants;
         float temp = K.T_REF;
@@ -166,26 +111,7 @@ public static class Fields
             y += diet[(int)Pool.Detritus] * Pools.Rho[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + K.M_PH * Pl[(int)Pool.Phyto][i]);
             return y;
         }
-        float W = w.Moisture[i], nut = N / (N + K.K_N);
-        float grow = W * nut;
-        if (clim) grow *= Climate.FGrass[Climate.Idx(temp)];
-        float g = Pl[(int)Pool.Grass][i], s = w.Shrub[i], t = w.Tree[i];
-        float room = MathF.Max(0f, 1f - s - t), lightG = 1f - 0.85f * t - 0.35f * s;
-        float dG = K.R_G * plants * grow * lightG * 0.25f * room * room;
-        float dB = K.R_B * plants * grow * 0.5f * (s + K.B_TREE * t);
-        float dF = K.R_F * plants * t * SEASON_MEAN * grow;
-        float dSd = K.R_SD * plants * (g + 0.5f * t) * SEASON_MEAN * (0.3f + grow);
-        float dNc = K.R_NC * plants * (0.5f * g + s) * SEASON_MEAN * grow;
-        float dR = K.R_R * plants * (g + s) * grow * 0.25f;
-        float dL = K.C_LIT * (g + 0.5f * s + 0.3f * t);
-        y += diet[(int)Pool.Grass] * Pools.Rho[(int)Pool.Grass] * dG;
-        y += diet[(int)Pool.Browse] * Pools.Rho[(int)Pool.Browse] * dB;
-        y += diet[(int)Pool.Fruit] * Pools.Rho[(int)Pool.Fruit] * dF;
-        y += diet[(int)Pool.Seed] * Pools.Rho[(int)Pool.Seed] * dSd;
-        y += diet[(int)Pool.Nectar] * Pools.Rho[(int)Pool.Nectar] * dNc;
-        y += diet[(int)Pool.Root] * Pools.Rho[(int)Pool.Root] * dR;
-        y += diet[(int)Pool.Litter] * Pools.Rho[(int)Pool.Litter] * dL;
-        return y;
+        return Plants.Yield(w, i, diet);
     }
 
     /// <summary>Is this a pool that Yield counts (it grows from plants, or from their fall)?</summary>
@@ -204,10 +130,6 @@ public static class Fields
     /// <summary>Swap the double buffers after all rows are done.</summary>
     public static void Swap(World w)
     {
-        (w.Pool[(int)Pool.Grass], w.GrassN) = (w.GrassN, w.Pool[(int)Pool.Grass]);
-        (w.Shrub, w.ShrubN) = (w.ShrubN, w.Shrub);
-        (w.Tree, w.TreeN) = (w.TreeN, w.Tree);
-        (w.Sapling, w.SaplingN) = (w.SaplingN, w.Sapling);
         (w.Nutrient, w.NutrientN) = (w.NutrientN, w.Nutrient);
         (w.Scent, w.ScentN) = (w.ScentN, w.Scent);
     }
@@ -255,17 +177,9 @@ public static class Fields
 
     static void Ignite(World w, int i, float[] F1)
     {
-        var Pl = w.Pool;
         F1[i] = K.FIRE_STEPS;
-        // above-ground parts burn; grasses and shrubs keep their rootstock and resprout (RESPROUT)
-        float g = Pl[(int)Pool.Grass][i], sh = w.Shrub[i];
-        float burned = g * (1f - K.RESPROUT) + sh * (1f - K.RESPROUT) + w.Sapling[i] + Pl[(int)Pool.Browse][i] + Pl[(int)Pool.Litter][i]
-                     + Pl[(int)Pool.Nectar][i] + Pl[(int)Pool.Seed][i] + 0.4f * w.Tree[i];
-        Pl[(int)Pool.Grass][i] = g * K.RESPROUT; w.Shrub[i] = sh * K.RESPROUT; w.Sapling[i] = 0; Pl[(int)Pool.Browse][i] = 0; Pl[(int)Pool.Litter][i] = 0;
-        Pl[(int)Pool.Nectar][i] = 0; Pl[(int)Pool.Seed][i] = 0;
-        Pl[(int)Pool.Wood][i] += 0.4f * w.Tree[i] * 0.5f;
-        w.Tree[i] *= 0.6f;
-        Pl[(int)Pool.Root][i] *= 0.7f;
+        // the plants burn as their traits let them (Plants.Burn: resprouting, bark, height over the flames)
+        float burned = Plants.Burn(w, i, Fuel(w, i));
         w.Nutrient[i] = MathF.Min(K.N_MAX, w.Nutrient[i] + K.C_ASH * burned * 0.2f);
         w.T.FireCells++;
     }

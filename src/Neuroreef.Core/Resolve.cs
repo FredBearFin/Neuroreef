@@ -122,26 +122,29 @@ public static class Resolve
             // which food: the most energy it can actually use this step, a bite no bigger than what its gut passes in a
             // step (Revision P): when the gut is the bottleneck, rich food beats a heap of poor food (optimal diet
             // theory, Charnov 1976). Before, a big heap of dung or litter won and filled the gut with food a third as rich
-            int best = -1; float bv = 0;
-            float pass = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL);
+            // Revision S: it tastes the plants it bites: their defences change what a bite is worth (Plants.Taste)
+            int best = -1; float bv = 0, bestEff = 0, bestBM = 1f;
+            float pass = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL), bite0 = w.PBite[i] * MathK.Pow(mf, K.EXP_BASAL);
             for (int p = 0; p < Pools.NFIELD; p++)
             {
                 float e = diet[p];
                 if (e <= 0) continue;
-                float v = e * Pools.Rho[p] * MathF.Min(pass, w.Pool[p][cell]);
-                if (v > bv) { bv = v; best = p; }
+                float em = 1f, bm = 1f;
+                if (p <= (int)Pool.Root && !waterCell) { Plants.Taste(w, p, cell, bite0, out em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
+                float v = e * Pools.Rho[p] * MathF.Min(pass * bm, w.Pool[p][cell]);
+                if (v > bv) { bv = v; best = p; bestEff = e; bestBM = bm; }
             }
             if (best >= 0)
             {
-                float bite = MathF.Min(MathF.Min(w.PBite[i] * MathK.Pow(mf, K.EXP_BASAL), w.Pool[best][cell]), gutCap - w.Gut[i]);
+                float bite = MathF.Min(MathF.Min(bite0 * bestBM, w.Pool[best][cell]), gutCap - w.Gut[i]);
                 if (bite > 0)
                 {
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
                     w.Pool[best][cell] -= bite;
-                    if (best == (int)Pool.Browse) w.Sapling[cell] = MathF.Max(0, w.Sapling[cell] - 0.5f * bite);
-                    else if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
+                    if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
-                    r += Ingest(w, i, best, bite, diet[best], emax, cell);
+                    if (!waterCell) Plants.Eaten(w, i, cell, best, bite, bestEff);   // what it took from the plants, and the seed and pollen it carries
+                    r += Ingest(w, i, best, bite, bestEff, emax, cell);
                     Pathogens.Ate(w, i, cell);   // what lies on the food is swallowed with it: the faecal-oral route (Revision R)
                 }
             }
@@ -200,10 +203,12 @@ public static class Resolve
         {
             metrics?.Allow(P.CACHE);
             float m = 0.5f * w.GutSeedy[i], frac = m / MathF.Max(w.Gut[i], 1e-6f);
-            w.Pool[(int)Pool.Seed][cell] += m;
+            Plants.Deposit(w, cell, w.GutSeedG[i], w.GutSeedDad[i], m, 1);
             w.Gut[i] -= m; w.GutEnergy[i] *= 1f - frac; w.GutWaste[i] *= 1f - frac; w.GutSeedy[i] -= m;
             metrics?.Apply(P.CACHE);
         }
+
+        if (!waterCell || w.FurSeed[i] > 0f) Plants.Burrs(w, i, cell);   // hooked seed catches in its coat and falls off (Revision S)
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
@@ -268,11 +273,9 @@ public static class Resolve
             w.Energy[i] += de;
             w.Gut[i] -= d; w.GutEnergy[i] -= de; w.GutWaste[i] -= dung; w.GutSeedy[i] -= seedy;
             if (waterCell) w.Pool[(int)Pool.Detritus][cell] += dung;
-            else
-            {
-                w.Pool[(int)Pool.Dung][cell] += dung;
-                w.Sapling[cell] = MathF.Min(1f, w.Sapling[cell] + seedy * K.DUNG_SAPLING);
-            }
+            else w.Pool[(int)Pool.Dung][cell] += dung;
+            // the seed that passed the gut whole lands in its dung, with its parents (Revision S)
+            Plants.Deposit(w, cell, w.GutSeedG[i], w.GutSeedDad[i], seedy, 0);
         }
         if (w.Energy[i] > emax) w.Energy[i] = emax;
 
@@ -443,7 +446,6 @@ public static class Resolve
         float rel = MathF.Min(w.Thirst[i], wet);
         w.Thirst[i] -= rel;
         w.Gut[i] += mass; w.GutEnergy[i] += e; w.GutWaste[i] += mass * (1f - eff);
-        if (pool == (int)Pool.Fruit || pool == (int)Pool.Seed) w.GutSeedy[i] += mass * (1f - eff);
         w.T.Intake[w.Spc[i] * Pools.N + pool] += e;
         // a meal worth FED_WELL steps' need marks a place worth coming back to, plant, meat or blood (Revision P)
         if (e >= K.FED_WELL * K.FIELD_METAB * w.PBasal[i] * MathK.Pow(w.MassOf(i) / w.PM[i], K.EXP_BASAL)) PathMemory.Fed(w, i);

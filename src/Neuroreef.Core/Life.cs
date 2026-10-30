@@ -46,6 +46,7 @@ public static class Life
         w.Children[c] = 0; w.Matured[c] = 0; w.LastChildSlot[c] = -1; w.LastChildSerial[c] = 0;
         w.IActs[c] = 0; w.ITarget[c] = -1; w.IMate[c] = -1; w.IScanning[c] = 0; w.ISpeed[c] = 0; w.IHeading[c] = w.Heading[c];
         Pathogens.Clear(w, c); w.CareLeft[c] = 0; w.CareStep[c] = 0;
+        Plants.ClearAnimal(w, c);
         if (mother >= 0)
         {
             w.MotherSlot[c] = mother; w.MotherSerial[c] = w.Serial[mother];

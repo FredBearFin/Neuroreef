@@ -164,7 +164,8 @@ public static class Terrain
             Climate.Normalise(w, before); Ponds.Update(w);   // evaporation normalised to keep the no-climate total; ponds refilled with it
         }
 
-        // Initial vegetation: a mosaic of grassland, shrubland and woodland, and plankton in the water.
+        // Initial vegetation: a mosaic of grassland, shrubland and woodland, and plankton in the water. It is only a start:
+        // Simulation grows the plants for PLANT_SPINUP years before step 0, and their cover becomes what their genes hold.
         var P = w.Pool;
         for (int y = 0; y < FW; y++)
             for (int x = 0; x < FW; x++)
@@ -184,7 +185,7 @@ public static class Terrain
                 float grass = Math.Clamp(0.9f * wb * w.Fert[i] + 0.2f, 0f, 1f - tree - shrub);
                 w.Tree[i] = tree; w.Shrub[i] = shrub; P[(int)Pool.Grass][i] = grass;
                 w.Sapling[i] = 0.05f * tree;
-                P[(int)Pool.Browse][i] = shrub + K.B_TREE * tree;
+                P[(int)Pool.Browse][i] = shrub + 0.4f * tree;
                 P[(int)Pool.Fruit][i] = 0.15f * tree;
                 P[(int)Pool.Seed][i] = 0.10f * grass + 0.05f * tree;
                 P[(int)Pool.Nectar][i] = 0.05f * (grass + shrub);
@@ -192,6 +193,8 @@ public static class Terrain
                 P[(int)Pool.Litter][i] = 0.15f;
                 P[(int)Pool.Wood][i] = 0.3f * tree;
             }
+        // the first plants' genes (Revision S): random founders, each cell taking the best growers for its site
+        Plants.Found(w);
     }
 
     /// <summary>Multi-source distance (in cells, 8-connected chamfer) on the torus to the nearest cell with any bit of mask.</summary>

@@ -121,8 +121,23 @@ public sealed class World
 
     // ---- fields (DESIGN §10): food pools 0..12, then structure layers
     public readonly float[][] Pool;        // [Pools.NFIELD][FW*FW]
-    public float[] Shrub, Tree, Sapling, Nutrient, Scent;
-    public float[] ShrubN, TreeN, SaplingN, NutrientN, ScentN, GrassN;   // double buffers
+    public readonly float[] Shrub, Tree, Sapling;   // cover of the shrub, tree and sapling slots (grass = the herb slot, Pool.Grass), updated in place by Plants
+    public float[] Nutrient, Scent;
+    public float[] NutrientN, ScentN;   // double buffers
+    // ---- plants (Revision S, Plants.cs): per land cell the genotype of each slot (herb, shrub, tree, sapling; 0 = empty),
+    // per cell and stratum (herb, shrub, canopy) the seed bank's mass and its seed and pollen parents, the seed released
+    // this epoch to each neighbour and its parents, the genotype of the fruit, pollen animals left, and leaf-on bits
+    public readonly ushort[] POcc, BankMom, BankDad, SeedMom, SeedDad, FruitG, PollenDad;
+    public readonly float[] BankM, SeedOut;
+    public readonly byte[] PFlags;
+    // long-distance seed: per block of WIND_BLOCK^2 cells and stratum, what lands this epoch and what gathers for the next,
+    // and per row its share of the gathering (a row's own, so rows run in parallel)
+    public readonly float[] WindAcc, WindDist, RowFar, RowFarBest;
+    public readonly ushort[] WindAccMom, WindAccDad, WindDistMom, WindDistDad, RowFarMom, RowFarDad;
+    public readonly PlantTable Flora;
+    // per animal: the seed in its gut and coat (seed and pollen parent) and the pollen it carries
+    public readonly ushort[] GutSeedG, GutSeedDad, FurSeedG, FurSeedDad, PollenG;
+    public readonly float[] FurSeed;
     public readonly float[] Moisture, Poll;
     public readonly float[] Temp;          // air temperature (°C), written by FIELDS every step (Revision O); water is at least T_WATER_MIN under it
     public float[] Fire, FireN;
@@ -162,7 +177,7 @@ public sealed class World
     // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
     public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
     public long RainYear = -1;             // year RainAnom belongs to
-    public float TreeMean;                 // mean tree cover of land cells (refreshed every 32 steps)
+    public float TreeMean;                 // mean tree cover of land cells (refreshed every 32 steps; telemetry)
 
     // ---- evolution
     public readonly sbyte[] Archive;       // NS * ARCHIVE * G.LEN
@@ -181,7 +196,8 @@ public sealed class World
         + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4    // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
         + 5 * 4                                  // Revision O: fur, appendages, heat strain, heat need, operative temperature
         + 4 * 4 + 1                              // Revision P: remembered drink and feeding vectors
-        + PG.N + G.NMHC + 4 * 4;                 // Revision R: pathogen genome, immune memory key, 8 floats where 4 were
+        + PG.N + G.NMHC + 4 * 4                  // Revision R: pathogen genome, immune memory key, 8 floats where 4 were
+        + 5 * 2 + 4;                             // Revision S: seed in gut and coat, pollen
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
@@ -237,9 +253,15 @@ public sealed class World
         int n = Map.FW * Map.FW;
         Pool = new float[Pools.NFIELD][];
         for (int p = 0; p < Pools.NFIELD; p++) Pool[p] = new float[n];
-        GrassN = new float[n];
         Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; Nutrient = new float[n]; Scent = new float[n];
-        ShrubN = new float[n]; TreeN = new float[n]; SaplingN = new float[n]; NutrientN = new float[n]; ScentN = new float[n];
+        NutrientN = new float[n]; ScentN = new float[n];
+        POcc = new ushort[4 * n]; BankMom = new ushort[3 * n]; BankDad = new ushort[3 * n]; SeedMom = new ushort[3 * n]; SeedDad = new ushort[3 * n];
+        FruitG = new ushort[n]; PollenDad = new ushort[n]; BankM = new float[3 * n]; SeedOut = new float[3 * n]; PFlags = new byte[n];
+        int nb = 3 * Plants.Blocks, nr = 3 * Map.FW * ((Map.FW + K.WIND_BLOCK - 1) / K.WIND_BLOCK);
+        WindAcc = new float[nb]; WindDist = new float[nb]; WindAccMom = new ushort[nb]; WindAccDad = new ushort[nb]; WindDistMom = new ushort[nb]; WindDistDad = new ushort[nb];
+        RowFar = new float[nr]; RowFarBest = new float[nr]; RowFarMom = new ushort[nr]; RowFarDad = new ushort[nr];
+        Flora = new PlantTable(Map.FW);
+        GutSeedG = new ushort[c]; GutSeedDad = new ushort[c]; FurSeedG = new ushort[c]; FurSeedDad = new ushort[c]; PollenG = new ushort[c]; FurSeed = new float[c];
         Moisture = new float[n]; Poll = new float[n]; Fire = new float[n]; FireN = new float[n];
         Temp = new float[n]; Array.Fill(Temp, K.T_REF); TLapse = new float[n]; Cont = new float[n];
         Elev = new float[n]; Depth = new float[n]; MoistBase = new float[n]; Fert = new float[n]; Cell = new byte[n];
