@@ -60,6 +60,7 @@ public static class Body
     {
         int g = i * G.LEN;
         var gn = w.Genome;
+        Signature(w, i);   // its look and MHC diversity, cached for DECIDE and LIFECYCLE (see Signature)
         float floor = Floors[Math.Clamp((int)gn[g + G.B_FLOOR], 0, K.FLOOR_CLASSES - 1)];
         w.PFloor[i] = floor;
         float m = MathF.Max(floor, G.GeneLog(gn[g + G.B_MASS], K.MASS_LO, K.MASS_HI));   // its size class's floor; free above it
@@ -309,6 +310,52 @@ public static class Body
             float d = MathF.Abs(w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f);
             if (k == G.B_HUE || k == G.B_PATTERN_HUE) d = MathF.Min(d, 2f - d);
             if (k < G.B_HUE) shape += d * d;
+            else colour += d * d;
+        }
+        return shape < K.KIN_LOOK * K.KIN_LOOK * 10 && colour < K.KIN_LOOK * K.KIN_LOOK * 6;
+    }
+
+    // ------------------------------------------------------------------ cached look (2026-10-31, performance only)
+
+    /// <summary>Bytes of a look signature: the Visible genes in their order, then the appearance genes (APPEARANCE..B_MHC).</summary>
+    public const int NLOOK = NVISIBLE + G.NAPPEARANCE;
+    const int NVISIBLE = 8;
+    const int HUE = NVISIBLE + G.B_HUE - G.APPEARANCE, PATTERN_HUE = NVISIBLE + G.B_PATTERN_HUE - G.APPEARANCE, SHAPE_END = NVISIBLE + G.B_HUE - G.APPEARANCE;
+
+    /// <summary>
+    /// Cache slot i's look signature (World.D.Look: the genes LooksAlike compares, NLOOK bytes together) and its MHC
+    /// diversity (World.D.MhcDiv), from its genome. Called by Express, so whenever the genome is expressed. DECIDE compares
+    /// each animal with its neighbours' looks, and the genes lie G.LEN (98 KB) apart in the genome array; the signature
+    /// holds them in one cache line. Nothing changes: LooksAlike(sig, sig) is LooksAlike(w, a, b) bit for bit.
+    /// </summary>
+    public static void Signature(World w, int i)
+    {
+        int g = i * G.LEN, o = i * NLOOK;
+        var gn = w.Genome; var s = w.D.Look;
+        for (int k = 0; k < NVISIBLE; k++) s[o + k] = gn[g + Visible[k]];
+        for (int k = 0; k < G.NAPPEARANCE; k++) s[o + NVISIBLE + k] = gn[g + G.APPEARANCE + k];
+        w.D.MhcDiv[i] = Pathogens.Diversity(w, i);
+    }
+
+    /// <summary>LooksAlike from the cached signatures of a and b (Signature): the same test, in the same order.</summary>
+    public static unsafe bool LooksAlikeCached(World w, int a, int b)
+    {
+        fixed (sbyte* s = w.D.Look) return LooksAlike(s + a * NLOOK, s + b * NLOOK);
+    }
+
+    /// <summary>LooksAlike of two look signatures (NLOOK bytes each; Signature): the same arithmetic as LooksAlike(w, a, b).</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    public static unsafe bool LooksAlike(sbyte* a, sbyte* b)
+    {
+        float s = 0;
+        for (int k = 0; k < NVISIBLE; k++) { float d = (a[k] - b[k]) * (1f / 127f); s += d * d; }
+        if (s >= K.KIN_LOOK * K.KIN_LOOK * NVISIBLE) return false;
+        float shape = 0f, colour = 0f;
+        for (int k = NVISIBLE; k < NLOOK; k++)
+        {
+            float d = MathF.Abs(a[k] - b[k]) * (1f / 127f);
+            if (k == HUE || k == PATTERN_HUE) d = MathF.Min(d, 2f - d);
+            if (k < SHAPE_END) shape += d * d;
             else colour += d * d;
         }
         return shape < K.KIN_LOOK * K.KIN_LOOK * 10 && colour < K.KIN_LOOK * K.KIN_LOOK * 6;

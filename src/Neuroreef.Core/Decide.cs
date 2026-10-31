@@ -74,7 +74,7 @@ public static class Decide
     static int CellAt(int c, int dx, int dy)
         => World.WrapI(c / Map.FW + dy, Map.FW) * Map.FW + World.WrapI(c % Map.FW + dx, Map.FW);
 
-    public static void Run(World w, int i, ProbeBuf probe)
+    public static unsafe void Run(World w, int i, ProbeBuf probe)
     {
         byte stg = w.StageOf[i];
         if (stg < St.Juvenile) return;
@@ -111,40 +111,47 @@ public static class Decide
         Span<uint> priorities = stackalloc uint[K.MAX_NEIGH];
         int seen = SelectNeighbours(w, i, step, hcx, hcy, nOff, neighbours, priorities, out int candidates);
         int infNear = 0, strainSrc = -1;
-        for (int q = 0; q < seen; q++)
+        // the neighbours as BUILD packed them (World.Neighbour: one cache line each, in hash-cell order); every value is the
+        // slot's own, or the MathK function of it this loop took before (2026-10-31), so nothing changes
+        fixed (Neighbour* nbs = w.D.Near)
+        fixed (sbyte* looks = w.D.Look)
         {
-            int j = neighbours[q];
-            float ddx = World.Delta1(w.X[j] - x), ddy = World.Delta1(w.Y[j] - y);
-            float d2 = ddx * ddx + ddy * ddy;
-            if (d2 > R2 || d2 < 1e-8f) continue;
-            float d = MathF.Sqrt(d2);
-            if (d > reach && (ddx * fx + ddy * fy) / d < fovCos) continue;
-            float close = 1f - d / R;
-            crowd += close;
-            byte sj = w.StageOf[j];
-            bool active = sj >= St.Juvenile;
-            bool alike = Body.LooksAlike(w, i, j);
-            // contact route (Revision R): any animal in reach that sheds, of any kind; whether its strain can grow here is the strain's host range
-            float shedJ = w.PgShed[j];
-            if (active && shedJ > 0f && d <= reach + w.PReach[j]) { infNear++; dose += shedJ; if (shedJ > srcShed) { srcShed = shedJ; strainSrc = j; } }
-            if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-            if (alike)
+            sbyte* myLook = looks + i * Body.NLOOK;
+            for (int q = 0; q < seen; q++)
             {
-                if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(j)) && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                if (!active) continue;
-                kinSum += close; kinCx += ddx; kinCy += ddy;
-                kinHx += MathK.Cos(w.Heading[j]); kinHy += MathK.Sin(w.Heading[j]);
-                if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
-                if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-                continue;
+                Neighbour* nb = nbs + neighbours[q];
+                int j = nb->Slot;
+                float ddx = World.Delta1(nb->X - x), ddy = World.Delta1(nb->Y - y);
+                float d2 = ddx * ddx + ddy * ddy;
+                if (d2 > R2 || d2 < 1e-8f) continue;
+                float d = MathF.Sqrt(d2);
+                if (d > reach && (ddx * fx + ddy * fy) / d < fovCos) continue;
+                float close = 1f - d / R;
+                crowd += close;
+                bool active = nb->Stage >= St.Juvenile;
+                bool alike = Body.LooksAlike(myLook, nb->Look);
+                // contact route (Revision R): any animal in reach that sheds, of any kind; whether its strain can grow here is the strain's host range
+                float shedJ = nb->Shed;
+                if (active && shedJ > 0f && d <= reach + w.PReach[j]) { infNear++; dose += shedJ; if (shedJ > srcShed) { srcShed = shedJ; strainSrc = j; } }
+                if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                if (alike)
+                {
+                    if (d <= reach + 0.5f + 0.4f * nb->MassCbrt && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    if (!active) continue;
+                    kinSum += close; kinCx += ddx; kinCy += ddy;
+                    kinHx += nb->HCos; kinHy += nb->HSin;
+                    if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
+                    if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    continue;
+                }
+                otherSum += close;
+                float mj = nb->Mass;
+                if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                if (mj > o2Mass) { o2Mass = mj; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
+                float reachJ = reach + 0.5f + 0.4f * nb->MassCbrt;
+                if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
             }
-            otherSum += close;
-            float mj = w.ApparentMass(j);
-            if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-            if (mj > o2Mass) { o2Mass = mj; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
-            float reachJ = reach + 0.5f + 0.4f * MathK.Cbrt(mj);
-            if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
-            if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
         }
         if (metrics != null)
         {
@@ -246,7 +253,7 @@ public static class Decide
                 int cb = j * F.MAX_SYL;
                 for (int p = 0; p < F.MAX_SYL; p++) { int sk = w.Call[cb + p]; if (sk != 0 && l > hear[sk - 1]) hear[sk - 1] = l; }
                 if (l > loud) { loud = l; callDx = ddx; callDy = ddy; }
-                bool alike = Body.LooksAlike(w, i, j);
+                bool alike = Body.LooksAlikeCached(w, i, j);
                 if (alike && l > lA) { lA = l; jA = j; dxA = ddx; dyA = ddy; dA = d; }
                 if (l > lB) { lB = l; jB = j; dxB = ddx; dyB = ddy; dB = d; }
                 if (j == prevF) { lPrev = l; dxP = ddx; dyP = ddy; dP = d; prevAlike = alike; }
@@ -492,35 +499,42 @@ public static class Decide
         }
     }
 
+    /// <summary>
+    /// The neighbours examined: every other animal in the nOff nearest hash cells, or when there are more than MAX_NEIGH,
+    /// the MAX_NEIGH with the lowest stable priority, in priority order (ties by slot). Writes their positions in W.Sorted,
+    /// which index World.D.Near, to pos.
+    /// </summary>
     static int SelectNeighbours(World w, int i, uint step, int hcx, int hcy, int nOff,
-        Span<int> slots, Span<uint> priorities, out int candidates)
+        Span<int> pos, Span<uint> priorities, out int candidates)
     {
         int count = 0;
         candidates = 0;
+        var near = w.D.Near;
+        uint mySerial = w.Serial[i];
         for (int o = 0; o < nOff; o++)
         {
             int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
             for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
             {
-                int j = w.Sorted[q];
+                int j = near[q].Slot;   // = w.Sorted[q]
                 if (j == i) continue;
                 candidates++;
                 if (candidates <= K.MAX_NEIGH)
                 {
-                    slots[count++] = j;
+                    pos[count++] = q;
                 }
                 else
                 {
                     if (candidates == K.MAX_NEIGH + 1)
                     {
-                        for (int k = 0; k < count; k++) priorities[k] = Rng.Hash(w.Seed, step, w.Serial[i], w.Serial[slots[k]]);
-                        for (int k = count / 2 - 1; k >= 0; k--) HeapDown(slots, priorities, count, k);
+                        for (int k = 0; k < count; k++) priorities[k] = Rng.Hash(w.Seed, step, mySerial, near[pos[k]].Serial);
+                        for (int k = count / 2 - 1; k >= 0; k--) HeapDown(near, pos, priorities, count, k);
                     }
-                    uint priority = Rng.Hash(w.Seed, step, w.Serial[i], w.Serial[j]);
-                    if (Before(priority, j, priorities[0], slots[0]))
+                    uint priority = Rng.Hash(w.Seed, step, mySerial, near[q].Serial);
+                    if (Before(priority, j, priorities[0], near[pos[0]].Slot))
                     {
-                        slots[0] = j; priorities[0] = priority;
-                        HeapDown(slots, priorities, count, 0);
+                        pos[0] = q; priorities[0] = priority;
+                        HeapDown(near, pos, priorities, count, 0);
                     }
                 }
             }
@@ -529,27 +543,27 @@ public static class Decide
         // When the cap binds, keep the 64 lowest stable priorities and process them in priority order.
         for (int k = 1; k < count; k++)
         {
-            int slot = slots[k], j = k;
+            int p = pos[k], slot = near[p].Slot, j = k;
             uint priority = priorities[k];
-            while (j > 0 && Before(priority, slot, priorities[j - 1], slots[j - 1]))
+            while (j > 0 && Before(priority, slot, priorities[j - 1], near[pos[j - 1]].Slot))
             {
-                slots[j] = slots[j - 1]; priorities[j] = priorities[j - 1];
+                pos[j] = pos[j - 1]; priorities[j] = priorities[j - 1];
                 j--;
             }
-            slots[j] = slot; priorities[j] = priority;
+            pos[j] = p; priorities[j] = priority;
         }
         return count;
     }
 
-    static void HeapDown(Span<int> slots, Span<uint> priorities, int count, int k)
+    static void HeapDown(Neighbour[] near, Span<int> pos, Span<uint> priorities, int count, int k)
     {
         while (true)
         {
             int child = 2 * k + 1;
             if (child >= count) return;
-            if (child + 1 < count && Before(priorities[child], slots[child], priorities[child + 1], slots[child + 1])) child++;
-            if (!Before(priorities[k], slots[k], priorities[child], slots[child])) return;
-            Swap(slots, priorities, k, child);
+            if (child + 1 < count && Before(priorities[child], near[pos[child]].Slot, priorities[child + 1], near[pos[child + 1]].Slot)) child++;
+            if (!Before(priorities[k], near[pos[k]].Slot, priorities[child], near[pos[child]].Slot)) return;
+            Swap(pos, priorities, k, child);
             k = child;
         }
     }
@@ -585,7 +599,7 @@ public static class Decide
                 float d = MathF.Sqrt(d2);
                 if (d > reach && (dx * fx + dy * fy) / d < fovCos) continue;
                 byte stage = w.StageOf[j];
-                bool active = stage >= St.Juvenile, alike = Body.LooksAlike(w, i, j);
+                bool active = stage >= St.Juvenile, alike = Body.LooksAlikeCached(w, i, j);
                 if (ready && active && d < allMate.D && ValidPartner(w, i, j))
                     allMate = new Near { D = d, Dx = dx, Dy = dy, J = j };
                 if (alike)

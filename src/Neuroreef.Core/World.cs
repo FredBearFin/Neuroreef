@@ -197,11 +197,16 @@ public sealed class World
         + 5 * 4                                  // Revision O: fur, appendages, heat strain, heat need, operative temperature
         + 4 * 4 + 1                              // Revision P: remembered drink and feeding vectors
         + PG.N + G.NMHC + 4 * 4                  // Revision R: pathogen genome, immune memory key, 8 floats where 4 were
-        + 5 * 2 + 4;                             // Revision S: seed in gut and coat, pollen
+        + 5 * 2 + 4                              // Revision S: seed in gut and coat, pollen
+        + Body.NLOOK + 4 + 64;                   // derived (World.D): look signature, MHC diversity, packed neighbour
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
     // ---- telemetry
     public readonly Telemetry T;
+
+    /// <summary>What is derived from other state for speed, not state of its own (so a checkpoint does not save it):
+    /// written by Body.Express and BUILD, refreshed from the genomes by Derived.Refresh after a load.</summary>
+    public readonly Derived D;
 
     /// <summary>The most slots a world can have: one array holds every genome (.NET arrays have at most 2^31 elements).</summary>
     public static int MaxSlots => int.MaxValue / G.LEN / 1024 * 1024;
@@ -281,6 +286,7 @@ public sealed class World
         Scratch = new sbyte[G.LEN * 2];
 
         T = new Telemetry(this);
+        D = new Derived(c);
     }
 
     // ---- small helpers used by every phase
@@ -415,6 +421,45 @@ public sealed class World
     public void FireSwap() { (Fire, FireN) = (FireN, Fire); }
 
     public Span<sbyte> GenomeOf(int i) => new Span<sbyte>(Genome, i * G.LEN, G.LEN);
+}
+
+/// <summary>
+/// Per-slot values derived from the genome, kept for speed (2026-10-31): not state, so a checkpoint does not save them
+/// (Checkpoint walks World, not this class). Body.Express writes them; Refresh rebuilds them all from the genomes (the
+/// simulation does when the world was changed under it, as by loading a checkpoint).
+/// </summary>
+public sealed class Derived
+{
+    public readonly sbyte[] Look;    // Cap * Body.NLOOK: the genes LooksAlike compares (Body.Signature)
+    public readonly float[] MhcDiv;  // Pathogens.Diversity of each slot's recognition genes
+    /// <summary>BUILD's packed copy of what DECIDE reads of every neighbour, in W.Sorted order (index = sorted position).</summary>
+    public readonly Neighbour[] Near;
+
+    public Derived(int cap) { Look = new sbyte[cap * Body.NLOOK]; MhcDiv = new float[cap]; Near = new Neighbour[cap]; }
+
+    /// <summary>Recompute every living slot's values from its genome.</summary>
+    public void Refresh(World w)
+    {
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Body.Signature(w, i);
+    }
+}
+
+/// <summary>
+/// One animal as its neighbours see it this step, packed by BUILD into one cache line (World.D.Near, in hash-cell order):
+/// DECIDE reads these for every neighbour, where the slot arrays it read before lay in a dozen places. The values are
+/// the slot's own (or the MathK function of them DECIDE took), so every result is the same bit for bit.
+/// </summary>
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Size = 64)]
+public unsafe struct Neighbour
+{
+    public float X, Y;
+    public float HCos, HSin;      // MathK.Cos and Sin of its heading
+    public float Mass, MassCbrt;  // ApparentMass and MathK.Cbrt of it
+    public float Shed;            // PgShed
+    public int Slot;
+    public uint Serial;
+    public byte Stage;
+    public fixed sbyte Look[Body.NLOOK];   // its look signature (Body.Signature)
 }
 
 /// <summary>Bits of World.MemHas: what an animal remembers the way back to (Revision P).</summary>

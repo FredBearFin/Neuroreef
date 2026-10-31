@@ -8,7 +8,9 @@ public sealed class Options
 {
     public uint Seed;   // 0 until chosen: --seed N, or a fresh random one for every new world (Parse)
     public int Capacity = K.CAPACITY;
-    public int Threads = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 8));
+    // every core: the step loop's main thread works its share of each phase instead of waiting (2026-10-31: cores - 1 left a
+    // quarter of a 4-core machine idle in the live server and headless runs)
+    public int Threads = Math.Max(1, Math.Min(Environment.ProcessorCount, 8));
     public int Port = 5800;
     public bool Headless, RandomBrains, NoBrowser, PrintConstants, Help, Empty, Evolve, StepsSet, NewPrehistory;
     public string? ReportTxt;
@@ -86,7 +88,7 @@ public sealed class Options
   --seed N              world and run seed: the same N gives the same map, ancestors and names
                         (default: a new random seed every time; it is printed at start)
   --capacity N          agent slots of the world (default 65536)
-  --threads N           worker threads (default: cores - 1, max 8)
+  --threads N           worker threads (default: all cores, max 8)
   --port N              web console port (default 5800)
   --rate N              steps per second of the world (default 3, 0 = as fast as possible)
   --no-browser          do not open the browser

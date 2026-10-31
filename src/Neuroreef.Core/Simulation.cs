@@ -16,7 +16,7 @@ public sealed class Simulation : IDisposable
     readonly Workers _pool;
     readonly int[] _active;
     readonly int _orderA;
-    readonly Action<int, int> _decideJob, _fieldsJob, _waterJob, _plantJob;
+    readonly Action<int, int> _decideJob, _decideResetJob, _fieldsJob, _waterJob, _plantJob;
     public readonly int[] ActiveCount;
 
     /// <param name="prehistory">true for a prehistory branch (a label: every world is births and deaths only after its founders).</param>
@@ -57,13 +57,22 @@ public sealed class Simulation : IDisposable
         }
         Life.Run(W, _active);   // clears newborn flags, counts
 
-        _decideJob = (lo, hi) =>
+        _decideResetJob = (lo, hi) =>
         {
             // the memory-reset control (World.MemoryReset, off by default): forget the last step's activity of the
             // units in use (Brain.Forward zeroes the rest itself) and the places its brain holds; weights and learning traces are kept
-            if (W.MemoryReset) for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
+            for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
             for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe);
         };
+        // DECIDE visits the animals in hash-cell order (BUILD's W.Sorted: every one not dead or an embryo, so every one
+        // that acts), not by slot: neighbours share cells, so the slots one worker reads stay in its cache. Each call writes
+        // only its own slot and reads nothing another call writes (NR-105), so the order changes no result
+        _decideJob = (lo, hi) =>
+        {
+            var sorted = W.Sorted;
+            for (int q = lo; q < hi; q++) Decide.Run(W, sorted[q], Probe);
+        };
+        Seen();
     }
 
     /// <summary>The spun-up land before the founders came (with keepLand), for a world of the same seed to begin on.</summary>
@@ -256,14 +265,21 @@ public sealed class Simulation : IDisposable
     long _t;
     void Lap(int k) { long t = System.Diagnostics.Stopwatch.GetTimestamp(); PhaseMs[k] += (t - _t) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; _t = t; }
 
+    // the world as the last step left it: if it is not so now, it was changed under the simulation (a checkpoint loaded
+    // into it), and what is derived from the genomes (World.D) is rebuilt before the step
+    ulong _seenStep = ulong.MaxValue; uint _seenSerial; int _seenFree;
+    void Seen() { _seenStep = W.Step; _seenSerial = W.NextSerial; _seenFree = W.FreeTop; }
+
     public void Step()
     {
         var w = W;
         _t = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (w.Step != _seenStep || w.NextSerial != _seenSerial || w.FreeTop != _seenFree) w.D.Refresh(w);
         Build();
         UpdateProbe();
         Lap(0);
-        _pool.Run(_decideJob, w.Cap);
+        if (w.MemoryReset) _pool.Run(_decideResetJob, w.Cap);
+        else _pool.Run(_decideJob, w.CellStart[Map.GW * Map.GW]);
         Lap(1);
         int orderB = (int)(Rng.Hash(w.Seed, (uint)w.Step, 0, Rs.Order) % (uint)w.Cap);
         w.T.KillFlashN = 0;
@@ -282,6 +298,7 @@ public sealed class Simulation : IDisposable
         w.Step++;
         if (w.Step % K.SAMPLE_EVERY == 0) w.T.Take();
         Snap.AfterStep();
+        Seen();
         Lap(6);
     }
 
@@ -289,7 +306,7 @@ public sealed class Simulation : IDisposable
     void Build() => BuildFor(W);
 
     /// <summary>Rebuild the spatial hash of a world (BUILD phase).</summary>
-    public static void BuildFor(World w)
+    public static unsafe void BuildFor(World w)
     {
         int n = Map.GW * Map.GW;
         Array.Clear(w.CellCount);
@@ -307,11 +324,20 @@ public sealed class Simulation : IDisposable
         for (int c = 0; c < n; c++) { w.CellStart[c] = acc; acc += w.CellCount[c]; }
         w.CellStart[n] = acc;
         Array.Clear(w.CellCount);
+        var near = w.D.Near; var look = w.D.Look;
         for (int i = 0; i < w.Cap; i++)
         {
             int c = w.CellOf[i];
             if (c < 0) continue;
-            w.Sorted[w.CellStart[c] + w.CellCount[c]++] = i;
+            int q = w.CellStart[c] + w.CellCount[c]++;
+            w.Sorted[q] = i;
+            // what DECIDE reads of it as a neighbour, packed (World.Neighbour)
+            ref var nb = ref near[q];
+            float h = w.Heading[i], m = w.ApparentMass(i);
+            nb.X = w.X[i]; nb.Y = w.Y[i]; nb.HCos = MathK.Cos(h); nb.HSin = MathK.Sin(h);
+            nb.Mass = m; nb.MassCbrt = MathK.Cbrt(m); nb.Shed = w.PgShed[i];
+            nb.Slot = i; nb.Serial = w.Serial[i]; nb.Stage = w.StageOf[i];
+            fixed (sbyte* dst = nb.Look) new ReadOnlySpan<sbyte>(look, i * Body.NLOOK, Body.NLOOK).CopyTo(new Span<sbyte>(dst, Body.NLOOK));
         }
         // this step's callers (Revision N): every organism that made a sound last step, sorted by hash cell like the
         // others, with how far its call carries: HEAR_R x voice x M^(1/3) (a bigger, louder animal is heard further),
@@ -455,7 +481,9 @@ public sealed class Simulation : IDisposable
         {
             _job = job; _total = total;
             if (_n == 1) { job(0, total); return; }
-            _chunk = Math.Max(1, Math.Min(256, total / (_n * 8)));
+            // about 32 chunks per thread, at most 64 elements (2026-10-31: was 8 per thread, up to 256): DECIDE runs in hash
+            // order, so a herd of big-brained animals sits in a few chunks, and big chunks left one thread with a long tail
+            _chunk = Math.Max(1, Math.Min(64, total / (_n * 32)));
             _next = 0;
             _done.Reset(_n - 1);
             for (int k = 1; k < _n; k++) _go[k].Release();
