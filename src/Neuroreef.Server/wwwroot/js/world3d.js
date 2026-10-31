@@ -18,7 +18,7 @@ import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBod
 // degrees, under 33 almost everywhere. (Before Geology worked at this scale, 55 units drew 2-4 % plate-scale slopes as cliffs.)
 const RELIEF = 55;
 const SHADE_Z = 1;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
-const LAND_LIFT = 0.06;      // land sits this far above the lake level, so the lakes' flat surface never shows through it
+const LAND_LIFT = 0.06;      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
 const RIVER_W0 = 1.1, RIVER_WMAX = 3.6;   // river ribbon width (units) at the river threshold, and the widest (a cell is 4)
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
 const CALL_MAX = 768;         // call rings drawn at once (up to 3 per utterance)
@@ -91,11 +91,12 @@ export class World3D {
   //
   // Everything here draws what the WORLD and FIELDS frames hold, nothing else (2026-10-31):
   // - ground: one vertex per cell at its elevation, RELIEF units for the sim's whole height range above the lakes;
-  // - lakes: a flat surface at the lake level, only over the quads that touch a lake cell (w.cell water below w.sea),
-  //   so the shore is where the ground crosses the lake level and nowhere else;
+  // - standing water (the sea and every lake, each at its own level: the WORLD frame's surface plane, w.surf): a flat
+  //   surface over the quads that touch a cell of it, at that water's level, so the shore is where the ground crosses
+  //   the level and nowhere else (a server without the plane: every water cell below w.sea, at the sea level);
   // - rivers: ribbons along each river cell's course to the cell it drains to (the WORLD frame's river plane), as wide
   //   as its flow gives, in a channel cut as deep as its depth;
-  // - ponds (FIELDS 'pond', Wet = 2): standing water painted on the ground.
+  // - ponds (FIELDS 'pond', Wet = 2) and flooded floodplains (FIELDS 'flood', Wet = 3): shallow water painted on the ground.
   // The map is a torus: the ground is drawn as a 3x3 tiling so the view never runs out of land, but in the overview one
   // map's worth around the view centre is drawn in full, a thin line marks where the map wraps, the copies beyond it
   // are dimmed, and the tiling's outer edge fades into the background (no edge, skirt or underside ever shows).
@@ -110,11 +111,24 @@ export class World3D {
     const lake = this.isLake = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
       const h = (w.elev[i] / 255 - sea) * U;
-      if (w.cell[i] === 1) H[i] = Math.max(0, h) + LAND_LIFT;   // land is never below the lake level (elevation is sent in 1/255 steps)
+      if (w.cell[i] === 1) H[i] = Math.max(0, h) + LAND_LIFT;   // land is never below the sea level (elevation is sent in 1/255 steps)
       else if (riv[i]) {                                          // a river: its surface at the cell's level, its bed its depth below
         const top = Math.max(0, h) + LAND_LIFT;
         H[i] = top - Math.max(0.12, (w.depth[i] / 2000) * U); SF[i] = top + 0.02;
-      } else { H[i] = Math.min(h, -0.05); SF[i] = 0; lake[i] = 1; }   // a lake: its bed, under the lake level
+      } else {                                                    // the sea or a lake: its bed, under its own level
+        let s = w.surf && w.surf[i] ? (w.surf[i] / 65535 - sea) * U : 0;
+        if (Math.abs(s) < 0.01) s = 0;                            // the sea (its level sent in 1/65535 steps): exactly 0 as ever
+        H[i] = Math.min(h, s - 0.05); SF[i] = s; lake[i] = 1;
+      }
+    }
+    // land beside standing water is never below its level (its 1/255 elevation steps could put a shore under an upland lake)
+    if (w.surf) for (let i = 0; i < n; i++) {
+      if (w.cell[i] !== 1) continue;
+      const x = i % fw, y = (i / fw) | 0;
+      for (let k = 0; k < 8; k++) {
+        const j = ((y + DIRY[k] + fw) % fw) * fw + ((x + DIRX[k] + fw) % fw);
+        if (lake[j] && H[i] < SF[j] + LAND_LIFT) H[i] = SF[j] + LAND_LIFT;
+      }
     }
     // each quad is split along the diagonal its water follows (a river running diagonally stays in one channel)
     const D = this.diag = new Uint8Array(n);
@@ -146,15 +160,18 @@ export class World3D {
     tg.setIndex(new THREE.BufferAttribute(idx, 1));
     this.tColor = new Float32Array(N * N * 3).fill(0.4);
     tg.setAttribute('color', new THREE.BufferAttribute(this.tColor, 3));
-    // lakes: the quads touching a lake cell, flat at the lake level; colour (by depth) per corner cell
-    const lp = [], lv = [];
+    // standing water: the quads touching a cell of the sea or a lake, flat at its level (the highest of the quad's water
+    // cells, where two waters meet); colour (by depth below that level) per corner cell
+    const lp = [], lv = [], ll = [];
     for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
       const cs = [at(x, y), at(x + 1, y), at(x, y + 1), at(x + 1, y + 1)];
-      if (!(lake[cs[0]] || lake[cs[1]] || lake[cs[2]] || lake[cs[3]])) continue;
-      lp.push(x * S, 0, y * S, (x + 1) * S, 0, y * S, x * S, 0, (y + 1) * S, (x + 1) * S, 0, (y + 1) * S); lv.push(...cs);
+      let L = -Infinity;
+      for (const c of cs) if (lake[c] && SF[c] > L) L = SF[c];
+      if (L === -Infinity) continue;
+      lp.push(x * S, L, y * S, (x + 1) * S, L, y * S, x * S, L, (y + 1) * S, (x + 1) * S, L, (y + 1) * S); lv.push(...cs); ll.push(L, L, L, L);
     }
     const lg = quadGeometry(lp, 4);
-    this.lakeVC = Int32Array.from(lv); this.lakeColor = lg.attributes.color.array;
+    this.lakeVC = Int32Array.from(lv); this.lakeVL = Float32Array.from(ll); this.lakeColor = lg.attributes.color.array;
     // rivers
     const rg = this._riverGeometry(at, S);
     this.rivColor = rg.attributes.color.array;
@@ -258,7 +275,8 @@ export class World3D {
     const d = f ? f.d : 0, L = f ? (n) => f.data.subarray(this._layer(n) * d * d, (this._layer(n) + 1) * d * d) : null;
     const grass = f && L('grass'), shrub = f && L('shrub'), tree = f && L('tree'), fire = f && L('fire'), moist = f && L('moisture'),
           carrion = f && L('carrion'), algae = f && L('algae'), phyto = f && L('phyto'), nectar = f && L('nectar'), pond = f && L('pond'),
-          frozen = f && this._layer('frozen') >= 0 && L('frozen'), temp = f && this._layer('temp') >= 0 && L('temp');
+          frozen = f && this._layer('frozen') >= 0 && L('frozen'), temp = f && this._layer('temp') >= 0 && L('temp'),
+          flood = f && this._layer('flood') >= 0 && L('flood');
     const sea = w.sea;
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const cx = x % fw, cy = y % fw, i = cy * fw + cx, k = y * N + x;
@@ -280,6 +298,8 @@ export class World3D {
         const ca = carrion[fi] / 255; r += (0.35 - r) * ca * 0.5; g *= 1 - ca * 0.4; b *= 1 - ca * 0.4;
         // a seasonal pond holding water (Wet = 2; the layer is the share of the field cell's 4 cells): open water
         if (pond && pond[fi] && w.cell[i] === 1) { const p = Math.min(1, 0.35 + pond[fi] / 255); r += (0.12 - r) * p; g += (0.30 - g) * p; b += (0.44 - b) * p; }
+        // a flooded floodplain (Wet = 3; the share of the field cell's 4 cells): shallow, silty water over the ground
+        if (flood && flood[fi] && w.cell[i] === 1) { const p = Math.min(0.9, 0.4 + 0.5 * flood[fi] / 255); r += (0.20 - r) * p; g += (0.36 - g) * p; b += (0.42 - b) * p; }
         if (frozen && frozen[fi]) { const fr = 0.75 * frozen[fi] / 255; r += (0.92 - r) * fr; g += (0.94 - g) * fr; b += (0.97 - b) * fr; }   // frost and snow (Revision O)
         if (fire[fi]) { r = 1.0; g = 0.42; b = 0.08; }
         if (this.tempOverlay && temp) {
@@ -295,10 +315,10 @@ export class World3D {
       C[k * 3] = r; C[k * 3 + 1] = g; C[k * 3 + 2] = b;
     }
     const fieldOf = (i) => f ? (((i / fw) | 0) >> 1) * d + ((i % fw) >> 1) : 0;
-    // lakes: shallow water turquoise, deep water dark blue (depth below the lake level at each corner); algae and plankton tint it green
-    const LC = this.lakeColor, LV = this.lakeVC;
+    // lakes: shallow water turquoise, deep water dark blue (depth below the water's level at each corner); algae and plankton tint it green
+    const LC = this.lakeColor, LV = this.lakeVC, LL = this.lakeVL;
     for (let v = 0; v < LV.length; v++) {
-      const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, -this.cellH[i]) / 2.0);
+      const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, LL[v] - this.cellH[i]) / 2.0);
       const al = f ? algae[fi] / 255 : 0, ph = f ? phyto[fi] / 255 : 0;
       LC[v * 4] = 0.10 - 0.07 * dd + 0.06 * al; LC[v * 4 + 1] = 0.40 - 0.24 * dd + 0.18 * al + 0.10 * ph; LC[v * 4 + 2] = 0.48 - 0.18 * dd + 0.02 * ph;
       LC[v * 4 + 3] = 0.62 + 0.33 * dd;

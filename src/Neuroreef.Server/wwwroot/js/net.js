@@ -32,7 +32,10 @@ export class Link {
         const fw = dv.getUint16(8, true), sea = dv.getFloat32(12, true), n = fw * fw;
         // rivers: course and size per cell (a server without the plane sends null; world3d.js then derives them)
         const river = buf.byteLength >= 16 + 4 * n ? new Uint8Array(buf, 16 + 3 * n, n) : null;
-        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river });
+        // standing water surface per cell (elevation x 65535, 0 = none; a server without the plane sends null: the sea level then)
+        let surf = null;
+        if (buf.byteLength >= 16 + 6 * n) { surf = new Uint16Array(n); for (let i = 0, o = 16 + 4 * n; i < n; i++, o += 2) surf[i] = dv.getUint16(o, true); }
+        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf });
         break;
       }
       case T_AGENTS: {

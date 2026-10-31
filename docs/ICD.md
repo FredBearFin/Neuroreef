@@ -33,7 +33,8 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | 16 | u8[FW²] | elevation, 0..255 = normalised 0..1 |
 | 16 + FW² | u8[FW²] | realm bits per cell: 1 land, 2 shallow water, 4 deep water |
 | 16 + 2·FW² | u8[FW²] | water depth × 2000, clamped to 255 |
-| 16 + 3·FW² | u8[FW²] | rivers (2026-10-31, display only): 0 = not a river (land, or lake below lake level); for a river cell (open water above lake level) bits 0-2 = the neighbour it drains to (0 +x, 1 +x+y, 2 +y, 3 −x+y, 4 −x, 5 −x−y, 6 −y, 7 +x−y; y is the row) and bits 3-7 = size class 1 + round(4·log2(Flow / river threshold)), 1..31 (quarter octaves of the rain it gathers over the catchment at which a cell becomes river, RIVER_ACC). A client that predates it ignores the trailing plane |
+| 16 + 3·FW² | u8[FW²] | rivers (2026-10-31, display only): 0 = not a river (land, the sea or a lake); for a river cell (open water outside the sea and the lakes) bits 0-2 = the neighbour it drains to (0 +x, 1 +x+y, 2 +y, 3 −x+y, 4 −x, 5 −x−y, 6 −y, 7 +x−y; y is the row) and bits 3-7 = size class 1 + round(4·log2(Flow / river threshold)), 1..31 (quarter octaves of the rain it gathers over the catchment at which a cell becomes river, RIVER_ACC). A client that predates it ignores the trailing plane |
+| 16 + 4·FW² | u16[FW²] | standing water surface (2026-10-31, display only): for a cell of the sea or a lake, its water level (bed + depth) as normalised elevation × 65535, at least 1; 0 for land and rivers. Lakes in upland basins stand at their own levels, above or below the sea level. A client that predates it ignores the trailing plane and draws all standing water at the sea level |
 
 ### 0x02 AGENTS (~20 Hz; `view.hz` sets the rate per client)
 
@@ -80,7 +81,7 @@ The first 26 record bytes retain their format-5 meaning.
 |---|---|---|
 | 8 | u16 | side D = FW / 2 (2×2 cells averaged) |
 | 10 | u16 | layer count L |
-| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora |
+| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood |
 
 Layer values are 0..255 for 0..1. Pools that can exceed 1 are sent as tanh(amount) (carrion,
 dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)). `pond` is 1 where a seasonal
@@ -88,7 +89,8 @@ pond holds water; `temp` is the air temperature as (T + 40) / 90 (−40..50 °C;
 is below 0 °C (frost on land, ice on water). The plant layers (Revision S): `plant height` is the tallest plant with
 cover above 0.02 on the height trait's log scale (5 cm..40 m); `toxin`, `thorns` and `drought tolerance` are the
 cover-weighted trait levels /15 of the cell's slots; `fleshy fruit` is the FRUIT level /15 of the fruit there; `leaf-on`
-is the leafy share of the cover; `flora` is (founding lineage + 1) / 129 of the plant with most cover (0 = none).
+is the leafy share of the cover; `flora` is (founding lineage + 1) / 129 of the plant with most cover (0 = none). `flood` (2026-10-31) is 1 where a
+river has flooded its floodplain (Wet = 3); clients look layers up by name, so one that predates it ignores it.
 
 ### 0x04 TELEMETRY (when a new sample exists, checked every 0.5 s)
 

@@ -16,7 +16,8 @@ public static class Wire
     public static readonly string[] FieldLayers =
         { "grass", "shrub", "tree", "browse", "fruit", "seed", "nectar", "root", "carrion", "dung+litter", "wood",
           "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen",
-          "plant height", "toxin", "thorns", "drought tolerance", "fleshy fruit", "leaf-on", "flora" };   // Revision S: the plants' genes
+          "plant height", "toxin", "thorns", "drought tolerance", "fleshy fruit", "leaf-on", "flora",   // Revision S: the plants' genes
+          "flood" };   // 2026-10-31: a flooded floodplain (Wet = 3)
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -35,11 +36,12 @@ public static class Wire
         BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(4), (uint)step);
     }
 
-    /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River).</summary>
+    /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River),
+    /// u16[FW²] standing water surface (Surface).</summary>
     public static byte[] EncodeWorld(World w)
     {
         int n = Map.FW * Map.FW;
-        var b = new byte[16 + 4 * n];
+        var b = new byte[16 + 6 * n];
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -49,8 +51,21 @@ public static class Wire
             b[16 + n + i] = w.Cell[i];
             b[16 + 2 * n + i] = (byte)Math.Clamp((int)(w.Depth[i] * 2000f), 0, 255);
             b[16 + 3 * n + i] = River(w, i);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 4 * n + 2 * i), Surface(w, i));
         }
         return b;
+    }
+
+    /// <summary>
+    /// A cell's standing water surface for the console (display only; 2026-10-31, so the 3D view draws every lake flat at
+    /// its own level, not only the sea): for a cell of the sea or a lake (LakeOf >= 0), its bed plus its depth (Elev + Depth,
+    /// which Hydrology.Waters sets to the lake's level) as normalised elevation x 65535, at least 1; 0 for every other cell
+    /// (land and rivers).
+    /// </summary>
+    static ushort Surface(World w, int i)
+    {
+        if (w.Cell[i] == (byte)Realm.Land || w.LakeOf[i] < 0) return 0;
+        return (ushort)Math.Clamp((int)MathF.Round((w.Elev[i] + w.Depth[i]) * 65535f), 1, 65535);
     }
 
     // the 8 neighbours of a cell in the order of River's direction code (dx, dy in cells; y is the row)
@@ -58,15 +73,15 @@ public static class Wire
 
     /// <summary>
     /// A cell's river for the console (display only; 2026-10-31, so the 3D view can draw rivers as connected ribbons of the
-    /// width their flow gives): 0 = not a river (land, or a lake below lake level). A river cell (open water above lake
-    /// level, as Terrain.BuildWater makes it) has bits 0-2 = the neighbour it drains to (WaterCycle's receiver, Recv:
+    /// width their flow gives): 0 = not a river (land, the sea or a lake: LakeOf >= 0, or water below the sea level). A river
+    /// cell (open water outside the sea and the lakes, as Hydrology.Waters makes it) has bits 0-2 = the neighbour it drains to (WaterCycle's receiver, Recv:
     /// 0 east (+x), 1 +x+y, 2 +y, 3 -x+y, 4 -x, 5 -x-y, 6 -y, 7 +x-y) and bits 3-7 = its size class,
     /// 1 + round(4 · log2(Flow / river threshold)) clamped to 1..31: quarter octaves of the rain it gathers (Flow) over the
     /// catchment at which a cell becomes river (RIVER_ACC, scaled to the map).
     /// </summary>
     static byte River(World w, int i)
     {
-        if (w.Cell[i] == (byte)Realm.Land || w.Elev[i] < w.SeaLevel) return 0;
+        if (w.Cell[i] == (byte)Realm.Land || w.Elev[i] < w.SeaLevel || w.LakeOf[i] >= 0) return 0;
         int FW = Map.FW, x = i % FW, y = i / FW;
         float acc = K.RIVER_ACC * (FW * FW / 65536f);
         int size = Math.Clamp(1 + (int)MathF.Round(4f * MathF.Log2(MathF.Max(1f, w.Flow[i] / acc))), 1, 31);
@@ -119,6 +134,7 @@ public static class Wire
             14 => w.Fire[i] > 0 ? 1f : 0f, 15 => MathF.Tanh(w.Scent[i] * 4f), 16 => w.Moisture[i], 17 => w.Nutrient[i] / K.N_MAX, 18 => w.Poll[i], 19 => w.Wet[i] == 2 ? 1f : 0f,
             20 => (w.Temp[i] + 40f) / 90f, 21 => w.Temp[i] < 0f ? 1f : 0f,   // air temperature (-40..50 °C) and frost or ice (Revision O)
             >= 22 and <= 28 => PlantLayer(w, layer - 22, i),
+            29 => w.Wet[i] == 3 ? 1f : 0f,
             _ => 0f,
         };
     }
