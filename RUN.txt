@@ -29,6 +29,10 @@ YOUR WORLD IS SAVED
   The world saves itself every 30 minutes and when you close the window (Ctrl+C), to world.nrck.
   Starting Neuroreef.exe again continues it exactly where it was. To start a new world instead:
   Neuroreef.exe --new-world (the old one is kept as world.nrck.old).
+  A save made by an older version of the program is continued too (and so is a prehistory in progress,
+  prehistory.nrck): its animals, their genomes and brains, the species and the step are kept, and what the
+  new version builds differently (the land, water, plants, disease in the ground) is rebuilt from the
+  world's own seed and nature. The program prints what it kept and what it rebuilt.
 
 SETUP BEFORE A NEW PREHISTORY
   When a new prehistory is about to start, the browser first shows a setup page: how many branches,

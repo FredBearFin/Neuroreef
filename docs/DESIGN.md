@@ -3,6 +3,25 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Saves that survive an update, and a faster start** (2026-10-31; Checkpoint.cs, Land.cs). Checkpoint version 18 writes a
+kind byte per field (so a field a later program does not know can be skipped) and, for the big per-slot arrays (genome,
+weights, traces, learning history, hidden state, gains, features), only the slots in use: each is written whole at a birth
+before it is read. A save of format 12 to 17 (the genome layout is unchanged since 12) is migrated on load: every field
+whose name, kind, element type and length still match is kept (the animals with their genomes and brains, the clades, the
+step, the telemetry); a field the save lacks starts as a new world has it (a missing phenotype field: every animal's body
+is expressed again from its genes); a field the program no longer has is dropped. The land (Checkpoint.LandFields:
+terrain, climate, water cycle, plants with their genotype table, the pathogen reservoir) is rebuilt from the world's own
+terrain seed and nature exactly as a new world builds it if the save is older than format 17 (other land rules) or any
+land field no longer fits; the reservoir is then seeded as at creation, the seed and pollen animals carry are dropped,
+and an animal standing where the rebuilt land does not hold it moves to the nearest cell that does. The load prints what
+it kept and rebuilt. Startup: a world that is about to be loaded from a save builds no land and no founders (restore);
+a prehistory forms its relief (Terrain.Shape: depends on the terrain seed alone) once and builds its branches side by
+side, each on its own workers (ponds, plants and founders depend on the branch's run seed, so the rest is built per
+branch: copying branch 0's spun-up land would change the other branches); the world that begins after a prehistory on
+its map starts on branch 0's land as it was before its founders (same seed, same land) instead of growing it again;
+--validate builds each seed's land once for its two runs. A world built from a Land is bit-identical to one that builds
+its own (CheckpointTests).
+
 **Evolving plants (Revision S)** (2026-10-30; Plants.cs). Land vegetation is no longer three fixed layers with designed
 rates. Each land cell has four slots (herb, shrub, tree, sapling), each one genotype (an id into a table of up to 65,535)
 and its cover (Pool.Grass, World.Shrub/Tree/Sapling, now updated in place: the old double buffers are gone). A genotype
