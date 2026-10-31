@@ -47,6 +47,39 @@ genotypes. Not built yet (design steps 7-8 in full): lineage splitting into name
 console panel and 3D tinting; the world report has a FLORA section and the console seven new map layers. Checkpoint
 version 17.
 
+**Relief that looks like land (geomorphology)** (2026-10-31; Geology.cs, Hydrology.Erode; the user's screenshots showed
+flat-topped plateaus behind near-vertical cliffs). Measured before (1024 map, seeds 3, 7, 11; tools/TerrainProbe, images
+in docs/art/terrain/geo_before_*): 3-12% of the coarse land stood at the 5 km cap (GEO_H_MAX), the top tenth of the relief
+held 0.3-12% of the land, and 7-22% of the land above half the relief was flat (< 3°). As the 3D view draws it, 13-18% of
+the land was steeper than 45° (p99 66-68°). The main cause was a scale error: slopes were made on the plates' 39 km cells
+and shown on 218 m ones (the 3D view draws H_RELIEF over 55 units and a field cell over 4), ~90 times steeper; the cap
+then cut the belts flat, and an erosion threshold kept the flats. The top-view repeats are the 3D view drawing the torus
+3 x 3 when zoomed out: the relief has no shorter period (autocorrelation at shifts beyond a quarter map at most 0.14-0.33, a long belt, not a
+repeat; at most 0.03 for its detail). Changes:
+- *Two scales.* The plates (belts, rifts, flexure) keep GEO_KM; the land surface (slopes, drainage area, hillslopes) is
+  measured at GEO_CELL_M = 218 m a field cell, the scale it is shown at.
+- *No cap.* Uplift has no ceiling; erosion that rises steeply with relief bounds it (Montgomery & Brandon 2002):
+  stream power E = K A^(n/2) S^n with m/n = 0.5 and n = 2 (Whipple & Tucker 1999; Lague 2014), solved implicitly and
+  never below the lake a river runs into; critical-slope failure at GEO_SC = 0.6 (31°), its debris carried with the load;
+  nonlinear hillslope diffusion D S / (1 - (S/Sc)^2) (Roering et al. 1999). K is 2-8 km^-1/Myr by rock.
+- *The last of deep time at full resolution.* After 200 coarse steps, the relief, its sediment and its rock uplift (the
+  plates' plus the flexural rebound the coarse grid ended with) are upsampled and 40 more steps are run on the field grid,
+  so valleys and the ridges between them are cut rather than interpolated. The relief is scaled down to stand at most
+  H_RELIEF above the lakes, at the start and 10 steps from the end (never up: the 256 map's 14 km of land holds only
+  1.5-2.2 km at slopes it can stand at); Elev is then H_RELIEF / (1 - SeaLevel) m per unit (scaled down again if the last
+  steps raised the top above H_RELIEF), so slopes are what deep time made. On the field grid lake floors sink
+  under their fill (as the coarse grid's flexure does), so rift lakes are not filled to the brim.
+- *Fine passes.* Hydrology.Erode takes the same critical slope (sc, as elevation per cell); rivers cut down to their lake's
+  level, not below it, and creep into a lake stops at its level, so the lake share is the Nature.Water quantile exactly.
+Measured after (1024 map, seeds 3, 7, 11; geo_after_*): no cap, nothing flat on high ground (0.3-0.8% of the land above half
+the relief), the top tenth of the relief 0.1-0.2% of the land; slopes as drawn p50 12-19°, p99 31.5-32°, p99.9 under 33°;
+lowland channels have wide floors (47-69% of the cells within 4 of them lie within 30 m of their height) and upland ones
+narrow V's (16-17%); hypsometric integral 0.18-0.23 (it was 0.27-0.38), median land 390-580 m (600-790); lakes 10.0%
+(10.3-10.5). Land rock: crystalline 61-69%, sedimentary 26-35%, volcanic 4-5%; alluvial land (> ALLUV_D) 11-15% (it was
+9-11%). Rivers 0.78-0.86% of the map, 0.25% for seed 7 (a dissected upland between many lakes). Generation: Terrain.Build
+2.4 s at 1024 and 9.7 s at 2048 on 4 shared cores (load ~6). GeologyTests now test no plateau at a cap, bounded slopes,
+no periodicity and valley shape; the rift test asks for twice the map's lake share in rifts (24-41%; erosion now fills
+some rifts), and the lake share is the quantile ±1 cell. Not done: the 3D view's vertical scale and torus tiling (world3d.js).
 **Land formed by geology (Revision R)** (2026-10-30; the user: "the land should be FORMED by geological processes at
 world creation, not drawn from fractal noise"). Before, the relief was fBm noise, the lakes its lowest 10%, and 20
 erosion passes cut it. Now Geology.Form (Geology.cs) makes it in deep time, and Terrain.Build finishes it with the same

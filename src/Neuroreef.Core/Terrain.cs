@@ -71,7 +71,7 @@ public static class Terrain
         // routing), cuts the ground and lays down what it carries (Hydrology.Erode). Rivers are the cells that gather
         // the most rain; nothing else decides where they are. Revision R: hard rock cuts slower.
         var rain0 = RunoffRain(w);
-        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w));
+        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w), sc: Geology.CriticalDrop(w));
         return rain0;
     }
 

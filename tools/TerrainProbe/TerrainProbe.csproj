@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A headless probe of the generated relief (geomorphology diagnostics): dumps elevation, flow and the coarse
+       deep-time state of a few worlds as raw float32 files; tools/TerrainProbe/stats.py turns them into numbers and images. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Neuroreef.Core\Neuroreef.Core.csproj" />
+  </ItemGroup>
+</Project>
