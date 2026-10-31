@@ -23,6 +23,8 @@
 //   ?view=arch      labelled appearance sweeps (each: four variants near, then the low-detail body)
 //   ?view=grid      a grid of random gene combinations, seeded by ?seed=N
 //   ?row=N          one appearance row only (close up)
+//   ?view=side      random species seen from the side at eye level: ?n=8 · ?cols=4 · ?loco=Walk|Wade|Swim|Fly|Sessile
+//                   (random gene combinations until n of that locomotion) · ?labels=0 · ?h=heading · ?elev=degrees
 //   (default: both) ?gait=0..1 · ?act=eat|strike|rest · ?t=seconds freezes time · ?true=1 true relative sizes
 import * as THREE from 'three';
 import { OrbitControls } from './lib/OrbitControls.js';
@@ -30,6 +32,7 @@ import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize, 
 
 const q = new URLSearchParams(location.search);
 const row = q.has('row') ? +q.get('row') : -1, view = row >= 0 ? 'arch' : q.get('view') || 'both', seed = +(q.get('seed') || 1), trueSize = q.has('true');
+const side = view === 'side', showLabels = q.get('labels') !== '0', heading = q.has('h') ? +q.get('h') : side ? 0.35 : 0.5;
 const gait = q.has('gait') ? +q.get('gait') : 0.6;
 const act = { eat: 1, strike: 2 }[q.get('act')] || 0, rest = q.get('act') === 'rest' ? 1 : 0;
 const frozen = q.has('t') ? +q.get('t') : null;
@@ -49,7 +52,7 @@ const SWEEPS = [
 
 const tiles = [];   // { body, color (hex), x, z, far, label }
 let x0 = 0;
-if (view !== 'grid') {
+if (view !== 'grid' && !side) {
   SWEEPS.forEach(([name, genes], r) => {
     if (row >= 0 && r !== row) return;
     for (let i = 0; i < 5; i++) {
@@ -62,10 +65,22 @@ if (view !== 'grid') {
   });
   x0 = 62;
 }
-if (view !== 'arch') {
+const randomBody = () => ({ legs: organ(), fins: organ(), wings: organ(), sight: organ(), armour: organ(), strike: organ(), meat: Math.min(0.95, organ()), m01: organ(), legPairs: 1 + Math.floor(rnd() * 4), finPairs: 1 + Math.floor(rnd() * 4), eyePairs: 1 + Math.floor(rnd() * 4), fur: organ(), append: organ(), appearance: Float32Array.from({ length: 16 }, organ) });
+if (side) {
+  const n = +(q.get('n') || 8), cols = +(q.get('cols') || 4), want = q.get('loco');
+  // ?set=wings:0.7,legPairs:2,a3:0.9 fixes genes on every body (aN = appearance gene N)
+  const fix = (q.get('set') || '').split(',').filter(Boolean).map((kv) => kv.split(':'));
+  for (let i = 0, tries = 0; i < n && tries < 5000; tries++) {
+    const b = randomBody();
+    for (const [k, v] of fix) if (/^a\d+$/.test(k)) b.appearance[+k.slice(1)] = +v; else b[k] = +v;
+    if (want && locoOf(b.legs, b.fins, b.wings, massOf(b.m01 * 255 - 128)) !== want) continue;
+    tiles.push({ body: b, color: new THREE.Color().setHSL(rnd(), 0.55, 0.5).getHex(), x: (i % cols) * 7, z: Math.floor(i / cols) * 7, far: q.get('far') === '1' });
+    i++;
+  }
+} else if (view !== 'arch') {
   const cols = 6, rows = view === 'grid' ? 5 : 6;
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    const b = { legs: organ(), fins: organ(), wings: organ(), sight: organ(), armour: organ(), strike: organ(), meat: Math.min(0.95, organ()), m01: organ(), legPairs: 1 + Math.floor(rnd() * 4), finPairs: 1 + Math.floor(rnd() * 4), eyePairs: 1 + Math.floor(rnd() * 4), fur: organ(), append: organ(), appearance: Float32Array.from({ length: 16 }, organ) };
+    const b = randomBody();
     const color = new THREE.Color().setHSL(rnd(), 0.55, 0.5).getHex();
     tiles.push({ body: b, color, x: x0 + c * 10, z: r * 10, far: false });
   }
@@ -89,13 +104,14 @@ const labels = [], col = new THREE.Color(), f2 = (v) => v.toFixed(2).replace(/^0
 tiles.forEach((tl, i) => {
   const b = tl.body, mass = massOf(b.m01 * 255 - 128), loco = (b.loco = locoOf(b.legs, b.fins, b.wings, mass));
   const sc = trueSize ? bodySize(mass) : Math.max(0.9, Math.min(2.4, bodySize(mass)));
-  const y = loco === 'Swim' ? 0.45 * sc : loco === 'Fly' && !rest ? 0.5 + 0.8 * sc : 0;
+  const y = loco === 'Swim' ? (side ? 0.25 * sc : 0.45 * sc) : loco === 'Fly' && !rest ? 0.5 + 0.8 * sc : 0;
   col.setHex(tl.color);
   const B = tl.far ? F : N, k = tl.far ? nf++ : nn++;
-  setBody(B, k, tl.x, y, tl.z, 0.5, sc, sc * (rest && loco !== 'Fly' ? 0.7 : 1), b, loco === 'Sessile' ? 0 : gait, (i * 0.37) % 1, act, rest, col.r, col.g, col.b);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: loco === 'Swim' ? 0x1d4a66 : loco === 'Wade' ? 0x2c5a55 : 0x3b4a2a }));
+  setBody(B, k, tl.x, y, tl.z, heading, sc, sc * (rest && loco !== 'Fly' ? 0.7 : 1), b, loco === 'Sessile' ? 0 : gait, (i * 0.37) % 1, act, rest, col.r, col.g, col.b);
+  const ground = new THREE.Mesh(side ? new THREE.PlaneGeometry(7, 7) : new THREE.PlaneGeometry(9.6, 7.6), new THREE.MeshLambertMaterial({ color: loco === 'Swim' ? 0x1d4a66 : loco === 'Wade' ? 0x2c5a55 : 0x3b4a2a }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(tl.x, -0.01, tl.z); scene.add(ground);
-  const l = document.createElement('div'); l.className = 'lab';
+  const l = document.createElement('div'); l.className = 'lab'; if (!showLabels) l.style.display = 'none';
+  if (side) { l.innerHTML = `<b>${loco}</b> · mass ${mass < 1 ? mass.toFixed(2) : mass.toFixed(1)} · legs ×${2 * b.legPairs} ${f2(b.legs)} fins ${f2(b.fins)} wings ${f2(b.wings)} · fur ${f2(b.fur)} armour ${f2(b.armour)} meat ${f2(b.meat)}`; document.body.append(l); labels.push([l, new THREE.Vector3(tl.x, -0.2, tl.z + 2.6)]); return; }
   l.innerHTML = `<b>${loco}</b> · mass ${mass < 1 ? mass.toFixed(2) : mass.toFixed(1)}${tl.far ? ' · low detail' : ''}<br>` +
     `legs ${f2(b.legs)} ×${2 * b.legPairs} fins ${f2(b.fins)} ×${2 * (b.finPairs || 1)} wings ${f2(b.wings)}<br>fur ${f2(b.fur)} appendages ${f2(b.append)} · appearance ${Array.from(b.appearance, f2).join(' ')}`;
   document.body.append(l); labels.push([l, new THREE.Vector3(tl.x, 0, tl.z + 3.0)]);
@@ -112,7 +128,11 @@ document.getElementById('info').textContent = `Neuroreef bodies · one parametri
 const xs = tiles.map((t) => t.x), zs = tiles.map((t) => t.z);
 const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
 const span = Math.max((Math.max(...xs) - Math.min(...xs) + 10) * (row >= 0 ? 0.68 : 0.85), (Math.max(...zs) - Math.min(...zs) + 10) * 1.3);
-controls.target.set(cx, 0, cz + 0.5); camera.position.set(cx, span * (row >= 0 ? 0.45 : 1.05), cz + span * (row >= 0 ? 0.75 : 0.6)); controls.update();
+if (side) {
+  const el = (q.has('elev') ? +q.get('elev') : 14) * Math.PI / 180, d = Math.max(Math.max(...xs) - Math.min(...xs) + 7, (Math.max(...zs) - Math.min(...zs) + 7) * 1.6) * 1.25 / +(q.get('zoom') || 1);
+  controls.target.set(cx, 1.0, cz + 0.5); camera.position.set(cx, 1.0 + d * Math.sin(el), cz + 0.5 + d * Math.cos(el));
+} else { controls.target.set(cx, 0, cz + 0.5); camera.position.set(cx, span * (row >= 0 ? 0.45 : 1.05), cz + span * (row >= 0 ? 0.75 : 0.6)); }
+controls.update();
 
 function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();

@@ -1,48 +1,41 @@
 // The creature kit: part ids of the one parametric body (body.js, anim.js) and small geometry helpers.
 //
-// Every part of the body is stored in its own local frame (a unit sphere, a unit cone, a flat outline);
-// the vertex shader (anim.js) places and sizes each part from the organism's genes. A part carries:
-//   aAux (side, along, part): side = +1 left / -1 right for paired parts; along = where on the body the
-//          part sits (front/back for legs, position along the jaw for teeth, along the back for plates);
-//          part = the id below. Packing these leaves room for appearance on 16-attribute GPUs.
+// Every part of the body is a parametric surface: a vertex stores only its surface coordinates (s, t) and
+// the vertex shader (anim.js) evaluates the surface from the organism's genes. A part carries:
+//   position = (s, t, 0): s along the part (the spine for the trunk, hip to toe for a leg, root to tip for a fin),
+//              t across or around it
+//   aAux     = (side, index, part): side = +1 left / -1 right for paired parts; index = which of a row (leg pair,
+//              eye pair, tooth, plate); part = the id below, plus FAR for the low-detail body
 // Display only: nothing here affects the simulation.
 
 import * as THREE from 'three';
 
-/** Part ids (aAux.z). */
+/** Part ids (aAux.z). The trunk is one continuous tube from the tail tip to the nose. */
 export const P = {
-  BODY: 0, HEAD: 1, EYE: 2, SNOUT: 3, JAW: 4, TEETH_U: 5, TEETH_L: 6, LEG: 7,
-  FIN_SIDE: 8, FIN_DORSAL: 9, TAIL: 10, TAIL_FIN: 11, WING: 12, PLATE: 13, SCUTE: 14, NECK: 15, FUR: 16, APPEND: 17,
+  TRUNK: 0, LEG: 1, EYE: 2, JAW: 3, TOOTH: 4, BONE: 5,      // closed surfaces (normals from their own shape)
+  WING: 6, FIN_SIDE: 7, FIN_DORSAL: 8, TAIL_FIN: 9, EAR: 10, PLATE: 11,   // membranes (two-sided)
 };
-
-/** Non-indexed positions of a three.js geometry. */
-export function soup(g) { return (g.index ? g.toNonIndexed() : g).attributes.position.array; }
-
-/** An open cone without degenerate triangles: base ring (radius 1) at y = 0, tip at y = 1; seg triangles. */
-export function cone(seg) {
-  const out = [];
-  for (let i = 0; i < seg; i++) {
-    const a = (i / seg) * Math.PI * 2, b = ((i + 1) / seg) * Math.PI * 2;
-    out.push(Math.cos(a), 0, Math.sin(a), 0, 1, 0, Math.cos(b), 0, Math.sin(b));
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
-  return g;
-}
+/** Added to the part id of every low-detail vertex: the shader takes cheaper normals there. */
+export const FAR = 32;
 
 /**
- * A two-sided flat polygon from a star-shaped 2D outline [[u, v], ...], fanned from centre [cu, cv].
- * plane 'xy' (vertical: dorsal and tail fins) or 'xz' (horizontal: wings, side fins; v is the z axis).
+ * A grid surface over the values ss x ts (s rows, t columns), indexed. closed: a tube or a cap the camera sees
+ * only from outside (one winding, back faces culled); a membrane gets both windings over the same vertices.
+ * flip reverses the winding of a closed part (its outside depends on how the shader maps (s, t)).
  */
-export function flat(outline, plane = 'xy', centre = null, closed = false) {
-  const pt = ([u, v]) => (plane === 'xy' ? [u, v, 0] : [u, 0, v]);
-  const out = [];
-  const n = outline.length;
-  const tri = (a, b, c) => { out.push(...pt(a), ...pt(b), ...pt(c), ...pt(a), ...pt(c), ...pt(b)); };
-  if (centre) { for (let i = 0; i < (closed ? n : n - 1); i++) tri(centre, outline[i], outline[(i + 1) % n]); }
-  else for (let i = 1; i < n - 1; i++) tri(outline[0], outline[i], outline[i + 1]);
-  return new Float32Array(out);
+export function grid(ss, ts, { closed = true, flip = false } = {}) {
+  const ns = ss.length, nt = ts.length, pos = [], idx = [];
+  for (const s of ss) for (const t of ts) pos.push(s, t, 0);
+  for (let i = 0; i < ns - 1; i++) for (let j = 0; j < nt - 1; j++) {
+    const a = i * nt + j, b = (i + 1) * nt + j, c = (i + 1) * nt + j + 1, d = i * nt + j + 1;
+    if (!closed || flip) idx.push(a, b, c, a, c, d);
+    if (!closed || !flip) idx.push(a, c, b, a, d, c);   // a membrane: both windings
+  }
+  return { pos, idx };
 }
+
+/** n + 1 evenly spaced values from 0 to 1 (a seam is closed by its repeated end). */
+export const steps = (n) => Array.from({ length: n + 1 }, (_, i) => i / n);
 
 /** Merge geometries into one non-indexed geometry, with an optional flat colour per part: [[geometry, colour], ...]. */
 export function merge(parts) {

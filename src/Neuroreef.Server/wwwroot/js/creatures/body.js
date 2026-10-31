@@ -1,9 +1,11 @@
-// One parametric body for every organism. There are no designed species: the geometry below holds each
-// part in a neutral unit frame. Appearance genes determine proportions, placement, outlines and pigment;
-// organs determine their presence, while locomotion only selects animation. Both detail levels share the shader.
+// One parametric body for every organism. There are no designed species: the geometry below holds only the
+// surface coordinates of each part (one continuous trunk tube from tail tip to nose, legs, eyes, jaw, teeth,
+// membranes), indexed; the shader (anim.js) builds the surfaces from the genes. Appearance genes determine
+// proportions, posture, outlines and pigment; organs determine their presence, while locomotion selects pose and
+// animation. Near body ~1.5k triangles, far body ~260 (no eyes, jaw, teeth, plates); both share the shader.
 
 import * as THREE from 'three';
-import { P, soup, flat, cone } from './kit.js';
+import { P, FAR, grid, steps } from './kit.js';
 import { bodyMaterial } from './anim.js';
 import { locoOf } from '../net.js';
 
@@ -15,82 +17,80 @@ export function massOf(g) { return 0.1 * Math.pow(40 / 0.1, (g + 128) / 255); } 
 /** View scale of an organism of this mass (model units to world units): length grows as mass^(1/3). */
 export function bodySize(mass) { return 1.5 * Math.cbrt(mass); }
 
-const sphere = (w, h) => soup(new THREE.SphereGeometry(1, w, h));
-/** A sphere with its poles on the x axis, so its rings run along the trunk (the torso profile is shaped along x). */
-const sphereX = (w, h) => { const g = new THREE.SphereGeometry(1, w, h); g.rotateZ(Math.PI / 2); return soup(g); };
-/** A cone along +x: base (radius 1) at x = 0, tip at x = 1; open at the base. */
-const coneX = (seg) => { const g = cone(seg); g.rotateZ(-Math.PI / 2); return soup(g); };
-/** A cone along -x: base at x = 0, tip at x = -1. */
-const coneNX = (seg) => { const g = cone(seg); g.rotateZ(Math.PI / 2); return soup(g); };
-/** A spike: base (radius 1) at y = 0, tip at y = 1 (or y = -1 when down). */
-const spike = (seg, down = false) => { const g = cone(seg); if (down) g.rotateX(Math.PI); return soup(g); };
-/** A leg: from the hip (y = 0, radius 1) down to the foot (y = -1, radius 0.6). */
-const legGeo = (seg, hseg) => { const g = new THREE.CylinderGeometry(1, 0.6, 1, seg, hseg, true); g.translate(0, -0.5, 0); return soup(g); };
-
 /** Most pairs of legs, of side fins and of eyes a body can have (their genes give 1..4 each). */
 export const MAX_PAIRS = 4;
 const pairsOf = (n) => Math.min(4, Math.max(1, n | 0 || 1));
 const LOCO_CODE = { Walk: 0, Wade: 1, Swim: 2, Fly: 3, Sessile: 4 };
+
+// Surface coordinates of each part at the two detail levels. The trunk's s runs 0..4 over four spans: tail
+// (tip to rump), trunk (rump to shoulders), neck and head (occiput to nose); rings are denser where it curves.
+// A leg's s runs over its bones: hip 0, knee 1, ankle 2, toe 3.
+const LOD = {
+  near: {
+    trunk: [[0, 0.12, 0.3, 0.5, 0.7, 0.86, 1, 1.15, 1.3, 1.45, 1.6, 1.75, 1.9, 2, 2.33, 2.66, 3, 3.18, 3.36, 3.54, 3.7, 3.84, 3.94, 4], steps(12)],
+    leg: [[0, 0.45, 1, 2, 3], steps(6)],
+    eye: [[0, 0.3, 0.62], steps(5)],
+    jaw: [[0, 0.3, 0.6, 0.85, 1], steps(5)],
+    tooth: [[0, 1], steps(3)],
+    bone: [[0, 0.15, 0.3, 0.62, 1], steps(3)],
+    wing: [steps(6), [0, 0.5, 1]],
+    fin: [[0, 0.5, 1], [0, 1]],
+    dorsal: [steps(3), [0, 0.5, 1]],
+    tailFin: [[0, 0.5, 1], steps(3)],
+    ear: [[0, 0.5, 1], [0, 1]],
+    plate: [[0, 0.5, 1], [0, 0.5, 1]],
+  },
+  far: {
+    trunk: [[0, 0.45, 1, 1.5, 2, 2.6, 3, 3.5, 3.85, 4], steps(5)],
+    leg: [[0, 1, 3], steps(3)],
+    wing: [[0, 0.5, 1], [0, 1]],
+    fin: [[0, 1], [0, 1]],
+    dorsal: [[0, 0.5, 1], [0, 1]],
+    tailFin: [[0, 1], [0, 0.5, 1]],
+    ear: [[0, 1], [0, 1]],
+  },
+};
 // LENGTH WIDTH HEIGHT HEAD NECK TAIL LIMB_POS LIMB_SHAPE FIN_SHAPE WING_SHAPE
 // HUE SAT LIGHT PATTERN PATTERN_SCALE PATTERN_HUE. Previews without genes stay neutral.
 export const DEFAULT_APPEARANCE = new Float32Array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0, 0.5, 0, 0.5, 0.5]);
 export function appearanceColor(b, color) {
   const a = b.appearance || DEFAULT_APPEARANCE;
-  return color.setHSL(a[10], 0.05 + 0.9 * a[11], 0.12 + 0.72 * a[12], THREE.SRGBColorSpace);
+  return color.setHSL(a[10], 0.04 + 0.78 * Math.pow(a[11], 1.4), 0.12 + 0.62 * a[12], THREE.SRGBColorSpace);   // as the shader's pigment
 }
 
-const WING = [[0.5, 0], [0.38, 0.6], [0.02, 1.0], [-0.38, 0.85], [-0.5, 0]];
-const SIDE_FIN = [[0.25, 0], [-0.35, 1.0], [-0.7, 0.8], [-0.45, 0]];
-const DORSAL = [[-0.5, 0], [0.3, 0], [-0.05, 1.0], [-0.4, 0.85]];
-const TAIL_FAN = [[0, 0.18], [-0.95, 1.0], [-0.65, 0], [-0.95, -1.0], [0, -0.18]];
-
-/** The body geometry at one detail level: position (part-local), aAux (side, along, part). */
+/**
+ * The body geometry at one detail level: indexed parametric surfaces, position = surface coordinates (s, t, 0),
+ * aAux = (side, index, part). No normals are stored: the shader takes them from the surface it builds.
+ */
 export function bodyGeometry(detail = 'near') {
-  const near = detail === 'near';
-  const parts = [];
-  const add = (pos, part, side = 0, along = 0) => parts.push({ pos, part, side, along });
-  add(near ? sphereX(8, 9) : sphereX(6, 4), P.BODY);
-  add(near ? sphere(7, 5) : sphere(4, 3), P.HEAD);
-  // up to four pairs of eyes and of side fins (aAux.y = pair index); the genes decide how many show
-  if (near) for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(sphere(4, 3), P.EYE, s, j);
-  add(near ? legGeo(6, 1) : legGeo(3, 1), P.NECK);
-  add(coneX(near ? 6 : 4), P.SNOUT);
+  const near = detail === 'near', L = LOD[near ? 'near' : 'far'], far = near ? 0 : FAR;
+  const pos = [], aux = [], idx = [];
+  const add = ([ss, ts], part, side = 0, index = 0, opt = {}) => {
+    const g = grid(ss, ts, opt), o = pos.length / 3;
+    pos.push(...g.pos);
+    for (let i = 0; i < g.pos.length / 3; i++) aux.push(side, index, part + far);
+    for (const i of g.idx) idx.push(o + i);
+  };
+  const membrane = { closed: false };
+  add(L.trunk, P.TRUNK);
+  // up to four pairs of legs, of side fins and of eyes (index = pair, front first); the genes decide how many show
+  for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(L.leg, P.LEG, s, j);
+  for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(L.fin, P.FIN_SIDE, s, j, membrane);
+  for (const s of [1, -1]) add(L.wing, P.WING, s, 0, membrane);
+  add(L.dorsal, P.FIN_DORSAL, 0, 0, membrane);
+  add(L.tailFin, P.TAIL_FIN, 0, 0, membrane);
+  for (const s of [1, -1]) add(L.ear, P.EAR, s, 0, membrane);
   if (near) {
-    add(coneX(6), P.JAW);
-    for (const s of [1, -1]) for (const a of [0.2, 0.5, 0.8]) { add(spike(3, true), P.TEETH_U, s, a); add(spike(3), P.TEETH_L, s, a); }
-  }
-  // fur is drawn as volume (the body inflates in the shader); a few short tufts break the outline near the camera
-  if (near) for (const x of [-0.6, -0.3, 0, 0.3, 0.6]) for (let j = 0; j < 6; j++) add(spike(3), P.FUR, j * Math.PI * 2 / 6, x);
-  // appendages: a pair of ears (the tail and limbs lengthen with the gene in the shader)
-  for (const side of [-1, 1]) add(spike(near ? 4 : 3), P.APPEND, side, 0);
-  // up to four pairs of legs (aAux.y = pair index, front first); the leg-pairs gene decides how many show
-  const leg = near ? legGeo(6, 2) :   // two segments: the middle ring is the knee
-    flat([[-1, 0], [1, 0], [0, -1]], 'xy');
-  for (let i = 0; i < MAX_PAIRS; i++) for (const s of [1, -1]) add(leg, P.LEG, s, i);
-  const fin = near ? flat(SIDE_FIN, 'xz') : flat([[0.25, 0], [-0.5, 1], [-0.45, 0]], 'xz');
-  for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(fin, P.FIN_SIDE, s, j);
-  add(near ? flat(DORSAL, 'xy') : flat([[-0.5, 0], [0.3, 0], [-0.2, 1]], 'xy'), P.FIN_DORSAL);
-  add(coneNX(near ? 6 : 3), P.TAIL);
-  add(near ? flat(TAIL_FAN, 'xy', [0, 0]) : flat([[0, 0], [-0.95, 1], [-0.95, -1]], 'xy'), P.TAIL_FIN);
-  const wing = near ? flat(WING, 'xz') : flat([[0.5, 0], [0.1, 1], [-0.4, 0.85], [-0.5, 0]], 'xz');
-  add(wing, P.WING, 1); add(wing, P.WING, -1);
-  if (near) {
-    for (const a of [-0.6, -0.3, 0, 0.3, 0.6]) add(spike(4), P.PLATE, 0, a);
-    for (const s of [1, -1]) for (const a of [-0.5, -0.17, 0.17, 0.5]) add(spike(3), P.SCUTE, s, a);
-  }
-  let n = 0; for (const q of parts) n += q.pos.length / 3;
-  const pos = new Float32Array(n * 3), aux = new Float32Array(n * 3);
-  let o = 0;
-  for (const q of parts) {
-    const m = q.pos.length / 3;
-    pos.set(q.pos, o * 3);
-    for (let i = 0; i < m; i++) { aux[(o + i) * 3] = q.side; aux[(o + i) * 3 + 1] = q.along; aux[(o + i) * 3 + 2] = q.part; }
-    o += m;
+    for (let j = 0; j < MAX_PAIRS; j++) for (const s of [1, -1]) add(L.eye, P.EYE, s, j, { flip: true });
+    add(L.jaw, P.JAW);
+    for (const s of [1, -1]) for (let k = 0; k < 3; k++) add(L.tooth, P.TOOTH, s, k);
+    for (const s of [1, -1]) add(L.bone, P.BONE, s);
+    for (let k = 0; k < 4; k++) add(L.plate, P.PLATE, 0, k, membrane);
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('aAux', new THREE.BufferAttribute(aux, 3));
-  g.computeVertexNormals();      // unused (flat shading), but keeps the standard attribute present
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aAux', new THREE.Float32BufferAttribute(aux, 3));
+  g.setIndex(idx);
   // Includes volume-normalized extreme proportions, extended neck/tail/wings and animation.
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 12);
   g.boundingBox = new THREE.Box3(new THREE.Vector3(-12, -12, -12), new THREE.Vector3(12, 12, 12));
@@ -98,7 +98,7 @@ export function bodyGeometry(detail = 'near') {
 }
 
 /** Triangle count of a body geometry. */
-export function triangles(g) { return g.attributes.position.count / 3; }
+export function triangles(g) { return (g.index ? g.index.count : g.attributes.position.count) / 3; }
 
 /**
  * An instanced mesh with room for cap organisms. Includes animation, organ, clade and four appearance
@@ -139,7 +139,9 @@ function writeGenes(B, k4, b) {
   for (let j = 0; j < 4; j++) for (let c = 0; c < 4; c++) B.morph[j].array[k4 + c] = appearance[j * 4 + c];
 }
 
-const cladeCode = (b) => (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
+// the packed counts (aClade.w): meat-eating (0..15) * 512 + loco * 64 + (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1)
+const cladeCode = (b) => Math.round(Math.min(1, Math.max(0, b.meat || 0)) * 15) * 512 +
+  (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
 
 // ------------------------------------------------------------------ stable instance slots (the live view)
 // Each organism keeps its instance slot while it stays drawn in a mesh, so its genes, appearance and colour are
@@ -215,7 +217,7 @@ export function finishBodies(B) {
 /**
  * Write organism k of a body mesh: position (x, height, z), heading h (radians, world convention: +x
  * forward, turning toward +z), scale sx/sy, the body b = { legs, fins, wings, sight, armour, strike,
- * fur, append, appearance, legPairs, finPairs, eyePairs, loco }, animation (gait, phase, acts, rest) and
+ * fur, append, meat, appearance, legPairs, finPairs, eyePairs, loco }, animation (gait, phase, acts, rest) and
  * the identification-overlay colour (linear r, g, b). Missing appearance uses stable neutral defaults.
  */
 export function setBody(B, k, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl) {
