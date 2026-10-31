@@ -3,6 +3,82 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Water from its balance: the sea, lakes at their spill points, river channels** (2026-10-31; Hydrology.Waters,
+Terrain.BuildWater, WaterCycle.cs; images docs/art/terrain/hydro_before_*.png and hydro_after_*.png). The owner saw no
+rivers and drowned low ground. Measured before (1024 map, seeds 3, 7, 11):
+- Standing water was exactly the cells below the Nature.Water quantile (10.3-10.5%), all at that one level, in 6-19
+  separate bodies. The largest was 5.9-6.9% of the map; the others (3.5-4.4%) were cut off from it by rims whose spill
+  points stand 140-370 m above that level on average. 40-54% of the standing water was shallower than SHALLOW.
+- The quantile did not drown low ground beyond any spill point: no body stood above its rim, and only 1.7-2.6% of the
+  land lay within 35 m above the water. The flat, broad water was the rift basins Geology grades to that level.
+- Rivers were the cells over RIVER_ACC: 0.53-0.68% of the map in 11-14 rivers, all one cell wide, 61-126 m deep.
+  Strahler order at most 2, the longest 87-130 cells. Every river reached standing water, but few reached the largest body.
+- Water by type: sea and lakes 10.3-10.5%, rivers 0.5-0.7%, ponds 0.1-1.4%, springs 0.5-0.7%, floods 0 at the start.
+  Drinkable water was 6.6-7.3 cells away on average.
+Now:
+- *The sea* is the low ground below sea level (SeaLevel, still the Nature.Water quantile). **Nature.Water now means the
+  share of the map that is sea**; the lakes above it come from the water balance. Every region below sea level counts
+  as sea (SEA_MIN = 0), because Geology holds every such region at sea level as base level for 60 Myr and never cuts
+  its rim. Treated strictly as closed basins (SEA_MIN = 1: only the largest region is sea), those regions fill to their
+  spill points, and lakes cover 13-26% of the map (seeds 1, 2, 3, 7, 11). Once deep time drains to the connected sea
+  alone, SEA_MIN can rise.
+- *Lakes.* A Priority-Flood from the sea fills every depression to its spill point. It orders by the exact filled height,
+  first-in-first-out among equals, so the spill levels are exact and no epsilon is needed. Sources first, each
+  depression's lake rises from its floor, cell by cell in the order a rising pool floods them (Fill-Spill: Barnes,
+  Callaghan & Wickert 2020). It keeps rising while its inflow pays for what the lake loses. The inflow is the mean yield
+  P - ET of its catchment, with ET from Budyko's curve in Fu's form (w = 2.6), plus what full lakes upstream spill.
+  The temperature for PET is the default climate's (K.CLIMATE) whatever the setting, so a seed makes the same land and
+  water at any climate setting (ClimateTests); the setting changes how lakes and rivers run, not where they are.
+  The loss is open-water evaporation (E_OPEN x PET) less the rain on the lake. A lake that reaches its sill is full and
+  spills its surplus through its exit cell. One that stops short is terminal: it passes nothing on, and its dry floor
+  drains to it and holds pond sites (playas). A depression smaller than LAKE_MIN_CELLS or shallower than
+  LAKE_MIN_DEPTH is a pond site, as before. No lake stands above its spill point, and none stands above the dry ground
+  beside it (HydrologyTests).
+- *Drainage and discharge.* World.Recv and DrainOrder are now Waters' own: the filled surface; in a terminal basin, toward
+  its lake. Flow is the mean discharge in cells of mean land rain: the yield of everything above, plus the surplus of
+  full lakes upstream carried down their outflows. It is no longer the rain gathered.
+- *Channels.* A head is a cell whose inflow from upstream Q and slope S give Q S^2 >= CHANNEL_C (Montgomery & Dietrich
+  1992; the threshold does not change with the map's size). Any inflow over RIVER_ACC also makes a head, and no head has
+  less than CHANNEL_A_MIN. Every cell below a head is channel, down to its lake or the sea. A head is judged by its
+  inflow, not its own rain: a channel cell is water, and the rain on it never reaches the water cycle's streams.
+- *Hydraulic geometry* (Leopold & Maddock 1953). Depth = RIVER_D x SHALLOW x (Q / RIVER_Q1)^0.4, at most SHALLOW, so every
+  river stays wadeable. Width = sqrt(Q / RIVER_Q1) cells, from 1 to RIVER_W_MAX. A wider river covers the cells beside its
+  channel that are at most RIVER_BANK x SHALLOW above the channel's bed, in a parabolic cross-section. FloodFrom of a
+  river cell is its channel cell: floodplains and floods read that channel's depth and discharge.
+- *The water cycle.* Lakes are processed upstream first (LakeRank). A lake rises LakeSill above its level at creation
+  before it spills (0 for a full lake). What it spills runs down its outflow (LakeExit, along Recv) into the next lake
+  (LakeDown) in the same update, and adds to the discharge of every river cell on the way. Only the sea's spill leaves
+  the map (WbLakeSpill), so the budget closes as before. A flood's soaking is now taken from the level of the lake its
+  river runs to, since the lakes are balanced first.
+- New World fields (all land, listed in Checkpoint.LandFields): LakeSill, LakeExit, LakeDown, LakeRank. A save without
+  them rebuilds its land, so no format change is needed.
+- One-line hook in Climate.Rainfall: over open water the air's previous height is the water's own height, not 0. Before,
+  every high river cell made the next land cell downwind lift its air from sea level, a spurious orographic spike. That
+  spike moved enough rain to put the land's ET share at 0.24, outside WaterCycleTests' range. Continentality
+  (Climate.Build's Cont) is now measured from the sea and the lakes only: a river damps no seasons, and with the dense
+  network every cell had become maritime. BuildWater does this by passing Climate.Build a DistWater to standing water,
+  then measuring DistWater to all water.
+After (same seeds):
+- Sea 10.3-10.5%; lakes 0.2-2.2% in 6-10 lakes, nearly all full and spilling (the climate is humid: P_MEAN 800 mm).
+- Rivers 2.2-4.3% of the map, with channels 2.1-3.6% and 52-85 heads. Strahler order 2-3. The longest river is 91-201
+  cells, and 80-85% of mouths reach the sea.
+- Width 1-5 cells, with cross-sections up to 9-12 cells where rivers join. Depth 24-126 m (0.2-1 x SHALLOW).
+- Drinkable water is 5.4-6.5 cells away on average. Generation time is unchanged: Waters takes ~0.3 s at 1024.
+Tests: HydrologyTests checks that rivers run continuously to a lake or the sea, the hydraulic geometry, that lakes stand
+at or below their spill points, and that closed-basin lakes follow their water balance (a synthetic bowl: humid full and
+spilling, semi-arid terminal and smaller). WaterCycleTests checks that lakes spill down their outflow rivers. The dry-spell
+test now measures baseflow at the mouths of major rivers (two cells wide or more): the many small new streams drain
+small steep catchments with little groundwater. It also checks that channel cells keep flowing. Pond sites on seed 4 fell
+from 102 to 60: hollows big enough hold lakes, and pond sites keep POND_GAP from the denser river network. In a wet year
+13 of them hold water, against 3 after a drought; before, it was 53 against 37. Most spring-fed ponds are gone: the deep
+groundwater now emerges into the first river it meets. ClimateTests' no-climate hash is re-pinned (0x996581FE746A3C7C).
+Not done here (other owners):
+- The 3D view draws a lake's surface at the sea's height only below SeaLevel. A lake above it should be drawn at
+  Elev + Depth, which is flat across the lake.
+- Pathogens.BuildNet counts water at or above SeaLevel as river, so lakes above sea join its reservoir network.
+- Geology's deep time grades the land to every region below the quantile. Grading it to the connected sea alone (lakes
+  filling and spilling, outlets cut) would make SEA_MIN = 1 consistent.
+
 **Saves that survive an update, and a faster start** (2026-10-31; Checkpoint.cs, Land.cs). Checkpoint version 18 writes a
 kind byte per field (so a field a later program does not know can be skipped) and, for the big per-slot arrays (genome,
 weights, traces, learning history, hidden state, gains, features), only the slots in use: each is written whole at a birth

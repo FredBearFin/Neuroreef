@@ -42,6 +42,10 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Water from its balance (2026-10-31) re-pinned it: rivers are channels from Q S^2 (a network of 2-4% of the map,
+        // several cells wide where large) instead of the cells over RIVER_ACC, lakes stand at their own spill levels, and
+        // Flow, Recv and DrainOrder are the new drainage, so the same seed has other water, soil and plants. It was
+        // 0x4635958CC1772992 at Revision S.
         // Revision S (evolving plants) re-pinned it: land vegetation is now genotypes in four slots per cell, grown in stripes
         // with their own traits after a year of spin-up, so the same seed grows different fields; Climate = 0 still skips
         // every climate rule (the plants read T_REF). It was 0x3EBEA675E685E2C7 at the water cycle.
@@ -55,7 +59,7 @@ public class ClimateTests
         // same seed, map and steps.
         // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
         // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
-        Assert.Equal(0x4635958CC1772992UL, h);
+        Assert.Equal(0x996581FE746A3C7CUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

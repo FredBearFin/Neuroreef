@@ -117,7 +117,9 @@ public static class Climate
             {
                 int i = y * FW + x;
                 float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea);
-                if (w.Cell[i] != (byte)Realm.Land) { q += (1f - q) * K.RAIN_EVAP; hPrev = 0f; continue; }
+                // open water: the air takes up moisture at the water's own height (2026-10-31: a river or a lake above sea level
+                // is not sea level, so the land beyond it is not lifted from 0)
+                if (w.Cell[i] != (byte)Realm.Land) { q += (1f - q) * K.RAIN_EVAP; hPrev = h; continue; }
                 float lift = MathF.Max(0f, h - hPrev) * K.RAIN_OROG;
                 float r = MathF.Min(q, q * (1f / K.RAIN_L + lift));
                 q += (1f - q) * K.RAIN_RECYCLE - r;
