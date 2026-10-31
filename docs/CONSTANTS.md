@@ -72,8 +72,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_RECOVER | 0.004 | /step | fatigue recovery (x3 resting) | HT |
 | REST_BASAL | 0.85 | - | basal multiplier while resting | HT |
 | SWIM_SPEED | 0.85 | - | speed factor for swimmers | HT |
-| FLY_SPEED | 1.4 | - | speed factor for flyers | HT |
-| FLY_COST | 0.5 | - | movement cost factor for flyers (per distance, against running) | ECO: flying costs less per distance than running at equal mass (Schmidt-Nielsen 1972); wing upkeep is in basal cost |
 | DRINK_RATE | 0.25 | /step | drinking: thirst removed per step | HT |
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
 | GROW_RESERVE | 0.2 | xEmax | a juvenile keeps this share of its reserve against starving; above it, it grows at its top rate times how full the reserve is | ECO: growth draws on the reserve in proportion to its density (dynamic energy budget, Kooijman 2010); hungry young grow slowly (Revision D; Revision P: was a threshold of 0.5, below which the young, living near 40% full, hardly grew) |
@@ -183,14 +181,14 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BODY_RANGE_TRAIT | 1.6 | - | range of the speed and sight multipliers (x/÷) | HT |
 | COST_SPEED | 0.4 | - | basal cost per unit of extra speed | HT |
 | COST_SIGHT | 0.15 | - | basal cost per unit of extra sight | HT |
-| ARMOUR_DRAG | 0.2 | - | speed loss per unit of extra armour | HT |
+| ARMOUR_DRAG | 0.2 | - | speed loss per unit of armour in water and air (on land armour is part of the load the legs carry, LOAD_DRAG) | HT |
 | MASS_LO | 0.1 | M | smallest body mass a mass gene can give (the floor of the smallest size class) | ECO: Revision M: 0.01 gave tiny bodies 32x the numbers from the same food; the user (2026-10-30) asked for size classes with their own floors |
 | FLOOR_CLASSES | 4 | - | number of body-plan size classes; class k cannot be smaller than Body.Floors[k] (0.1, 1, 3, 10) | designed: the user (2026-10-30): classes with different floors, inherited, rarely changing; size evolves freely above the floor |
 | FLOOR_MUT | 5E-05 | - | chance per birth that the size class steps up or down one class | designed: the user: inherited, rarely changes (a body-plan change is rare; ~1 in 20,000 births) |
 | MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
 | LIMB_MIN | 0.3 | - | organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth) | - |
-| COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size, or of leg size per pair of legs | ECO: locomotor muscle is maintained at a cost |
-| COST_WING | 0.5 | xbasal | basal cost per unit of wing size, times mass^(1/3) | ECO: flight power rises faster than mass, so flight favours the small |
+| COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size per pair of fins (legs pay instead while they walk: LEG_SWING) | ECO: locomotor muscle is maintained at a cost |
+| COST_WING | 0.15 | xbasal | basal cost per unit of wing size (upkeep of wings and flight muscle; the power of flying is paid while airborne, FLIGHT_MULT) | ECO: flight muscle is 15-25% of a bird's mass (Greenewalt 1962; Marden 1987), maintained like any muscle; until 2026-10-31 this was 0.5 x mass^(1/3), standing in for the flight power now paid per step |
 | COST_ARMOUR_ABS | 0.12 | xbasal | basal cost per unit of armour | ECO: heavy armour is costly to carry and grow |
 | COST_STRIKE_ABS | 0.15 | xbasal | basal cost per unit of weaponry | ECO: jaws, teeth and claws are costly tissue |
 | ARMOUR_MAX | 3 | - | largest armour a gene can give | - |
@@ -205,7 +203,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOV_HI | 360 | degrees | widest field of view a gene can give | ECO: prey with lateral eyes |
 | C_GEST | 150 | steps | gestation (or incubation) at M=1, scaling with M^0.25 | ECO: gestation scales about as M^0.25 |
 | C_COOL | 150 | steps | breeding cooldown at M=1, scaling with M^0.25 | ECO: as gestation |
-| WING_LIFT | 1.6 | - | a body can fly when wing size x WING_LIFT reaches mass^(1/3) (wing loading) | ECO: lift scales with wing area, weight with volume, so large flyers need relatively bigger wings |
 | DEEP_SWIM | 0.3 | - | swimming power (share of the body's top speed in water) needed to stay in deep water | ECO: staying up in open water needs swimming power |
 | SWIM_DEPTH_RANGE | 14 | x | additional maximum water depth per unit fin size, in SHALLOW-depth units | HT |
 | CRAWL | 0.05 | - | a legless body crawls on land at this share of its top speed | ECO: worms, snakes and stranded fish move slowly without legs |
@@ -278,7 +275,29 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
-## 18. Clades
+## 18. Locomotion physics
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| FLIGHT_MULT | 10 | xbasal | metabolic rate of flight at its cheapest speed (the minimum of the power curve) for a body of FLY_M_REF, as a multiple of basal metabolism | ECO: flying birds and bats metabolise at 10-15x their resting rate, against 2-4x for animals walking (Tucker 1970; Schmidt-Nielsen 1972; Norberg 1990; Masman & Klaassen 1987); flight is cheap per km only because it is fast |
+| FLY_M_REF | 1 | M | mass at which the least power of flight is FLIGHT_MULT x basal | assumption: M = 1 is about 1 kg (see above); the middle of the range of flying birds (10 g - 15 kg) on a log scale |
+| EXP_FLY_REQ | 1.16667 | - | mass exponent of the least power flight requires | ECO: for geometrically similar fliers, P_min ~ M^(7/6) (Pennycuick 1968, 2008; Ellington 1991); against basal M^0.75 a bigger flier pays more per unit basal (x3.8 basal at M = 0.1, x31 at M = 16) |
+| EXP_FLY_AVAIL | 0.7 | - | mass exponent of the power a body's flight muscles can deliver | ECO: flight muscle is a fixed share of mass, and its mass-specific power falls with wingbeat frequency, so power available ~ M^0.7 (Pennycuick 1968; Ellington 1991; Marden 1994) |
+| FLY_M_MAX | 16 | M | heaviest body that can fly, with the largest wings (wing gene 1): a body flies while wings x (FLY_M_MAX / M)^(EXP_FLY_REQ - EXP_FLY_AVAIL) >= 1, power available over the least power required | ECO: power available ~M^0.7 against power required ~M^(7/6) caps flapping flight at ~12-19 kg (Pennycuick 1968, 2008; Ellington 1991): the heaviest living fliers, bustards and swans, weigh 12-18 kg. At wing gene 0.5 the ceiling is 16 x 0.5^2.14 = 3.6 |
+| FLY_WING_MIN | 0.45 | - | smallest wing gene that can take off at any size (the flight muscle needed to lift the body's own weight) | ECO: takeoff needs flight muscle of at least ~16% of body mass, nearly whatever the size, in birds, bats and insects (Marden 1987); the largest flight-muscle ratios are ~35% (hummingbirds, pigeons; Greenewalt 1962; Hartman 1961), so wing gene 1 is taken as ~35% and 16/35 = 0.45. Without it the power margin alone let a 0.1 body fly on a wing gene of 0.09 |
+| FLY_VMP | 4 | - | speed of least power (a flier's cruise) as a multiple of the walking-speed allometry C_SPEED M^EXP_SPEED x speed gene | ECO: birds cruise at ~5-15 m/s (Pennycuick 2008: V_mp ~ M^(1/6), as walking speed here, EXP_SPEED) while walkers travel at ~1-2 m/s (Alexander 2003), so a flier cruises several times faster than it walks; 4 keeps the fastest fliers under FLY_V_CAP (was FLY_SPEED = 1.4 for top speed, i.e. ~0.9 for cruise) |
+| FLY_V_CAP | 16 | units/step | fastest an animal moves in one step through the air, in world units | world cap: an animal senses others only within MAX_SIGHT = 2 spatial-hash cells (HCELL) and decides once per step; moving more than one hash cell per step would overshoot what it sensed. Real fliers would go faster still: the cost per distance (FLY_COT_RATIO) is calibrated instead of the speed |
+| FLY_COT_RATIO | 0.4 | - | cost per distance of flying at the speed of least power, against walking's at the same mass (M = FLY_M_REF, full legs, two pairs) | ECO: flight's cost of transport is 1/3-1/2 of running's at equal mass (Tucker 1970; Schmidt-Nielsen 1972). It sets how long in a step a flier is really in the air: it flies at FLIGHT_MULT x basal for the share of the step its distance needs (Body.FlightFullStep), but the whole step when it cannot land |
+| FLY_X_MAX | 1.6 | - | fastest level flight as a multiple of the speed of least power, when power allows (and at most FLY_V_CAP) (power there is (3/x + x^3)/4 = 1.49 x least) | ECO: birds fly up to ~1.5-2x their minimum-power speed; the maximum-range speed is ~1.3-1.6x (Pennycuick 2008; Tobalske et al. 2003). A flier with less margin flies at most where power required meets power available |
+| FLY_U_MIN | 0.38 | - | slowest speed counted on the power curve, as a share of the speed of least power: hovering costs (3/u + u^3)/4 = 2x the least power | ECO: the power curve is U-shaped (induced power ~1/v, profile and parasite power ~v^3; Pennycuick 1968; Tucker 1973); hovering costs about twice the minimum (Norberg 1990; Ellington 1984) |
+| LEG_SWING | 0.26 | - | share of the cost of walking that swinging the legs takes, for LEG_PAIRS_REF pairs of full legs at top speed; the rest (stance) every walker pays | ECO: swing-phase muscles use ~26% of limb-muscle energy in walking and running guinea fowl (Marsh et al. 2004; Modica & Kram 2005: ~20% in running humans); swing work per distance rises with speed (stride frequency) |
+| LEG_PAIRS_REF | 2 | pairs | leg pairs of the body whose cost of transport the walking cost (C_MOVE, EXP_MOVE) describes | ECO: the cost-of-transport line is fitted to quadrupeds and bipeds (Taylor, Heglund & Maloiy 1982); hexapods and octopods lie near it (Full & Tu 1991), so each pair beyond this adds its swing |
+| LEG_STAB | 0.6 | - | share of the slowing by rough ground that four pairs of full legs prevent (one pair: none; linear in pairs - 1 and leg size) | ECO: many legs keep a small, slow body statically stable on uneven ground (an alternating tripod; Ting, Blickhan & Full 1994); cockroaches cross rough terrain at near full speed (Sponberg & Full 2008) |
+| ROUGH_REF | 0.15 | elev/cell | rise of the ground to a neighbouring cell at which ground counts as fully rough | HT: about the 90th percentile of land cells on a 256 map (0.20) and the 99th on a 1024 map (0.18) |
+| ROUGH_SLOW | 0.5 | - | walking speed lost on fully rough ground by an M = 1 body without stabilising legs: v / (1 + ROUGH_SLOW x rough x M^(-1/3) x (1 - stability)) | ECO/HT: obstacles are bigger against a small body's legs (leg length ~ M^(1/3)), so roughness slows the small most (Kaspari & Weiser 1999: the size-grain hypothesis) |
+| LOAD_DRAG | 0.2 | - | walking speed lost per unit of bone stress above an unarmoured two-pair body's: drag = LOAD_DRAG x M^(1/3) x ((1 + armour) / sqrt(leg pairs) - 1/sqrt(2)) | ECO: weight grows as M, bone section as M^(2/3), so bone stress ~ M^(1/3) and heavier bodies must move more carefully (Biewener 1989, 1990); more legs share it. At M = 1 the armour term equals the old ARMOUR_DRAG / sqrt(pairs) |
+
+## 19. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -297,13 +316,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 19. Reward
+## 20. Reward
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | R_SPEND | 1 | - | energy spent on its choices (strikes, calls, moving, heat) counts against the reward at this share of the weight energy eaten counts for it | ECO: animals learn by net energy gain (optimal foraging; Stephens & Krebs 1986); 1 = a unit spent weighs as a unit eaten. 2026-10-30: without it, calling (19-24% of basal) rose from ~38% to ~65% of steps by learning |
 
-## 20. Reproduction
+## 21. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -313,7 +332,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 21. Care
+## 22. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -322,7 +341,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 22. Pathogens
+## 23. Pathogens
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -375,7 +394,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PG_STRAIN_D | 0.1 | - | two pathogens are one strain (for telemetry) within this RMS genome distance (traits /255, antigen /127) | HT: one transmission drifts a genome ~0.03 by PG_MUT and MHC_MUT, so a strain is about a dozen transmissions of drift |
 | PG_CLUSTERS | 256 | strains | most strains telemetry tells apart | HT |
 
-## 23. Weather
+## 24. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -383,7 +402,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 24. Vegetation
+## 25. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -414,7 +433,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 25. Plants
+## 26. Plants
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -517,7 +536,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BURR_DROP | 0.03 | /step | share of seed in a coat that falls off per step | ECO: Couvreur et al. 2004 |
 | M_GAPE | 1 | M | body mass whose gape passes a reference seed whole | ECO: gape limits the seed size dispersed (Wheelwright 1985) |
 
-## 26. Fire
+## 27. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -531,7 +550,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 27. Climate
+## 28. Climate
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -570,7 +589,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TT_STEP | 0.25 | K | temperature step of the response tables | - |
 | TT_N | 512 | - | entries of each response table | - |
 
-## 28. Heat
+## 29. Heat
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -598,7 +617,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 29. Memory
+## 30. Memory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -609,7 +628,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DAMP_CUE | 0.02 | - | smallest difference in soil moisture across a cell (between its two neighbours) that a thirsty animal can feel and follow toward water; below it it walks downhill | HT: about the patchiness of moisture on uniform ground; animals follow damp ground and smell water at a distance (Polansky et al. 2015), and water gathers downhill |
 | FED_WELL | 1 | steps | a meal is remembered as 'fed well' when one bite's energy is at least this many steps' need (FIELD_METAB x basal) | HT: a bite that pays for its step, FOOD_HERE 0.63; a patch richer than the cost of being there is worth coming back to (Charnov 1976) |
 
-## 30. Hydrology
+## 31. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -630,7 +649,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLOOD_R | 3 | cells | floodplain: cells at most this many flow steps upstream of the river they drain into | HT: floodplains are a few channel widths to tens of km wide |
 | FLOOD_HAND | 0.5 | xSHALLOW | floodplain: cells at most this high above that river, x SHALLOW | HT: bounds the search; the stage decides which of them flood |
 
-## 31. Geology
+## 32. Geology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -674,13 +693,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FERT_SED | 0.6 | - | base fertility of soil on sedimentary rock | ECO: shales and limestones weather to moderately rich soils, sandstones to poor ones; their mean |
 | FERT_VAR | 0.15 | - | local variation of fertility about its parent material (±, from organic matter, drainage and soil age) | HT: was the whole fertility (noise) before Revision R |
 
-## 32. Hydrology
+## 33. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | FLOOD_MIX | 0.3 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each water-cycle update (WC_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993); 0.5 per 100 steps before the water cycle, the same rate per step at 50 |
 
-## 33. Water cycle
+## 34. Water cycle
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -711,6 +730,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAKE_STAGE | 500 | mm | a lake's stage above its outlet's sill (its level at creation) when it receives its mean inflow; its outlet carries in proportion to the stage (a linear reservoir whose outlet is sized for the lake's mean flow) | ECO/HT: outlet channels are sized by the flows they carry, as river channels are (Leopold, Wolman & Miller 1964); lakes rise a few dm to m in floods; a lake below its sill does not spill |
 | WC_SPINUP | 2 | years | years of weather the water cycle runs at world creation (average years), so soil, snow, groundwater and rivers start in their seasonal state | HT: groundwater is first set to the steady state of the first year's recharge, then a second year settles the seasons and gives each river its mean discharge |
 
-## 34. Organisms
+## 35. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

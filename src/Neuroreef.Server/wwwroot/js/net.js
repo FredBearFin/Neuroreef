@@ -101,11 +101,13 @@ export function agentAt(a, k, world, out) {
 
 export const LOCO = ['Walk', 'Wade', 'Swim', 'Fly', 'Sessile'];
 
-/** Locomotion from the organs, as the sim decides it (Body.cs): 'Fly', 'Wade', 'Walk', 'Swim' or 'Sessile'.
- *  A body flies when its wings can lift it: wings x WING_LIFT (1.6) >= mass^(1/3) (wing loading), so no body
- *  heavier than about 4 flies. */
+/** Locomotion from the organs, only a fallback: the sim sends each animal's own (locoCode, Body.cs).
+ *  A body flies when its flight muscles' power reaches the least power flight requires (2026-10-31):
+ *  wings x (FLY_M_MAX / mass)^(EXP_FLY_REQ - EXP_FLY_AVAIL) >= 1, FLY_M_MAX = 16, exponents 7/6 and 0.7,
+ *  and wings >= FLY_WING_MIN (0.45, the flight muscle to take off at all), so no body heavier than 16 flies,
+ *  and one with half-size wings no heavier than about 3.6. */
 export function locoOf(legs, fins, wings, mass = 1) {
-  if (wings * 1.6 >= Math.cbrt(mass)) return 'Fly';
+  if (wings >= 0.45 && wings * Math.pow(16 / mass, 7 / 6 - 0.7) >= 1) return 'Fly';
   const walk = legs >= 0.3, swim = fins >= 0.3;
   return walk && swim ? 'Wade' : walk ? 'Walk' : swim ? 'Swim' : 'Sessile';
 }

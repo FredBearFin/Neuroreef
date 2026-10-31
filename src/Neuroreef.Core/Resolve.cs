@@ -49,7 +49,21 @@ public static class Resolve
         // ---- 1. move (realm rule, DESIGN §9.2)
         float h = w.IHeading[i], spd = w.ISpeed[i];
         float nx = w.X[i], ny = w.Y[i];
-        if (spd > 0 && !Move(w, i, nx, ny, h, spd, out nx, out ny, out float fraction))
+        // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
+        // drinking water within reach, it lands and walks (or stands) on its legs; it stays in the air only over ground it
+        // cannot stand on (2026-10-31). An urge to eat with nothing here to eat does not ground it: it flies on to look
+        bool flier = loco == Loco.Fly, airborne = false, canLand = true;
+        if (flier)
+        {
+            int c0 = World.FIdx(nx, ny);
+            float vGround = w.GroundVmax(i, c0);
+            bool feed = (acts & BIT_EAT) != 0 && w.IFoodHere[i] > 0f, sip = (acts & BIT_DRINK) != 0 && w.DistDrink[c0] <= 1.5f && w.Thirst[i] > 0f;
+            bool settle = rest || feed || sip || spd <= vGround;
+            canLand = w.GroundAllows(i, c0);
+            airborne = !(settle && canLand);
+            if (!airborne) spd = MathF.Min(spd, vGround);
+        }
+        if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne, out nx, out ny, out float fraction))
         {
             spd *= fraction;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
@@ -65,7 +79,7 @@ public static class Resolve
         if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < K.FIRE_KILL) { Die(w, i, Cause.Fire, -1); return; }
 
         // ---- 2. drink
-        if ((acts & BIT_DRINK) != 0 && w.DistDrink[cell] <= 1.5f)
+        if ((acts & BIT_DRINK) != 0 && w.DistDrink[cell] <= 1.5f && !airborne)
         {
             if (w.Thirst[i] > 0f) metrics?.Allow(P.DRINK);
             float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
@@ -73,11 +87,12 @@ public static class Resolve
             if (rel > 0f) { metrics?.Apply(P.DRINK); PathMemory.Drank(w, i); Pathogens.Drank(w, i, cell); }   // waterborne pathogens (Revision R)
         }
 
-        static bool Move(World w, int i, float x, float y, float h, float speed, out float nx, out float ny, out float fraction)
+        // on the ground a landed flier keeps to where it can stand (World.GroundAllows); for others it is the same rule
+        static bool Move(World w, int i, float x, float y, float h, float speed, bool ground, out float nx, out float ny, out float fraction)
         {
             float dx = MathK.Cos(h) * speed, dy = MathK.Sin(h) * speed;
             int cx = (int)(x / K.FCELL), cy = (int)(y / K.FCELL);
-            if (!w.CellAllows(i, World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW)))
+            if (!(ground ? w.GroundAllows(i, World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW)) : w.CellAllows(i, World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW))))
             {
                 nx = x; ny = y;
                 fraction = 0f;
@@ -96,7 +111,7 @@ public static class Resolve
                 if (tx <= ty) { cx += sx; tx += dtx; }
                 if (ty <= t) { cy += sy; ty += dty; }
                 int cell = World.WrapI(cy, Map.FW) * Map.FW + World.WrapI(cx, Map.FW);
-                if (!w.CellAllows(i, cell))
+                if (!(ground ? w.GroundAllows(i, cell) : w.CellAllows(i, cell)))
                 {
                     float back = 1e-4f / MathF.Max(speed, 1e-6f);
                     float safe = MathF.Max(0f, t - back);
@@ -117,7 +132,7 @@ public static class Resolve
         bool preyEat = (acts & BIT_EAT) != 0 && w.IEatPrey[i] != 0 && (acts & BIT_STRIKE) == 0 && w.PStrike[i] > 0;
         if (preyEat) { acts |= BIT_STRIKE; metrics?.Allow(P.EAT); }
         else if ((acts & BIT_EAT) != 0 && scanning && metrics != null) metrics.Add(ref metrics.ScanBlockedEats);
-        if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !(waterCell && loco == Loco.Fly && w.Depth[cell] > K.SHALLOW))
+        if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !airborne)   // a flier eats landed (2026-10-31)
         {
             // which food: the most energy it can actually use this step, a bite no bigger than what its gut passes in a
             // step (Revision P): when the gut is the bottleneck, rich food beats a heap of poor food (optimal diet
@@ -212,16 +227,14 @@ public static class Resolve
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
-        // cost of transport: ~M^0.7 x speed (Taylor et al. 1982); equal to the old M*v^2 rule at M=1 and full walking speed
-        // (a heavy coat adds to it, Revision O)
-        float moveCost = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * (loco == Loco.Fly ? K.FLY_COST : 1f) * (1f + K.INS_MOVE * w.PInsul[i]);
+        float moveCost = MoveCost(w, i, mass, mf, spd, cell, airborne, canLand);
         // a juvenile runs every unit of its brain from birth, so it pays for all of them; only the body's share scales
         // with its size (audit 2026-10-30: a young brain was charged at body scale; real infant brains cost more, not less)
         float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF;
         float fullBasal = (w.PBasal[i] - brainBasal) * MathK.Pow(mf, K.EXP_BASAL) + brainBasal;
         // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
         // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
-        bool immersed = waterCell && loco != Loco.Fly;
+        bool immersed = waterCell && !airborne;
         float top = K.T_REF, core = K.T_BODY, rateT = 1f;
         if (Climate.On)
         {
@@ -303,6 +316,36 @@ public static class Resolve
             float a = w.Age[i] / life;
             if (Rng.U(seed, step, (uint)i, Rs.Death + 1) < 0.002f * a * a) { Die(w, i, Cause.Old, -1); return; }
         }
+    }
+
+    /// <summary>
+    /// Energy spent moving this step (2026-10-31). In the air: the power curve of flight, FlightPowerMin(M) x
+    /// (3/u + u^3)/4 at u = speed / speed of least power, less the basal metabolism it includes, for the share of the
+    /// step it is really in the air: its distance over a whole step's flight (Body.FlightFullStep), so flying costs
+    /// FLY_COT_RATIO of walking per distance at cruise; the whole step when it could not land where it was (over
+    /// water it cannot stand in, hovering or not). On the ground: the cost of transport ~M^0.7 x speed (Taylor et al.
+    /// 1982), of which the stance share (1 - LEG_SWING) every walker pays and the swing share grows with its legs (size
+    /// x pairs, against LEG_PAIRS_REF full pairs) and with speed against its top speed there (Marsh et al. 2004).
+    /// Swimming has no swing. A heavy coat adds to every kind (Revision O).
+    /// </summary>
+    public static float MoveCost(World w, int i, float mass, float mf, float spd, int cell, bool airborne, bool canLand = true)
+    {
+        float coat = 1f + K.INS_MOVE * w.PInsul[i];
+        if (airborne)
+        {
+            // the speed of least power in this world: its top air speed over how far above it power lets it fly (when
+            // FLY_V_CAP holds the top speed down, the whole curve is compressed with it)
+            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
+            float p = Body.FlightPowerMin(mass) * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
+            float duty = canLand ? MathF.Min(1f, spd / Body.FlightFullStep(mass)) : 1f;
+            return MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty * coat;
+        }
+        if (spd <= 0f) return 0f;
+        float cot = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;
+        bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > K.SHALLOW;
+        if (swimming) return cot;
+        float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
+        return cot * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);
     }
 
     /// <summary>Put food into the gut. Returns the reward for it (taste of energy).</summary>

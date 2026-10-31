@@ -19,6 +19,7 @@ public static class Headless
         var w = sim.W;
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
         Console.WriteLine($"start: {(bank != null ? $"the world, brains from gene bank ({bank.Total} genomes), no spawning" : "the world, RANDOM BRAINS, no spawning")}   alive {w.AliveCount}");
+        Console.Write(CladeLoco(w)); Console.WriteLine(LocoReport(w));
         Header(w);
         var sw = Stopwatch.StartNew();
         long lastT = 0; ulong lastStep = 0;
@@ -223,6 +224,7 @@ public static class Headless
             land = Math.Max(1, land);
             Console.WriteLine($"         plants: {Plants.SlotGenotypes(w)} genotypes in plants, {w.Flora.Live} in the table; cover herb {g / land:F2} shrub {sh / land:F2} tree {tr / land:F2}; establishments {w.Flora.Establish:N0}, mutations {w.Flora.Mutations:N0}");
         }
+        Console.WriteLine(LocoReport(w));
         if (Environment.GetEnvironmentVariable("NR_PROFILE") == "1")
         {
             Console.WriteLine("         ms: " + string.Join(" ", sim.PhaseMs.Select(v => v.ToString("F0"))));
@@ -238,6 +240,60 @@ public static class Headless
                 $"fruit {a[Telemetry.G_POOLS + 2] / land:F3} seed {a[Telemetry.G_POOLS + 3] / land:F3} nectar {a[Telemetry.G_POOLS + 4] / land:F3} " +
                 $"carrion {a[Telemetry.G_POOLS + 8]:F0} N {a[Telemetry.G_NUT_LAND]:F2}/{a[Telemetry.G_NUT_WATER]:F2} burning {a[Telemetry.G_BURNING]:F0} season {a[Telemetry.G_SEASON]:F2}");
         }
+    }
+
+    /// <summary>Per clade (living): how many, the share that flies, mean mass, wings, legs and leg pairs (reporting only).</summary>
+    public static string CladeLoco(World w)
+    {
+        var T = w.T; var o = new StringBuilder();
+        o.AppendLine("LOCOMOTION per clade (living): alive, share flying, mean mass, mean wings, mean legs, mean leg pairs (of those with legs), created");
+        for (int s = 0; s < w.NS; s++)
+        {
+            if (!w.Sp[s].Used) continue;
+            int n = 0, fly = 0, legged = 0; double m = 0, wg = 0, lg = 0, lp = 0;
+            for (int i = 0; i < w.Cap; i++)
+            {
+                if (w.StageOf[i] < St.Juvenile || w.Spc[i] != s) continue;
+                n++; m += w.PM[i]; wg += w.PWings[i]; lg += w.PLegs[i];
+                if (w.PLoco[i] == (byte)Loco.Fly) fly++;
+                if (w.PLegs[i] >= K.LIMB_MIN) { legged++; lp += w.PLegPairs[i]; }
+            }
+            o.AppendLine(n > 0
+                ? $"{w.Sp[s].Name,-12} {n,6}  fly {100.0 * fly / n,5:F1}%  mass {m / n:F2}  wings {wg / n:F2}  legs {lg / n:F2}  pairs {(legged > 0 ? lp / legged : 0):F2}  created {T.Created[s]}"
+                : $"{w.Sp[s].Name,-12} {0,6}  (extinct)  created {T.Created[s]}");
+        }
+        return o.ToString();
+    }
+
+    /// <summary>Locomotion census (reporting only): animals and lineages by how most of their members move, fliers'
+    /// body masses, and the distribution of leg pairs among animals with legs (legs >= LIMB_MIN).</summary>
+    public static string LocoReport(World w)
+    {
+        var byLoco = new int[5]; var legPairs = new int[5]; var cladeLoco = new int[K.CLADES * 5];
+        var flierMass = new System.Collections.Generic.List<float>();
+        int n = 0, air = 0;
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            n++; int l = w.PLoco[i]; byLoco[l]++; cladeLoco[w.Spc[i] * 5 + l]++;
+            if (l == (int)Loco.Fly) { flierMass.Add(w.PM[i]); if (w.Airborne(i)) air++; }
+            if (w.PLegs[i] >= K.LIMB_MIN) legPairs[w.PLegPairs[i]]++;
+        }
+        int lineages = 0, flyLineages = 0;
+        for (int s = 0; s < K.CLADES; s++)
+        {
+            int tot = 0, best = 0;
+            for (int l = 0; l < 5; l++) { tot += cladeLoco[s * 5 + l]; if (cladeLoco[s * 5 + l] > cladeLoco[s * 5 + best]) best = l; }
+            if (tot == 0) continue;
+            lineages++; if (best == (int)Loco.Fly) flyLineages++;
+        }
+        flierMass.Sort();
+        string fm = flierMass.Count > 0
+            ? $"mass median {flierMass[flierMass.Count / 2]:F2} p90 {flierMass[flierMass.Count * 9 / 10]:F2} max {flierMass[^1]:F2}"
+            : "none";
+        return $"         loco: walk {byLoco[0]} wade {byLoco[1]} swim {byLoco[2]} fly {byLoco[3]} sessile {byLoco[4]}  " +
+               $"fliers {(n > 0 ? 100.0 * byLoco[3] / n : 0):F1}% of animals, {flyLineages} of {lineages} lineages, {(byLoco[3] > 0 ? 100.0 * air / byLoco[3] : 0):F0}% of them airborne; fliers {fm}; " +
+               $"leg pairs 1:{legPairs[1]} 2:{legPairs[2]} 3:{legPairs[3]} 4:{legPairs[4]}";
     }
 
     /// <summary>Climate and body heat of a world (Revision O; reporting only): the land's temperature now and over the
@@ -345,6 +401,9 @@ public static class Headless
         o.Append(Plants.Report(w));   // the plants' genotypes, dispersal, traits and lineages (Revision S)
         o.AppendLine();
         o.Append(VoiceReport(w, 0, "the world"));   // whether any utterance has come to go with something (2026-10-30)
+        o.AppendLine();
+        o.Append(CladeLoco(w));
+        o.AppendLine(LocoReport(w).Trim());
         return o.ToString();
     }
 
