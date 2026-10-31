@@ -261,12 +261,12 @@ public static class Headless
     {
         var byLoco = new int[5]; var legPairs = new int[5]; var cladeLoco = new int[K.CLADES * 5];
         var flierMass = new System.Collections.Generic.List<float>();
-        int n = 0;
+        int n = 0, air = 0;
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] < St.Juvenile) continue;
             n++; int l = w.PLoco[i]; byLoco[l]++; cladeLoco[w.Spc[i] * 5 + l]++;
-            if (l == (int)Loco.Fly) flierMass.Add(w.PM[i]);
+            if (l == (int)Loco.Fly) { flierMass.Add(w.PM[i]); if (w.Airborne(i)) air++; }
             if (w.PLegs[i] >= K.LIMB_MIN) legPairs[w.PLegPairs[i]]++;
         }
         int lineages = 0, flyLineages = 0;
@@ -282,7 +282,7 @@ public static class Headless
             ? $"mass median {flierMass[flierMass.Count / 2]:F2} p90 {flierMass[flierMass.Count * 9 / 10]:F2} max {flierMass[^1]:F2}"
             : "none";
         return $"         loco: walk {byLoco[0]} wade {byLoco[1]} swim {byLoco[2]} fly {byLoco[3]} sessile {byLoco[4]}  " +
-               $"fliers {(n > 0 ? 100.0 * byLoco[3] / n : 0):F1}% of animals, {flyLineages} of {lineages} lineages; fliers {fm}; " +
+               $"fliers {(n > 0 ? 100.0 * byLoco[3] / n : 0):F1}% of animals, {flyLineages} of {lineages} lineages, {(byLoco[3] > 0 ? 100.0 * air / byLoco[3] : 0):F0}% of them airborne; fliers {fm}; " +
                $"leg pairs 1:{legPairs[1]} 2:{legPairs[2]} 3:{legPairs[3]} 4:{legPairs[4]}";
     }
 
