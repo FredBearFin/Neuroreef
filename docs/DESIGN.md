@@ -1180,7 +1180,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | maturity | c_A·M^0.25·k_mat: the fastest time to adult size, with food unlimited |
 | sight R | min(32, c_R·M^0.2·k_sight) |
 | reach | 1 + 0.4·M^(1/3) |
-| movement cost | C_MOVE·C_SPEED·M^EXP_MOVE·speed (cost of transport ~M^0.7 × speed, Taylor et al. 1982; × FLY_COST flying, × (1 + INS_MOVE·fur)) |
+| movement cost | on the ground C_MOVE·C_SPEED·M^EXP_MOVE·speed·(1 − LEG_SWING + LEG_SWING·legs·pairs/LEG_PAIRS_REF·speed/vmax) (cost of transport ~M^0.7 × speed, Taylor et al. 1982; leg swing, Marsh et al. 2004; no swing swimming); airborne FlightPowerMin(M)·(3/u + u³)/4 − basal, u = speed/v_mp ≥ FLY_U_MIN (§9.2b); all × (1 + INS_MOVE·fur) |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
 | growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
@@ -1192,10 +1192,35 @@ because its genes differ moves to the nearest allowed cell, or dies.
 - A move into a cell outside the stage's realm is refused. The animal stays where it is and turns by
   ±90° (hashed).
 - Realms (Revision G): every mobile organism may move on land and in shallow water; deep water needs
-  enough fin (DEEP_SWIM); a flyer goes anywhere. Its top speed depends on the cell it is in: in the air
+  enough fin (DEEP_SWIM); a flyer goes anywhere while airborne, and where it can stand when landed (§9.2b). Its top speed depends on the cell it is in: in the air
   for a flyer, otherwise its land speed on land, its water speed in deep water, and the better of its
   water speed and 0.6 × its land speed in shallows.
 - Settled organisms have speed 0.
+
+### 9.2b Locomotion physics (2026-10-31)
+
+- **Who flies.** Power available from flight muscle ~ wings·M^0.7, least power required ~ M^(7/6)
+  (Pennycuick 1968, 2008; Ellington 1991). A body flies when the margin wings·(FLY_M_MAX/M)^(7/6 − 0.7) ≥ 1:
+  nothing above FLY_M_MAX = 16 flies (M = 1 is taken as ~1 kg; the heaviest fliers are 12-18 kg). Takeoff also
+  needs wings ≥ FLY_WING_MIN at any size (flight muscle ≥ ~16% of body mass, Marden 1987).
+- **Flight costs by the hour.** The least power of flight is FlightPowerMin(M) = FLIGHT_MULT·C_BASAL·M^(7/6)
+  (10× basal at M = 1; Tucker 1970, Norberg 1990), at the speed of least power v_mp. The power curve is U-shaped:
+  P = P_min·(3/u + u³)/4, u = v/v_mp (induced power ~1/u, profile and parasite ~u³); hovering (u below
+  FLY_U_MIN) costs 2× P_min. Top air speed is v_mp·x where the curve meets the margin, at most FLY_X_MAX = 1.6
+  (1.49× P_min there). The power is paid on every airborne step, moving or not.
+- **Landed.** There is no "take off" output. A flier that rests, eats food that is here, drinks water within
+  reach, or goes no faster than it walks,
+  lands wherever it can stand (land; shallow water if it has legs or swims; deep water if it swims well enough)
+  and walks on its legs at its ground speed, paying basal and the walking cost only. It stays airborne only over
+  ground it cannot stand on, or when travelling faster than its legs carry it. It eats and drinks only landed.
+- **Diet reach.** A flier digests water-column food (phyto, algae, detritus) only if it also wades on legs or swims.
+- **Legs.** Legs have no upkeep; they pay a swing cost while walking: the stance share (1 − LEG_SWING) of the cost
+  of transport every walker pays, the swing share grows with leg size × pairs (against LEG_PAIRS_REF = 2) and with
+  speed against its top speed. On rough ground (the largest rise to a neighbour cell, ROUGH_REF fully rough) a body
+  walks at 1/(1 + ROUGH_SLOW·rough·M^(−1/3)·(1 − stability)), stability = LEG_STAB·legs·(pairs − 1)/3: many legs
+  steady a small body (Ting, Blickhan & Full 1994). The legs carry the body's weight: land speed is divided by
+  1 + LOAD_DRAG·M^(1/3)·((1 + armour)/√pairs − 1/√2) (bone stress ~M^(1/3), Biewener 1989), so more legs help most
+  a heavy or armoured body; in water and air armour adds ARMOUR_DRAG·armour/√2 of drag.
 
 ### 9.3 Gut, digestion and intake (NR-302)
 

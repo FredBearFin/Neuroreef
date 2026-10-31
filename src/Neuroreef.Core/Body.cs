@@ -3,9 +3,11 @@
 // threshold that decides what a body "is". Each trait has a physical cost, so evolution trades them off:
 //   mass       everything scales by allometry (Kleiber): a bigger body costs more and matures later
 //   legs, fins, wings  locomotion organs: speed on land, in water and in the air follows smoothly from their
-//              sizes; a body flies when its wings can lift it (wing loading), and stays in deep water when it
-//              swims well enough; each organ costs basal energy, wings more the heavier the body
-//   leg pairs, fin pairs, eye pairs   how many: more legs carry armour with less slowing, more fins steer,
+//              sizes; a body flies when its flight muscles' power (~wings x M^0.7) reaches the least power flight
+//              requires (~M^(7/6)), and stays in deep water when it swims well enough; fins and wings cost upkeep,
+//              legs cost their swing while walking and flight its power while airborne (Resolve)
+//   leg pairs, fin pairs, eye pairs   how many: more legs share the body's weight, steady a small body on rough
+//              ground and cost more to swing, more fins steer,
 //              more eyes see around; each pair costs upkeep
 //   speed, sight, field of view   multipliers that raise basal cost; a narrow field of view sees further
 //   armour, strike   defence and weapons, each costly; armour slows
@@ -96,7 +98,7 @@ public static class Body
         w.PThirstK[i] = MathK.Pow(m, K.EXP_THIRST) * (1f - K.WATER_ECON * wecon);
         float mPow = MathK.Pow(m, K.EXP_BASAL);
         float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
-                     + K.COST_LIMB * (legs * legPairs * 0.5f + fins * finPairs * 0.5f) + K.COST_WING * wings * MathK.Cbrt(m)
+                     + K.COST_LIMB * fins * finPairs * 0.5f + K.COST_WING * wings   // legs pay while they walk (LEG_SWING), flight while airborne
                      + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
                      + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice
                      + K.COST_INS * ins + K.COST_APP * app;
@@ -115,10 +117,13 @@ public static class Body
         w.PReach[i] = 1f + 0.4f * MathK.Cbrt(m);
         w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * (1f + K.FIN_TURN * (finPairs - 1) * fins);
 
-        // locomotion: smooth speeds in each medium from the organ sizes
-        float drag = K.ARMOUR_DRAG * armour / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1);   // more legs spread a heavy body's weight
-        float v = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * fs / (1f + drag);
-        float vLand = v * (K.CRAWL + (1f - K.CRAWL) * legs);
+        // locomotion: smooth speeds in each medium from the organ sizes. On land the legs carry the body's weight and its
+        // armour: bone stress grows as M^(1/3), and more legs share it (LOAD_DRAG; an unarmoured two-pair body is the
+        // allometry's own reference). In water and air armour only adds drag
+        float v0 = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * fs;
+        float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
+        float loadDrag = K.LOAD_DRAG * MathK.Cbrt(m) * ((1f + armour) / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1) - 0.70710678f);
+        float vLand = v0 / (1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         Dimensions(gn[g + G.B_LENGTH], gn[g + G.B_WIDTH], gn[g + G.B_HEIGHT], out float length, out float width, out float height);
         const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
@@ -130,9 +135,13 @@ public static class Body
         vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
         vWater *= streamlining * (1f - 0.2f * limbShape * legs);
         w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
-        bool flies = wings * K.WING_LIFT >= MathK.Cbrt(m);
+        // flight (2026-10-31): a body flies when the power its flight muscles deliver (~ wings x M^0.7) reaches the least
+        // power flight requires (~M^(7/6)) and its flight muscle can lift its weight at all (FLY_WING_MIN); the margin
+        // sets how far above the speed of least power it can fly
+        float margin = FlightMargin(wings, m);
+        bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
         if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
-        float vAir = flies ? v * K.FLY_SPEED * MathF.Min(1f, wings * K.WING_LIFT / MathK.Cbrt(m) - 0.5f) * streamlining : 0f;
+        float vAir = flies ? v * K.FLY_SPEED / K.FLY_X_MAX * TopFlightSpeed(margin) * streamlining : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
@@ -140,6 +149,8 @@ public static class Body
         Realm realm = flies ? Realm.Any : Realm.Land | Realm.Shallow | (deep ? Realm.Deep : 0);
         Loco loco = settled ? Loco.Sessile : flies ? Loco.Fly : vWater > vLand ? (legs >= K.LIMB_MIN ? Loco.Wade : Loco.Swim) : (fins >= K.LIMB_MIN ? Loco.Wade : Loco.Walk);
         if (settled) realm = fins > legs ? Realm.Water : Realm.Land;
+        // a flier eats where it can land: water-column food only if it also wades or swims (2026-10-31)
+        Realm reach = flies ? GroundRealm(legs, fins) : realm;
         w.PLoco[i] = (byte)loco; w.PRealm[i] = (byte)realm;
         w.PVmax[i] = MathF.Max(vAir, MathF.Max(vLand, vWater));
 
@@ -155,7 +166,7 @@ public static class Body
         w.PGest[i] = K.C_GEST * t * MathF.Sqrt(birth / 0.1f);
         w.PCool[i] = K.C_COOL * t;
         w.PCare[i] = Organ(gn[g + G.B_CARE]);
-        ExpressDiet(w, i, realm, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
+        ExpressDiet(w, i, reach, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
         // a meat-eater can feed on a carcass, its own kill's included (Revision L, ecology review: wolves
         // return to a kill for days, and almost every carnivore scavenges)
         { int d = i * Pools.N; w.PDiet[d + (int)Pool.Carrion] = MathF.Max(w.PDiet[d + (int)Pool.Carrion], K.SCAVENGE * w.PDiet[d + (int)Pool.Meat]); }
@@ -165,6 +176,41 @@ public static class Body
         w.PDrain[i] = blood + meat > 1e-4f ? blood / (blood + meat) : 0f;
         w.PParasite[i] = (byte)(w.PDrain[i] >= 0.5f ? 1 : 0);   // a label (and whom it targets): mostly a blood-drinker
     }
+
+    /// <summary>Where a flier can stand, perch, feed or rest once landed: land; shallow water if it wades on legs or
+    /// swims; open water if it swims well enough to stay up (DEEP_SWIM).</summary>
+    public static Realm GroundRealm(float legs, float fins)
+    {
+        bool swims = 0.1f + 0.9f * fins >= K.DEEP_SWIM;
+        return Realm.Land | (swims || legs >= K.LIMB_MIN ? Realm.Shallow : 0) | (swims ? Realm.Deep : 0);
+    }
+
+    /// <summary>Flight power margin (2026-10-31): the power a body's flight muscles can deliver over the least power its
+    /// flight requires, wings x (FLY_M_MAX / M)^(EXP_FLY_REQ - EXP_FLY_AVAIL). It flies when this is at least 1.</summary>
+    public static float FlightMargin(float wings, float m) => wings * MathK.Pow(K.FLY_M_MAX / m, K.EXP_FLY_REQ - K.EXP_FLY_AVAIL);
+
+    /// <summary>Power of flight against its least, at speed u x the speed of least power: (3/u + u^3)/4 (induced power
+    /// falling as 1/u, profile and parasite power rising as u^3; minimum 1 at u = 1). Below FLY_U_MIN it is hovering.</summary>
+    public static float PowerCurve(float u)
+    {
+        u = MathF.Max(u, K.FLY_U_MIN);
+        return 0.25f * (3f / u + u * u * u);
+    }
+
+    /// <summary>Fastest level flight as a multiple of the speed of least power: where the power curve meets the margin,
+    /// at most FLY_X_MAX (bisection: the curve rises monotonically above u = 1).</summary>
+    public static float TopFlightSpeed(float margin)
+    {
+        if (margin <= 1f) return 1f;
+        if (PowerCurve(K.FLY_X_MAX) <= margin) return K.FLY_X_MAX;
+        float lo = 1f, hi = K.FLY_X_MAX;
+        for (int k = 0; k < 24; k++) { float mid = 0.5f * (lo + hi); if (PowerCurve(mid) < margin) lo = mid; else hi = mid; }
+        return lo;
+    }
+
+    /// <summary>The least power of flight at mass m (2026-10-31): FLIGHT_MULT x basal at FLY_M_REF, rising as M^(7/6).</summary>
+    public static float FlightPowerMin(float m)
+        => K.FLIGHT_MULT * K.C_BASAL * MathK.Pow(K.FLY_M_REF, K.EXP_BASAL) * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ);
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)
     {

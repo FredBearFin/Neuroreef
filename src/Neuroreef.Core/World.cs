@@ -321,26 +321,49 @@ public sealed class World
 
     public float Carnivory(int i) => PDiet[i * Pools.N + (int)Neuroreef.Pool.Meat];
 
-    /// <summary>Top speed in the cell's water depth, blended from wading to swimming.</summary>
+    /// <summary>Top speed in the cell: a flier's top air speed, otherwise its speed on the ground there (GroundVmax).</summary>
     public float Vmax(int i, int cell)
+        => (PLoco[i] == (byte)Neuroreef.Loco.Fly ? PVAir[i] : GroundSpeed(i, cell)) * MathF.Max(0.3f, MassOf(i) / PM[i]);
+
+    /// <summary>Top speed on the ground in this cell, the young's smallness included: walking on land, blended from
+    /// wading to swimming in water. A landed flier walks at it (2026-10-31).</summary>
+    public float GroundVmax(int i, int cell) => GroundSpeed(i, cell) * MathF.Max(0.3f, MassOf(i) / PM[i]);
+
+    float GroundSpeed(int i, int cell)
     {
-        float v;
-        if (PLoco[i] == (byte)Neuroreef.Loco.Fly) v = PVAir[i];
-        else if ((Cell[cell] & (byte)Realm.Water) != 0)
+        if ((Cell[cell] & (byte)Realm.Water) != 0)
         {
             float depth = MathF.Max(0f, Depth[cell]);
             float wade = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
             float mix = Math.Clamp(depth / K.SHALLOW, 0f, 1f);
-            v = wade + (PVWater[i] - wade) * mix;
+            float v = wade + (PVWater[i] - wade) * mix;
             float maxDepth = MaxWaterDepth(i);
             if (maxDepth > K.SHALLOW)
             {
                 float load = Math.Clamp((depth - K.SHALLOW) / (maxDepth - K.SHALLOW), 0f, 1f);
                 v *= 1f - 0.5f * load;
             }
+            return v;
         }
-        else v = PVLand[i];
-        return v * MathF.Max(0.3f, MassOf(i) / PM[i]);
+        return PVLand[i] * Footing(i, cell);
+    }
+
+    /// <summary>
+    /// Walking speed kept on this ground (2026-10-31): rough or sloping ground (the largest rise to a neighbouring cell,
+    /// ROUGH_REF fully rough) slows a body by 1 / (1 + ROUGH_SLOW x rough x M^(-1/3) x (1 - stability)): obstacles are
+    /// bigger against a small body's legs, and many legs keep it statically stable (LEG_STAB: Ting, Blickhan & Full 1994).
+    /// </summary>
+    public float Footing(int i, int cell)
+    {
+        int fw = Map.FW, cx = cell % fw, cy = cell / fw;
+        float e = Elev[cell];
+        float d = MathF.Max(MathF.Max(MathF.Abs(Elev[cy * fw + (cx + 1) % fw] - e), MathF.Abs(Elev[cy * fw + (cx + fw - 1) % fw] - e)),
+                            MathF.Max(MathF.Abs(Elev[(cy + 1) % fw * fw + cx] - e), MathF.Abs(Elev[(cy + fw - 1) % fw * fw + cx] - e)));
+        float rough = MathF.Min(1f, d / K.ROUGH_REF);
+        if (rough <= 0f) return 1f;
+        float legs = PLegs[i], stab = K.LEG_STAB * legs * (PLegPairs[i] - 1) / 3f;
+        float small = MathK.Cbrt(1f / MathF.Max(MassOf(i), 1e-3f));
+        return 1f / (1f + K.ROUGH_SLOW * rough * small * (1f - stab));
     }
 
     public float Vmax(int i) => Vmax(i, FIdx(X[i], Y[i]));
@@ -350,6 +373,26 @@ public sealed class World
     public float MaxWaterDepth(int i) => K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
 
     public bool CellAllows(int i, int cell) => CellAllows(i, cell, RealmOf(i));
+
+    /// <summary>Can this flier land here (2026-10-31)? On land, and in water it can wade or swim in (Body.GroundRealm).
+    /// Anything else answers as CellAllows.</summary>
+    public bool GroundAllows(int i, int cell)
+    {
+        if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return CellAllows(i, cell);
+        byte kind = Cell[cell];
+        if ((kind & (byte)Realm.Land) != 0) return true;
+        return (kind & (byte)Body.GroundRealm(PLegs[i], PFins[i])) != 0 && Depth[cell] <= MaxWaterDepth(i);
+    }
+
+    /// <summary>Is flier i in the air (2026-10-31)? A flier lands whenever it can and is going no faster than it can walk
+    /// (Resolve: resting, eating and drinking land it), so one in the air is over ground it cannot stand on or moved
+    /// faster than its legs carry it.</summary>
+    public bool Airborne(int i)
+    {
+        if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return false;
+        int cell = FIdx(X[i], Y[i]);
+        return !GroundAllows(i, cell) || Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;
+    }
 
     public bool CellAllows(int i, int cell, Realm realm)
     {

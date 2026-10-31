@@ -100,13 +100,191 @@ public class EcologyTests
         Assert.Equal(Loco.Wade, L(100, 100, -127));
         Assert.Equal(Loco.Sessile, L(-127, -127, -127));
         Assert.Equal(0f, w.PVmax[0]);
-        // costs: an organism with all organs pays more than one without; wings cost more on a heavier body
+        // costs: an organism with all organs pays more than one without (fins and wings have upkeep; legs pay as they
+        // swing, 2026-10-31); flight costs more per unit basal on a heavier body (least power ~M^(7/6) against M^0.75)
         L(-127, -127, -127); float bare = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
-        L(127, 127, -127); float limbs = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
+        L(127, 127, 127); float limbs = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
         Assert.True(limbs > bare);
-        L(-127, -127, 127, -100); float wingSmall = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
-        L(-127, -127, 127, 100); float wingBig = w.PBasal[0] / MathK.Pow(w.PM[0], K.EXP_BASAL);
-        Assert.True(wingBig > wingSmall);
+        L(-127, -127, 127, -100); float m0 = w.PM[0], flySmall = Body.FlightPowerMin(m0) / (K.C_BASAL * MathK.Pow(m0, K.EXP_BASAL));
+        L(-127, -127, 127, 60); float m1 = w.PM[0], flyBig = Body.FlightPowerMin(m1) / (K.C_BASAL * MathK.Pow(m1, K.EXP_BASAL));
+        Assert.True(m1 > m0 && flyBig > flySmall);
+    }
+
+    // ---- locomotion physics (2026-10-31)
+
+    static World FlierWorld(sbyte mass, sbyte legs = -127, sbyte fins = -127)
+    {
+        var w = new World(16, 1);
+        w.Genome[G.B_WINGS] = 127; w.Genome[G.B_LEGS] = legs; w.Genome[G.B_FINS] = fins; w.Genome[G.B_MASS] = mass;
+        Body.Express(w, 0);
+        return w;
+    }
+
+    [Fact] // flight costs by the hour: at its cheapest speed ~FLIGHT_MULT x basal, more slower (induced power) and faster
+    public void AirborneCostFollowsAUShapedPowerCurve()
+    {
+        var w = FlierWorld(0);
+        float m = w.PM[0];
+        // pick the mass gene that gives M = FLY_M_REF: the reference body pays FLIGHT_MULT x basal at the least
+        for (int g = -127; g <= 127; g++) { w.Genome[G.B_MASS] = (sbyte)g; Body.Express(w, 0); if (w.PM[0] >= K.FLY_M_REF) break; }
+        m = w.PM[0];
+        Assert.Equal(Loco.Fly, w.LocoOf(0));
+        float basal = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+        float vmp = w.PVAir[0] / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[0], m));
+        int cell = 0;
+        float Total(float v) => basal + Resolve.MoveCost(w, 0, m, 1f, v, cell, true);
+        float atMin = Total(vmp);
+        Assert.InRange(atMin / basal, 0.9f * K.FLIGHT_MULT * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ - K.EXP_BASAL), 1.1f * K.FLIGHT_MULT * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ - K.EXP_BASAL));
+        Assert.InRange(atMin / basal, 8f, 13f);
+        // U-shaped: slower costs more (induced power), faster costs more (profile and parasite power), hovering ~2x the least
+        Assert.True(Total(0.6f * vmp) > atMin && Total(0.8f * vmp) > atMin && Total(0.6f * vmp) > Total(0.8f * vmp));
+        Assert.True(Total(1.3f * vmp) > atMin && Total(1.6f * vmp) > Total(1.3f * vmp));
+        Assert.InRange(Body.PowerCurve(0f), 1.9f, 2.1f);
+        Assert.Equal(1f, Body.PowerCurve(1f), 4);
+        // it is paid even without moving: a hovering flier pays twice the least
+        Assert.True(Total(0f) > 1.8f * (atMin - basal));
+        // the top air speed is where the curve meets the power available, at most FLY_X_MAX x v_mp
+        Assert.InRange(w.PVAir[0] / vmp, 1f, K.FLY_X_MAX + 1e-4f);
+    }
+
+    [Fact] // the flight ceiling comes from power: available ~wings x M^0.7, required ~M^(7/6); nothing above FLY_M_MAX flies
+    public void LargeBodiesCannotFly()
+    {
+        Assert.True(Body.FlightMargin(1f, 0.99f * K.FLY_M_MAX) >= 1f);
+        Assert.True(Body.FlightMargin(1f, 1.01f * K.FLY_M_MAX) < 1f);
+        Assert.True(Body.FlightMargin(0.5f, 4f) < 1f && Body.FlightMargin(0.5f, 3f) >= 1f);   // half wings: ceiling ~3.6
+        Assert.InRange(K.FLY_M_MAX, 12f, 19f);
+        // and at any size, wings too small to lift the body's weight do not fly, however big the margin (Marden 1987)
+        { var w = new World(16, 1); w.Genome[G.B_MASS] = -127; w.Genome[G.B_WINGS] = -60; Body.Express(w, 0);
+          Assert.True(Body.FlightMargin(w.PWings[0], w.PM[0]) >= 1f && w.PWings[0] < K.FLY_WING_MIN);
+          Assert.NotEqual(Loco.Fly, w.LocoOf(0)); }   // the heaviest living fliers (Pennycuick 2008; Ellington 1991), M = 1 ~ 1 kg
+        // the largest wings on the heaviest body (M = 40) cannot lift it; on a 0.2 body they can
+        Assert.NotEqual(Loco.Fly, FlierWorld(127).LocoOf(0));
+        Assert.Equal(Loco.Fly, FlierWorld(-100).LocoOf(0));
+        for (int g = -127; g <= 127; g += 8)
+        {
+            var w = FlierWorld((sbyte)g);
+            Assert.Equal(w.PM[0] < K.FLY_M_MAX, w.LocoOf(0) == Loco.Fly);
+        }
+    }
+
+    [Fact] // a flier that rests or eats lands, and pays only basal (and the walk, if it walks)
+    public void ALandedFlierPaysOnlyBasal()
+    {
+        float climate = Nature.Climate; Nature.Climate = 0f;   // no body-heat budget: only basal and moving are paid
+        try { ALandedFlierPaysOnlyBasalCore(); } finally { Nature.Climate = climate; }
+    }
+
+    static void ALandedFlierPaysOnlyBasalCore()
+    {
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        int cell = -1;
+        for (int c = 0; c < Map.FW * Map.FW; c++) if (w.Cell[c] == (byte)Realm.Land) { cell = c; break; }
+        Assert.True(cell >= 0);
+        float x = (cell % Map.FW + 0.5f) * K.FCELL, y = (cell / Map.FW + 0.5f) * K.FCELL;
+        float Spent(uint acts, float speed, float food = 0f)
+        {
+            w.Genome[G.B_WINGS] = 127; w.Genome[G.B_LEGS] = 60; w.Genome[G.B_FINS] = -127; w.Genome[G.B_MASS] = -60;
+            w.Genome[G.B_INSUL] = -127;
+            w.Spc[0] = 0; w.StageOf[0] = St.Adult; Body.Express(w, 0);
+            w.X[0] = x; w.Y[0] = y; w.Energy[0] = w.EmaxOf(0) * 0.9f; w.Thirst[0] = 0f; w.Gut[0] = 0f; w.GutEnergy[0] = 0f;
+            w.IActs[0] = acts; w.ISpeed[0] = speed; w.IHeading[0] = 0f; w.ITarget[0] = -1; w.IMate[0] = -1; w.IScanning[0] = 0;
+            w.IFoodHere[0] = food;
+            float e0 = w.Energy[0];
+            Resolve.Run(w, 1, 0);
+            return e0 - w.Energy[0];
+        }
+        uint rest = 1u << (P.REST - P.FIRST_ACTION), eat = 1u << (P.EAT - P.FIRST_ACTION);
+        float basalRest = Spent(rest, 0f);
+        Assert.Equal(Loco.Fly, w.LocoOf(0));
+        Assert.False(w.Airborne(0));
+        float m = w.PM[0], basal = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+        Assert.InRange(basalRest, 0.5f * w.PBasal[0], 1.01f * w.PBasal[0]);   // basal, a little less resting (REST_BASAL)
+        // eating while trying to travel fast: it lands and walks at its ground speed, paying a walk, not flight
+        float eating = Spent(eat, w.PVAir[0], 1f);
+        Assert.False(w.Airborne(0));
+        Assert.True(w.Speed[0] <= w.GroundVmax(0, World.FIdx(w.X[0], w.Y[0])) * 1.001f + 1e-5f);
+        // an urge to eat with nothing here to eat does not ground it
+        Spent(eat, w.PVAir[0], 0f);
+        Assert.True(w.Airborne(0));
+        // travelling at its air speed it flies, and pays ~FLIGHT_MULT x basal or more
+        float flying = Spent(0u, w.PVAir[0]);
+        Assert.True(w.Airborne(0));
+        Assert.True(flying > basalRest + 0.5f * Body.FlightPowerMin(m), $"flying {flying}, resting {basalRest}");
+        Assert.True(eating < flying);
+        Assert.True(basalRest < 0.25f * flying);
+        Assert.True(basal > 0f);
+    }
+
+    [Fact] // a flier cannot reach water-column food from the air: only if it also wades on legs or swims
+    public void FliersCannotEatPhytoplanktonUnlessTheySwim()
+    {
+        var w = new World(16, 1);
+        for (int p = 0; p < Pools.N; p++) w.Genome[G.B_DIET + p] = 127;
+        w.Genome[G.B_WINGS] = 127; w.Genome[G.B_MASS] = -100;
+        w.Genome[G.B_LEGS] = -127; w.Genome[G.B_FINS] = -127; Body.Express(w, 0);
+        Assert.Equal(Loco.Fly, w.LocoOf(0));
+        Assert.Equal(0f, w.DietOf(0)[(int)Pool.Phyto]);
+        Assert.Equal(0f, w.DietOf(0)[(int)Pool.Algae]);
+        Assert.Equal(0f, w.DietOf(0)[(int)Pool.Detritus]);
+        Assert.True(w.DietOf(0)[(int)Pool.Seed] > 0f);
+        // a flier that swims (a duck) gets them back
+        w.Genome[G.B_FINS] = 127; Body.Express(w, 0);
+        Assert.Equal(Loco.Fly, w.LocoOf(0));
+        Assert.True(w.DietOf(0)[(int)Pool.Phyto] > 0f && w.DietOf(0)[(int)Pool.Algae] > 0f);
+        // a wading flier (a heron) reaches the shallows' algae
+        w.Genome[G.B_FINS] = -127; w.Genome[G.B_LEGS] = 127; Body.Express(w, 0);
+        Assert.True(w.DietOf(0)[(int)Pool.Algae] > 0f);
+    }
+
+    [Fact] // legs cost their swing while walking: more with more pairs and faster; nothing for swimming or standing
+    public void LegSwingCostRisesWithPairsAndSpeed()
+    {
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        int cell = -1;
+        for (int c = 0; c < Map.FW * Map.FW; c++) if (w.Cell[c] == (byte)Realm.Land) { cell = c; break; }
+        float Cost(sbyte pairsGene, float rel)
+        {
+            w.Genome[G.B_LEGS] = 127; w.Genome[G.B_LEGN] = pairsGene; w.Genome[G.B_WINGS] = -127; w.Genome[G.B_MASS] = 0;
+            w.StageOf[0] = St.Adult; Body.Express(w, 0);
+            w.X[0] = (cell % Map.FW + 0.5f) * K.FCELL; w.Y[0] = (cell / Map.FW + 0.5f) * K.FCELL;
+            float v = rel * w.GroundVmax(0, cell);
+            return Resolve.MoveCost(w, 0, w.PM[0], 1f, v, cell, false) / MathF.Max(v, 1e-6f);   // per distance
+        }
+        float one = Cost(-127, 1f), two = Cost(-40, 1f), four = Cost(127, 1f);
+        Assert.Equal(4, w.PLegPairs[0]);
+        Assert.True(one < two && two < four, $"{one} {two} {four}");
+        Assert.InRange(four / one, 1.3f, 2.2f);   // a full extra swing share per pair (LEG_SWING 0.26)
+        Assert.True(Cost(127, 0.4f) < Cost(127, 1f));   // per distance, slower walking swings less
+        // legs no longer cost upkeep: four pairs of full legs cost no more at rest than none
+        w.Genome[G.B_LEGS] = -127; Body.Express(w, 0); float bare = w.PBasal[0];
+        w.Genome[G.B_LEGS] = 127; w.Genome[G.B_LEGN] = 127; Body.Express(w, 0);
+        Assert.Equal(bare, w.PBasal[0], 5);
+    }
+
+    [Fact] // many legs steady a small body on rough ground; legs share a heavy body's weight (bone stress ~M^(1/3))
+    public void ManyLegsHelpSmallBodiesOnRoughGroundAndCarryHeavyOnes()
+    {
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        int rough = -1; float most = 0f;
+        for (int c = 0; c < Map.FW * Map.FW; c++)
+        {
+            if (w.Cell[c] != (byte)Realm.Land) continue;
+            w.StageOf[0] = St.Adult; w.Genome[G.B_LEGS] = 127; w.Genome[G.B_LEGN] = -127; w.Genome[G.B_MASS] = -127; Body.Express(w, 0);
+            float f = w.Footing(0, c);
+            if (1f - f > most) { most = 1f - f; rough = c; }
+        }
+        Assert.True(rough >= 0 && most > 0.2f, $"roughest footing loss {most}");
+        float Foot(sbyte mass, sbyte pairs) { w.Genome[G.B_MASS] = mass; w.Genome[G.B_LEGN] = pairs; Body.Express(w, 0); return w.Footing(0, rough); }
+        Assert.True(Foot(-127, 127) > Foot(-127, -127));            // a small body: four pairs keep more speed than one
+        Assert.True(Foot(127, -127) > Foot(-127, -127));            // a big body is slowed less by the same ground
+        Assert.True(Foot(-127, 127) - Foot(-127, -127) > Foot(127, 127) - Foot(127, -127));   // the benefit is the small body's
+        // load: more legs help a heavy body more than a light one (top land speed, four pairs over one)
+        float Land(sbyte mass, sbyte pairs) { w.Genome[G.B_MASS] = mass; w.Genome[G.B_LEGN] = pairs; w.Genome[G.B_ARMOUR] = -127; Body.Express(w, 0); return w.PVLand[0]; }
+        Assert.True(Land(127, 127) / Land(127, -127) > Land(-127, 127) / Land(-127, -127));
     }
 
     [Fact] // NR-210: founder brains come from the RNG only; founder bodies are the species body plan
