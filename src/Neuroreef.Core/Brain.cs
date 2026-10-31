@@ -252,17 +252,33 @@ public static class Brain
     }
 
     /// <summary>Pull learned weights back toward the genome (kappa), applied every 32 steps per slot.</summary>
-    public static void Relax(World w, int i)
+    public static unsafe void Relax(World w, int i)
     {
         int g0 = i * G.LEN, o = i * G.W2N;
         float kappa = 32f * G.Gene(w.Genome[g0 + G.KAPPA], 0f, K.KAPPA_HI);
         int units = w.PBrain[i];
-        for (int p = 0; p < P.N; p++)
-            for (int seg = 0; seg < 2; seg++)
-                for (int k = p * G.NIN + (seg == 0 ? 0 : G.NH), kend = p * G.NIN + (seg == 0 ? units : G.NIN); k < kend; k++)
+        // 8 weights at a time (2026-10-31): each weight on its own, w + kappa x (b - w) with the same roundings, so the
+        // result is the scalar rule's bit for bit (no sum to reorder; .NET does not fuse the multiply and add)
+        bool simd = Avx2.IsSupported;
+        var vk = Vector256.Create(kappa); var vs = Vector256.Create(K.WSCALE);
+        fixed (sbyte* gen = &w.Genome[g0 + G.W2])
+        fixed (float* W = &w.W2f[o])
+            for (int p = 0; p < P.N; p++)
+                for (int seg = 0; seg < 2; seg++)
                 {
-                    float b = w.Genome[g0 + G.W2 + k] * K.WSCALE;
-                    w.W2f[o + k] += kappa * (b - w.W2f[o + k]);
+                    int k = p * G.NIN + (seg == 0 ? 0 : G.NH), kend = p * G.NIN + (seg == 0 ? units : G.NIN);
+                    if (simd)
+                        for (; k <= kend - 8; k += 8)
+                        {
+                            var b = Avx.ConvertToVector256Single(Avx2.ConvertToVector256Int32(gen + k)) * vs;
+                            var x = Vector256.Load(W + k);
+                            Vector256.Store(x + vk * (b - x), W + k);
+                        }
+                    for (; k < kend; k++)
+                    {
+                        float b = gen[k] * K.WSCALE;
+                        W[k] += kappa * (b - W[k]);
+                    }
                 }
     }
 

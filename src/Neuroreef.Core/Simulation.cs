@@ -457,7 +457,9 @@ public sealed class Simulation : IDisposable
         {
             _job = job; _total = total;
             if (_n == 1) { job(0, total); return; }
-            _chunk = Math.Max(1, Math.Min(256, total / (_n * 8)));
+            // about 32 chunks per thread, at most 64 elements (2026-10-31: was 8 per thread, up to 256): DECIDE runs in hash
+            // order, so a herd of big-brained animals sits in a few chunks, and big chunks left one thread with a long tail
+            _chunk = Math.Max(1, Math.Min(64, total / (_n * 32)));
             _next = 0;
             _done.Reset(_n - 1);
             for (int k = 1; k < _n; k++) _go[k].Release();
