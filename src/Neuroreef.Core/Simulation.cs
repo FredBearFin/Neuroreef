@@ -65,6 +65,7 @@ public sealed class Simulation : IDisposable
             var sorted = W.Sorted;
             for (int q = lo; q < hi; q++) Decide.Run(W, sorted[q], Probe);
         };
+        Seen();
     }
 
     /// <summary>
@@ -240,10 +241,16 @@ public sealed class Simulation : IDisposable
     long _t;
     void Lap(int k) { long t = System.Diagnostics.Stopwatch.GetTimestamp(); PhaseMs[k] += (t - _t) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; _t = t; }
 
+    // the world as the last step left it: if it is not so now, it was changed under the simulation (a checkpoint loaded
+    // into it), and what is derived from the genomes (World.D) is rebuilt before the step
+    ulong _seenStep = ulong.MaxValue; uint _seenSerial; int _seenFree;
+    void Seen() { _seenStep = W.Step; _seenSerial = W.NextSerial; _seenFree = W.FreeTop; }
+
     public void Step()
     {
         var w = W;
         _t = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (w.Step != _seenStep || w.NextSerial != _seenSerial || w.FreeTop != _seenFree) w.D.Refresh(w);
         Build();
         UpdateProbe();
         Lap(0);
@@ -267,6 +274,7 @@ public sealed class Simulation : IDisposable
         w.Step++;
         if (w.Step % K.SAMPLE_EVERY == 0) w.T.Take();
         Snap.AfterStep();
+        Seen();
         Lap(6);
     }
 

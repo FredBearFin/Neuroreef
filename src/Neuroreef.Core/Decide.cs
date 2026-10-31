@@ -123,7 +123,7 @@ public static class Decide
             crowd += close;
             byte sj = w.StageOf[j];
             bool active = sj >= St.Juvenile;
-            bool alike = Body.LooksAlike(w, i, j);
+            bool alike = Body.LooksAlikeCached(w, i, j);
             // contact route (Revision R): any animal in reach that sheds, of any kind; whether its strain can grow here is the strain's host range
             float shedJ = w.PgShed[j];
             if (active && shedJ > 0f && d <= reach + w.PReach[j]) { infNear++; dose += shedJ; if (shedJ > srcShed) { srcShed = shedJ; strainSrc = j; } }
@@ -246,7 +246,7 @@ public static class Decide
                 int cb = j * F.MAX_SYL;
                 for (int p = 0; p < F.MAX_SYL; p++) { int sk = w.Call[cb + p]; if (sk != 0 && l > hear[sk - 1]) hear[sk - 1] = l; }
                 if (l > loud) { loud = l; callDx = ddx; callDy = ddy; }
-                bool alike = Body.LooksAlike(w, i, j);
+                bool alike = Body.LooksAlikeCached(w, i, j);
                 if (alike && l > lA) { lA = l; jA = j; dxA = ddx; dyA = ddy; dA = d; }
                 if (l > lB) { lB = l; jB = j; dxB = ddx; dyB = ddy; dB = d; }
                 if (j == prevF) { lPrev = l; dxP = ddx; dyP = ddy; dP = d; prevAlike = alike; }
@@ -585,7 +585,7 @@ public static class Decide
                 float d = MathF.Sqrt(d2);
                 if (d > reach && (dx * fx + dy * fy) / d < fovCos) continue;
                 byte stage = w.StageOf[j];
-                bool active = stage >= St.Juvenile, alike = Body.LooksAlike(w, i, j);
+                bool active = stage >= St.Juvenile, alike = Body.LooksAlikeCached(w, i, j);
                 if (ready && active && d < allMate.D && ValidPartner(w, i, j))
                     allMate = new Near { D = d, Dx = dx, Dy = dy, J = j };
                 if (alike)

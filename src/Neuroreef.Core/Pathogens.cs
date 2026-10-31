@@ -256,7 +256,7 @@ public static class Pathogens
         float q = Quorum(L, QsT[g[o + PG.QS]]);
         float mode = K.PG_STEALTH + (1f - K.PG_STEALTH) * q, det = K.PG_DETECT + (1f - K.PG_DETECT) * q;
         float E = w.ImmEff[i];
-        float imm = (K.PG_IMM_BASE + w.PImmune[i]) * (1f + K.PG_MHC_DIV * Diversity(w, i));
+        float imm = (K.PG_IMM_BASE + w.PImmune[i]) * (1f + K.PG_MHC_DIV * w.D.MhcDiv[i]);   // Diversity(w, i), cached at Body.Express
         float r = Growth(g, o) * w.PgFit[i];
         float L1 = MathF.Min(1f, L * MathK.Exp(r * (1f - L) - K.PG_KILL * E * det));
         // clonal expansion (Antia, Levin & May 1994); the bound of 10 is a numerical guard only (killing at E = 10 is far
