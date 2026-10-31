@@ -13,7 +13,9 @@ public static class Headless
 {
     public static int Run(Options o, GeneBank.Data? bank)
     {
+        var clock = Stopwatch.StartNew();
         using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, empty: o.Empty, terrainSeed: o.Seed, evo: o.WorldSettings());
+        Console.WriteLine($"world built in {clock.Elapsed.TotalSeconds:F1} s");
         var w = sim.W;
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
         Console.WriteLine($"start: {(bank != null ? $"the world, brains from gene bank ({bank.Total} genomes), no spawning" : "the world, RANDOM BRAINS, no spawning")}   alive {w.AliveCount}");
@@ -50,14 +52,22 @@ public static class Headless
         if (o.CheckpointPath != null && File.Exists(o.CheckpointPath))
             try { var (nb, cap, sd) = Checkpoint.PrehistoryHeader(o.CheckpointPath); o.Branches = nb; o.BranchSlots = cap; o.Seed = sd; }
             catch (Exception ex) { Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}"); return 2; }
-        using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e);
+        var clock = Stopwatch.StartNew();
+        bool resume = o.CheckpointPath != null && File.Exists(o.CheckpointPath);
+        using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e, restore: resume);   // resuming: no land built only to be overwritten
+        if (!resume) Console.WriteLine($"{pre.B.Length} branches built in {clock.Elapsed.TotalSeconds:F1} s");
         var s0 = pre.Pending;
         if (o.CheckpointPath != null)
         {
             pre.CheckpointPath = o.CheckpointPath; pre.CheckpointMinutes = o.CheckpointMinutes;
-            if (File.Exists(o.CheckpointPath))
+            if (resume)
             {
-                try { pre.LoadCheckpoint(o.CheckpointPath); Console.WriteLine($"RESUMED from {o.CheckpointPath} at step {pre.Step:N0}"); }
+                try
+                {
+                    var ms = pre.LoadCheckpoint(o.CheckpointPath);
+                    for (int b = 0; b < ms.Length; b++) if (ms[b].Migrated) Console.WriteLine($"branch {b}: {ms[b]}");
+                    Console.WriteLine($"RESUMED from {o.CheckpointPath} at step {pre.Step:N0} ({clock.Elapsed.TotalSeconds:F1} s)");
+                }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}");

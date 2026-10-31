@@ -23,6 +23,9 @@ public static class Program
         if (!o.Evolve && !o.Headless && !o.NoCheckpoint && !o.NewWorld && !o.NewPrehistory && !o.RandomBrains && o.LoadBank == null && File.Exists(savedWorld))
         {
             Console.WriteLine("continuing your saved world (" + savedWorld + "); Neuroreef.exe --new-world starts a new one");
+            // a save of an older format is migrated (Checkpoint); one this program cannot read at all is left as it is
+            try { Checkpoint.WorldHeader(savedWorld, out int version); if (version != Checkpoint.Version) Console.WriteLine($"it was saved by an older version of the program (format {version}): what still fits is kept"); }
+            catch (Exception e) { Console.Error.WriteLine("cannot continue it: " + e.Message + " (Neuroreef.exe --new-world starts a new one and keeps this one as world.nrck.old)"); return 2; }
             o.ResumeWorld = true;
             return Host.Run(o, null);
         }

@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(17, Checkpoint.Version);   // 17: evolving plants (plant table, slots, seed banks; new World arrays)
+            Assert.Equal(18, Checkpoint.Version);   // 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);

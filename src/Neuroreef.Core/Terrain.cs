@@ -55,12 +55,15 @@ public static class Terrain
         return rain;
     }
 
-    public static void Build(World w)
+    public static void Build(World w) => Finish(w, Shape(w));
+
+    /// <summary>
+    /// The first half of Build, which depends on the terrain seed alone (not the run seed): the geological genesis and
+    /// the fine passes of running water. Returns the rain it ran with, which Finish routes again. Prehistory branches
+    /// share their land, so this is done once and copied to each (Land.Shape).
+    /// </summary>
+    public static float[] Shape(World w)
     {
-        int FW = Map.FW, n = FW * FW;
-        var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
-        var moistN = Fbm(ref r, 4, 4);
-        var vegN = Fbm(ref r, 6, 3);
         // Geology (Revision R): plates, uplift and tens of millions of years of erosion make the relief and its rock
         Geology.Form(w);
 
@@ -69,6 +72,16 @@ public static class Terrain
         // the most rain; nothing else decides where they are. Revision R: hard rock cuts slower.
         var rain0 = RunoffRain(w);
         Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w));
+        return rain0;
+    }
+
+    /// <summary>The second half of Build, on the shaped land: rivers, lakes, ponds, soil and the first plants (these draw on the run seed).</summary>
+    public static void Finish(World w, float[] rain0)
+    {
+        int n = Map.FW * Map.FW;
+        var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
+        var moistN = Fbm(ref r, 4, 4);
+        var vegN = Fbm(ref r, 6, 3);
         var net = new Hydrology.Net(n);
         Hydrology.Route(w.Elev, w.SeaLevel, rain0, net);
         Array.Copy(net.Flow, w.Flow, n);

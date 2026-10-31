@@ -72,9 +72,13 @@ public sealed class SimHost : IDisposable
         if (o.ResumeWorld && WorldPath != null)
         {
             // continue a saved world exactly where it was: build an empty world of its size, then load its state
+            // (restore: its land is not built only to be overwritten; an older save is migrated and says what it kept)
+            var clock = Stopwatch.StartNew();
             var (cap, seed, ts) = Checkpoint.WorldHeader(WorldPath);
-            _live = new Simulation(cap, seed, o.Threads, null, prehistory: false, empty: true, terrainSeed: ts);
-            Checkpoint.LoadWorld(_live.W, WorldPath);
+            _live = new Simulation(cap, seed, o.Threads, null, prehistory: false, restore: true, terrainSeed: ts);
+            var m = Checkpoint.LoadWorld(_live, WorldPath);
+            if (m.Migrated) Console.WriteLine(m);
+            Console.WriteLine($"saved world loaded in {clock.Elapsed.TotalSeconds:F1} s");
             BankSource = "saved world";
             Console.WriteLine($"continuing your saved world at step {_live.W.Step:N0} ({_live.W.AliveCount:N0} alive)");
         }
@@ -82,7 +86,10 @@ public sealed class SimHost : IDisposable
             _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed, evo: o.WorldSettings());
         else
         {
-            Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false));
+            var clock = Stopwatch.StartNew();
+            bool resume = o.CheckpointPath != null && o.ResumePrehistory;
+            Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false), restore: resume);
+            if (!resume) Console.WriteLine($"{Pre.B.Length} prehistory branches built in {clock.Elapsed.TotalSeconds:F1} s");
             BankSource = "prehistory";
             Rate = 0;   // a prehistory runs as fast as possible until the console asks for a speed
             if (o.CheckpointPath != null)
@@ -90,8 +97,9 @@ public sealed class SimHost : IDisposable
                 Pre.CheckpointPath = o.CheckpointPath; Pre.CheckpointMinutes = o.CheckpointMinutes;
                 if (o.ResumePrehistory)
                 {
-                    Pre.LoadCheckpoint(o.CheckpointPath);   // a checkpoint that does not fit stops the program with its reason
-                    Console.WriteLine($"resumed the prehistory at step {Pre.Step:N0}");
+                    var ms = Pre.LoadCheckpoint(o.CheckpointPath);   // a checkpoint that does not fit stops the program with its reason
+                    for (int b = 0; b < ms.Length; b++) if (ms[b].Migrated) Console.WriteLine($"branch {b}: {ms[b]}");
+                    Console.WriteLine($"resumed the prehistory at step {Pre.Step:N0} ({clock.Elapsed.TotalSeconds:F1} s)");
                 }
                 else if (File.Exists(o.CheckpointPath))
                 {
@@ -221,11 +229,16 @@ public sealed class SimHost : IDisposable
         // the prehistory is over: its state is kept, but the next start will not resume it
         if (pre.CheckpointPath != null && File.Exists(pre.CheckpointPath))
             try { File.Move(pre.CheckpointPath, pre.CheckpointPath + ".done", overwrite: true); } catch (Exception e) { Console.Error.WriteLine(e.Message); }
-        // the world gets its own map (a valley after a big prehistory): free the branches first, then build it
+        // the world gets its own map (a valley after a big prehistory): free the branches first, then build it. On the
+        // prehistory's map it begins on branch 0's land as it was before its founders (the same seed makes the same land),
+        // so that land is not grown a second time
+        var land = pre.WorldLand;
         Pre = null;
         pre.Dispose();
         if (Map.W != Nature.WorldMap) { Map.Set(Nature.WorldMap); Console.WriteLine($"the world is a {Map.Name} ({Map.W} units)"); }
-        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed, evo: _o.WorldSettings());
+        var clock = Stopwatch.StartNew();
+        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed, evo: _o.WorldSettings(), land: land);
+        Console.WriteLine($"the world was built in {clock.Elapsed.TotalSeconds:F1} s" + (land != null && land.Fits(live.W) ? " (on the prehistory's land)" : ""));
         _live = live;
         BankSource = "prehistory";
         Paused = false;

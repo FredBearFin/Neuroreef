@@ -14,6 +14,8 @@ public sealed class Prehistory : IDisposable
 {
     public const int SYNC = 500;                 // steps between barriers
     public readonly Simulation[] B;
+    /// <summary>Branch 0's land before its founders (on the world's map only): the world that follows begins on it instead of growing it again.</summary>
+    public Land? WorldLand { get; private set; }
     public readonly EvoSettings Pending = new(); // edited by the console; copied into every branch at the next barrier
     readonly object _pendingLock = new();
     bool _pendingDirty;
@@ -32,19 +34,35 @@ public sealed class Prehistory : IDisposable
     long _lastT; ulong _lastStep;
     readonly System.Diagnostics.Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
 
-    public Prehistory(int branches, int capacity, uint seed, int threads, EvoSettings? settings = null)
+    /// <param name="restore">the state comes from a checkpoint next (LoadCheckpoint): the branches are built without land or founders</param>
+    public Prehistory(int branches, int capacity, uint seed, int threads, EvoSettings? settings = null, bool restore = false)
     {
         int n = Math.Max(1, branches);
         B = new Simulation[n];
         int per = Math.Max(1, threads / n);
         if (settings != null) Pending.CopyFrom(settings);
         Pending.Clamp();
-        for (int b = 0; b < n; b++)
+        // every branch has its own run seed but the same land (terrain seed): the relief, which depends on the terrain
+        // seed alone, is made once; then the branches are built side by side, each on its own workers (the rest of the
+        // land and the founders depend on the branch's run seed). A branch is the same as one built alone.
+        var shape = restore ? null : Land.Shape(seed);
+        bool keep = !restore && Map.W == Nature.WorldMap;   // the world that follows begins on branch 0's land (same seed and map)
+        try
         {
-            // every branch has its own run seed but the same land (terrain seed)
-            B[b] = new Simulation(capacity, seed + 1000u * (uint)b, per, null, prehistory: true, terrainSeed: seed, evo: Pending);
-            B[b].W.Evo.CopyFrom(Pending);
+            System.Threading.Tasks.Parallel.For(0, n, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = n }, b =>
+            {
+                B[b] = new Simulation(capacity, seed + 1000u * (uint)b, per, null, prehistory: true, terrainSeed: seed, evo: Pending,
+                    restore: restore, land: shape, keepLand: keep && b == 0);
+                B[b].W.Evo.CopyFrom(Pending);
+            });
         }
+        catch (AggregateException e) when (e.InnerExceptions.Count > 0)
+        {
+            foreach (var s in B) s?.Dispose();
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e.InnerExceptions[0]).Throw();
+            throw;
+        }
+        WorldLand = B[0].StartLand;
         _barrier = new Barrier(n, _ => AtBarrier());
         _threads = new Thread[n];
         for (int b = 0; b < n; b++)
@@ -130,11 +148,12 @@ public sealed class Prehistory : IDisposable
     }
 
     /// <summary>Resume from a checkpoint (before Start). The current settings (Pending) replace the saved ones.</summary>
-    public void LoadCheckpoint(string path)
+    public Checkpoint.Migration[] LoadCheckpoint(string path)
     {
-        Checkpoint.Load(this, path);
+        var m = Checkpoint.Load(this, path);
         foreach (var s in B) s.W.Evo.CopyFrom(Pending);
         _lastStep = Step;
+        return m;
     }
 
     // ------------------------------------------------------------------ progress and the result

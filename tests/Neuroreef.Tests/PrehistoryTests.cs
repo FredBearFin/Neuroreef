@@ -57,7 +57,7 @@ public class PrehistoryTests
         try
         {
             using (var b = new Prehistory(2, 4096, 81, 2)) { RunTo(b, 1000); Checkpoint.Save(b, path); }
-            using var c = new Prehistory(2, 4096, 81, 2);
+            using var c = new Prehistory(2, 4096, 81, 2, restore: true);
             c.LoadCheckpoint(path);
             Assert.Equal(1000UL, c.Step);
             RunTo(c, 1500);
@@ -65,7 +65,7 @@ public class PrehistoryTests
             Assert.Equal(straight.Length, resumed.Length);
             Assert.True(straight.AsSpan().SequenceEqual(resumed), "resumed state differs from the straight run");
             // a checkpoint for another seed is refused
-            using var d = new Prehistory(2, 4096, 82, 2);
+            using var d = new Prehistory(2, 4096, 82, 2, restore: true);
             Assert.Throws<System.IO.InvalidDataException>(() => d.LoadCheckpoint(path));
         }
         finally { System.IO.File.Delete(path); }
@@ -87,9 +87,9 @@ public class PrehistoryTests
         {
             Checkpoint.SaveWorld(a.W, path);
             var (cap, seed, ts) = Checkpoint.WorldHeader(path);
-            using var b = new Simulation(cap, seed, 1, null, prehistory: false, empty: true, terrainSeed: ts);
-            Checkpoint.LoadWorld(b.W, path);
-            for (int k = 0; k < 200; k++) { a.Step(); b.Step(); }
+            using var b = new Simulation(cap, seed, 1, null, prehistory: false, restore: true, terrainSeed: ts);
+            Assert.False(Checkpoint.LoadWorld(b, path).Migrated);
+            for (int k = 0; k < 600; k++) { a.Step(); b.Step(); }   // long enough for dead slots (not saved) to be born into again
             Assert.True(WorldState(a.W).AsSpan().SequenceEqual(WorldState(b.W)), "continued world differs");
         }
         finally { System.IO.File.Delete(path); }

@@ -50,9 +50,10 @@ public static class Validate
         for (int k = 0; k < o.ValidateSeeds; k++)
         {
             uint seed = seed0 + (uint)k;
+            Land? land = null;   // the second run of a seed begins on the first one's land (the same seed makes the same land)
             foreach (bool reset in new[] { false, true })
             {
-                var r = RunOne(o, bank, seed, reset, steps);
+                var r = RunOne(o, bank, seed, reset, steps, ref land);
                 all.Add(r);
                 Console.WriteLine(Row(r));
                 GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();   // a world is gigabytes: free it before the next
@@ -66,8 +67,16 @@ public static class Validate
     /// <summary>One world: build it from the seed, set the control, run it, measure.</summary>
     public static Result RunOne(Options o, GeneBank.Data? bank, uint seed, bool reset, long steps)
     {
+        Land? land = null;
+        return RunOne(o, bank, seed, reset, steps, ref land);
+    }
+
+    /// <param name="land">the land of this seed if made already (null: it is built, and kept here for the next run)</param>
+    public static Result RunOne(Options o, GeneBank.Data? bank, uint seed, bool reset, long steps, ref Land? land)
+    {
         var bw = Stopwatch.StartNew();
-        using var sim = new Simulation(o.Capacity, seed, o.Threads, bank, prehistory: false, terrainSeed: seed, evo: o.WorldSettings());
+        using var sim = new Simulation(o.Capacity, seed, o.Threads, bank, prehistory: false, terrainSeed: seed, evo: o.WorldSettings(), land: land, keepLand: land == null);
+        land ??= sim.StartLand;
         var w = sim.W;
         w.MemoryReset = reset;
         var r = new Result { Seed = seed, Reset = reset, BuildS = bw.Elapsed.TotalSeconds };

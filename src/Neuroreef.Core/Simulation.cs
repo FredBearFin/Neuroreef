@@ -20,20 +20,27 @@ public sealed class Simulation : IDisposable
     public readonly int[] ActiveCount;
 
     /// <param name="prehistory">true for a prehistory branch (a label: every world is births and deaths only after its founders).</param>
-    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0, EvoSettings? evo = null)
+    /// <param name="restore">its whole state comes from a save next (Checkpoint.LoadWorld or Load): no land is built and
+    /// no founders made, only to be overwritten. Checkpoint builds the land if an older save needs it (BuildLand).</param>
+    /// <param name="land">the land made already for this world (Land.Fits): its relief, or the whole spun-up land. Ignored if it does not fit.</param>
+    /// <param name="keepLand">keep the spun-up land before the founders (StartLand), for another world of the same seed to begin on</param>
+    public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0, EvoSettings? evo = null,
+        bool restore = false, Land? land = null, bool keepLand = false)
     {
         W = new World(capacity, seed, terrainSeed);
         if (evo != null) W.Evo.CopyFrom(evo);   // before founding: it says how many ancestors are big-brained
-        Terrain.Build(W);
         _pool = new Workers(Math.Max(1, threads));
-        WaterCycle.Init(W, (job, n) => _pool.Run(job, n));   // rain, soil, groundwater, rivers, ponds and lakes in their seasonal state, before founders are fed
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
         _waterJob = (lo, hi) => { for (int y = lo; y < hi; y++) WaterCycle.Row(W, y); };
         _plantJob = (lo, hi) => { for (int k = lo; k < hi; k++) Plants.StripeRow(W, k); };
-        SpinUp(K.PLANT_SPINUP * Nature.SeasonLength);   // the plants grow into what their genes can hold before the animals come (Revision S)
+        if (!restore)
+        {
+            BuildLand(land != null && land.Fits(W) ? land : null);
+            if (keepLand) StartLand = Land.Grown(W);
+        }
         _active = new int[W.NS];
         ActiveCount = _active;
-        W.Prehistory = prehistory && !empty;
+        W.Prehistory = prehistory && !empty && !restore;
         Snap = new Snapshot(W);
 
         // the visiting order of RESOLVE: k*A + B (mod Cap) with gcd(A, Cap) = 1
@@ -42,7 +49,7 @@ public sealed class Simulation : IDisposable
         _orderA = a;
 
         // founders (DESIGN §7.9): the random ancestors, or the clades of a gene bank (NR-210, NR-212)
-        if (!empty)
+        if (!empty && !restore)
         {
             if (bank != null) FoundFromBank(bank, seed);
             else FoundAncestors(seed);
@@ -57,6 +64,23 @@ public sealed class Simulation : IDisposable
             if (W.MemoryReset) for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
             for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe);
         };
+    }
+
+    /// <summary>The spun-up land before the founders came (with keepLand), for a world of the same seed to begin on.</summary>
+    public Land? StartLand { get; private set; }
+
+    /// <summary>
+    /// The land as world creation makes it: terrain, then the water cycle in its seasonal state, then the plants grown for
+    /// PLANT_SPINUP years (Revision S), all before any animal. From a fitting Land, what it holds is copied instead.
+    /// Also used by Checkpoint to rebuild the land of an older save.
+    /// </summary>
+    public void BuildLand(Land? from = null)
+    {
+        if (from != null && from.Is == Land.Stage.Grown) { from.Into(W); return; }
+        var rain = from?.Into(W);
+        if (rain != null) Terrain.Finish(W, rain); else Terrain.Build(W);
+        WaterCycle.Init(W, (job, n) => _pool.Run(job, n));   // rain, soil, groundwater, rivers, ponds and lakes in their seasonal state, before founders are fed
+        SpinUp(K.PLANT_SPINUP * Nature.SeasonLength);   // the plants grow into what their genes can hold before the animals come (Revision S)
     }
 
     /// <summary>
