@@ -14,7 +14,9 @@ terrain, climate, water cycle, plants with their genotype table, the pathogen re
 terrain seed and nature exactly as a new world builds it if the save is older than format 17 (other land rules) or any
 land field no longer fits; the reservoir is then seeded as at creation, the seed and pollen animals carry are dropped,
 and an animal standing where the rebuilt land does not hold it moves to the nearest cell that does. The load prints what
-it kept and rebuilt. Startup: a world that is about to be loaded from a save builds no land and no founders (restore);
+it kept and rebuilt. Version 19 gives a whole array's byte count as i64 and copies every array through spans at long
+offsets, a chunk at a time, so an array over 2 GB (W2f, Trace at ~39,000 slots or more) saves and loads; a save of format
+18 (i32 counts) is migrated with everything kept. Startup: a world that is about to be loaded from a save builds no land and no founders (restore);
 a prehistory forms its relief (Terrain.Shape: depends on the terrain seed alone) once and builds its branches side by
 side, each on its own workers (ponds, plants and founders depend on the branch's run seed, so the rest is built per
 branch: copying branch 0's spun-up land would change the other branches); the world that begins after a prehistory on

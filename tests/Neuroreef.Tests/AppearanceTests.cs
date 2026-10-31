@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(18, Checkpoint.Version);   // 18: a kind byte per field, slots in use only for the big per-slot arrays
+            Assert.Equal(19, Checkpoint.Version);   // 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             Assert.Equal(w.Genome, restored.Genome);
