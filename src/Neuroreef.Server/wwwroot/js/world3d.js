@@ -12,14 +12,12 @@ import { merge } from './creatures/kit.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBodies, bodySize, appearanceColor } from './creatures/body.js';
 
 // Vertical scale (2026-10-31). Elevation is 0..1 with the lakes at w.sea; Climate reads (e - sea) / (1 - sea) x H_RELIEF
-// (3000 m) as the height above the lakes, and the water cycle takes a cell (4 units) to be several km across (GW_DEEP,
-// RAIN_L: hundreds of km over 30 cells). At ~5 km a cell a unit is ~1.25 km; RELIEF = 12 units for the 3000 m is 250 m
-// a unit: a vertical exaggeration of about 5x, so the land's 1-4 % slopes look like hills (median 5 degrees, the
-// steepest 1 % 28 degrees). It was 55 units (~23x, lake beds x1.6 more), which turned the same slopes into 60-78 degree
-// cliffs. (The scales of the sim are not one: at the plants' CELL_M, 25 m a cell, the true relief would be 480 units,
-// at Geology's 5000 km map a fraction of a unit; this follows the water cycle's, which with Geology made the relief.)
-const RELIEF = 12;
-const SHADE_Z = 2;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
+// (3000 m) as the height above the lakes. Geology measures slopes, drainage and hillslopes on a field cell of GEO_CELL_M
+// (218 m) and caps hillslopes at the critical angle (~31 degrees), so the land is drawn at true scale: a cell (4 units) is
+// 218 m, and the 3000 m are RELIEF = 55 units (no exaggeration). Its slopes are then what Geology made: median 12-19
+// degrees, under 33 almost everywhere. (Before Geology worked at this scale, 55 units drew 2-4 % plate-scale slopes as cliffs.)
+const RELIEF = 55;
+const SHADE_Z = 1;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
 const LAND_LIFT = 0.06;      // land sits this far above the lake level, so the lakes' flat surface never shows through it
 const RIVER_W0 = 1.1, RIVER_WMAX = 3.6;   // river ribbon width (units) at the river threshold, and the widest (a cell is 4)
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
