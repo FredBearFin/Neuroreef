@@ -11,6 +11,8 @@
 // kind is taken from the field of the same name in this program, and an unknown field is skipped as an array.
 // The largest per-slot arrays (genome, brain weights, traces, histories; SlotFields) are written for slots in use
 // only (Kind.Slots): every one of them is written whole at a birth before it is read, so a dead slot's are not state.
+// An array may hold more than 2 GB (W2f, Trace: Cap * G.W2N floats), so bytes are copied through spans at long offsets,
+// a chunk at a time; a whole array (Kind.Arr) gives its byte count as i64 from version 19 on (i32 before).
 // A file is written to <path>.tmp and then renamed over <path>, so a crash during a save keeps the last one.
 //
 // Older saves (OldestMigratable .. Version - 1) are migrated on load: every field whose name, kind, element type and
@@ -25,18 +27,21 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 18;   // 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 19;   // 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     /// <summary>The oldest save this program can continue: the genome layout (GeneBank.Version 12) is unchanged since checkpoint 12.</summary>
     public const ushort OldestMigratable = 12;
     /// <summary>The oldest save whose land (relief, water, plants, reservoir) was made by this program's rules; older saves get their land rebuilt.</summary>
     public const ushort LandVersion = 17;
     const ushort TaggedVersion = 18;     // the first version with a kind byte per field
+    const ushort LongBytesVersion = 19;  // the first version with an i64 byte count per whole array
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     // classes whose state is saved by walking their fields; any other reference field is not state (links, buffers rebuilt each step)
@@ -405,36 +410,39 @@ public static class Checkpoint
         return r;
     }
 
-    static readonly byte[] _buf = new byte[1 << 24];
+    /// <summary>The bytes copied at a time: a span is at most 2 GB, an array may be more.</summary>
+    internal const int Chunk = 1 << 24;
 
-    static void WriteBytes(BinaryWriter bw, Array a, long off, long bytes)
+    /// <summary>The size in bytes of a primitive array, as a long (Buffer.ByteLength overflows past 2 GB).</summary>
+    internal static long ByteLength(Array a) => a.LongLength * SizeOf(Type.GetTypeCode(a.GetType().GetElementType()!));
+
+    /// <summary>The bytes [off, off + n) of a primitive array, at a long offset.</summary>
+    internal static Span<byte> Bytes(Array a, long off, int n)
     {
-        lock (_buf)
-            for (long k = 0; k < bytes; k += _buf.Length)
-            {
-                int n = (int)Math.Min(_buf.Length, bytes - k);
-                Buffer.BlockCopy(a, (int)(off + k), _buf, 0, n);
-                bw.Write(_buf, 0, n);
-            }
+        if (off < 0 || n < 0 || off > ByteLength(a) - n) throw new ArgumentOutOfRangeException(nameof(off), $"bytes {off}..{off + n} of an array of {ByteLength(a)}");
+        return MemoryMarshal.CreateSpan(ref Unsafe.AddByteOffset(ref MemoryMarshal.GetArrayDataReference(a), (nint)off), n);
     }
 
-    static void ReadBytes(BinaryReader br, Array a, long off, long bytes)
+    internal static void WriteBytes(BinaryWriter bw, Array a, long off, long bytes, int chunk = Chunk)
     {
-        lock (_buf)
-            for (long k = 0; k < bytes; k += _buf.Length)
-            {
-                int n = (int)Math.Min(_buf.Length, bytes - k);
-                int got = 0;
-                while (got < n) { int r = br.Read(_buf, got, n - got); if (r <= 0) throw new EndOfStreamException(); got += r; }
-                Buffer.BlockCopy(_buf, 0, a, (int)(off + k), n);
-            }
+        for (long k = 0; k < bytes; k += chunk)
+            bw.Write(Bytes(a, off + k, (int)Math.Min(chunk, bytes - k)));
+    }
+
+    internal static void ReadBytes(BinaryReader br, Array a, long off, long bytes, int chunk = Chunk)
+    {
+        for (long k = 0; k < bytes; k += chunk)
+        {
+            var s = Bytes(a, off + k, (int)Math.Min(chunk, bytes - k));
+            while (s.Length > 0) { int r = br.Read(s); if (r <= 0) throw new EndOfStreamException(); s = s[r..]; }
+        }
     }
 
     static void WriteArray(BinaryWriter bw, Type elem, Array? a)
     {
         bw.Write((byte)Type.GetTypeCode(elem));
         if (a == null) { bw.Write(-1); return; }
-        int bytes = Buffer.ByteLength(a);
+        long bytes = ByteLength(a);
         bw.Write(a.Length); bw.Write(bytes);
         WriteBytes(bw, a, 0, bytes);
     }
@@ -576,13 +584,18 @@ public static class Checkpoint
             return true;
         }
         if (len < 0) return true;   // written as null: nothing to take
-        int bytes = br.ReadInt32();
-        bool ok = a != null && a.Length == len && bytes == Buffer.ByteLength(a)
+        long bytes = c.Version >= LongBytesVersion ? br.ReadInt64() : br.ReadInt32();
+        bool ok = a != null && a.Length == len && bytes == ByteLength(a)
             && (!c.Tagged || Type.GetTypeCode(a.GetType().GetElementType()!) == code);
         if (!ok || !take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return ok; }
         ReadBytes(br, a!, 0, bytes);
         return true;
     }
+
+    /// <summary>One whole array as a save of the given format holds it (Kind.Arr, tagged), into a (tests).</summary>
+    internal static bool ReadArray(BinaryReader br, int version, Array a) => ReadArrayField(new Ctx(br, version, new Migration(), apply: true), a, Kind.Arr, take: true);
+
+    internal static void WriteArray(BinaryWriter bw, Array a) => WriteArray(bw, a.GetType().GetElementType()!, a);
 
     static bool ReadJagged(Ctx c, float[][]? a, bool take)
     {
