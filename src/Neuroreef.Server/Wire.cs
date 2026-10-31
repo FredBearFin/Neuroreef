@@ -35,11 +35,11 @@ public static class Wire
         BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(4), (uint)step);
     }
 
-    /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth.</summary>
+    /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River).</summary>
     public static byte[] EncodeWorld(World w)
     {
         int n = Map.FW * Map.FW;
-        var b = new byte[16 + 3 * n];
+        var b = new byte[16 + 4 * n];
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -48,8 +48,43 @@ public static class Wire
             b[16 + i] = (byte)Math.Clamp((int)(w.Elev[i] * 255f), 0, 255);
             b[16 + n + i] = w.Cell[i];
             b[16 + 2 * n + i] = (byte)Math.Clamp((int)(w.Depth[i] * 2000f), 0, 255);
+            b[16 + 3 * n + i] = River(w, i);
         }
         return b;
+    }
+
+    // the 8 neighbours of a cell in the order of River's direction code (dx, dy in cells; y is the row)
+    static readonly int[] DirX = { 1, 1, 0, -1, -1, -1, 0, 1 }, DirY = { 0, 1, 1, 1, 0, -1, -1, -1 };
+
+    /// <summary>
+    /// A cell's river for the console (display only; 2026-10-31, so the 3D view can draw rivers as connected ribbons of the
+    /// width their flow gives): 0 = not a river (land, or a lake below lake level). A river cell (open water above lake
+    /// level, as Terrain.BuildWater makes it) has bits 0-2 = the neighbour it drains to (WaterCycle's receiver, Recv:
+    /// 0 east (+x), 1 +x+y, 2 +y, 3 -x+y, 4 -x, 5 -x-y, 6 -y, 7 +x-y) and bits 3-7 = its size class,
+    /// 1 + round(4 · log2(Flow / river threshold)) clamped to 1..31: quarter octaves of the rain it gathers (Flow) over the
+    /// catchment at which a cell becomes river (RIVER_ACC, scaled to the map).
+    /// </summary>
+    static byte River(World w, int i)
+    {
+        if (w.Cell[i] == (byte)Realm.Land || w.Elev[i] < w.SeaLevel) return 0;
+        int FW = Map.FW, x = i % FW, y = i / FW;
+        float acc = K.RIVER_ACC * (FW * FW / 65536f);
+        int size = Math.Clamp(1 + (int)MathF.Round(4f * MathF.Log2(MathF.Max(1f, w.Flow[i] / acc))), 1, 31);
+        int dir = -1, r = w.WaterOn ? w.Recv[i] : -1;
+        if (r >= 0 && r != i)
+            for (int k = 0; k < 8; k++)
+                if (((y + DirY[k] + FW) % FW) * FW + (x + DirX[k] + FW) % FW == r) { dir = k; break; }
+        if (dir < 0)
+        {
+            // no receiver (the water cycle is off): the lowest neighbour
+            float lo = float.MaxValue;
+            for (int k = 0; k < 8; k++)
+            {
+                int j = ((y + DirY[k] + FW) % FW) * FW + (x + DirX[k] + FW) % FW;
+                if (w.Elev[j] < lo) { lo = w.Elev[j]; dir = k; }
+            }
+        }
+        return (byte)(size << 3 | dir);
     }
 
     /// <summary>FIELDS: u16 side, u16 layer count, u32 0, then each layer u8[side²] (DESIGN §10). Called on the sim thread.</summary>

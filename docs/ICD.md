@@ -33,6 +33,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | 16 | u8[FW²] | elevation, 0..255 = normalised 0..1 |
 | 16 + FW² | u8[FW²] | realm bits per cell: 1 land, 2 shallow water, 4 deep water |
 | 16 + 2·FW² | u8[FW²] | water depth × 2000, clamped to 255 |
+| 16 + 3·FW² | u8[FW²] | rivers (2026-10-31, display only): 0 = not a river (land, or lake below lake level); for a river cell (open water above lake level) bits 0-2 = the neighbour it drains to (0 +x, 1 +x+y, 2 +y, 3 −x+y, 4 −x, 5 −x−y, 6 −y, 7 +x−y; y is the row) and bits 3-7 = size class 1 + round(4·log2(Flow / river threshold)), 1..31 (quarter octaves of the rain it gathers over the catchment at which a cell becomes river, RIVER_ACC). A client that predates it ignores the trailing plane |
 
 ### 0x02 AGENTS (~20 Hz; `view.hz` sets the rate per client)
 
