@@ -117,7 +117,99 @@ export function bodyMesh(base, material, cap) {
   const mesh = new THREE.InstancedMesh(g, material, cap);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.count = 0; mesh.frustumCulled = false;
-  return { mesh, cap, anim, geneA, geneB, clade, morph };
+  // stable instance slots (placeBody): key -> slot, the key in each slot, the frame each slot was last placed in,
+  // free slots below the high-water mark, and the slots whose genes or colour changed this frame
+  const slots = { of: new Map(), key: new Array(cap), seen: new Uint32Array(cap), free: [], hw: 0, frame: 0, dirty: [], repack: false };
+  return { mesh, cap, anim, geneA, geneB, clade, morph, slots };
+}
+
+function writeMatrix(M, o, x, y, z, h, sx, sy) {
+  const ca = Math.cos(h), sa = Math.sin(h);
+  M[o] = ca * sx; M[o + 1] = 0; M[o + 2] = sa * sx; M[o + 3] = 0;
+  M[o + 4] = 0; M[o + 5] = sy; M[o + 6] = 0; M[o + 7] = 0;
+  M[o + 8] = -sa * sx; M[o + 9] = 0; M[o + 10] = ca * sx; M[o + 11] = 0;
+  M[o + 12] = x; M[o + 13] = y; M[o + 14] = z; M[o + 15] = 1;
+}
+
+function writeGenes(B, k4, b) {
+  const GA = B.geneA.array, GB = B.geneB.array;
+  GA[k4] = b.legs; GA[k4 + 1] = b.fins; GA[k4 + 2] = b.wings; GA[k4 + 3] = b.sight;
+  GB[k4] = b.armour; GB[k4 + 1] = b.strike; GB[k4 + 2] = b.fur || 0; GB[k4 + 3] = b.append || 0;
+  const appearance = b.appearance || DEFAULT_APPEARANCE;
+  for (let j = 0; j < 4; j++) for (let c = 0; c < 4; c++) B.morph[j].array[k4 + c] = appearance[j * 4 + c];
+}
+
+const cladeCode = (b) => (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
+
+// ------------------------------------------------------------------ stable instance slots (the live view)
+// Each organism keeps its instance slot while it stays drawn in a mesh, so its genes, appearance and colour are
+// uploaded once, when it gets the slot; each frame only the matrices and the animation data are uploaded.
+
+/** Start a frame of placeBody calls on a body mesh. */
+export function beginBodies(B) {
+  const S = B.slots;
+  if (S.repack) {   // too many hidden slots below the high-water mark: give every organism a new slot this frame
+    S.of.clear(); S.key.fill(undefined); S.free.length = 0; S.hw = 0; S.repack = false;
+  }
+  S.frame = (S.frame + 1) >>> 0 || 1; S.dirty.length = 0;
+}
+
+/**
+ * Draw the organism with this key (its serial; any stable key) in this frame: as setBody, in the slot it had last
+ * frame, or a new one (its genes written then). The genes are taken to be the same for its life. Returns false when
+ * the mesh is full and the organism has no slot in it.
+ */
+export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl) {
+  const S = B.slots;
+  let k = S.of.get(key), fresh = false;
+  if (k === undefined) {
+    if (S.free.length) k = S.free.pop(); else if (S.hw < B.cap) k = S.hw++; else return false;
+    S.of.set(key, k); S.key[k] = key; fresh = true;
+  }
+  S.seen[k] = S.frame;
+  writeMatrix(B.mesh.instanceMatrix.array, k * 16, x, y, z, h, sx, sy);
+  const k4 = k * 4, A = B.anim.array, CL = B.clade.array;
+  A[k4] = gait; A[k4 + 1] = phase; A[k4 + 2] = acts; A[k4 + 3] = rest;
+  if (fresh) writeGenes(B, k4, b);
+  // the overlay colour changes (a hit flushes it, the clade table may change), so it is compared and sent when it does
+  const code = cladeCode(b);
+  if (fresh || CL[k4] !== r || CL[k4 + 1] !== g || CL[k4 + 2] !== bl || CL[k4 + 3] !== code) {
+    CL[k4] = r; CL[k4 + 1] = g; CL[k4 + 2] = bl; CL[k4 + 3] = code;
+    S.dirty.push(k);
+  }
+  return true;
+}
+
+/** End the frame: free (and hide) the slots not placed this frame; upload the matrices and animation of every slot
+ *  in use, and the genes and colour of the slots that changed. */
+export function finishBodies(B) {
+  const S = B.slots, M = B.mesh.instanceMatrix.array;
+  let live = 0;
+  for (let k = 0; k < S.hw; k++) {
+    if (S.key[k] === undefined) continue;
+    if (S.seen[k] === S.frame) { live++; continue; }
+    S.of.delete(S.key[k]); S.key[k] = undefined; S.free.push(k);
+    for (let j = 0; j < 16; j++) M[k * 16 + j] = 0;   // a zero matrix: nothing is drawn
+  }
+  const hw0 = S.hw;
+  while (S.hw > 0 && S.key[S.hw - 1] === undefined) S.hw--;
+  if (S.hw < hw0) S.free = S.free.filter((k) => k < S.hw);
+  if (S.hw > 2 * live + 256) S.repack = true;
+  const n = S.hw;
+  B.mesh.count = n;
+  if (n === 0) return;
+  for (const [a, w] of [[B.mesh.instanceMatrix, 16], [B.anim, 4]]) { a.clearUpdateRanges(); a.addUpdateRange(0, n * w); a.needsUpdate = true; }
+  if (S.dirty.length === 0) return;
+  // the changed slots as runs of neighbours (a few dozen uploads at most; beyond that one span over all of them)
+  const d = S.dirty.sort((a, b) => a - b), runs = [];
+  for (let i = 0; i < d.length;) { let j = i; while (j + 1 < d.length && d[j + 1] <= d[j] + 1) j++; runs.push(d[i], d[j]); i = j + 1; }
+  const statics = [B.geneA, B.geneB, B.clade, ...B.morph];
+  for (const a of statics) {
+    a.clearUpdateRanges();
+    if (runs.length > 64) a.addUpdateRange(d[0] * 4, (d[d.length - 1] - d[0] + 1) * 4);
+    else for (let r = 0; r < runs.length; r += 2) a.addUpdateRange(runs[r] * 4, (runs[r + 1] - runs[r] + 1) * 4);
+    a.needsUpdate = true;
+  }
 }
 
 /**
@@ -127,18 +219,11 @@ export function bodyMesh(base, material, cap) {
  * the identification-overlay colour (linear r, g, b). Missing appearance uses stable neutral defaults.
  */
 export function setBody(B, k, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl) {
-  const M = B.mesh.instanceMatrix.array, o = k * 16, ca = Math.cos(h), sa = Math.sin(h);
-  M[o] = ca * sx; M[o + 1] = 0; M[o + 2] = sa * sx; M[o + 3] = 0;
-  M[o + 4] = 0; M[o + 5] = sy; M[o + 6] = 0; M[o + 7] = 0;
-  M[o + 8] = -sa * sx; M[o + 9] = 0; M[o + 10] = ca * sx; M[o + 11] = 0;
-  M[o + 12] = x; M[o + 13] = y; M[o + 14] = z; M[o + 15] = 1;
-  const k4 = k * 4, A = B.anim.array, GA = B.geneA.array, GB = B.geneB.array, CL = B.clade.array;
+  writeMatrix(B.mesh.instanceMatrix.array, k * 16, x, y, z, h, sx, sy);
+  const k4 = k * 4, A = B.anim.array, CL = B.clade.array;
   A[k4] = gait; A[k4 + 1] = phase; A[k4 + 2] = acts; A[k4 + 3] = rest;
-  GA[k4] = b.legs; GA[k4 + 1] = b.fins; GA[k4 + 2] = b.wings; GA[k4 + 3] = b.sight;
-  GB[k4] = b.armour; GB[k4 + 1] = b.strike; GB[k4 + 2] = b.fur || 0; GB[k4 + 3] = b.append || 0;
-  CL[k4] = r; CL[k4 + 1] = g; CL[k4 + 2] = bl; CL[k4 + 3] = (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
-  const appearance = b.appearance || DEFAULT_APPEARANCE;
-  for (let j = 0; j < 4; j++) for (let c = 0; c < 4; c++) B.morph[j].array[k4 + c] = appearance[j * 4 + c];
+  writeGenes(B, k4, b);
+  CL[k4] = r; CL[k4 + 1] = g; CL[k4 + 2] = bl; CL[k4 + 3] = cladeCode(b);
 }
 
 /** Set the instance count and upload only the used part of each instance buffer. */

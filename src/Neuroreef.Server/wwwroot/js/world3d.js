@@ -6,9 +6,9 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from '../lib/OrbitControls.js';
-import { agentAt } from './net.js';
+import { agentState, agentGenes, REC } from './net.js';
 import { merge } from './creatures/kit.js';
-import { bodyGeometry, bodyMaterial, bodyMesh, setBody, commitBodies, bodySize, appearanceColor } from './creatures/body.js';
+import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBodies, bodySize, appearanceColor } from './creatures/body.js';
 
 const RELIEF = 55;
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
@@ -18,7 +18,8 @@ const STAIN_MAX = 1024;       // blood stains on the ground
 const BLOOD_MAX = 2500;       // blood droplets in the air at once
 const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sinking for the last quarter
 const NEAR_DIST = 90;        // organisms closer than this to the camera are drawn with the detailed body
-const NEAR_CAP = 4096;       // at most this many detailed bodies; the rest get the low-detail one
+const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
+                             // a detailed body for every animal in a crowd, where a few hundred fill the near view)
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
 const TREE_CAP = 30000, SHRUB_CAP = 16000;
 const PLANT_FULL = 260;      // trees and shrubs are drawn at full density within this distance of the view centre, thinner beyond
@@ -303,20 +304,24 @@ export class World3D {
     this.frameDt = Math.min(250, Math.max(16, now - this.frameT)); this.frameT = now;
     const gen = (this._gen = (this._gen || 0) + 1), W = this.W, o = this.tmp;
     for (let k = 0; k < a.n; k++) {
-      agentAt(a, k, W, o);
+      agentState(a, k, W, o);
       let e = this.agents.get(o.serial);
       if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h }; this.agents.set(o.serial, e); }
       else { e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h; }
       e.sp = o.sp; e.stage = o.stage; e.acts = o.acts; e.scan = o.scan; e.rest = o.rest; e.energy = o.energy; e.gen = gen; e.carry = o.carrying;
-      if (e.gMass !== o.gMass || e.legs !== o.legs || e.fins !== o.fins || e.wings !== o.wings || e.legPairs !== o.legPairs || e.finPairs !== o.finPairs || e.eyePairs !== o.eyePairs || e.loco !== o.loco) {
-        // the body this organism's genes built (constant for its life)
+      // the body its genes built is the same for its life: decoded the first time its serial is seen (and again only if
+      // the first gene bytes differ, as when another world, whose serials start again at 1, is shown)
+      const fp = a.dv.getUint32(k * REC + 12, true);
+      if (e.fp !== fp) {
+        e.fp = fp;
+        agentGenes(a, k, o);
         e.gMass = o.gMass; e.m01 = o.m01; e.mass = o.mass; e.size = bodySize(o.mass);
         e.legs = o.legs; e.fins = o.fins; e.wings = o.wings; e.loco = o.loco; e.legPairs = o.legPairs; e.finPairs = o.finPairs; e.eyePairs = o.eyePairs;
         e.fly = o.loco === 'Fly'; e.swim = o.loco === 'Swim';
+        e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
+        e.fur = o.fur; e.append = o.append;
+        (e.appearance ||= new Float32Array(16)).set(o.appearance);
       }
-      e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
-      e.fur = o.fur; e.append = o.append;
-      (e.appearance ||= new Float32Array(16)).set(o.appearance);
       e.call = o.call; e.call2 = o.call2; e.call3 = o.call3; if (o.call) e.callT = now;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
@@ -664,6 +669,12 @@ export class World3D {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
     const eggCol = new THREE.Color(), white = new THREE.Color(1, 1, 1);
     const t = now / 1000, Wh = W / 2;
+    // only what the camera can see is drawn (the meshes themselves are not culled: their instances cover the world)
+    const fr = this._frustum ||= new THREE.Frustum(), sph = this._sphere ||= new THREE.Sphere();
+    this.camera.updateMatrixWorld();
+    fr.setFromProjectionMatrix((this._pv ||= new THREE.Matrix4()).multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
+    const inView = (x, gy, z, r) => { sph.center.set(x, gy, z); sph.radius = r; return fr.intersectsSphere(sph); };
+    beginBodies(near); beginBodies(far);
     for (const [serial, e] of this.agents) {
       if (this.hidden.has(e.sp) || this.dead.has(serial)) continue;
       if (farStride > 1 && serial % farStride !== 0 && serial !== this.selected) {
@@ -681,7 +692,9 @@ export class World3D {
       }
       if (e.stage === 0) {
         if (ne >= 4096) continue;
-        p.set(x, this.heightAt(x, y) + 0.3, y); q.identity(); s.set(1, 0.8, 1);
+        const ey = this.heightAt(x, y) + 0.3;
+        if (!inView(x, ey, y, 1)) continue;
+        p.set(x, ey, y); q.identity(); s.set(1, 0.8, 1);
         this.eggs.setMatrixAt(ne, m.compose(p, q, s));
         if (this.speciesOverlay) eggCol.setRGB(rgb[ci], rgb[ci + 1], rgb[ci + 2]);
         else appearanceColor(e, eggCol);
@@ -697,10 +710,13 @@ export class World3D {
       if (mdy > Wh) mdy -= W; else if (mdy < -Wh) mdy += W;
       const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * size + 0.05));
       e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
+      if (!inView(x, gy, y, 3 * sc + 2)) continue;   // a body (wings and tail spread) lies well within 3 x its size
       const ddx = x - camX, ddz = y - camZ;
-      let B, k;
-      if (ddx * ddx + ddz * ddz < near2 && nn < near.cap) { B = near; k = nn++; } else { B = far; k = nf++; if (k >= far.cap) continue; }
-      setBody(B, k, x, gy, y, h, sc, sc * (e.rest && !e.fly ? 0.7 : 1), e, e.gait, (serial % 997) / 997, acts, e.rest ? 1 : 0, cr, cg, cb);
+      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997, rs = e.rest ? 1 : 0;
+      // each organism keeps its instance slot (keyed by serial) while it stays in a mesh: only its matrix and animation
+      // are sent each frame. A near one goes to the far mesh when the near one is full
+      if (ddx * ddx + ddz * ddz < near2 && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb)) nn++;
+      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb)) nf++;
     }
     // the killed: flattened, darkened bodies lying where they fell, sinking into the ground at the end
     this.corpses = this.corpses.filter((d) => { if (now - d.t0 < CORPSE_LIFE) return true; this.dead.delete(d.serial); return false; });
@@ -708,13 +724,14 @@ export class World3D {
       const e = d.e, x = d.x + W * Math.round((cx - d.x) / W), y = d.y + W * Math.round((cz - d.y) / W);
       const a = (now - d.t0) / CORPSE_LIFE, sc = (e.size || 1) * (e.stage === 1 ? 0.55 : 1);
       const gy = this.heightAt(x, y, e.swim) - sc * 0.15 - Math.max(0, a - 0.75) * 4 * sc * 0.6;
+      if (!inView(x, gy, y, 3 * sc + 2)) continue;
       const ddx = x - camX, ddz = y - camZ;
-      let B, k;
-      if (ddx * ddx + ddz * ddz < near2 && nn < near.cap) { B = near; k = nn++; } else { B = far; k = nf++; if (k >= far.cap) continue; }
-      const ci = e.sp * 3, dk = 0.45 - 0.2 * a;
-      setBody(B, k, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, rgb[ci] * dk + 0.18, rgb[ci + 1] * dk * 0.5, rgb[ci + 2] * dk * 0.5);
+      const ci = e.sp * 3, dk = 0.45 - 0.2 * a, r = rgb[ci] * dk + 0.18, g = rgb[ci + 1] * dk * 0.5, b = rgb[ci + 2] * dk * 0.5;
+      const key = -d.serial;   // a corpse's slot is apart from the living animal's (serials are > 0)
+      if (ddx * ddx + ddz * ddz < near2 && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b)) nn++;
+      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b)) nf++;
     }
-    commitBodies(near, nn); commitBodies(far, nf);
+    finishBodies(near); finishBodies(far);
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
 
     // selection marker, field of view and perceived animals

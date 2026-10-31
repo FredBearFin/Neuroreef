@@ -68,6 +68,12 @@ export class Link {
 
 /** Decode one format-6 AGENTS record; reuse out and its appearance buffer. */
 export function agentAt(a, k, world, out) {
+  agentState(a, k, world, out);
+  return agentGenes(a, k, out);
+}
+
+/** The part of record k that changes from step to step: position, heading, clade, stage, flags, actions, serial, calls. */
+export function agentState(a, k, world, out) {
   const o = k * REC, dv = a.dv, b = a.bytes;
   out.x = dv.getUint16(o, true) * world / 65536;
   out.y = dv.getUint16(o + 2, true) * world / 65536;
@@ -80,6 +86,14 @@ export function agentAt(a, k, world, out) {
   out.energy = (st >> 5) / 7;
   out.acts = b[o + 7];
   out.serial = dv.getUint32(o + 8, true);
+  out.call = b[o + 21] >> 4;                             // the first sound of its utterance this step: 0 none, 1..8
+  out.call2 = b[o + 24] & 15; out.call3 = b[o + 24] >> 4; // its second and third sounds (Revision N), 0 none
+  return out;
+}
+
+/** The part of record k its genes give, the same for its whole life: body size, organs, pairs, locomotion, fur, appearance. */
+export function agentGenes(a, k, out) {
+  const o = k * REC, dv = a.dv, b = a.bytes;
   // the organism's own body genes (bytes 12-19, int8): organ sizes are (g + 127) / 254, 0..1
   const gm = dv.getInt8(o + 12);
   out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.1 * Math.pow(40 / 0.1, out.m01);   // the body's actual size (its size class's floor included)
@@ -90,8 +104,6 @@ export function agentAt(a, k, world, out) {
   out.finPairs = Math.min(4, b[o + 22] || 1);             // side fins
   out.eyePairs = Math.min(4, b[o + 23] || 1);
   out.locoCode = b[o + 21] & 15;                         // computed by the sim: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
-  out.call = b[o + 21] >> 4;                             // the first sound of its utterance this step: 0 none, 1..8
-  out.call2 = b[o + 24] & 15; out.call3 = b[o + 24] >> 4; // its second and third sounds (Revision N), 0 none
   out.fur = (b[o + 25] >> 4) / 15; out.append = (b[o + 25] & 15) / 15;   // fur and appendages, 0..1 (Revision O)
   const appearance = out.appearance ||= new Float32Array(16);
   for (let j = 0; j < 16; j++) appearance[j] = (dv.getInt8(o + 26 + j) + 127) / 254;
