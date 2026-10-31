@@ -30,7 +30,9 @@ export class Link {
     switch (type) {
       case T_WORLD: {
         const fw = dv.getUint16(8, true), sea = dv.getFloat32(12, true), n = fw * fw;
-        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n) });
+        // rivers: course and size per cell (a server without the plane sends null; world3d.js then derives them)
+        const river = buf.byteLength >= 16 + 4 * n ? new Uint8Array(buf, 16 + 3 * n, n) : null;
+        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river });
         break;
       }
       case T_AGENTS: {
