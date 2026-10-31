@@ -78,14 +78,18 @@ public static class Hydrology
     /// <summary>
     /// Stream-power incision and deposition over iters passes, changing h in place (lakes, below sea, are base level and
     /// do not change). alluv receives the depth of sediment left on each cell. kRock (Revision R, optional): each cell's
-    /// erodibility against soft sedimentary rock (Geology.Erodibility); hard rock cuts slower. Returns the mass budget.
+    /// erodibility against soft sedimentary rock (Geology.Erodibility); hard rock cuts slower. sc (optional): the critical
+    /// slope, as the most elevation a land cell may stand above a neighbour (x sqrt 2 on diagonals); steeper ground fails
+    /// and the rivers carry what slid (Geology.Fail). Returns the mass budget.
     /// </summary>
     public static Budget Erode(float[] h, float sea, float[] rain, float[] alluv, int iters,
-        float kErode = K.ERODE_K, float kCarry = K.CARRY_K, float drop = K.DEPOSIT_FRAC, float kCreep = K.CREEP_K, float[]? kRock = null)
+        float kErode = K.ERODE_K, float kCarry = K.CARRY_K, float drop = K.DEPOSIT_FRAC, float kCreep = K.CREEP_K, float[]? kRock = null,
+        float sc = 0f)
     {
         int FW = Map.FW, n = FW * FW;
         var net = new Net(n);
         var cut = new float[n]; var load = new float[n]; var h0 = new float[n];
+        var slid = sc > 0f ? new float[n] : null;
         var b = new Budget();
         Array.Clear(alluv);
         for (int it = 0; it < iters; it++)
@@ -106,6 +110,9 @@ public static class Hydrology
                     h[i] = h0[i] + dh;
                 }
             }
+            // critical-slope failure (geomorphology, 2026-10-31): ground steeper than sc slides until it stands at sc (Geology.Fail);
+            // before the routing, so the drainage is that of the ground after the slides, and the rivers carry what slid
+            if (slid != null) { Array.Clear(slid); Geology.Fail(h, slid, sea, sc, FW); }
             Route(h, sea, rain, net);
             int[] recv = net.Recv, order = net.Order; float[] flow = net.Flow, fill = net.Fill;
             // incision, outlets first: h' = (h + F h'_r) / (1 + F), F = K A^m / dx (implicit for n = 1)
@@ -113,13 +120,16 @@ public static class Hydrology
             {
                 int c = order[q], r = recv[c];
                 cut[c] = 0f;
-                if (r < 0 || h[c] <= h[r]) continue;        // a lake, or the floor of a closed basin: no slope to cut
+                if (r < 0) continue;                         // a lake
+                float hr = MathF.Max(h[r], sea);              // a river cuts down to the lake it runs into, not below its level
+                if (h[c] <= hr) continue;                    // the floor of a closed basin: no slope to cut
                 // bedrock under alluvium is not cut until the alluvium is gone: sediment is soft (kRock 1)
                 float kr = kRock == null || alluv[c] > 0f ? 1f : kRock[c];
                 float F = kErode * kr * MathK.Pow(flow[c], K.ERODE_M) / Dist(c, r, FW);
-                float hn = (h[c] + F * h[r]) / (1f + F);
+                float hn = (h[c] + F * hr) / (1f + F);
                 cut[c] = h[c] - hn; h[c] = hn;
             }
+            if (slid != null) for (int i = 0; i < n; i++) cut[i] += slid[i];   // what slid is carried with what was cut
             // transport, sources first: the load runs down; a surplus over capacity is partly dropped, a basin fills to its rim
             Array.Clear(load);
             for (int q = n - 1; q >= 0; q--)
@@ -147,7 +157,7 @@ public static class Hydrology
     // creep between land cell i and neighbour j; a lake (below sea) keeps its bed, so what goes into it is lost to it
     static float Creep(float[] h0, int i, int j, float sea, float k, ref Budget b)
     {
-        float f = k * (h0[j] - h0[i]);
+        float f = k * (MathF.Max(h0[j], sea) - h0[i]);   // down to the lake's level, not its bed
         if (h0[j] < sea) b.ToLakes -= f;   // land is above every lake, so this only ever flows into it
         return f;
     }

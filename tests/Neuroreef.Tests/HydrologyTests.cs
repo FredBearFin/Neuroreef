@@ -17,7 +17,8 @@ public class HydrologyTests
         var rain = Terrain.RunoffRain(w);
         var h0 = (float[])w.Elev.Clone();
         // Revision R: the relief is the geological genesis, and its rock sets how fast each cell cuts, as in Terrain.Build
-        var b = Hydrology.Erode(w.Elev, w.SeaLevel, rain, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w));
+        // geomorphology (2026-10-31): and ground steeper than the critical slope fails, its debris carried with the load
+        var b = Hydrology.Erode(w.Elev, w.SeaLevel, rain, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w), sc: Geology.CriticalDrop(w));
         return (w, h0, rain, b);
     }
 
@@ -81,7 +82,9 @@ public class HydrologyTests
             }
             Assert.True(w.Elev[c] < w.SeaLevel, "a river ends somewhere but a lake");
         }
-        Assert.InRange(rivers / (double)n, 0.003, 0.03);
+        // geomorphology (2026-10-31): the lower bound was 0.003. Seed 7's land is now a dissected upland between many
+        // lakes, so its rivers are short (0.25% of the map at RIVER_ACC; seeds 1, 2, 3, 11: 0.78-0.86%, against 0.5-0.95%)
+        Assert.InRange(rivers / (double)n, 0.002, 0.03);
         // bigger rivers are deeper (depth ~ discharge^0.4)
         int small = -1, big = -1;
         for (int i = 0; i < n; i++)

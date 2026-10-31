@@ -42,6 +42,9 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Geomorphology (2026-10-31) re-pinned it: the relief is now made at the land surface's own scale, with no height
+        // cap, critical-slope failure, n = 2 stream power and the last steps of deep time on the field grid, so the same
+        // seed has other land; Climate = 0 still skips every climate rule. It was 0x4635958CC1772992 at Revision S.
         // Revision S (evolving plants) re-pinned it: land vegetation is now genotypes in four slots per cell, grown in stripes
         // with their own traits after a year of spin-up, so the same seed grows different fields; Climate = 0 still skips
         // every climate rule (the plants read T_REF). It was 0x3EBEA675E685E2C7 at the water cycle.
@@ -55,7 +58,7 @@ public class ClimateTests
         // same seed, map and steps.
         // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
         // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
-        Assert.Equal(0x4635958CC1772992UL, h);
+        Assert.Equal(0xD748405AB8C664B7UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
