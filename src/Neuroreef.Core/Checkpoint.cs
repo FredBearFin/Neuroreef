@@ -1,16 +1,21 @@
 // Checkpoint (DESIGN §7.6): the whole state of a prehistory, so a run of weeks survives a reboot or a crash
 // and resumes exactly where it was. Every state field of each branch's World (with its clade table, clade
 // scratch, telemetry and evolution settings) is written by reflection, so a field added later is saved
-// without anyone remembering to. Arrays are copied into the existing arrays on load (same capacity and
-// genome layout); a readonly scalar (capacity, seed) must match, or the checkpoint is refused.
+// without anyone remembering to. A world grows (World.Resize), so it is first given the saved number of slots, then its
+// arrays are copied into the existing arrays (same genome layout); an identity (seed, terrain seed) must match, or the
+// checkpoint is refused. A field marked [NonSerialized] is a run setting, not state, and is not saved.
 //
-// Format: "NRCK" | u16 version | i32 G.LEN | i32 branches | i32 capacity | u32 seed | nature | per branch: object tree.
+// Format: "NRCK" | u16 version | i32 G.LEN | i32 branches | i32 capacity | u32 seed | nature | per branch: [i32 its
+//         capacity, from version 20] object tree.
 //         "NRWK" | u16 version | i32 G.LEN | i32 capacity | u32 seed | u32 terrain seed | nature | object tree.
 // Object tree (version 18 on): per field its name, a kind byte (Kind) and its value; an empty name ends the object.
 // With the kind, a field this program does not know can always be skipped. Before 18 there was no kind byte: the
 // kind is taken from the field of the same name in this program, and an unknown field is skipped as an array.
 // The largest per-slot arrays (genome, brain weights, traces, histories; SlotFields) are written for slots in use
 // only (Kind.Slots): every one of them is written whole at a birth before it is read, so a dead slot's are not state.
+// The genomes, weights and traces are paged (SlotArray); a run of slots is written page by page, as one array was.
+// Kind.Slots gives the number of slots from version 20 on (before, the number of elements: an i32 that ~21,800 genomes
+// would overflow).
 // An array may hold more than 2 GB (W2f, Trace: Cap * G.W2N floats), so bytes are copied through spans at long offsets,
 // a chunk at a time; a whole array (Kind.Arr) gives its byte count as i64 from version 19 on (i32 before).
 // A file is written to <path>.tmp and then renamed over <path>, so a crash during a save keeps the last one.
@@ -35,13 +40,14 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 19;   // 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 20;   // 20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     /// <summary>The oldest save this program can continue: the genome layout (GeneBank.Version 12) is unchanged since checkpoint 12.</summary>
     public const ushort OldestMigratable = 12;
     /// <summary>The oldest save whose land (relief, water, plants, reservoir) was made by this program's rules; older saves get their land rebuilt.</summary>
     public const ushort LandVersion = 17;
     const ushort TaggedVersion = 18;     // the first version with a kind byte per field
     const ushort LongBytesVersion = 19;  // the first version with an i64 byte count per whole array
+    const ushort GrowVersion = 20;       // the first version with slots (not elements) in Kind.Slots and a capacity per branch
     const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     // classes whose state is saved by walking their fields; any other reference field is not state (links, buffers rebuilt each step)
@@ -73,10 +79,12 @@ public static class Checkpoint
     };
 
     /// <summary>Per-slot arrays written for slots in use only: each is written whole when a slot is born (the genome before
-    /// Life.Place, the rest by Life.Place and Brain.InitLife), so what a dead slot holds is never read again.</summary>
-    static readonly HashSet<string> SlotFields = new(StringComparer.Ordinal) { "Genome", "W2f", "Trace", "Hidden", "HistA", "HistV", "HistD", "HistY", "Gain", "Feat" };
+    /// Life.Place, the rest by Life.Place and Brain.InitLife), so what a dead slot holds is never read again. (The paged
+    /// ones, SlotArray: Genome, W2f, Trace, are always written so.)</summary>
+    static readonly HashSet<string> SlotFields = new(StringComparer.Ordinal) { "Hidden", "HistA", "HistV", "HistD", "HistY", "Gain", "Feat" };
 
-    // the readonly scalars of a World that say which world it is: a save for another one is refused, not migrated
+    // the scalars of a World that say which world it is: a save for another one is refused, not migrated. Cap is given
+    // before the fields are read (World.SetCapacityForLoad), so it matches; none of them is ever set from a save
     static readonly HashSet<string> Identity = new(StringComparer.Ordinal) { "Cap", "Seed", "TerrainSeed", "NS" };
 
     enum Kind : byte { Scalar = 1, Str = 2, Arr = 3, Jagged = 4, Obj = 5, ObjArr = 6, Slots = 7 }
@@ -87,8 +95,8 @@ public static class Checkpoint
         {
             if (!_fields.TryGetValue(t, out var f))
             {
-                // a link back to the world (Telemetry._w) is not state
-                f = t.GetFields(Flags).Where(x => x.FieldType != typeof(World)).OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
+                // a link back to the world (Telemetry._w) is not state, nor is a run setting ([NonSerialized], World.MaxCap)
+                f = t.GetFields(Flags).Where(x => x.FieldType != typeof(World) && !x.IsNotSerialized).OrderBy(x => x.Name, StringComparer.Ordinal).ToArray();
                 _fields[t] = f;
             }
             return f;
@@ -145,8 +153,8 @@ public static class Checkpoint
         using (var bw = new BinaryWriter(fs))
         {
             bw.Write("NRCK"u8.ToArray()); bw.Write(Version);
-            bw.Write(G.LEN); bw.Write(pre.B.Length); bw.Write(pre.B[0].W.Cap); bw.Write(pre.B[0].W.Seed); Nature.Write(bw);
-            foreach (var s in pre.B) Write(bw, s.W, s.W, landOnly: false);
+            bw.Write(G.LEN); bw.Write(pre.B.Length); bw.Write(pre.B.Max(b => b.W.Cap)); bw.Write(pre.B[0].W.Seed); Nature.Write(bw);
+            foreach (var s in pre.B) { bw.Write(s.W.Cap); Write(bw, s.W, s.W, landOnly: false); }   // each branch grows on its own
             fs.Flush(true);
         }
         File.Move(tmp, path, overwrite: true);
@@ -162,7 +170,8 @@ public static class Checkpoint
         return v;
     }
 
-    /// <summary>Branches, slots per branch and seed of a prehistory checkpoint, to rebuild a prehistory it fits.</summary>
+    /// <summary>Branches, slots per branch (the most any branch has) and seed of a prehistory checkpoint, to rebuild a
+    /// prehistory it fits (each branch is given its own number of slots as it is loaded).</summary>
     public static (int branches, int cap, uint seed) PrehistoryHeader(string path)
     {
         using var fs = File.OpenRead(path);
@@ -176,7 +185,7 @@ public static class Checkpoint
     }
 
     /// <summary>
-    /// Restore a prehistory built with the same branches, capacity and seed (best built with restore: true, so no land
+    /// Restore a prehistory built with the same branches and seed, of any capacity (best built with restore: true, so no land
     /// is made only to be overwritten). An older save is migrated: branches whose land must be rebuilt are rebuilt in
     /// parallel. Returns what each branch kept. Throws if the checkpoint does not fit.
     /// </summary>
@@ -190,14 +199,15 @@ public static class Checkpoint
         if (side != Map.W) throw new InvalidDataException($"checkpoint map is {side} units, this run's is {Map.W}");
         Nature.Read(br);
         if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
-        if (n != pre.B.Length || cap != pre.B[0].W.Cap || seed != pre.B[0].W.Seed)
-            throw new InvalidDataException($"checkpoint has {n} branches, {cap} slots, seed {seed}; start with the same --branches and --seed");
+        if (n != pre.B.Length || seed != pre.B[0].W.Seed)
+            throw new InvalidDataException($"checkpoint has {n} branches, seed {seed}; start with the same --branches and --seed");
         var ms = new Migration[n];
         var start = new long[n];
         var need = new bool[n];
         for (int b = 0; b < n; b++)
         {
             ms[b] = new Migration { From = v };
+            pre.B[b].W.SetCapacityForLoad(v >= GrowVersion ? br.ReadInt32() : cap);   // the branch as big as it had grown
             start[b] = fs.Position;
             if (v != Version) { Read(new Ctx(br, v, ms[b], apply: false), pre.B[b].W); need[b] = NeedsLand(ms[b]); }
             else Read(new Ctx(br, v, ms[b], apply: true), pre.B[b].W);
@@ -257,7 +267,8 @@ public static class Checkpoint
     public static Migration LoadWorld(World w, string path, Action? rebuildLand = null)
     {
         var (cap, seed, ts) = WorldHeader(path);
-        if (cap != w.Cap || seed != w.Seed || ts != w.TerrainSeed) throw new InvalidDataException("saved world does not fit this world");
+        if (seed != w.Seed || ts != w.TerrainSeed) throw new InvalidDataException("saved world does not fit this world");
+        w.SetCapacityForLoad(cap);   // the world as big as it had grown
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
         using var br = new BinaryReader(fs);
         ushort v = ReadVersion(br, "NRWK", "saved world"); br.ReadInt32(); br.ReadInt32(); br.ReadUInt32(); br.ReadUInt32();
@@ -306,12 +317,24 @@ public static class Checkpoint
             if (m.LandRebuilt) Plants.ClearAnimal(w, i);   // seed and pollen it carried name plant genotypes of the old table
         }
         m.Reexpressed = phenotype;
+        if (Lost("SlotsUsed")) w.SlotsUsed = SlotsUsedOf(w);
         if (m.LandRebuilt)
         {
             Pathogens.Seed(w);   // the founding pathogen strains in the rebuilt ground and water, as a new world has them
             m.Moved = Relocate(w);
         }
         Summarise(m, w);
+    }
+
+    /// <summary>Slots ever used, for a save that did not count them: all but the run of never-used slots at the bottom of the
+    /// free stack (Cap - 1, Cap - 2, ...), and at least every slot in use.</summary>
+    static int SlotsUsedOf(World w)
+    {
+        int k = 0;
+        while (k < w.FreeTop && w.FreeStack[k] == w.Cap - 1 - k) k++;
+        int used = w.Cap - k;
+        for (int i = w.Cap - 1; i >= used; i--) if (w.StageOf[i] != St.Dead) { used = i + 1; break; }
+        return used;
     }
 
     /// <summary>Animals standing where the (rebuilt) land does not hold them go to the nearest cell that does (within 32 cells).</summary>
@@ -377,9 +400,14 @@ public static class Checkpoint
                 if (o is World && a != null && SlotFields.Contains(f.Name) && a.Length % w.Cap == 0)
                 {
                     runs ??= Runs(w);
-                    bw.Write((byte)Kind.Slots); WriteSlots(bw, a, a.Length / w.Cap, runs);
+                    bw.Write((byte)Kind.Slots); WriteSlots(bw, new ArraySlots(a, a.Length / w.Cap), runs);
                 }
                 else { bw.Write((byte)Kind.Arr); WriteArray(bw, t.GetElementType()!, a); }
+            }
+            else if (v is ISlotArray sa)
+            {
+                runs ??= Runs(w);
+                bw.Write(f.Name); bw.Write((byte)Kind.Slots); WriteSlots(bw, sa, runs);
             }
             else if (t == typeof(float[][]))
             {
@@ -447,15 +475,53 @@ public static class Checkpoint
         WriteBytes(bw, a, 0, bytes);
     }
 
-    static void WriteSlots(BinaryWriter bw, Array a, int stride, List<(int start, int count)> runs)
+    /// <summary>A plain per-slot array (Cap x stride elements) seen as slots, for Kind.Slots.</summary>
+    sealed class ArraySlots : ISlotArray
     {
-        var code = Type.GetTypeCode(a.GetType().GetElementType()!);
-        int es = SizeOf(code);
-        bw.Write((byte)code);
-        bw.Write(a.Length); bw.Write(stride); bw.Write(runs.Count);
+        readonly Array _a;
+        public ArraySlots(Array a, int stride) { _a = a; Stride = stride; Code = Type.GetTypeCode(a.GetType().GetElementType()!); }
+        public TypeCode Code { get; }
+        public int Stride { get; }
+        public int Slots => _a.Length / Stride;
+        public int ElementSize => SizeOf(Code);
+        public int PageSlots => int.MaxValue;
+        public void Resize(int slots) => throw new NotSupportedException();
+        public Span<byte> Bytes(int slot, int count) => Checkpoint.Bytes(_a, (long)slot * Stride * ElementSize, checked(count * Stride * ElementSize));
+    }
+
+    static TypeCode CodeOf(ISlotArray a) => a is ArraySlots p ? p.Code : Type.GetTypeCode(a.GetType().GetGenericArguments()[0]);
+
+    /// <summary>Runs of slots, cut where a page ends and at most Chunk bytes each: each piece is one span of bytes.</summary>
+    static IEnumerable<(int s, int n)> Pieces(ISlotArray a, IEnumerable<(int s, int n)> runs)
+    {
+        long page = a.PageSlots;
+        int most = Math.Max(1, Chunk / (a.Stride * a.ElementSize));
+        foreach (var (s0, n0) in runs)
+            for (int s = s0, end = s0 + n0; s < end;)
+            {
+                long pageEnd = (s / page + 1) * page;
+                int n = (int)Math.Min(Math.Min(end, pageEnd) - s, most);
+                yield return (s, n);
+                s += n;
+            }
+    }
+
+    static void WriteSlots(BinaryWriter bw, ISlotArray a, List<(int start, int count)> runs)
+    {
+        bw.Write((byte)CodeOf(a));
+        bw.Write(a.Slots); bw.Write(a.Stride); bw.Write(runs.Count);
         foreach (var (s, c) in runs) { bw.Write(s); bw.Write(c); }
-        long slot = (long)stride * es;
-        foreach (var (s, c) in runs) WriteBytes(bw, a, s * slot, c * slot);
+        foreach (var (s, c) in Pieces(a, runs)) bw.Write(a.Bytes(s, c));
+    }
+
+    /// <summary>A whole array of an old save (Kind.Arr, before the genomes were paged) into a paged array, slot by slot.</summary>
+    static void ReadWhole(BinaryReader br, ISlotArray a)
+    {
+        foreach (var (s, c) in Pieces(a, new[] { (0, a.Slots) }))
+        {
+            var span = a.Bytes(s, c);
+            while (span.Length > 0) { int r = br.Read(span); if (r <= 0) throw new EndOfStreamException(); span = span[r..]; }
+        }
     }
 
     // ------------------------------------------------------------------ object tree: reading (and migrating)
@@ -471,7 +537,7 @@ public static class Checkpoint
     static bool Saved(FieldInfo f, object o)
     {
         var t = f.FieldType;
-        return t.IsPrimitive || t == typeof(string) || (t.IsArray && t.GetElementType()!.IsPrimitive) || t == typeof(float[][])
+        return t.IsPrimitive || t == typeof(string) || (t.IsArray && t.GetElementType()!.IsPrimitive) || t == typeof(float[][]) || typeof(ISlotArray).IsAssignableFrom(t)
             || (t.IsArray && Walk.Contains(t.GetElementType()!)) || (Walk.Contains(t) && f.GetValue(o) != null);
     }
 
@@ -480,7 +546,8 @@ public static class Checkpoint
 
     static Kind KindOf(Type t) =>
         t.IsPrimitive ? Kind.Scalar : t == typeof(string) ? Kind.Str : t == typeof(float[][]) ? Kind.Jagged
-        : t.IsArray && t.GetElementType()!.IsPrimitive ? Kind.Arr : t.IsArray ? Kind.ObjArr : Kind.Obj;
+        : (t.IsArray && t.GetElementType()!.IsPrimitive) || typeof(ISlotArray).IsAssignableFrom(t) ? Kind.Arr   // a paged array was a whole array before 18
+        : t.IsArray ? Kind.ObjArr : Kind.Obj;
 
     static void Read(Ctx c, World w) => Read(c, w, "", c.Apply, false);
 
@@ -511,6 +578,7 @@ public static class Checkpoint
             {
                 Kind.Scalar => ReadScalarField(c, o, f, take, p),
                 Kind.Str => ReadString(c, o, f, take),
+                Kind.Arr or Kind.Slots when typeof(ISlotArray).IsAssignableFrom(f.FieldType) => ReadSlotArrayField(c, (ISlotArray?)f.GetValue(o), kind, take),
                 Kind.Arr or Kind.Slots => ReadArrayField(c, (Array?)(f.FieldType.IsArray && f.FieldType.GetElementType()!.IsPrimitive ? f.GetValue(o) : null), kind, take),
                 Kind.Jagged => ReadJagged(c, f.FieldType == typeof(float[][]) ? (float[][]?)f.GetValue(o) : null, take),
                 Kind.ObjArr => ReadObjArray(c, f.FieldType.IsArray && Walk.Contains(f.FieldType.GetElementType()!) ? (Array?)f.GetValue(o) : null, p, take, isLand),
@@ -545,10 +613,11 @@ public static class Checkpoint
             try { v = Convert.ChangeType(v, f.FieldType, System.Globalization.CultureInfo.InvariantCulture); }
             catch (Exception e) when (e is InvalidCastException or OverflowException) { return false; }
         }
-        if (f.IsInitOnly)
+        bool identity = o is World && Identity.Contains(f.Name);
+        if (f.IsInitOnly || identity)
         {
             if (Equals(v, f.GetValue(o))) return true;
-            if (o is World && Identity.Contains(f.Name)) throw new InvalidDataException($"checkpoint {o.GetType().Name}.{f.Name} = {v}, this run has {f.GetValue(o)}");
+            if (identity) throw new InvalidDataException($"checkpoint {o.GetType().Name}.{f.Name} = {v}, this run has {f.GetValue(o)}");
             if (c.Version == Version) throw new InvalidDataException($"checkpoint {p} = {v}, this run has {f.GetValue(o)}");
             return false;
         }
@@ -567,28 +636,60 @@ public static class Checkpoint
     /// <summary>A primitive array (Kind.Arr, or Kind.Slots: the slots in use) into a; false (and read past it) if it does not fit.</summary>
     static bool ReadArrayField(Ctx c, Array? a, Kind kind, bool take)
     {
+        if (kind == Kind.Slots) return ReadSlots(c, a, take);
         var br = c.Br;
         TypeCode code = c.Tagged ? (TypeCode)br.ReadByte() : TypeCode.Empty;
         int len = br.ReadInt32();
-        if (kind == Kind.Slots)
-        {
-            int stride = br.ReadInt32(), nr = br.ReadInt32();
-            var runs = new (int s, int n)[nr];
-            long slots = 0;
-            for (int k = 0; k < nr; k++) { runs[k] = (br.ReadInt32(), br.ReadInt32()); slots += runs[k].n; }
-            int es = SizeOf(code);
-            long slot = (long)stride * es;
-            bool fits = a != null && a.Length == len && Type.GetTypeCode(a.GetType().GetElementType()!) == code;
-            if (!fits || !take) { br.BaseStream.Seek(slots * slot, SeekOrigin.Current); return fits; }
-            foreach (var (s, n) in runs) ReadBytes(br, a!, s * slot, n * slot);
-            return true;
-        }
         if (len < 0) return true;   // written as null: nothing to take
         long bytes = c.Version >= LongBytesVersion ? br.ReadInt64() : br.ReadInt32();
         bool ok = a != null && a.Length == len && bytes == ByteLength(a)
             && (!c.Tagged || Type.GetTypeCode(a.GetType().GetElementType()!) == code);
         if (!ok || !take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return ok; }
         ReadBytes(br, a!, 0, bytes);
+        return true;
+    }
+
+    /// <summary>
+    /// The slots in use of a per-slot array (Kind.Slots) into target: a plain array (Cap x stride) or a paged one
+    /// (SlotArray); false (and read past it) if it does not fit. Its count is of slots from version 20 on, of elements before.
+    /// </summary>
+    static bool ReadSlots(Ctx c, object? target, bool take)
+    {
+        var br = c.Br;
+        var code = (TypeCode)br.ReadByte();
+        int count = br.ReadInt32(), stride = br.ReadInt32(), nr = br.ReadInt32();
+        long slots = c.Version >= GrowVersion ? count : stride > 0 ? count / stride : 0;
+        var runs = new (int s, int n)[nr];
+        long used = 0;
+        for (int k = 0; k < nr; k++) { runs[k] = (br.ReadInt32(), br.ReadInt32()); used += runs[k].n; }
+        long bytes = used * stride * SizeOf(code);
+        ISlotArray? a = target switch
+        {
+            Array p when p.LongLength == slots * stride && Type.GetTypeCode(p.GetType().GetElementType()!) == code => new ArraySlots(p, stride),
+            ISlotArray s when s.Slots == slots && s.Stride == stride && CodeOf(s) == code => s,
+            _ => null,
+        };
+        if (a == null || !take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return a != null; }
+        foreach (var (s, n) in Pieces(a, runs))
+        {
+            var span = a.Bytes(s, n);
+            while (span.Length > 0) { int r = br.Read(span); if (r <= 0) throw new EndOfStreamException(); span = span[r..]; }
+        }
+        return true;
+    }
+
+    /// <summary>A paged per-slot array (SlotArray) of a field: Kind.Slots, or a whole array of an old save (Kind.Arr).</summary>
+    static bool ReadSlotArrayField(Ctx c, ISlotArray? a, Kind kind, bool take)
+    {
+        if (kind == Kind.Slots) return ReadSlots(c, a, take);
+        var br = c.Br;
+        TypeCode code = c.Tagged ? (TypeCode)br.ReadByte() : a != null ? CodeOf(a) : TypeCode.Empty;
+        int len = br.ReadInt32();
+        if (len < 0) return a == null;
+        long bytes = c.Version >= LongBytesVersion ? br.ReadInt64() : br.ReadInt32();
+        bool ok = a != null && (long)a.Slots * a.Stride == len && bytes == (long)len * a.ElementSize && CodeOf(a) == code;
+        if (!ok || !take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return ok; }
+        ReadWhole(br, a!);
         return true;
     }
 

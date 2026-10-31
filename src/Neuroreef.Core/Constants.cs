@@ -32,7 +32,7 @@ public static class K
     [K("World", "field grid side (WORLD/FCELL)", "cells", "-")] public const int FW = WORLD / FCELL;
     [K("World", "spatial-hash cell side", "units", "V1")] public const int HCELL = 16;
     [K("World", "spatial-hash grid side", "cells", "-")] public const int GW = WORLD / HCELL;
-    [K("World", "default agent slots (animals, eggs, embryos)", "slots", "HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB")] public const int CAPACITY = 16384;
+    [K("World", "agent slots (animals, eggs, embryos) a world starts with: it grows as births need more, limited only by memory (World.Grow)", "slots", "HT: ~212 KB per slot with 256-unit brains (World.SlotBytes); not a cap since 2026-10-31: a seed gives the same run from any start")] public const int CAPACITY = 16384;
     [K("World", "share of cells below lake level", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
     [K("World", "season period (one year), by default", "steps", "ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K)")] public const int T_SEASON = 3000;
@@ -145,7 +145,7 @@ public static class K
     [K("Prehistory", "length of a prehistory run", "steps", "HT")] public const int PREHISTORY_STEPS = 500000;
     [K("Prehistory", "number of separate branches (populations on the same land) evolving side by side", "branches", "HT (Revision M: 3 before; memory)")] public const int BRANCHES = 2;
     [K("Prehistory", "symbolic time shown in the console: years per step", "years", "-")] public const int YEARS_PER_STEP = 1000;
-    [K("Prehistory", "agent slots per branch", "slots", "HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds)")] public const int BRANCH_CAPACITY = 16384;
+    [K("Prehistory", "agent slots a branch starts with (it grows as needed, World.Grow)", "slots", "HT: Revision M; not a cap since 2026-10-31 (the report warns if a branch reaches its memory limit)")] public const int BRANCH_CAPACITY = 16384;
     [K("Brain", "founders start in groups of this size at one site", "agents", "ECO: populations are clustered; lone colonists cannot find mates (Allee effect)")] public const int GROUP_SIZE = 8;
     [K("Brain", "radius of a founder group", "units", "HT")] public const float GROUP_SPREAD = 10f;
     [K("Brain", "largest radius of a founding lineage's home range, as a share of the map side (a big body's range widens up to this until it can feed FOUND_MIN founders)", "-", "HT: a third of the map; home ranges grow about in proportion to body mass (Kelt & Van Vuren 2001)")] public const float HOME_R_MAX = 0.33f;

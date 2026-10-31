@@ -24,7 +24,7 @@ public class VoiceTests
         int c = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, adult, key, x, y);
         Assert.True(c >= 0);
         int g = c * G.LEN;
-        if (refSlot >= 0) Array.Copy(w.Genome, refSlot * G.LEN + G.BODY, w.Genome, g + G.BODY, G.NBODY);
+        if (refSlot >= 0) w.GenomeOf(refSlot).Slice(G.BODY, G.NBODY).CopyTo(w.GenomeOf(c).Slice(G.BODY));
         else
         {
             w.Genome[g + G.B_MASS] = G.ToGeneLog(1f, K.MASS_LO, K.MASS_HI);

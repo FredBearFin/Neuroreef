@@ -13,15 +13,24 @@ public static class Resolve
         BIT_REST = 1u << (P.REST - P.FIRST_ACTION), BIT_MARK = 1u << (P.MARK - P.FIRST_ACTION),
         BIT_LAY = 1u << (P.LAY - P.FIRST_ACTION), BIT_CACHE = 1u << (P.CACHE - P.FIRST_ACTION);
 
-    public static void Run(World w, int orderA, int orderB)
+    /// <summary>
+    /// RESOLVE: every animal that acts, in the order k x orderA + orderB (mod n) for k in [0, n): n a power of two above
+    /// every slot in use (World.SlotsUsed) and orderA odd, so each slot below n comes once. The order depends on the slots
+    /// used, never on Cap, so a world that grew runs as one built bigger. A slot taken during the step (a newborn) is skipped.
+    /// </summary>
+    /// <summary>RESOLVE over a power of two above every slot (tests: orderA 1, orderB 0 visits the slots in order).</summary>
+    public static void Run(World w, int orderA, int orderB) => Run(w, (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)w.Cap), orderA, orderB);
+
+    public static void Run(World w, int n, int orderA, int orderB)
     {
-        int cap = w.Cap;
-        for (int k = 0; k < cap; k++)
+        int cap = w.Cap, mask = n - 1;
+        for (int k = 0; k < n; k++)
         {
-            int i = (int)(((long)k * orderA + orderB) % cap);
-            if (w.StageOf[i] < St.Juvenile || (w.Flags[i] & Flag.Newborn) != 0) continue;
+            int i = (int)(((uint)k * (uint)orderA + (uint)orderB) & (uint)mask);
+            if (i >= cap || w.StageOf[i] < St.Juvenile || (w.Flags[i] & Flag.Newborn) != 0) continue;
             One(w, i);
         }
+        cap = w.Cap;   // it may have grown for this step's young
         // what others did to it this step (strikes, matings, a mother's feeding) is credited to this step's action, whether
         // it was resolved before or after them; read inside One it landed in this step or the next by the visiting order
         for (int i = 0; i < cap; i++)
@@ -207,7 +216,7 @@ public static class Resolve
         Voices(w, i, s, callType, acts);
 
         // ---- 6. mark and scent, cache
-        float carn = diet[(int)Pool.Meat];
+        float carn = w.PDiet[i * Pools.N + (int)Pool.Meat];   // (not diet: a birth above may have grown the world, reallocating PDiet)
         float scent = K.C_SCENT * carn * ((acts & BIT_MARK) != 0 ? K.MARK_GAIN : 1f);
         if ((acts & BIT_MARK) != 0 && carn <= 0) scent = K.C_SCENT * 0.5f;   // anyone can mark, faintly
         float scentBefore = w.Scent[cell];
@@ -574,7 +583,7 @@ public static class Resolve
         float dx = World.Delta1(w.X[j] - w.X[i]), dy = World.Delta1(w.Y[j] - w.Y[i]);
         float rr = w.PReach[i] * 2f + 0.5f;
         if (dx * dx + dy * dy > rr * rr) return 0;
-        if (w.FreeTop == 0) { w.T.SlotShortage++; if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; } return 0; }     // no room for young: nothing happens, nothing is paid
+        if (w.FreeTop == 0 && !w.Grow(1)) { Life.Full(w); return 0; }     // no room for young (the world at its memory limit): nothing happens, nothing is paid
         Decide.Metrics?.Allow(P.MATE);
         w.Energy[i] -= K.C_MATE * w.PM[i]; w.Energy[j] -= K.C_MATE * w.PM[j];
         w.PendingR[j] += K.R_MATE;

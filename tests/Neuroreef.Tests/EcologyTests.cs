@@ -572,11 +572,12 @@ public class EcologyTests
         Assert.Equal(0f, w2.Cooldown[a2]);
     }
 
-    [Fact] // DESIGN §8 (Revision H): with no free slot, a mating does nothing and costs nothing
+    [Fact] // DESIGN §8 (Revision H): with no free slot (a world at its limit, so it cannot grow), a mating does nothing and costs nothing
     public void NoSlotNoMatingCost()
     {
         var (w, a, b) = Pair(true, true);
         float ea = w.Energy[a];
+        w.MaxCap = w.Cap;
         int saved = w.FreeTop; w.FreeTop = 0;
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
@@ -729,7 +730,7 @@ public class EcologyTests
             {
                 var body = new sbyte[G.NBODY];
                 Clades.AncestorBody(body, (uint)seed, seed, land);
-                body.CopyTo(new Span<sbyte>(w.Genome, G.BODY, G.NBODY));
+                body.CopyTo(w.GenomeOf(0).Slice(G.BODY, G.NBODY));
                 Body.Express(w, 0);
 
                 float producers = 0f;

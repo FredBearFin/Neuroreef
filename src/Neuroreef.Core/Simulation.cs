@@ -15,7 +15,6 @@ public sealed class Simulation : IDisposable
     public bool ProbeFollow;          // follow the lineage when the probed animal dies
     readonly Workers _pool;
     readonly int[] _active;
-    readonly int _orderA;
     readonly Action<int, int> _decideJob, _decideResetJob, _fieldsJob, _waterJob, _plantJob;
     public readonly int[] ActiveCount;
 
@@ -24,10 +23,13 @@ public sealed class Simulation : IDisposable
     /// no founders made, only to be overwritten. Checkpoint builds the land if an older save needs it (BuildLand).</param>
     /// <param name="land">the land made already for this world (Land.Fits): its relief, or the whole spun-up land. Ignored if it does not fit.</param>
     /// <param name="keepLand">keep the spun-up land before the founders (StartLand), for another world of the same seed to begin on</param>
+    /// <param name="capacity">the slots it starts with: it grows as births need more (World.Grow)</param>
+    /// <param name="maxCapacity">the most slots it may grow to (0: as many as memory holds)</param>
     public Simulation(int capacity, uint seed, int threads, GeneBank.Data? bank = null, bool prehistory = false, bool empty = false, uint terrainSeed = 0, EvoSettings? evo = null,
-        bool restore = false, Land? land = null, bool keepLand = false)
+        bool restore = false, Land? land = null, bool keepLand = false, int maxCapacity = 0)
     {
         W = new World(capacity, seed, terrainSeed);
+        if (maxCapacity > 0) W.MaxCap = Math.Clamp(maxCapacity, capacity, World.MaxSlots);
         if (evo != null) W.Evo.CopyFrom(evo);   // before founding: it says how many ancestors are big-brained
         _pool = new Workers(Math.Max(1, threads));
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
@@ -43,11 +45,6 @@ public sealed class Simulation : IDisposable
         W.Prehistory = prehistory && !empty && !restore;
         Snap = new Snapshot(W);
 
-        // the visiting order of RESOLVE: k*A + B (mod Cap) with gcd(A, Cap) = 1
-        int a = (int)(2654435761u % (uint)capacity) | 1;
-        while (Gcd(a, capacity) != 1) a += 2;
-        _orderA = a;
-
         // founders (DESIGN §7.9): the random ancestors, or the clades of a gene bank (NR-210, NR-212)
         if (!empty && !restore)
         {
@@ -56,6 +53,7 @@ public sealed class Simulation : IDisposable
             Pathogens.Seed(W);   // the founding pathogen strains, in the ground and water (Revision R)
         }
         Life.Run(W, _active);   // clears newborn flags, counts
+        W.Reserve();            // free slots for the first step's births
 
         _decideResetJob = (lo, hi) =>
         {
@@ -258,8 +256,6 @@ public sealed class Simulation : IDisposable
         return K.SWIM_SPEED * (0.1f + 0.9f * fins) > K.CRAWL + (1f - K.CRAWL) * legs ? Realm.Water : Realm.Land;
     }
 
-    static int Gcd(int a, int b) { while (b != 0) (a, b) = (b, a % b); return a; }
-
     /// <summary>Accumulated wall time per phase (ms): build, decide, resolve, life, fields, fire, telemetry.</summary>
     public readonly double[] PhaseMs = new double[7];
     long _t;
@@ -281,9 +277,12 @@ public sealed class Simulation : IDisposable
         if (w.MemoryReset) _pool.Run(_decideResetJob, w.Cap);
         else _pool.Run(_decideJob, w.CellStart[Map.GW * Map.GW]);
         Lap(1);
-        int orderB = (int)(Rng.Hash(w.Seed, (uint)w.Step, 0, Rs.Order) % (uint)w.Cap);
+        // the visiting order of RESOLVE: k x A + B over a power of two n above every slot in use (Resolve.Run), A odd
+        int n = (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(1, w.SlotsUsed));
+        int orderA = (int)(2654435761u & (uint)(n - 1)) | 1;
+        int orderB = (int)(Rng.Hash(w.Seed, (uint)w.Step, 0, Rs.Order) & (uint)(n - 1));
         w.T.KillFlashN = 0;
-        Resolve.Run(w, _orderA, orderB);
+        Resolve.Run(w, n, orderA, orderB);
         Lap(2);
         Life.Run(w, _active);
         Clades.Update(w);
@@ -298,6 +297,7 @@ public sealed class Simulation : IDisposable
         w.Step++;
         if (w.Step % K.SAMPLE_EVERY == 0) w.T.Take();
         Snap.AfterStep();
+        w.Reserve();   // grow between steps if the next one could run short of slots (World.Reserve)
         Seen();
         Lap(6);
     }

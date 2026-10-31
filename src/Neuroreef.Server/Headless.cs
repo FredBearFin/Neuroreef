@@ -14,7 +14,7 @@ public static class Headless
     public static int Run(Options o, GeneBank.Data? bank)
     {
         var clock = Stopwatch.StartNew();
-        using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, empty: o.Empty, terrainSeed: o.Seed, evo: o.WorldSettings());
+        using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, empty: o.Empty, terrainSeed: o.Seed, evo: o.WorldSettings(), maxCapacity: o.MaxCapacity);
         Console.WriteLine($"world built in {clock.Elapsed.TotalSeconds:F1} s");
         var w = sim.W;
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
@@ -55,7 +55,7 @@ public static class Headless
             catch (Exception ex) { Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}"); return 2; }
         var clock = Stopwatch.StartNew();
         bool resume = o.CheckpointPath != null && File.Exists(o.CheckpointPath);
-        using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e, restore: resume);   // resuming: no land built only to be overwritten
+        using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e, restore: resume, maxCapacity: o.MaxCapacity);   // resuming: no land built only to be overwritten
         if (!resume) Console.WriteLine($"{pre.B.Length} branches built in {clock.Elapsed.TotalSeconds:F1} s");
         var s0 = pre.Pending;
         if (o.CheckpointPath != null)
@@ -391,10 +391,12 @@ public static class Headless
             o.AppendLine($"{w.Sp[s].Name,-12}{a0,7}{a1,10}{a2,13}{a3,13}{mean,20:F0}{w.Sp[s].Born,16:N0}");
         }
         o.AppendLine();
-        o.AppendLine($"slot shortages (births or matings refused because the world was full): {T.SlotShortage}");
+        o.AppendLine($"slots: {w.Cap:N0} now, grown {w.Grows} times as births needed them ({w.SlotBytes / 1024.0:N1} KB of memory per slot, {(long)w.Cap * w.SlotBytes / (1 << 20):N0} MB in all)" +
+            (w.GrowLimit != null ? $"; it could not grow past {w.GrowLimit}" : "; never limited"));
+        o.AppendLine($"slot shortages (births or matings refused because the world could not grow): {T.SlotShortage}");
         o.AppendLine($"steps on which the world was full: {T.FullSteps:N0} of {sim.W.Step:N0}");
         if (T.FullSteps > 0.01 * Math.Max(1UL, sim.W.Step))
-            o.AppendLine("INVALID: the slot cap, not food, limited this world on more than 1% of steps, so the cap chose who was born. Give it more slots or a smaller map.");
+            o.AppendLine($"INVALID: the world could not grow past {w.Cap:N0} slots ({w.GrowLimit}) on more than 1% of steps, so that limit, not food, chose who was born. Give it more memory, a higher --max-capacity or a smaller map.");
         o.AppendLine();
         o.Append(Pathogens.Report(w));   // the pathogens' census, lineages and deaths by disease (Revision R)
         o.AppendLine();

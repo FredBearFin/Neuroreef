@@ -136,11 +136,11 @@ public static class Wire
         BinaryPrimitives.WriteUInt32LittleEndian(s.Slice(20), w.LastChildSerial[i]);
         var f = new Span<float>(new float[PR_END]);
         pr.X.CopyTo(f.Slice(PR_FEAT)); pr.Hid.CopyTo(f.Slice(PR_HID)); pr.Z.CopyTo(f.Slice(PR_Z)); pr.Gn.CopyTo(f.Slice(PR_GAIN));
-        int gb = i * G.LEN, wb = i * G.W2N;
+        var gw = w.Genome.Slot(i).Slice(G.W2); var wf = w.W2f.Slot(i);
         for (int p = 0; p < P.N; p++)
         {
             float d = 0;
-            for (int k = 0; k < G.NIN; k++) d += MathF.Abs(w.W2f[wb + p * G.NIN + k] - w.Genome[gb + G.W2 + p * G.NIN + k] * K.WSCALE);
+            for (int k = 0; k < G.NIN; k++) d += MathF.Abs(wf[p * G.NIN + k] - gw[p * G.NIN + k] * K.WSCALE);
             f[PR_LEARN + p] = d / G.NIN;
         }
         float[] sc = { w.Reward[i], w.RewardMean[i], w.Energy[i], w.EmaxOf(i), w.Thirst[i], w.Fatigue[i], w.Gut[i] / MathF.Max(1e-6f, w.PGut[i] * w.MassOf(i) / w.PM[i]),
@@ -149,7 +149,7 @@ public static class Wire
         float[] ph = { w.PM[i], w.PVmax[i], w.PSight[i], w.PArmour[i], w.PStrike[i], w.PLitter[i], w.PBasal[i] };
         ph.CopyTo(f.Slice(PR_PHEN));
         w.DietOf(i).CopyTo(f.Slice(PR_DIET));
-        new ReadOnlySpan<float>(w.W2f, wb, G.W2N).CopyTo(f.Slice(PR_W2));
+        wf.CopyTo(f.Slice(PR_W2));
         for (int k = 0; k < PR_END; k++) BinaryPrimitives.WriteSingleLittleEndian(s.Slice(24 + 4 * k), f[k]);
         return 24 + 4 * PR_END;
     }

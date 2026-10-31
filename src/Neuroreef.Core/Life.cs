@@ -6,12 +6,22 @@ namespace Neuroreef;
 
 public static class Life
 {
+    /// <summary>A free slot for a newborn or founder, or -1 if the world is full. A world with no free slot grows here
+    /// (World.Grow: births are serial, in RESOLVE and founding), so it is full only at its memory limit (or MaxCap).</summary>
     public static int NewSlot(World w)
     {
-        if (w.FreeTop == 0) { w.T.SlotShortage++; if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; } return -1; }
+        if (w.FreeTop == 0 && !w.Grow(1)) { Full(w); return -1; }
         int c = w.FreeStack[--w.FreeTop];
         w.AliveCount++;
+        if (c >= w.SlotsUsed) w.SlotsUsed = c + 1;
         return c;
+    }
+
+    /// <summary>A birth or mating refused for want of a slot: the world is at its limit (counted per step for the reports).</summary>
+    public static void Full(World w)
+    {
+        w.T.SlotShortage++;
+        if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; }
     }
 
     public static void FreeSlot(World w, int i)
@@ -62,7 +72,7 @@ public static class Life
 
     public static void CopyGenome(World w, int from, int to, bool mutate)
     {
-        Array.Copy(w.Genome, from * G.LEN, w.Genome, to * G.LEN, G.LEN);
+        w.GenomeOf(from).CopyTo(w.GenomeOf(to));
         if (mutate) Brain.Mutate(w.GenomeOf(to), w.Seed, (uint)w.Step, (uint)to + 0x10000u, w.Evo);
     }
 
@@ -80,7 +90,7 @@ public static class Life
     {
         float score = Score(w, i);
         if (score < 0.05f) return;
-        ArchiveInsert(w, w.Spc[i], new ReadOnlySpan<sbyte>(w.Genome, i * G.LEN, G.LEN), score);
+        ArchiveInsert(w, w.Spc[i], w.GenomeOf(i), score);
     }
 
     /// <summary>Put a genome into a species' archive if it beats the weakest entry (also used by migration between branches).</summary>

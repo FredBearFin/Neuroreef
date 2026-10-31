@@ -192,7 +192,7 @@ public static class Clades
                 if (w.Sp[s].Alive && x.Count[s] >= 2 * K.MIN_SPLIT) TrySplit(w, s, x);
     }
 
-    static float Gene(World w, int i, int k) => w.Genome[i * G.LEN + G.BODY + k] * (1f / 127f);
+    static float Gene(World w, int i, int k) => w.Genome.At(i, G.BODY + k) * (1f / 127f);
 
     // The traits you can see on a body, each in "visible units": 1 unit is a difference you notice at a glance
     // (Revision L, the user: "subspeciation that is very clearly visual"): half again the body mass, 0.15 of an
@@ -208,13 +208,13 @@ public static class Clades
     // size is the body's actual size (its class floor included), not the mass gene alone
     static float Vis(World w, int i, int k)
     {
-        int g = i * G.LEN;
+        var g = w.Genome.Slot(i);
         if (k >= 10 && k <= 12)
         {
-            Body.Dimensions(w.Genome[g + G.B_LENGTH], w.Genome[g + G.B_WIDTH], w.Genome[g + G.B_HEIGHT], out float length, out float width, out float height);
+            Body.Dimensions(g[G.B_LENGTH], g[G.B_WIDTH], g[G.B_HEIGHT], out float length, out float width, out float height);
             return MathK.Log(k == 10 ? length : k == 11 ? width : height) / MathK.Log(1.5f);
         }
-        return k == 0 ? MathK.Log(w.PM[i] / K.MASS_LO) / MathK.Log(1.5f) : w.Genome[g + VisGene[k]] / VisUnit(k);
+        return k == 0 ? MathK.Log(w.PM[i] / K.MASS_LO) / MathK.Log(1.5f) : g[VisGene[k]] / VisUnit(k);
     }
 
     /// <summary>

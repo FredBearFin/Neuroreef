@@ -596,7 +596,8 @@ cloners and egg-eating, or made hunting unreachable)
 - One brain per ancestor; founders vary around it (FOUNDER_W_SD), so crossover recombines related
   networks (§6.2).
 - The report warns when the slot cap, not food, limited the world (on more than 1% of steps). Each
-  prehistory branch has 49,152 slots so that food limits it first.
+  prehistory branch has 49,152 slots so that food limits it first. (Since 2026-10-31 a world grows as
+  births need slots, §3: only its memory limit can bind.)
 - Speciation needs the two centres to be at least half-infertile (SPLIT_MIN_D, RMS per gene).
 
 **Changes in Revision G.1: variation to evolve from.** The first Revision G run showed no body change
@@ -689,10 +690,24 @@ Headless mode runs the same core with no server and writes reports, CSV files an
 ## 3. World and memory map
 
 The world is a torus of WORLD = 1024 units. The field grid has cells of 4 units (FW = 256, 65,536
-cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = 65,536 agent slots by
-default (`--capacity`). Eggs and embryos occupy slots too. When every slot is in use, births and
-immigrants are refused and counted (`SlotShortage`); the console shows **WORLD FULL**, because that
-is a limit of the computer, not an ecological result.
+cells). The spatial hash has cells of 16 units (GW = 64). C = capacity = the agent slots the world
+has now; it starts at 16,384 (`--capacity`) and grows (2026-10-31). Eggs and embryos occupy slots too.
+
+**Growth.** There is no fixed animal cap. Every per-slot array of World (and of its derived cache,
+World.D) is marked `[PerSlot]`; World.Resize reallocates them all. Between steps the world keeps at
+least MIN_FREE (256) slots and an eighth of its slots free, growing to 3/2 of its size (in blocks of
+1,024) when it has fewer; a step that still runs out grows inside RESOLVE, where births are serial.
+The genomes, working weights and traces (about 200 KB of a slot's 212 KB) are paged (SlotArray:
+pages of 512 or 1,024 whole slots, 64 MB), so no one array holds every genome (an sbyte[] stops at
+2^31 elements: 21,504 genomes) and growth never copies them. Growth changes nothing in the run: the
+free slots are a stack whose bottom holds the never-used slots, lowest on top, so the new slots go
+below every free one and each birth takes the slot a bigger world would have given it; RESOLVE's
+order runs over a power of two above the slots ever used (World.SlotsUsed), not over C. The same seed
+gives the same run from any starting capacity (EngineeringTests). A world stops growing only at its
+memory limit (the machine's or container's memory, less an eighth of it and at least 1 GB, against
+what the process holds) or at `--max-capacity`; only then are births refused and counted
+(`SlotShortage`), the console shows **WORLD FULL** with the reason, and a run full on more than 1% of
+steps is reported INVALID, because that is a limit of the computer, not an ecological result.
 
 | Block | Type | Per slot or cell | Total (default) |
 |---|---|---|---|
@@ -713,8 +728,9 @@ is a limit of the computer, not an ecological result.
 | Telemetry ring (4,096 samples × 1,621 floats) | float | — | 26.6 MB |
 | Snapshots (×3) | byte | 12 | 2.4 MB |
 
-The total is about 0.9 GB at the default capacity and scales linearly with `--capacity`
-(`--capacity 32768` halves it).
+(The per-slot sizes above are of the 36-unit brain. With 256-unit brains a slot takes about 212 KB,
+World.SlotBytes: the genome 96 KB, W2f and traces 54 KB each, the learning history 6 KB, the rest
+about 3 KB.) Memory scales with the slots the world has grown to, so with the animals it holds.
 
 ## 4. Senses: the shared feature vector (34 entries)
 

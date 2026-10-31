@@ -75,7 +75,7 @@ public sealed class SimHost : IDisposable
             // (restore: its land is not built only to be overwritten; an older save is migrated and says what it kept)
             var clock = Stopwatch.StartNew();
             var (cap, seed, ts) = Checkpoint.WorldHeader(WorldPath);
-            _live = new Simulation(cap, seed, o.Threads, null, prehistory: false, restore: true, terrainSeed: ts);
+            _live = new Simulation(cap, seed, o.Threads, null, prehistory: false, restore: true, terrainSeed: ts, maxCapacity: o.MaxCapacity);
             var m = Checkpoint.LoadWorld(_live, WorldPath);
             if (m.Migrated) Console.WriteLine(m);
             Console.WriteLine($"saved world loaded in {clock.Elapsed.TotalSeconds:F1} s");
@@ -83,12 +83,12 @@ public sealed class SimHost : IDisposable
             Console.WriteLine($"continuing your saved world at step {_live.W.Step:N0} ({_live.W.AliveCount:N0} alive)");
         }
         else if (bank != null || o.RandomBrains)
-            _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed, evo: o.WorldSettings());
+            _live = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, terrainSeed: o.Seed, evo: o.WorldSettings(), maxCapacity: o.MaxCapacity);
         else
         {
             var clock = Stopwatch.StartNew();
             bool resume = o.CheckpointPath != null && o.ResumePrehistory;
-            Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false), restore: resume);
+            Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false), restore: resume, maxCapacity: o.MaxCapacity);
             if (!resume) Console.WriteLine($"{Pre.B.Length} prehistory branches built in {clock.Elapsed.TotalSeconds:F1} s");
             BankSource = "prehistory";
             Rate = 0;   // a prehistory runs as fast as possible until the console asks for a speed
@@ -237,7 +237,7 @@ public sealed class SimHost : IDisposable
         pre.Dispose();
         if (Map.W != Nature.WorldMap) { Map.Set(Nature.WorldMap); Console.WriteLine($"the world is a {Map.Name} ({Map.W} units)"); }
         var clock = Stopwatch.StartNew();
-        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed, evo: _o.WorldSettings(), land: land);
+        var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed, evo: _o.WorldSettings(), land: land, maxCapacity: _o.MaxCapacity);
         Console.WriteLine($"the world was built in {clock.Elapsed.TotalSeconds:F1} s" + (land != null && land.Fits(live.W) ? " (on the prehistory's land)" : ""));
         _live = live;
         BankSource = "prehistory";

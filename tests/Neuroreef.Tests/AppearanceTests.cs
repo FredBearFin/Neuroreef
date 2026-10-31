@@ -237,7 +237,7 @@ public class AppearanceTests
         w.Sp[0].Used = w.Sp[0].Alive = true; w.Sp[0].Name = "Test";
         for (int i = 0; i < 4; i++)
         {
-            Ancestor((uint)i).CopyTo(w.Genome, i * G.LEN + G.BODY);
+            Ancestor((uint)i).CopyTo(w.GenomeOf(i).Slice(G.BODY));
             w.StageOf[i] = new[] { St.Adult, St.Juvenile, St.Egg, St.Embryo }[i];
             w.Serial[i] = (uint)(i + 1);
             Body.Express(w, i);
@@ -296,10 +296,10 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(19, Checkpoint.Version);   // 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
+            Assert.Equal(20, Checkpoint.Version);   // 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
-            Assert.Equal(w.Genome, restored.Genome);
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Assert.True(w.GenomeOf(i).SequenceEqual(restored.GenomeOf(i)), $"genome of slot {i}");
             Assert.Equal(Frame(w), Frame(restored));
             using (var file = File.OpenWrite(path)) { file.Position = 4; file.WriteByte(9); }
             Assert.Throws<InvalidDataException>(() => Checkpoint.WorldHeader(path));

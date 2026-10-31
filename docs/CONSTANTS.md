@@ -16,7 +16,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FW | 256 | cells | field grid side (WORLD/FCELL) | - |
 | HCELL | 16 | units | spatial-hash cell side | V1 |
 | GW | 64 | cells | spatial-hash grid side | - |
-| CAPACITY | 16384 | slots | default agent slots (animals, eggs, embryos) | HT: Revision N, ~200 KB per slot with 256-unit brains (World.BytesPerSlot): 8,192 is ~1.7 GB |
+| CAPACITY | 16384 | slots | agent slots (animals, eggs, embryos) a world starts with: it grows as births need more, limited only by memory (World.Grow) | HT: ~212 KB per slot with 256-unit brains (World.SlotBytes); not a cap since 2026-10-31: a seed gives the same run from any start |
 | LAKE_SHARE | 0.1 | fraction | share of cells below lake level | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
 | T_SEASON | 3000 | steps | season period (one year), by default | ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K) |
@@ -161,7 +161,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PREHISTORY_STEPS | 500000 | steps | length of a prehistory run | HT |
 | BRANCHES | 2 | branches | number of separate branches (populations on the same land) evolving side by side | HT (Revision M: 3 before; memory) |
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
-| BRANCH_CAPACITY | 16384 | slots | agent slots per branch | HT: Revision M, 2 x 16,384 slots of 256-unit brains is ~5 GB (the report warns if the cap binds) |
+| BRANCH_CAPACITY | 16384 | slots | agent slots a branch starts with (it grows as needed, World.Grow) | HT: Revision M; not a cap since 2026-10-31 (the report warns if a branch reaches its memory limit) |
 
 ## 10. Brain
 

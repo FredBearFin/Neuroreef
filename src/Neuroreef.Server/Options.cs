@@ -7,7 +7,8 @@ namespace Neuroreef.Server;
 public sealed class Options
 {
     public uint Seed;   // 0 until chosen: --seed N, or a fresh random one for every new world (Parse)
-    public int Capacity = K.CAPACITY;
+    public int Capacity = K.CAPACITY;   // slots a world (--capacity) or branch (--branch-slots) starts with: it grows as births need more
+    public int MaxCapacity;             // --max-capacity: the most slots a world or branch may grow to (0: as many as memory holds)
     // every core: the step loop's main thread works its share of each phase instead of waiting (2026-10-31: cores - 1 left a
     // quarter of a 4-core machine idle in the live server and headless runs)
     public int Threads = Math.Max(1, Math.Min(Environment.ProcessorCount, 8));
@@ -87,7 +88,9 @@ public sealed class Options
   --prehistory-steps N  length of the prehistory (default 500000 steps = 500 million symbolic years)
   --seed N              world and run seed: the same N gives the same map, ancestors and names
                         (default: a new random seed every time; it is printed at start)
-  --capacity N          agent slots of the world (default 65536)
+  --capacity N          agent slots the world starts with (default 16384); it grows as births need more,
+                        limited only by memory (it keeps an eighth of the machine's memory, at least 1 GB, free)
+  --max-capacity N      the most slots a world or prehistory branch may grow to (default: as many as memory holds)
   --threads N           worker threads (default: all cores, max 8)
   --port N              web console port (default 5800)
   --rate N              steps per second of the world (default 3, 0 = as fast as possible)
@@ -106,7 +109,7 @@ public sealed class Options
                         on land; 0 = none)
   --big-brain-units N   prehistory: memory units of a big-brained ancestor (default 256; others start with up to 24)
   --founders N          prehistory: founders per ancestor (default 600)
-  --branch-slots N      prehistory: animal slots per branch (default 49152; memory grows with it)
+  --branch-slots N      prehistory: animal slots each branch starts with (default 16384; it grows as needed)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
   --map valley|region|continent|supercontinent        map of the prehistory (default continent; 256/512/1024/2048 units)
   --world-map valley|region|continent|supercontinent  map of the world you watch (default continent, as big as the prehistory)
@@ -141,6 +144,7 @@ public sealed class Options
             {
                 case "--seed": o.Seed = uint.Parse(Next()); o.SeedSet = true; break;
                 case "--capacity": o.Capacity = Math.Clamp(int.Parse(Next()), 1024, World.MaxSlots); break;
+                case "--max-capacity": o.MaxCapacity = Math.Clamp(int.Parse(Next()), 1024, World.MaxSlots); break;
                 case "--threads": o.Threads = int.Parse(Next()); break;
                 case "--port": o.Port = int.Parse(Next()); break;
                 case "--rate": o.Rate = float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
