@@ -282,7 +282,7 @@ public sealed class Simulation : IDisposable
     void Build() => BuildFor(W);
 
     /// <summary>Rebuild the spatial hash of a world (BUILD phase).</summary>
-    public static void BuildFor(World w)
+    public static unsafe void BuildFor(World w)
     {
         int n = Map.GW * Map.GW;
         Array.Clear(w.CellCount);
@@ -300,11 +300,20 @@ public sealed class Simulation : IDisposable
         for (int c = 0; c < n; c++) { w.CellStart[c] = acc; acc += w.CellCount[c]; }
         w.CellStart[n] = acc;
         Array.Clear(w.CellCount);
+        var near = w.D.Near; var look = w.D.Look;
         for (int i = 0; i < w.Cap; i++)
         {
             int c = w.CellOf[i];
             if (c < 0) continue;
-            w.Sorted[w.CellStart[c] + w.CellCount[c]++] = i;
+            int q = w.CellStart[c] + w.CellCount[c]++;
+            w.Sorted[q] = i;
+            // what DECIDE reads of it as a neighbour, packed (World.Neighbour)
+            ref var nb = ref near[q];
+            float h = w.Heading[i], m = w.ApparentMass(i);
+            nb.X = w.X[i]; nb.Y = w.Y[i]; nb.HCos = MathK.Cos(h); nb.HSin = MathK.Sin(h);
+            nb.Mass = m; nb.MassCbrt = MathK.Cbrt(m); nb.Shed = w.PgShed[i];
+            nb.Slot = i; nb.Serial = w.Serial[i]; nb.Stage = w.StageOf[i];
+            fixed (sbyte* dst = nb.Look) new ReadOnlySpan<sbyte>(look, i * Body.NLOOK, Body.NLOOK).CopyTo(new Span<sbyte>(dst, Body.NLOOK));
         }
         // this step's callers (Revision N): every organism that made a sound last step, sorted by hash cell like the
         // others, with how far its call carries: HEAR_R x voice x M^(1/3) (a bigger, louder animal is heard further),

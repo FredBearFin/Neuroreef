@@ -40,7 +40,10 @@ public class DecisionTests
         Simulation.BuildFor(w);
         if (reverse)
             for (int c = 0; c < Map.GW * Map.GW; c++)
+            {
                 Array.Reverse(w.Sorted, w.CellStart[c], w.CellStart[c + 1] - w.CellStart[c]);
+                Array.Reverse(w.D.Near, w.CellStart[c], w.CellStart[c + 1] - w.CellStart[c]);   // BUILD's packed copy, in the same order
+            }
         Decide.Run(w, 0, new Decide.ProbeBuf());
         var features = new float[F.N];
         Array.Copy(w.Feat, features, F.N);
