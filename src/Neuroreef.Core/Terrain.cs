@@ -78,17 +78,14 @@ public static class Terrain
     /// <summary>The second half of Build, on the shaped land: rivers, lakes, ponds, soil and the first plants (these draw on the run seed).</summary>
     public static void Finish(World w, float[] rain0)
     {
-        int n = Map.FW * Map.FW;
         var r = new Rng.Seq(w.TerrainSeed * 7919u + 13u);
         var moistN = Fbm(ref r, 4, 4);
         var vegN = Fbm(ref r, 6, 3);
-        var net = new Hydrology.Net(n);
-        Hydrology.Route(w.Elev, w.SeaLevel, rain0, net);
-        Array.Copy(net.Flow, w.Flow, n);
-        BuildWater(w, net, moistN, vegN);
+        BuildWater(w, rain0, moistN, vegN);
     }
 
-    /// <summary>Normalise Elev to 0..1 and set the lake level: the Nature.Water quantile of elevation.</summary>
+    /// <summary>Normalise Elev to 0..1 and set the sea level: the Nature.Water quantile of elevation (the relief's base
+    /// level; what lies below it and is not cut off from it is the sea, Hydrology.Waters).</summary>
     internal static void LakeLevel(World w)
     {
         int n = Map.FW * Map.FW;
@@ -102,29 +99,28 @@ public static class Terrain
     }
 
     // rivers, lakes, ponds, soil and the first vegetation on the worked relief
-    static void BuildWater(World w, Hydrology.Net net, Func<float, float, float> moistN, Func<float, float, float> vegN)
+    static void BuildWater(World w, float[] rain0, Func<float, float, float> moistN, Func<float, float, float> vegN)
     {
         int FW = Map.FW, n = FW * FW;
-        float riverAcc = K.RIVER_ACC * (n / 65536f);
-        for (int i = 0; i < n; i++)
-        {
-            float e = w.Elev[i];
-            if (e < w.SeaLevel) w.Depth[i] = w.SeaLevel - e;
-            // depth ~ discharge^0.4 (Leopold & Maddock 1953), wadeable at most
-            else if (w.Flow[i] > riverAcc) w.Depth[i] = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(w.Flow[i] / riverAcc, K.RIVER_DEPTH_EXP));
-            else w.Depth[i] = 0;
-            w.Cell[i] = (byte)(w.Depth[i] <= 0 ? Realm.Land : w.Depth[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
-        }
+        // the sea, the lakes at their own levels, the drainage and the rivers, from the water balance (2026-10-31: before,
+        // every cell below the Nature.Water quantile was a lake at that one level, and rivers were the cells over RIVER_ACC)
+        var net = Hydrology.Waters(w, rain0);
         Hydrology.Floodplain(w, net);
 
+        // continentality is distance from the sea and the lakes: a river damps no seasons (2026-10-31: rivers are now a
+        // dense network, and counting them made every cell maritime); DistWater then measures to any water
+        var stand = new byte[n];
+        for (int i = 0; i < n; i++) stand[i] = (byte)(w.LakeOf[i] >= 0 ? 1 : 0);
+        Distance(stand, 1, w.DistWater);
+        Climate.Build(w);   // height, continentality and the temperature now (Revision O); draws no random numbers
         Distance(w.Cell, (byte)Realm.Water, w.DistWater);
         Distance(w.Cell, (byte)Realm.Land, w.DistLand);
-        Climate.Build(w);   // height, continentality and the temperature now (Revision O); draws no random numbers
 
         // Pond sites (Revision K, ecology review): land basins, the lowest point in their neighbourhood, away from
         // standing water; each holds rain in the wet season and dries out in the dry one (Ponds.Update). Revision Q: also
         // every cell of a closed basin the running water has left (the routing fills it to its rim: it is where rain gathers
-        // and stands), as seasonal wetlands, pans and playas do.
+        // and stands), as seasonal wetlands, pans and playas do. 2026-10-31: those are the hollows too small to hold a
+        // lake and the dry floors of closed basins whose lake is smaller than the basin (net.Fill: the spill level).
         uint ps = Rng.Hash(w.Seed, 0, 0, Rs.Pond);
         for (int y = 0; y < FW; y++)
             for (int x = 0; x < FW; x++)

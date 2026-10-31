@@ -18,6 +18,9 @@
 //
 // Lakes keep their extent (their cells stay water, so the realm checks, DistWater and DistLand do not change): each
 // lake's level is tracked against its level at creation, and its evaporating area shrinks as its level falls.
+// 2026-10-31: the sea and the lakes are Terrain.Build's (Hydrology.Waters): each lake at its own level, full to its
+// spill point or (a terminal lake) below it by its sill. A lake above its sill spills down its outflow river into the
+// next lake, which receives it in the same update (lakes upstream first); only the sea's outflow leaves the map.
 
 using System;
 
@@ -56,7 +59,6 @@ public static class WaterCycle
     public static void Init(World w, Action<Action<int, int>, int>? parallel = null)
     {
         int FW = Map.FW, n = FW * FW;
-        float sea = w.SeaLevel;
         // where rain falls: the pattern of the winds and the ground (Climate.Rainfall; land mean 1, none on open water or rivers)
         Climate.Rainfall(w, w.Rain);
         for (int y = 0; y < FW; y++)
@@ -68,37 +70,11 @@ public static class WaterCycle
             // stays 1); a lake gets what the land of its latitude gets
             for (int i = y * FW; i < (y + 1) * FW; i++)
                 if (w.Cell[i] == (byte)Realm.Land) w.Rain[i] = (1f - K.RAIN_LOCAL) * w.Rain[i] + K.RAIN_LOCAL * rowMean;
-                else if (w.Elev[i] < sea) w.Rain[i] = rowMean;
+                else if (w.LakeOf[i] >= 0) w.Rain[i] = rowMean;
         }
-        // the drainage of the worked relief: the same receivers Terrain.Build routed the rivers with
-        var net = new Hydrology.Net(n);
-        Hydrology.Route(w.Elev, sea, w.Rain, net);
-        Array.Copy(net.Recv, w.Recv, n); Array.Copy(net.Order, w.DrainOrder, n);
-        // lakes: connected open water below lake level (8 neighbours, on the torus)
-        Array.Fill(w.LakeOf, -1);
-        var stack = new int[n];
-        int nl = 0;
-        float mmPerElev = K.H_RELIEF * 1000f / (1f - sea);
-        for (int i0 = 0; i0 < n; i0++)
-        {
-            if (w.Elev[i0] >= sea || w.LakeOf[i0] >= 0) continue;
-            int sp = 0; stack[sp++] = i0; w.LakeOf[i0] = nl;
-            float area = 0, deep = 0;
-            while (sp > 0)
-            {
-                int c = stack[--sp]; area++; deep = MathF.Max(deep, (sea - w.Elev[c]) * mmPerElev);
-                int x = c % FW, y = c / FW;
-                for (int dy = -1; dy <= 1; dy++)
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        int j = World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
-                        if (w.Elev[j] < sea && w.LakeOf[j] < 0) { w.LakeOf[j] = nl; stack[sp++] = j; }
-                    }
-            }
-            w.LakeArea[nl] = area; w.LakeDepth[nl] = MathF.Max(deep, 1f); w.LakeLevel[nl] = 0f; w.LakeQm[nl] = 0f;
-            nl++;
-        }
-        w.LakeCount = nl;
+        // the drainage, the sea and the lakes (each at its own level, with its area, depth, sill and the lake it spills
+        // into) are Terrain.Build's (Hydrology.Waters: the same receivers it routed the rivers with)
+        int nl = w.LakeCount;
         // the lake each cell drains to in the end (outlets first in DrainOrder)
         for (int q = 0; q < n; q++)
         {
@@ -107,6 +83,7 @@ public static class WaterCycle
         }
         // a first guess of each lake's mean inflow, for its outlet during the spin-up: half the rain on its catchment, all on itself
         float unit = K.P_MEAN * YearFrac;
+        Array.Clear(w.LakeQm, 0, nl); Array.Clear(w.LakeLevel, 0, nl);
         for (int i = 0; i < n; i++) if (w.Outlet[i] >= 0) w.LakeQm[w.Outlet[i]] += unit * w.Rain[i] * (w.LakeOf[i] >= 0 ? 1f : 0.5f);
         // soil: alluvium holds more water
         for (int i = 0; i < n; i++)
@@ -312,12 +289,13 @@ public static class WaterCycle
             else if (w.LakeOf[r] >= 0) { w.LakeIn[w.LakeOf[r]] += qc; toLakes += qc; }
             else Q[r] += qc;
         }
+        // the lakes, upstream first: what each spills runs on down the rivers to the next (2026-10-31)
+        Lakes(w, spinup);
         // a channel's size follows the flow it carries over years
         float a = YearFrac / K.QMEAN_YEARS;
         if (!spinup) for (int i = 0; i < n; i++) w.DischargeMean[i] += a * (Q[i] - w.DischargeMean[i]);
         if (!spinup) { Ponds.Update(w); Soak(w, out double soaked); toLakes -= soaked; }
         w.WbToLakes += toLakes;
-        Lakes(w, spinup);
     }
 
     // a flooded floodplain is soaked: its soil fills from the river that floods it (the water leaves the river)
@@ -333,14 +311,19 @@ public static class WaterCycle
             if (give <= 0f) continue;
             w.SoilWater[i] += give; w.Discharge[d] -= give;
             w.Moisture[i] = w.SoilWater[i] / w.SoilCap[i];
+            // the water would have reached the lake this river runs to (the lakes are already balanced this update)
             int l = w.Outlet[d];
-            if (l >= 0) w.LakeIn[l] -= give;
+            if (l >= 0) w.LakeLevel[l] -= give / w.LakeArea[l];
             soaked += give;
         }
     }
 
     // each lake: inflow + rain - evaporation over its wet area; above its outlet's sill it spills in proportion to its stage
-    // (outlet sized for its mean inflow: LAKE_STAGE above the sill at the mean), solved exactly over the update
+    // (outlet sized for its mean inflow: LAKE_STAGE above the sill at the mean), solved exactly over the update. 2026-10-31:
+    // a lake's sill stands LakeSill above its level at creation (0 for a full lake: it spills at once; a terminal lake must
+    // rise that far first), and what it spills runs down its outflow to the next lake (LakeDown), whose inflow it joins in
+    // the same update (lakes upstream first, LakeRank), adding to the discharge of the rivers on the way. Only the sea's
+    // spill (and that of a lake with nowhere to go) leaves the map: that is the lakes' outflow in the budget (WbLakeSpill).
     static void Lakes(World w, bool spinup)
     {
         int FW = Map.FW, nl = w.LakeCount;
@@ -362,18 +345,29 @@ public static class WaterCycle
             }
         }
         float a = YearFrac / K.QMEAN_YEARS;
-        for (int l = 0; l < nl; l++)
+        float[] Q = w.Discharge;
+        for (int t = 0; t < nl; t++)
         {
-            float A = w.LakeArea[l], L0 = w.LakeLevel[l], L1 = L0 + w.LakeIn[l] / A, L = L1;
+            int l = w.LakeRank[t];
+            float A = w.LakeArea[l], L0 = w.LakeLevel[l], L1 = L0 + w.LakeIn[l] / A, L = L1, sill = w.LakeSill[l];
             float lam = w.LakeQm[l] / (K.LAKE_STAGE * A);   // share of the stage the outlet passes per update
-            if (L1 > 0f && lam > 0f)
+            if (L1 > sill && lam > 0f)
             {
-                // dL/dt = i - lam L from max(L0, 0), with i the inflow above the sill
-                float start = MathF.Max(L0, 0f), i = L1 - start, decay = MathK.Exp(-lam);
-                L = i / lam + (start - i / lam) * decay;
-                L = Math.Clamp(L, MathF.Min(L1, 0f), L1);
+                // dL/dt = i - lam (L - sill) from max(L0, sill), with i the inflow above the sill
+                float start = MathF.Max(L0, sill), i = L1 - start, decay = MathK.Exp(-lam);
+                L = sill + i / lam + (start - sill - i / lam) * decay;
+                L = Math.Clamp(L, MathF.Min(L1, sill), L1);
             }
-            w.LakeLevel[l] = L; spillT += (double)(L1 - L) * A;
+            w.LakeLevel[l] = L;
+            float out1 = (L1 - L) * A;
+            int d = w.LakeDown[l];
+            if (out1 > 0f && d >= 0)
+            {
+                // down the outflow: the rivers between carry it, the next lake receives it
+                for (int c = w.LakeExit[l]; c >= 0 && w.LakeOf[c] < 0; c = w.Recv[c]) Q[c] += out1;
+                w.LakeIn[d] += out1; w.LakeGross[d] += out1;
+            }
+            else spillT += out1;
             if (!spinup) w.LakeQm[l] += a * (w.LakeGross[l] - w.LakeQm[l]);
         }
         w.WbLakeRain += rainT; w.WbLakeEvap += evT; w.WbLakeSpill += spillT;

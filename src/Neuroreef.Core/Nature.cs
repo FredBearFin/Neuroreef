@@ -13,7 +13,7 @@ public static class Nature
     public static float Fire = 1f;            // x LAMBDA_FIRE: how often fires start
     public static float Disease = 1f;         // x PG_INF: how easily pathogens infect (0 = no disease)
     public static float Thirst = 1f;          // x C_THIRST: how fast animals dry out on land
-    public static float Water = K.LAKE_SHARE; // share of the map under water
+    public static float Water = K.LAKE_SHARE; // share of the map below sea level: the sea (lakes above it follow their basins' water balance)
     public static float Ponds = 1f;           // share of land basins that hold seasonal ponds (0 = water only in lakes and rivers)
     public static float Climate = K.CLIMATE;  // how strongly sun, height and seasons change temperature (Revision O; 0 = everywhere T_REF, no heat budget)
     public static int WorldMap = K.WORLD;     // the map side of the world that follows a prehistory (it may be smaller: a valley)

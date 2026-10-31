@@ -42,9 +42,11 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
-        // Geomorphology (2026-10-31) re-pinned it: the relief is now made at the land surface's own scale, with no height
-        // cap, critical-slope failure, n = 2 stream power and the last steps of deep time on the field grid, so the same
-        // seed has other land; Climate = 0 still skips every climate rule. It was 0x4635958CC1772992 at Revision S.
+        // Geomorphology and then water from its balance (2026-10-31, relief at the land surface's own scale with no cap;
+        // lakes at spill levels, rivers from Q S^2) re-pinned it: rivers are channels from Q S^2 (a network of 2-4% of the map,
+        // several cells wide where large) instead of the cells over RIVER_ACC, lakes stand at their own spill levels, and
+        // Flow, Recv and DrainOrder are the new drainage, so the same seed has other water, soil and plants. It was
+        // 0x4635958CC1772992 at Revision S.
         // Revision S (evolving plants) re-pinned it: land vegetation is now genotypes in four slots per cell, grown in stripes
         // with their own traits after a year of spin-up, so the same seed grows different fields; Climate = 0 still skips
         // every climate rule (the plants read T_REF). It was 0x3EBEA675E685E2C7 at the water cycle.
@@ -58,7 +60,7 @@ public class ClimateTests
         // same seed, map and steps.
         // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
         // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
-        Assert.Equal(0xD748405AB8C664B7UL, h);
+        Assert.Equal(0xFC6EEB6D3DB2914UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
@@ -98,7 +100,8 @@ public class ClimateTests
             }
             float m(int i) => (w.Elev[i] - w.SeaLevel) / (1f - w.SeaLevel) * K.H_RELIEF;
             Assert.Equal(K.LAPSE * (m(hi) - m(lo)) / 1000f, w.TLapse[hi] - w.TLapse[lo], 2);
-            Assert.True(w.TLapse[hi] > 15f, $"the highest ground is only {w.TLapse[hi]:F1} K cooler");
+            // (2026-10-31: was > 15 K. The relief now stands only as high as its slopes allow: a 256 map holds ~2 km, 12.3 K here)
+            Assert.True(w.TLapse[hi] > 8f, $"the highest ground is only {w.TLapse[hi]:F1} K cooler");
             // the seasons swing less by the water: in the same row, a shore cell against one far inland
             int best = -1, bestRow = -1; float spread = 0;
             for (int y = FW / 8; y < FW / 4; y++)
@@ -341,7 +344,8 @@ public class ClimateTests
         Assert.InRange(flat, 0.9, 1.1);
         // Revision S: trees are evolving genotypes whose temperature optimum and frost tolerance are genes, so cold-adapted
         // trees hold some of the high ground and the line is softer than with the old fixed curves (0.7); it is still there
-        Assert.True(line < 0.9, $"high/low tree cover with a climate {line:F3} (without {flat:F3})");
+        // (2026-10-31: was < 0.9; the relief graded at its own scale is lower on average, so the high third is less high: 0.905)
+        Assert.True(line < 0.95 && line < flat - 0.05, $"high/low tree cover with a climate {line:F3} (without {flat:F3})");
     }
 
     [Fact] // a frozen pond cannot be drunk

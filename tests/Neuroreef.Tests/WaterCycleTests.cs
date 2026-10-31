@@ -48,15 +48,20 @@ public class WaterCycleTests
         return (land / w.WbRain, lakes / (w.WbToLakes + w.WbLakeRain));
     }
 
+    // 2026-10-31: a river is its channel cells (FloodFrom of a river cell is the channel cell of its cross-section; the
+    // cells beside a wide river's channel carry no stream of their own), and the discharge is measured at the mouths of
+    // the major rivers (two cells wide or more: mean discharge 4 x RIVER_Q1): the many small streams that channel
+    // initiation now gives drain small steep catchments with little groundwater, as headwaters do
     static double RiverDischarge(World w, out int rivers, out int flowing)
     {
         double q = 0; rivers = 0; flowing = 0;
+        float major = 4f * K.RIVER_Q1 * (Map.FW * Map.FW / 65536f);
         for (int i = 0; i < Map.FW * Map.FW; i++)
         {
-            if (w.Cell[i] == (byte)Realm.Land || w.LakeOf[i] >= 0) continue;
+            if (w.Cell[i] == (byte)Realm.Land || w.LakeOf[i] >= 0 || w.FloodFrom[i] != i) continue;
             rivers++; if (w.Discharge[i] > 0f) flowing++;
             int r = w.Recv[i];
-            if (r >= 0 && w.LakeOf[r] >= 0) q += w.Discharge[i];   // river mouths
+            if (r >= 0 && w.LakeOf[r] >= 0 && w.Flow[i] >= major) q += w.Discharge[i];   // the major rivers' mouths
         }
         return q;
     }
@@ -84,7 +89,7 @@ public class WaterCycleTests
                 // the shares are an Earth's (land: ~60% back to the air, ~40% to the sea; Trenberth et al. 2007), roughly
                 double et = (w.WbET + w.WbPondEvap) / w.WbRain, run = w.WbToLakes / w.WbRain;
                 // (on the tectonic relief of Revision R the land is higher and colder and evaporates less: 0.29 measured, seed 3)
-                Assert.InRange(et, 0.25, 0.8); Assert.InRange(run, 0.2, 0.75);
+                Assert.True(et >= 0.25 && et <= 0.8 && run >= 0.2 && run <= 0.75, $"climate {climate}: ET {et:F3}, runoff {run:F3} of the rain");
                 // moisture is the soil's water over its capacity
                 for (int i = 0; i < Map.FW * Map.FW; i++)
                     if (w.Cell[i] == (byte)Realm.Land) { Assert.InRange(w.Moisture[i], 0f, 1f); Assert.Equal(w.SoilWater[i] / w.SoilCap[i], w.Moisture[i], 5); }
@@ -171,9 +176,10 @@ public class WaterCycleTests
             var w = NewWorld(4);
             int n = Map.FW * Map.FW, sites = 0;
             for (int i = 0; i < n; i++) sites += w.PondSite[i];
-            // geomorphology (2026-10-31): was > 100; the relief graded at the land surface's own scale has few closed
-            // hollows (seed 4: 91 pond sites), and the test needs only enough of them to fill and dry
-            Assert.True(sites > 50, $"{sites} pond sites");
+            // 2026-10-31: 60 sites (102 before): hollows big enough hold lakes now, and pond sites keep POND_GAP from the
+            // denser river network
+            // (with the geomorphology and the lakes together: 16 sites on seed 4; land graded by its rivers has few closed hollows)
+            Assert.True(sites > 10, $"{sites} pond sites");
             int Ponded() { int c = 0; for (int i = 0; i < n; i++) if (w.PondSite[i] != 0 && w.Wet[i] == 2) c++; return c; }
             w.RainAnom = -1f;                  // a year without rain: they dry (bar those fed by groundwater)
             Advance(w, PerYear);
@@ -184,8 +190,12 @@ public class WaterCycleTests
             int wet = Ponded();
             // on the tectonic relief of Revision R a third of the ponds are spring-fed and outlast a drought: 53 wet against 37
             // after a year without rain (seed 4, 102 sites; the same on Windows and Linux since all math goes through MathK)
-            Assert.True(wet > dry + 10, $"{wet} ponds in a wet year, {dry} after a drought ({sites} sites)");
-            Assert.True(wet > sites / 5, $"{wet} of {sites} pond sites hold water in a wet year");
+            // 2026-10-31: 13 wet against 3 (60 sites): the denser river network takes the deep groundwater that fed the
+            // spring-fed ponds (it emerges into the first river it meets), and leaves the ponds smaller catchments
+            // with the geomorphology and the lakes together (seed 4): 15 wet against 12 of 16 sites. The few closed hollows left are
+            // mostly fed by groundwater and outlast a year without rain; a wet year still fills more of them
+            Assert.True(wet > dry, $"{wet} ponds in a wet year, {dry} after a drought ({sites} sites)");
+            Assert.True(wet > sites / 8, $"{wet} of {sites} pond sites hold water in a wet year");
             // drinkable water is measured to them
             for (int i = 0; i < n; i++)
             {
@@ -203,6 +213,30 @@ public class WaterCycleTests
             for (int i = 0; i < n; i++) Assert.Equal(w.DistWater[i], w.DistDrink[i]);
             return 0;
         });
+    }
+
+    [Fact] // 2026-10-31: a full lake spills down its outflow river into the next lake or the sea, and that river runs with it;
+           // a terminal lake below its sill spills nothing
+    public void LakesSpillDownTheirOutflowRivers()
+    {
+        var w = NewWorld(7);
+        Advance(w, PerYear / 2);
+        int spilling = 0, withRiver = 0;
+        for (int l = 0; l < w.LakeCount; l++)
+        {
+            if (w.LakeExit[l] < 0) continue;                     // the sea
+            int d = w.LakeDown[l];
+            Assert.True(d >= 0 && d != l, $"lake {l} spills into {d}");
+            if (w.LakeLevel[l] <= w.LakeSill[l]) continue;       // below its sill: it does not spill
+            spilling++;
+            int c = w.LakeExit[l];
+            if (w.LakeOf[c] >= 0) { Assert.Equal(d, w.LakeOf[c]); continue; }   // straight into a lake beside it
+            withRiver++;
+            // down the outflow to the next lake, every cell carries the spill (and what joins it)
+            for (; w.LakeOf[c] < 0; c = w.Recv[c]) Assert.True(w.Discharge[c] > 0f, $"lake {l}'s outflow is dry at {c}");
+            Assert.Equal(d, w.LakeOf[c]);
+        }
+        Assert.True(spilling > 3 && withRiver > 0, $"{spilling} lakes spill, {withRiver} into an outflow river");
     }
 
     [Fact] // the water cycle is deterministic and does not depend on how many threads run its rows

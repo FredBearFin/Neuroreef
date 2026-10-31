@@ -71,7 +71,7 @@ public static class Checkpoint
         "Elev", "Depth", "MoistBase", "Fert", "Cell", "DistWater", "DistLand", "PondSite", "Wet", "DistDrink",
         "Flow", "Alluvium", "FloodWet", "FloodFrom", "Rock", "TLapse", "Cont", "ClimateZ", "SeaLevel",
         // water cycle and weather years
-        "Rain", "SoilCap", "Recv", "DrainOrder", "Outlet", "LakeOf", "LakeArea", "LakeDepth", "LakeQm", "LakeGross", "LakeCount",
+        "Rain", "SoilCap", "Recv", "DrainOrder", "Outlet", "LakeOf", "LakeArea", "LakeDepth", "LakeQm", "LakeGross", "LakeCount", "LakeSill", "LakeExit", "LakeDown", "LakeRank",
         "SoilWater", "Snow", "Ground", "Deep", "PondWater", "Runoff", "Discharge", "DischargeMean", "Seep", "LakeLevel", "LakeIn",
         "WcRow", "WaterOn", "WbRain", "WbET", "WbPondEvap", "WbToLakes", "WbLakeRain", "WbLakeEvap", "WbLakeSpill", "RainAnom", "RainYear",
         // the pathogen reservoir in the ground and water
