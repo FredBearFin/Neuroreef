@@ -184,6 +184,95 @@ public class CheckpointTests
         finally { File.Delete(path); }
     }
 
+    // ---- arrays over 2 GB (W2f, Trace at ~39,000 slots or more): bytes copied through spans at long offsets, a chunk at a time
+
+    [Fact] // a range of an array at a byte offset, in chunks of any size, round-trips; nothing outside it is touched
+    public void ChunkedBytesRoundTrip()
+    {
+        var a = new float[1000];
+        for (int i = 0; i < a.Length; i++) a[i] = i * 1.5f - 7;
+        foreach (var (wc, rc) in new[] { (7, 5), (4096, 1), (Checkpoint.Chunk, 3001) })
+        {
+            var ms = new MemoryStream();
+            using (var bw = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true)) Checkpoint.WriteBytes(bw, a, 12, 3001, wc);
+            Assert.Equal(3001, ms.Length);
+            ms.Position = 0;
+            var b = new float[1000];
+            using (var br = new BinaryReader(ms)) Checkpoint.ReadBytes(br, b, 12, 3001, rc);
+            var ab = System.Runtime.InteropServices.MemoryMarshal.AsBytes(a.AsSpan());
+            var bb = System.Runtime.InteropServices.MemoryMarshal.AsBytes(b.AsSpan());
+            Assert.True(ab.Slice(12, 3001).SequenceEqual(bb.Slice(12, 3001)));
+            Assert.True(bb[..12].IndexOfAnyExcept((byte)0) < 0 && bb[3013..].IndexOfAnyExcept((byte)0) < 0);
+        }
+    }
+
+    [Fact] // the byte view of an array is bounded by its length in bytes as a long: an offset past 2 GB is refused, never wrapped
+    public void BytesAreBoundedAtLongOffsets()
+    {
+        var a = new double[100];
+        Assert.Equal(800L, Checkpoint.ByteLength(a));
+        a[99] = 3.25;
+        Assert.Equal(3.25, BitConverter.ToDouble(Checkpoint.Bytes(a, 792, 8)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Checkpoint.Bytes(a, 793, 8));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Checkpoint.Bytes(a, -1, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Checkpoint.Bytes(a, (1L << 32) + 8, 8));   // (int) of it would be 8
+        Assert.Throws<ArgumentOutOfRangeException>(() => Checkpoint.Bytes(a, long.MaxValue - 4, 8));
+    }
+
+    [Fact] // a whole array gives its byte count as i64 from format 19 on; a save of format 18 (i32) still reads
+    public void WholeArrayByteCountFormats()
+    {
+        var a = new int[] { 1, -2, 3, int.MaxValue };
+        var ms = new MemoryStream();
+        using (var bw = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true)) Checkpoint.WriteArray(bw, a);
+        Assert.Equal(1 + 4 + 8 + 16, ms.Length);
+        ms.Position = 0;
+        var b = new int[4];
+        using (var br = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true)) Assert.True(Checkpoint.ReadArray(br, Checkpoint.Version, b));
+        Assert.Equal(a, b);
+
+        var old = new MemoryStream();
+        using (var bw = new BinaryWriter(old, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            bw.Write((byte)TypeCode.Int32); bw.Write(a.Length); bw.Write(16);
+            foreach (int x in a) bw.Write(x);
+        }
+        old.Position = 0;
+        var c = new int[4];
+        using (var br = new BinaryReader(old)) Assert.True(Checkpoint.ReadArray(br, 18, c));
+        Assert.Equal(a, c);
+    }
+
+    /// <summary>A stream whose byte at position p is Pattern(p): read, it gives them; written, it checks them.</summary>
+    sealed class PatternStream : Stream
+    {
+        public static byte Pattern(long p) => (byte)(p * 31 + (p >> 20));
+        long _pos;
+        public override bool CanRead => true; public override bool CanSeek => false; public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => _pos; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+        public override int Read(Span<byte> s) { for (int i = 0; i < s.Length; i++) s[i] = Pattern(_pos++); return s.Length; }
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+        public override void Write(ReadOnlySpan<byte> s) { foreach (byte x in s) if (x != Pattern(_pos++)) throw new InvalidDataException($"byte {_pos - 1}"); }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
+
+    [Fact] // a real array over 2 GB (2.4 GB of memory, so only with NEUROREEF_BIG_TESTS=1): read and written whole, in place
+    public void ArrayOver2GBRoundTrips()
+    {
+        if (Environment.GetEnvironmentVariable("NEUROREEF_BIG_TESTS") != "1") return;
+        var a = new float[600_000_000];
+        long bytes = Checkpoint.ByteLength(a);
+        Assert.True(bytes > int.MaxValue);
+        using (var br = new BinaryReader(new PatternStream())) Checkpoint.ReadBytes(br, a, 0, bytes);
+        var tail = System.Runtime.InteropServices.MemoryMarshal.AsBytes(a.AsSpan(a.Length - 4));
+        for (int k = 0; k < tail.Length; k++) Assert.Equal(PatternStream.Pattern(bytes - 16 + k), tail[k]);
+        using (var bw = new BinaryWriter(new PatternStream())) Checkpoint.WriteBytes(bw, a, 0, bytes);
+    }
+
     [Fact] // a prehistory checkpoint of format 16 resumes with its branches' animals; each branch's land is rebuilt
     public void OldPrehistoryCheckpointMigrates()
     {

@@ -4,4 +4,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neuroreef.Tests" />
+  </ItemGroup>
 </Project>
