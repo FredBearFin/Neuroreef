@@ -16,7 +16,7 @@ public sealed class Simulation : IDisposable
     readonly Workers _pool;
     readonly int[] _active;
     readonly int _orderA;
-    readonly Action<int, int> _decideJob, _fieldsJob, _waterJob, _plantJob;
+    readonly Action<int, int> _decideJob, _decideResetJob, _fieldsJob, _waterJob, _plantJob;
     public readonly int[] ActiveCount;
 
     /// <param name="prehistory">true for a prehistory branch (a label: every world is births and deaths only after its founders).</param>
@@ -50,12 +50,20 @@ public sealed class Simulation : IDisposable
         }
         Life.Run(W, _active);   // clears newborn flags, counts
 
-        _decideJob = (lo, hi) =>
+        _decideResetJob = (lo, hi) =>
         {
             // the memory-reset control (World.MemoryReset, off by default): forget the last step's activity of the
             // units in use (Brain.Forward zeroes the rest itself) and the places its brain holds; weights and learning traces are kept
-            if (W.MemoryReset) for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
+            for (int i = lo; i < hi; i++) { Array.Clear(W.Hidden, i * G.NH, W.PBrain[i]); PathMemory.Clear(W, i); }
             for (int i = lo; i < hi; i++) Decide.Run(W, i, Probe);
+        };
+        // DECIDE visits the animals in hash-cell order (BUILD's W.Sorted: every one not dead or an embryo, so every one
+        // that acts), not by slot: neighbours share cells, so the slots one worker reads stay in its cache. Each call writes
+        // only its own slot and reads nothing another call writes (NR-105), so the order changes no result
+        _decideJob = (lo, hi) =>
+        {
+            var sorted = W.Sorted;
+            for (int q = lo; q < hi; q++) Decide.Run(W, sorted[q], Probe);
         };
     }
 
@@ -239,7 +247,8 @@ public sealed class Simulation : IDisposable
         Build();
         UpdateProbe();
         Lap(0);
-        _pool.Run(_decideJob, w.Cap);
+        if (w.MemoryReset) _pool.Run(_decideResetJob, w.Cap);
+        else _pool.Run(_decideJob, w.CellStart[Map.GW * Map.GW]);
         Lap(1);
         int orderB = (int)(Rng.Hash(w.Seed, (uint)w.Step, 0, Rs.Order) % (uint)w.Cap);
         w.T.KillFlashN = 0;
