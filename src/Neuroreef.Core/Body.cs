@@ -141,7 +141,7 @@ public static class Body
         float margin = FlightMargin(wings, m);
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
         if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
-        float vAir = flies ? v * K.FLY_SPEED / K.FLY_X_MAX * TopFlightSpeed(margin) * streamlining : 0f;
+        float vAir = flies ? MathF.Min(K.FLY_V_CAP, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
@@ -206,6 +206,21 @@ public static class Body
         float lo = 1f, hi = K.FLY_X_MAX;
         for (int k = 0; k < 24; k++) { float mid = 0.5f * (lo + hi); if (PowerCurve(mid) < margin) lo = mid; else hi = mid; }
         return lo;
+    }
+
+    /// <summary>
+    /// How far a flier of mass m would go in one whole step of flying at its speed of least power, in world units: the
+    /// world's per-step speeds are a step's travel, not a flight speed (a step is hours), so an airborne step is spent
+    /// in the air only for the share of it its distance needs (Resolve.MoveCost). Calibrated so flying at the speed of
+    /// least power costs FLY_COT_RATIO of walking per distance at FLY_M_REF (Tucker 1970; Schmidt-Nielsen 1972), and
+    /// scaling as the speed of least power, M^(1/6) (Pennycuick 2008). Per distance the ratio then grows as M^0.3
+    /// (power ~M^(7/6) over speed ~M^(1/6), against walking ~M^0.7): 0.2 at M = 0.1, 0.9 at M = 16.
+    /// </summary>
+    public static float FlightFullStep(float m)
+    {
+        float netRef = FlightPowerMin(K.FLY_M_REF) - K.C_BASAL * MathK.Pow(K.FLY_M_REF, K.EXP_BASAL);
+        float walkRef = K.C_MOVE * K.C_SPEED * MathK.Pow(K.FLY_M_REF, K.EXP_MOVE);   // per unit distance, two pairs of full legs at full speed
+        return netRef / (K.FLY_COT_RATIO * walkRef) * MathK.Pow(m / K.FLY_M_REF, 1f / 6f);
     }
 
     /// <summary>The least power of flight at mass m (2026-10-31): FLIGHT_MULT x basal at FLY_M_REF, rising as M^(7/6).</summary>

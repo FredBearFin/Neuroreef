@@ -52,14 +52,15 @@ public static class Resolve
         // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
         // drinking water within reach, it lands and walks (or stands) on its legs; it stays in the air only over ground it
         // cannot stand on (2026-10-31). An urge to eat with nothing here to eat does not ground it: it flies on to look
-        bool flier = loco == Loco.Fly, airborne = false;
+        bool flier = loco == Loco.Fly, airborne = false, canLand = true;
         if (flier)
         {
             int c0 = World.FIdx(nx, ny);
             float vGround = w.GroundVmax(i, c0);
             bool feed = (acts & BIT_EAT) != 0 && w.IFoodHere[i] > 0f, sip = (acts & BIT_DRINK) != 0 && w.DistDrink[c0] <= 1.5f && w.Thirst[i] > 0f;
             bool settle = rest || feed || sip || spd <= vGround;
-            airborne = !(settle && w.GroundAllows(i, c0));
+            canLand = w.GroundAllows(i, c0);
+            airborne = !(settle && canLand);
             if (!airborne) spd = MathF.Min(spd, vGround);
         }
         if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne, out nx, out ny, out float fraction))
@@ -226,7 +227,7 @@ public static class Resolve
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
-        float moveCost = MoveCost(w, i, mass, mf, spd, cell, airborne);
+        float moveCost = MoveCost(w, i, mass, mf, spd, cell, airborne, canLand);
         // a juvenile runs every unit of its brain from birth, so it pays for all of them; only the body's share scales
         // with its size (audit 2026-10-30: a young brain was charged at body scale; real infant brains cost more, not less)
         float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF;
@@ -319,20 +320,25 @@ public static class Resolve
 
     /// <summary>
     /// Energy spent moving this step (2026-10-31). In the air: the power curve of flight, FlightPowerMin(M) x
-    /// (3/u + u^3)/4 at u = speed / speed of least power, less the basal metabolism it includes, paid every airborne step
-    /// whether it moves or hovers. On the ground: the cost of transport ~M^0.7 x speed (Taylor et al. 1982), of which the
-    /// stance share (1 - LEG_SWING) every walker pays and the swing share grows with its legs (size x pairs, against
-    /// LEG_PAIRS_REF full pairs) and with speed against its top speed there (Marsh et al. 2004). Swimming has no swing.
-    /// A heavy coat adds to every kind (Revision O).
+    /// (3/u + u^3)/4 at u = speed / speed of least power, less the basal metabolism it includes, for the share of the
+    /// step it is really in the air: its distance over a whole step's flight (Body.FlightFullStep), so flying costs
+    /// FLY_COT_RATIO of walking per distance at cruise; the whole step when it could not land where it was (over
+    /// water it cannot stand in, hovering or not). On the ground: the cost of transport ~M^0.7 x speed (Taylor et al.
+    /// 1982), of which the stance share (1 - LEG_SWING) every walker pays and the swing share grows with its legs (size
+    /// x pairs, against LEG_PAIRS_REF full pairs) and with speed against its top speed there (Marsh et al. 2004).
+    /// Swimming has no swing. A heavy coat adds to every kind (Revision O).
     /// </summary>
-    public static float MoveCost(World w, int i, float mass, float mf, float spd, int cell, bool airborne)
+    public static float MoveCost(World w, int i, float mass, float mf, float spd, int cell, bool airborne, bool canLand = true)
     {
         float coat = 1f + K.INS_MOVE * w.PInsul[i];
         if (airborne)
         {
+            // the speed of least power in this world: its top air speed over how far above it power lets it fly (when
+            // FLY_V_CAP holds the top speed down, the whole curve is compressed with it)
             float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
             float p = Body.FlightPowerMin(mass) * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
-            return MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * coat;
+            float duty = canLand ? MathF.Min(1f, spd / Body.FlightFullStep(mass)) : 1f;
+            return MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty * coat;
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;

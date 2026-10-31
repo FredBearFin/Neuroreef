@@ -132,7 +132,7 @@ public class EcologyTests
         float basal = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
         float vmp = w.PVAir[0] / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[0], m));
         int cell = 0;
-        float Total(float v) => basal + Resolve.MoveCost(w, 0, m, 1f, v, cell, true);
+        float Total(float v) => basal + Resolve.MoveCost(w, 0, m, 1f, v, cell, true, canLand: false);   // a whole step in the air
         float atMin = Total(vmp);
         Assert.InRange(atMin / basal, 0.9f * K.FLIGHT_MULT * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ - K.EXP_BASAL), 1.1f * K.FLIGHT_MULT * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ - K.EXP_BASAL));
         Assert.InRange(atMin / basal, 8f, 13f);
@@ -145,6 +145,40 @@ public class EcologyTests
         Assert.True(Total(0f) > 1.8f * (atMin - basal));
         // the top air speed is where the curve meets the power available, at most FLY_X_MAX x v_mp
         Assert.InRange(w.PVAir[0] / vmp, 1f, K.FLY_X_MAX + 1e-4f);
+    }
+
+    [Fact] // per hour in the air flight costs ~FLIGHT_MULT x basal, but per distance at cruise less than walking (Tucker 1970;
+           // Schmidt-Nielsen 1972): fliers cruise several times faster than they walk
+    public void FlightIsDearerPerHourButCheaperPerDistanceThanWalking()
+    {
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        int cell = -1;
+        for (int c = 0; c < Map.FW * Map.FW; c++) if (w.Cell[c] == (byte)Realm.Land) { cell = c; break; }
+        w.X[0] = (cell % Map.FW + 0.5f) * K.FCELL; w.Y[0] = (cell / Map.FW + 0.5f) * K.FCELL; w.StageOf[0] = St.Adult;
+        w.Genome[G.B_LEGS] = 127; w.Genome[G.B_LEGN] = -40; w.Genome[G.B_INSUL] = -127;   // two pairs of full legs
+        int checkedMasses = 0;
+        for (int g = -127; g <= 127; g += 16)
+        {
+            w.Genome[G.B_MASS] = (sbyte)g; w.Genome[G.B_WINGS] = 127; Body.Express(w, 0);
+            if (w.LocoOf(0) != Loco.Fly) continue;
+            float m = w.PM[0], basal = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+            float vmp = w.PVAir[0] / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[0], m));
+            Assert.True(vmp >= 2.5f * K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) || w.PVAir[0] >= K.FLY_V_CAP - 1e-3f, $"M {m}: cruise {vmp}");
+            float flyStep = Resolve.MoveCost(w, 0, m, 1f, vmp, cell, true, canLand: true);
+            float flyHour = basal + Resolve.MoveCost(w, 0, m, 1f, vmp, cell, true, canLand: false);
+            // the same body without wings walks at its top speed
+            w.Genome[G.B_WINGS] = -127; Body.Express(w, 0);
+            float vw = w.GroundVmax(0, cell), walkStep = Resolve.MoveCost(w, 0, m, 1f, vw, cell, false);
+            float flyKm = flyStep / vmp, walkKm = walkStep / vw;
+            Assert.True(flyKm < walkKm, $"M {m}: flight {flyKm} per unit against walking {walkKm}");
+            if (m < 2f) Assert.True(flyKm < 0.6f * walkKm, $"M {m}: flight {flyKm} per unit against walking {walkKm}");
+            // per hour actually in the air: FLIGHT_MULT x basal at M = 1, scaled by M^(7/6 - 3/4)
+            float expect = K.FLIGHT_MULT * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ - K.EXP_BASAL);
+            Assert.InRange(flyHour / basal, 0.95f * expect, 1.05f * expect);
+            checkedMasses++;
+        }
+        Assert.True(checkedMasses >= 8);
     }
 
     [Fact] // the flight ceiling comes from power: available ~wings x M^0.7, required ~M^(7/6); nothing above FLY_M_MAX flies
@@ -208,12 +242,11 @@ public class EcologyTests
         // an urge to eat with nothing here to eat does not ground it
         Spent(eat, w.PVAir[0], 0f);
         Assert.True(w.Airborne(0));
-        // travelling at its air speed it flies, and pays ~FLIGHT_MULT x basal or more
+        // travelling at its air speed it flies, and pays for the share of the step it is in the air (several times basal)
         float flying = Spent(0u, w.PVAir[0]);
         Assert.True(w.Airborne(0));
-        Assert.True(flying > basalRest + 0.5f * Body.FlightPowerMin(m), $"flying {flying}, resting {basalRest}");
+        Assert.True(flying > 3f * basalRest, $"flying {flying}, resting {basalRest}");
         Assert.True(eating < flying);
-        Assert.True(basalRest < 0.25f * flying);
         Assert.True(basal > 0f);
     }
 

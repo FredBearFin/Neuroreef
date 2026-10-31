@@ -1206,8 +1206,16 @@ because its genes differ moves to the nearest allowed cell, or dies.
 - **Flight costs by the hour.** The least power of flight is FlightPowerMin(M) = FLIGHT_MULT·C_BASAL·M^(7/6)
   (10× basal at M = 1; Tucker 1970, Norberg 1990), at the speed of least power v_mp. The power curve is U-shaped:
   P = P_min·(3/u + u³)/4, u = v/v_mp (induced power ~1/u, profile and parasite ~u³); hovering (u below
-  FLY_U_MIN) costs 2× P_min. Top air speed is v_mp·x where the curve meets the margin, at most FLY_X_MAX = 1.6
-  (1.49× P_min there). The power is paid on every airborne step, moving or not.
+  FLY_U_MIN) costs 2× P_min. The speed of least power is FLY_VMP = 4× the walking-speed allometry (birds cruise
+  5-15 m/s, walkers travel 1-2 m/s); top air speed is v_mp·x where the curve meets the margin, at most
+  FLY_X_MAX = 1.6 (1.49× P_min there) and at most FLY_V_CAP = 16 units/step (one hash cell: an animal senses only
+  MAX_SIGHT around it once per step). A step is hours, so its speed is a step's travel: a flier that could land
+  is in the air only for the share of the step its distance needs, spd / FlightFullStep(M), and pays the power for
+  that share; FlightFullStep is calibrated so flying at v_mp costs FLY_COT_RATIO = 0.4 of walking per distance at
+  M = 1 (Tucker 1970; Schmidt-Nielsen 1972), growing as M^0.3 (0.17 at M = 0.1, 0.93 at M = 13). A flier that
+  cannot land where it is pays the whole step's power, moving or not. Walking's cost per step at top speed is
+  ~1.0-1.3× basal net, below Taylor et al. 1982 for continuous walking (~4.7× BMR at 1.5 m/s for 1 kg), as befits a
+  step's average travel: locomotion is ~8% of this world's spending, as in field energy budgets.
 - **Landed.** There is no "take off" output. A flier that rests, eats food that is here, drinks water within
   reach, or goes no faster than it walks,
   lands wherever it can stand (land; shallow water if it has legs or swims; deep water if it swims well enough)
