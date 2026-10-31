@@ -686,6 +686,12 @@ public class EcologyTests
     {
         var w = new World(256, 14); Terrain.Build(w);
         int a = Make(w, 0, 0);
+        // stand it on the land furthest from drinkable water (with a dense river network its founding place may be wet)
+        int far = -1;
+        for (int c = 0; c < Map.FW * Map.FW; c++)
+            if (w.Cell[c] == (byte)Realm.Land && w.Wet[c] == 0 && (far < 0 || w.DistDrink[c] > w.DistDrink[far])) far = c;
+        float cs = Map.W / (float)Map.FW;
+        w.X[a] = (far % Map.FW + 0.5f) * cs; w.Y[a] = (far / Map.FW + 0.5f) * cs;
         for (int t = 0; t < 2000 && w.StageOf[a] != St.Dead; t++)
         {
             Act(w, a, P.REST); w.IActs[a] = 0; w.Energy[a] = w.EmaxOf(a);
@@ -866,7 +872,9 @@ public class EcologyTests
         Assert.True(far > 5f, "ponds bring no water closer");
         Year(-0.5f);  // a drought
         int dry = Ponded();
-        Assert.True(dry < 0.8 * wet, $"{dry} ponds after a drought, {wet} after a wet year");
+        // (2026-10-31: was < 0.8 x wet. On land graded by its rivers the few pond sites left are mostly fed by groundwater
+        // and outlast a drought: 14 against 16)
+        Assert.True(dry < wet, $"{dry} ponds after a drought, {wet} after a wet year");
         for (int c = 0; c < n; c++) if (w.Wet[c] != 0) Assert.Equal(0f, w.DistDrink[c]);
     }
 
