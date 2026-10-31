@@ -14,10 +14,10 @@ Each requirement has a number, a statement and a verification method:
 
 | No. | Requirement | Ver. |
 |---|---|---|
-| NR-101 | The simulation shall allocate all of its working memory during initialisation. No heap allocation shall occur inside the step loop. | T |
-| NR-102 | Capacity (maximum animals) shall be a start-up parameter. Every array size shall be derived from it and from the world size, and listed in the memory map (DESIGN §3). | I |
+| NR-101 | The simulation shall allocate all of its working memory during initialisation. No heap allocation shall occur inside the step loop, except when the world grows its slots (World.Grow: a few times in a run, each to 3/2 of its size). | T |
+| NR-102 | Capacity (the animal slots a world starts with) shall be a start-up parameter; the world shall grow its slots as births need them, limited only by memory or an explicit `--max-capacity`. Every array size shall be derived from the slots and from the world size, and listed in the memory map (DESIGN §3). | I, T |
 | NR-103 | The simulation shall advance in fixed steps. Wall-clock time shall affect only how many steps are run per second, never the result of a step. | I, T |
-| NR-104 | Every random draw shall come from a counter-based hash keyed by (seed, step, slot, stream). The same seed and the same capacity shall give a bit-identical run. | T |
+| NR-104 | Every random draw shall come from a counter-based hash keyed by (seed, step, slot, stream). The same seed shall give a bit-identical run from any starting capacity. | T |
 | NR-105 | The result shall be independent of the number of worker threads (1, 2, 4, 8 compared bit-for-bit). | T |
 | NR-106 | Every tuning value shall be declared once, in `Constants.cs`, with its meaning, unit and origin. `docs/CONSTANTS.md` shall mirror it, and a test shall fail when the two disagree. | T |
 | NR-107 | The simulation core shall have no dependency outside the .NET base library. | I |

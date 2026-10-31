@@ -72,8 +72,8 @@ public static class Pathogens
     /// <summary>How well an antigen (key[ko..]) fits host h's recognition genes, with the strain's breadth gene.</summary>
     public static float Fit(World w, int h, sbyte[] key, int ko, byte breadth)
     {
-        float d2 = 0; int gh = h * G.LEN + G.B_MHC;
-        for (int k = 0; k < G.NMHC; k++) { float d = (key[ko + k] - w.Genome[gh + k]) * (1f / 127f); d2 += d * d; }
+        float d2 = 0; var gh = w.Genome.Slot(h).Slice(G.B_MHC);
+        for (int k = 0; k < G.NMHC; k++) { float d = (key[ko + k] - gh[k]) * (1f / 127f); d2 += d * d; }
         float wd = K.MHC_W * (1f + K.PG_BREADTH * U8(breadth));
         return MathK.Exp(-d2 / G.NMHC / (wd * wd));
     }
@@ -91,10 +91,10 @@ public static class Pathogens
     /// <summary>The spread of host h's recognition genes (RMS about their mean, /127): its MHC diversity, 0..1.</summary>
     public static float Diversity(World w, int h)
     {
-        int gh = h * G.LEN + G.B_MHC; float m = 0;
-        for (int k = 0; k < G.NMHC; k++) m += w.Genome[gh + k];
+        var gh = w.Genome.Slot(h).Slice(G.B_MHC); float m = 0;
+        for (int k = 0; k < G.NMHC; k++) m += gh[k];
         m /= G.NMHC; float v = 0;
-        for (int k = 0; k < G.NMHC; k++) { float d = w.Genome[gh + k] - m; v += d * d; }
+        for (int k = 0; k < G.NMHC; k++) { float d = gh[k] - m; v += d * d; }
         return MathF.Min(1f, MathF.Sqrt(v / G.NMHC) * (1f / 127f));
     }
 

@@ -126,8 +126,9 @@ public static class Brain
     /// <summary>Reset the life-time state of slot i from its genome: working weights, traces, hidden state.</summary>
     public static void InitLife(World w, int i)
     {
-        int g0 = i * G.LEN, o = i * G.W2N;
-        for (int k = 0; k < G.W2N; k++) { w.W2f[o + k] = w.Genome[g0 + G.W2 + k] * K.WSCALE; w.Trace[o + k] = 0f; }
+        var gw = w.Genome.Slot(i).Slice(G.W2, G.W2N); var wf = w.W2f.Slot(i);
+        for (int k = 0; k < G.W2N; k++) wf[k] = gw[k] * K.WSCALE;
+        w.Trace.Slot(i).Clear();
         Array.Clear(w.Hidden, i * G.NH, G.NH);
         Array.Clear(w.HistA, i * BLOCK, BLOCK);
         Array.Clear(w.HistV, i * BLOCK, BLOCK); w.VMean[i] = 0;
@@ -167,9 +168,8 @@ public static class Brain
 
     static unsafe void ApplyBlock(World w, int i)
     {
-        int g0 = i * G.LEN;
-        float eta = G.Gene(w.Genome[g0 + G.ETA], K.ETA_LO, K.ETA_HI);
-        float lam = G.Gene(w.Genome[g0 + G.LAMBDA], K.LAMBDA_LO, K.LAMBDA_HI);
+        float eta = G.Gene(w.Genome.At(i, G.ETA), K.ETA_LO, K.ETA_HI);
+        float lam = G.Gene(w.Genome.At(i, G.LAMBDA), K.LAMBDA_LO, K.LAMBDA_HI);
         // normalised learning (Revision P): a step changes an output by eta x advantage x |input|^2, and a big brain's input
         // is larger (|input|^2 ~117 at 256 units against ~25 at 24), so its steps were ~5x too big and it learned a delayed
         // cue worse than a small brain. Above NLMS_REF the step is scaled by NLMS_REF / |input|^2 (normalised LMS)
@@ -206,8 +206,8 @@ public static class Brain
             cCv = eta * (V2 + V3 * lam);
             cDv = eta * V3;
         }
-        fixed (float* W = &w.W2f[i * G.W2N])
-        fixed (float* E = &w.Trace[i * G.W2N])
+        fixed (float* W = w.W2f.Slot(i))
+        fixed (float* E = w.Trace.Slot(i))
         fixed (float* D = &w.HistD[hb * P.N])
         fixed (float* Y = &w.HistY[hb * G.NIN])
         {
@@ -254,15 +254,14 @@ public static class Brain
     /// <summary>Pull learned weights back toward the genome (kappa), applied every 32 steps per slot.</summary>
     public static unsafe void Relax(World w, int i)
     {
-        int g0 = i * G.LEN, o = i * G.W2N;
-        float kappa = 32f * G.Gene(w.Genome[g0 + G.KAPPA], 0f, K.KAPPA_HI);
+        float kappa = 32f * G.Gene(w.Genome.At(i, G.KAPPA), 0f, K.KAPPA_HI);
         int units = w.PBrain[i];
         // 8 weights at a time (2026-10-31): each weight on its own, w + kappa x (b - w) with the same roundings, so the
         // result is the scalar rule's bit for bit (no sum to reorder; .NET does not fuse the multiply and add)
         bool simd = Avx2.IsSupported;
         var vk = Vector256.Create(kappa); var vs = Vector256.Create(K.WSCALE);
-        fixed (sbyte* gen = &w.Genome[g0 + G.W2])
-        fixed (float* W = &w.W2f[o])
+        fixed (sbyte* gen = &w.Genome.At(i, G.W2))
+        fixed (float* W = w.W2f.Slot(i))
             for (int p = 0; p < P.N; p++)
                 for (int seg = 0; seg < 2; seg++)
                 {
@@ -295,8 +294,8 @@ public static class Brain
         float drive = (w.PSexual[i] == 0 ? 1f : w.PHerm[i] != 0 ? K.DRIVE_HERM : w.Sex[i] == 0 ? K.DRIVE_FEMALE : 1f) * w.Evo.MatingDrive;
         Reflex.Inputs(f, new Span<float>(c, G.NC), drive);
         fixed (float* hid = &w.Hidden[i * G.NH])
-        fixed (sbyte* gen = &w.Genome[i * G.LEN])
-        fixed (float* W = &w.W2f[i * G.W2N])
+        fixed (sbyte* gen = w.Genome.Slot(i))
+        fixed (float* W = w.W2f.Slot(i))
         fixed (float* yp = y)
         {
             for (int k = 0; k < G.NH; k++) u[F.N + k] = hid[k];
@@ -363,5 +362,5 @@ public static class Brain
         for (; k < n; k++) y[k] = decay * y[k] + a * x[k];
     }
 
-    public static float Sigma(World w, int i) => G.Gene(w.Genome[i * G.LEN + G.SIGMA], K.SIGMA_LO, K.SIGMA_HI);
+    public static float Sigma(World w, int i) => G.Gene(w.Genome.At(i, G.SIGMA), K.SIGMA_LO, K.SIGMA_HI);
 }

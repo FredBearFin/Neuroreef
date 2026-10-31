@@ -58,41 +58,40 @@ public static class Body
 
     public static void Express(World w, int i)
     {
-        int g = i * G.LEN;
-        var gn = w.Genome;
+        var gn = w.Genome.Slot(i);
         Signature(w, i);   // its look and MHC diversity, cached for DECIDE and LIFECYCLE (see Signature)
-        float floor = Floors[Math.Clamp((int)gn[g + G.B_FLOOR], 0, K.FLOOR_CLASSES - 1)];
+        float floor = Floors[Math.Clamp((int)gn[G.B_FLOOR], 0, K.FLOOR_CLASSES - 1)];
         w.PFloor[i] = floor;
-        float m = MathF.Max(floor, G.GeneLog(gn[g + G.B_MASS], K.MASS_LO, K.MASS_HI));   // its size class's floor; free above it
-        float fs = Mul(gn[g + G.B_SPEED], K.BODY_RANGE_TRAIT);
-        float fsi = Mul(gn[g + G.B_SIGHT], K.BODY_RANGE_TRAIT);
-        float armour = Organ(gn[g + G.B_ARMOUR]) * K.ARMOUR_MAX;
-        float strike = Organ(gn[g + G.B_STRIKE]) * K.STRIKE_MAX;
-        float legs = Organ(gn[g + G.B_LEGS]), fins = Organ(gn[g + G.B_FINS]), wings = Organ(gn[g + G.B_WINGS]);
-        int legPairs = Pairs(gn[g + G.B_LEGN]), finPairs = Pairs(gn[g + G.B_FINN]), eyePairs = Pairs(gn[g + G.B_EYEN]);
-        float fov = MathF.Min(360f, G.Gene(gn[g + G.B_FOV], K.FOV_LO, K.FOV_HI) * (1f + K.EYE_FOV * (eyePairs - 1)));
-        float life = Mul(gn[g + G.B_LIFE], K.LIFE_RANGE), devel = Mul(gn[g + G.B_DEVEL], K.LIFE_RANGE);
-        float imm = Organ(gn[g + G.B_IMMUNE]);
-        float wecon = Organ(gn[g + G.B_WATER]);
-        float voice = Organ(gn[g + G.B_VOICE]);
+        float m = MathF.Max(floor, G.GeneLog(gn[G.B_MASS], K.MASS_LO, K.MASS_HI));   // its size class's floor; free above it
+        float fs = Mul(gn[G.B_SPEED], K.BODY_RANGE_TRAIT);
+        float fsi = Mul(gn[G.B_SIGHT], K.BODY_RANGE_TRAIT);
+        float armour = Organ(gn[G.B_ARMOUR]) * K.ARMOUR_MAX;
+        float strike = Organ(gn[G.B_STRIKE]) * K.STRIKE_MAX;
+        float legs = Organ(gn[G.B_LEGS]), fins = Organ(gn[G.B_FINS]), wings = Organ(gn[G.B_WINGS]);
+        int legPairs = Pairs(gn[G.B_LEGN]), finPairs = Pairs(gn[G.B_FINN]), eyePairs = Pairs(gn[G.B_EYEN]);
+        float fov = MathF.Min(360f, G.Gene(gn[G.B_FOV], K.FOV_LO, K.FOV_HI) * (1f + K.EYE_FOV * (eyePairs - 1)));
+        float life = Mul(gn[G.B_LIFE], K.LIFE_RANGE), devel = Mul(gn[G.B_DEVEL], K.LIFE_RANGE);
+        float imm = Organ(gn[G.B_IMMUNE]);
+        float wecon = Organ(gn[G.B_WATER]);
+        float voice = Organ(gn[G.B_VOICE]);
         // body heat (Revision O): fur keeps heat in; appendages (ears, limbs, tail) shed it when the body is warm
-        float ins = Organ(gn[g + G.B_INSUL]), app = Organ(gn[g + G.B_APPEND]);
+        float ins = Organ(gn[G.B_INSUL]), app = Organ(gn[G.B_APPEND]);
         w.PInsul[i] = ins; w.PAppend[i] = app;
-        w.PEndo[i] = Organ(gn[g + G.B_ENDO]);
-        w.PReadyE[i] = K.READY_LO + (K.READY_HI - K.READY_LO) * Organ(gn[g + G.B_BREEDE]);
+        w.PEndo[i] = Organ(gn[G.B_ENDO]);
+        w.PReadyE[i] = K.READY_LO + (K.READY_HI - K.READY_LO) * Organ(gn[G.B_BREEDE]);
         w.PVoice[i] = voice;
         // vocal learning (Revision N): how strongly matching a remembered tutor reinforces its own calls, and for how
         // much of its life it memorises tutors (Doupe & Kuhl 1999; Brainard & Doupe 2002). No upkeep cost of its own:
         // the learning uses the brain it already pays for, so the gene drifts where it is of no use
-        w.PImit[i] = Organ(gn[g + G.B_IMIT]);
-        w.PImitAge[i] = K.IMIT_AGE_LO + (1f - K.IMIT_AGE_LO) * Organ(gn[g + G.B_IMIT_AGE]);
-        int brain = Units(gn[g + G.B_BRAIN]);
-        bool herm = gn[g + G.B_HERM] >= 0;
+        w.PImit[i] = Organ(gn[G.B_IMIT]);
+        w.PImitAge[i] = K.IMIT_AGE_LO + (1f - K.IMIT_AGE_LO) * Organ(gn[G.B_IMIT_AGE]);
+        int brain = Units(gn[G.B_BRAIN]);
+        bool herm = gn[G.B_HERM] >= 0;
         w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
         w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)finPairs; w.PEyePairs[i] = (byte)eyePairs;
         w.PBrain[i] = (ushort)brain; w.PHerm[i] = (byte)(herm ? 1 : 0); w.PImmune[i] = imm;
-        w.PWire[i] = WireScale(gn.AsSpan(g, G.LEN), brain);   // after the brain size: it scales the units in use
-        w.PSexRatio[i] = Organ(gn[g + G.B_SEXRATIO]);
+        w.PWire[i] = WireScale(gn, brain);   // after the brain size: it scales the units in use
+        w.PSexRatio[i] = Organ(gn[G.B_SEXRATIO]);
 
         w.PM[i] = m;
         w.PWaterEcon[i] = wecon;
@@ -126,10 +125,10 @@ public static class Body
         float loadDrag = K.LOAD_DRAG * MathK.Cbrt(m) * ((1f + armour) / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1) - 0.70710678f);
         float vLand = v0 / (1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
-        Dimensions(gn[g + G.B_LENGTH], gn[g + G.B_WIDTH], gn[g + G.B_HEIGHT], out float length, out float width, out float height);
+        Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
         length = MathK.Log(length) * invLn2 * 0.5f; width = MathK.Log(width) * invLn2 * 0.5f; height = MathK.Log(height) * invLn2 * 0.5f;
-        float limbShape = Organ(gn[g + G.B_LIMB_SHAPE]) - 0.5f;
+        float limbShape = Organ(gn[G.B_LIMB_SHAPE]) - 0.5f;
         // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
         // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
         float streamlining = Math.Clamp(1f + 0.2f * length - 0.15f * width - 0.15f * height, 0.75f, 1.25f);
@@ -157,16 +156,16 @@ public static class Body
 
         w.PArmour[i] = armour;
         w.PStrike[i] = strike;
-        w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathK.Exp(Organ(gn[g + G.B_LITTER]) * MathK.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
-        float birth = G.GeneLog(gn[g + G.B_BIRTH], K.BIRTH_LO, K.BIRTH_HI);
+        w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathK.Exp(Organ(gn[G.B_LITTER]) * MathK.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
+        float birth = G.GeneLog(gn[G.B_BIRTH], K.BIRTH_LO, K.BIRTH_HI);
         birth = MathF.Min(K.BIRTH_HI, MathF.Max(birth, K.NEWBORN_MIN / m));   // eggs and young have a smallest size (Revision M)
         w.PBirth[i] = birth;
-        w.PSexual[i] = (byte)(gn[g + G.B_SEX] >= 0 ? 1 : 0);
-        w.PLive[i] = (byte)(gn[g + G.B_LIVE] >= 0 ? 1 : 0);
+        w.PSexual[i] = (byte)(gn[G.B_SEX] >= 0 ? 1 : 0);
+        w.PLive[i] = (byte)(gn[G.B_LIVE] >= 0 ? 1 : 0);
         // gestation (or incubation) grows with body size and with how big the young are at birth
         w.PGest[i] = K.C_GEST * t * MathF.Sqrt(birth / 0.1f);
         w.PCool[i] = K.C_COOL * t;
-        w.PCare[i] = Organ(gn[g + G.B_CARE]);
+        w.PCare[i] = Organ(gn[G.B_CARE]);
         ExpressDiet(w, i, reach, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
         // a meat-eater can feed on a carcass, its own kill's included (Revision L, ecology review: wolves
         // return to a kill for days, and almost every carnivore scavenges)
@@ -230,7 +229,7 @@ public static class Body
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)
     {
-        int g = i * G.LEN;
+        var gn = w.Genome.Slot(i);
         float sum = 0;
         for (int p = 0; p < Pools.N; p++)
         {
@@ -238,7 +237,7 @@ public static class Body
             // and a small side share costs a specialist almost nothing, which is how omnivory starts. An even 6-way
             // generalist digests each food at ~0.41 against a specialist's 0.95. (A linear map with an L1 budget starved:
             // every ancestor became an even generalist at 1/6 per food.)
-            float raw = Reachable(realm, p) ? Organ(w.Genome[g + G.B_DIET + p]) : 0f;
+            float raw = Reachable(realm, p) ? Organ(gn[G.B_DIET + p]) : 0f;
             dst[p] = raw; sum += raw * raw;
         }
         float k = sum > 0 ? K.DIET_BUDGET / MathF.Sqrt(sum) : 0;
@@ -289,9 +288,9 @@ public static class Body
     /// Appearance and recognition variation do not create reproductive barriers or dilute ecological differences.</summary>
     public static float Distance(World w, int a, int b)
     {
-        int ga = a * G.LEN + G.BODY, gb = b * G.LEN + G.BODY; float s = 0;
+        var ga = w.Genome.Slot(a).Slice(G.BODY); var gb = w.Genome.Slot(b).Slice(G.BODY); float s = 0;
         const int N = G.APPEARANCE - G.BODY;
-        for (int k = 0; k < N; k++) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
+        for (int k = 0; k < N; k++) { float d = (ga[k] - gb[k]) * (1f / 127f); s += d * d; }
         return MathF.Sqrt(s / N);
     }
 
@@ -301,13 +300,13 @@ public static class Body
     /// so new cosmetic genes cannot dilute an existing visible ecological difference.</summary>
     public static bool LooksAlike(World w, int a, int b)
     {
-        int ga = a * G.LEN, gb = b * G.LEN; float s = 0;
-        foreach (int k in Visible) { float d = (w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f); s += d * d; }
+        var ga = w.Genome.Slot(a); var gb = w.Genome.Slot(b); float s = 0;
+        foreach (int k in Visible) { float d = (ga[k] - gb[k]) * (1f / 127f); s += d * d; }
         if (s >= K.KIN_LOOK * K.KIN_LOOK * Visible.Length) return false;
         float shape = 0f, colour = 0f;
         for (int k = G.APPEARANCE; k < G.B_MHC; k++)
         {
-            float d = MathF.Abs(w.Genome[ga + k] - w.Genome[gb + k]) * (1f / 127f);
+            float d = MathF.Abs(ga[k] - gb[k]) * (1f / 127f);
             if (k == G.B_HUE || k == G.B_PATTERN_HUE) d = MathF.Min(d, 2f - d);
             if (k < G.B_HUE) shape += d * d;
             else colour += d * d;
@@ -330,10 +329,10 @@ public static class Body
     /// </summary>
     public static void Signature(World w, int i)
     {
-        int g = i * G.LEN, o = i * NLOOK;
-        var gn = w.Genome; var s = w.D.Look;
-        for (int k = 0; k < NVISIBLE; k++) s[o + k] = gn[g + Visible[k]];
-        for (int k = 0; k < G.NAPPEARANCE; k++) s[o + NVISIBLE + k] = gn[g + G.APPEARANCE + k];
+        int o = i * NLOOK;
+        var gn = w.Genome.Slot(i); var s = w.D.Look;
+        for (int k = 0; k < NVISIBLE; k++) s[o + k] = gn[Visible[k]];
+        for (int k = 0; k < G.NAPPEARANCE; k++) s[o + NVISIBLE + k] = gn[G.APPEARANCE + k];
         w.D.MhcDiv[i] = Pathogens.Diversity(w, i);
     }
 

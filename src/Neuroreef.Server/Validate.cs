@@ -75,7 +75,7 @@ public static class Validate
     public static Result RunOne(Options o, GeneBank.Data? bank, uint seed, bool reset, long steps, ref Land? land)
     {
         var bw = Stopwatch.StartNew();
-        using var sim = new Simulation(o.Capacity, seed, o.Threads, bank, prehistory: false, terrainSeed: seed, evo: o.WorldSettings(), land: land, keepLand: land == null);
+        using var sim = new Simulation(o.Capacity, seed, o.Threads, bank, prehistory: false, terrainSeed: seed, evo: o.WorldSettings(), land: land, keepLand: land == null, maxCapacity: o.MaxCapacity);
         land ??= sim.StartLand;
         var w = sim.W;
         w.MemoryReset = reset;
@@ -167,7 +167,7 @@ public static class Validate
             sb.AppendLine($"{name,-44} {mn,9:0.###} {mz,9:0.###} {md,9:+0.###;-0.###;0} {se,7:0.###}  {d.Count(v => v > 0),3} {d.Count(v => v < 0),3}");
         }
         if (all.Any(r => r.FullSteps > 0.01 * Math.Max(1, r.Steps)))
-            sb.AppendLine("WARNING: some runs were full on more than 1% of steps: the slot cap, not food, limited them (raise --capacity).");
+            sb.AppendLine("WARNING: some runs were full on more than 1% of steps: they could not grow (the memory limit or --max-capacity), so that limit, not food, limited them.");
         return sb.ToString();
     }
 

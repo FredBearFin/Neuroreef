@@ -135,7 +135,7 @@ public static class Host
                 continue;
             }
             var w = h.W;
-            Console.WriteLine($"step {w.Step,9:N0}  {h.MeasuredRate,5:F0} steps/s  alive {w.AliveCount,6:N0}{(w.FreeTop == 0 ? "  WORLD FULL: births refused (raise --capacity)" : "")}");
+            Console.WriteLine($"step {w.Step,9:N0}  {h.MeasuredRate,5:F0} steps/s  alive {w.AliveCount,6:N0}  slots {w.Cap,7:N0}{(w.FullNow ? $"  WORLD FULL: births refused at {w.GrowLimit}" : "")}");
         }
     }
 
@@ -261,7 +261,7 @@ public static class Host
                             traits[s * Neuroreef.Telemetry.NTRAITS + k] = float.IsFinite(tv) ? MathF.Round(tv, 3) : 0;
                         }
                     }
-                    branches.Add(new { clades = Wire.Clades(b.W), splits = b.W.T.Splits, step = b.W.Step, alive = b.W.AliveCount, full = b.W.FreeTop == 0, standing = stand, count, births, generation = gen, traits });
+                    branches.Add(new { clades = Wire.Clades(b.W), splits = b.W.T.Splits, step = b.W.Step, alive = b.W.AliveCount, full = b.W.FullNow, standing = stand, count, births, generation = gen, traits });
                 }
                 _preJson = JsonSerializer.Serialize(new
                 {
@@ -410,7 +410,7 @@ public static class Host
                     {
                         type = "status", step = w.Step, rate = h.Rate, measured = h.MeasuredRate, paused = h.Paused, alive = w.AliveCount,
                         free = w.FreeTop, capacity = w.Cap, bankSource = h.BankSource, extinct = _s.Extinct(),
-                        slotShortage = w.T.SlotShortage, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
+                        slotShortage = w.T.SlotShortage, full = w.FullNow, growLimit = w.GrowLimit, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
                         season = w.SeasonAt(Map.W * 0.5f), mapSide = Map.W, rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                     }), ct);

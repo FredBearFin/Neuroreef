@@ -35,7 +35,9 @@ public sealed class Prehistory : IDisposable
     readonly System.Diagnostics.Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
 
     /// <param name="restore">the state comes from a checkpoint next (LoadCheckpoint): the branches are built without land or founders</param>
-    public Prehistory(int branches, int capacity, uint seed, int threads, EvoSettings? settings = null, bool restore = false)
+    /// <param name="capacity">slots each branch starts with (it grows as needed)</param>
+    /// <param name="maxCapacity">the most slots a branch may grow to (0: as many as memory holds)</param>
+    public Prehistory(int branches, int capacity, uint seed, int threads, EvoSettings? settings = null, bool restore = false, int maxCapacity = 0)
     {
         int n = Math.Max(1, branches);
         B = new Simulation[n];
@@ -52,7 +54,7 @@ public sealed class Prehistory : IDisposable
             System.Threading.Tasks.Parallel.For(0, n, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = n }, b =>
             {
                 B[b] = new Simulation(capacity, seed + 1000u * (uint)b, per, null, prehistory: true, terrainSeed: seed, evo: Pending,
-                    restore: restore, land: shape, keepLand: keep && b == 0);
+                    restore: restore, land: shape, keepLand: keep && b == 0, maxCapacity: maxCapacity);
                 B[b].W.Evo.CopyFrom(Pending);
             });
         }
@@ -196,7 +198,7 @@ public sealed class Prehistory : IDisposable
         {
             int self = 0;
             for (int s = 0; s < K.CLADES; s++) if (B[b].W.Sp[s].Alive && StandingOf(B[b], s, out _, out _) == Standing.SelfSustaining) self++;
-            // a branch whose slot cap bound on more than 1% of steps is not valid evolution (the cap, not nature, chose)
+            // a branch whose slots ran out (at its memory limit) on more than 1% of steps is not valid evolution (the limit, not nature, chose)
             bool valid = B[b].W.T.FullSteps <= 0.01 * Math.Max(1UL, B[b].W.Step);
             long key = (valid ? 1_000_000_000_000L : 0L) + (long)self * 10_000_000 + Math.Min(B[b].W.AliveCount, 9_999_999);
             if (key > bestKey) { bestKey = key; best = b; }

@@ -56,7 +56,7 @@ public static class GeneBank
             for (int k = 0; k < nl; k++)
             {
                 bw.Write(living[k].Item1);
-                bw.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<sbyte>(w.Genome, living[k].Item2 * G.LEN, G.LEN)));
+                bw.Write(System.Runtime.InteropServices.MemoryMarshal.AsBytes(w.GenomeOf(living[k].Item2)));
             }
             for (int k = 0; k < na; k++)
             {

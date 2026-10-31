@@ -260,16 +260,15 @@ public sealed class Telemetry
             bool sick = w.PgLoad[i] > 0f;
             if (sick) a[o + S_SICK]++;
             // is it evolving? mean strength of the starter-kit reflex genes (founders start near KIT_W)
-            int kb = i * G.LEN + G.REFLEX; float ks = 0;
-            foreach (var (c, p) in Reflex.Kit) ks += w.Genome[kb + p * G.NC + c];
+            var gn = w.Genome.Slot(i); float ks = 0;
+            foreach (var (c, p) in Reflex.Kit) ks += gn[G.REFLEX + p * G.NC + c];
             a[o + S_KIT] += ks / Reflex.Kit.Length;
-            int bg = i * G.LEN;
             a[o + S_TRAITS + T_MASS] += w.PM[i];
             a[o + S_TRAITS + T_LEGS] += w.PLegs[i];
             a[o + S_TRAITS + T_FINS] += w.PFins[i];
             a[o + S_TRAITS + T_WINGS] += w.PWings[i];
-            a[o + S_TRAITS + T_SPEED] += Body.Factor(w.Genome[bg + G.B_SPEED], K.BODY_RANGE_TRAIT);
-            a[o + S_TRAITS + T_SIGHT] += Body.Factor(w.Genome[bg + G.B_SIGHT], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_SPEED] += Body.Factor(gn[G.B_SPEED], K.BODY_RANGE_TRAIT);
+            a[o + S_TRAITS + T_SIGHT] += Body.Factor(gn[G.B_SIGHT], K.BODY_RANGE_TRAIT);
             a[o + S_TRAITS + T_ARMOUR] += w.PArmour[i];
             a[o + S_TRAITS + T_STRIKE] += w.PStrike[i];
             a[o + S_TRAITS + T_LITTER] += w.PLitter[i];
@@ -304,8 +303,8 @@ public sealed class Telemetry
             if ((i & 7) == 0)
             {
                 // learned change |W2f - genome W2|, sampled on one slot in eight
-                float d = 0; int gb = i * G.LEN + G.W2, wb = i * G.W2N;
-                for (int k = 0; k < G.W2N; k += 4) d += MathF.Abs(w.W2f[wb + k] - w.Genome[gb + k] * K.WSCALE);
+                float d = 0; var gw = gn.Slice(G.W2); var wf = w.W2f.Slot(i);
+                for (int k = 0; k < G.W2N; k += 4) d += MathF.Abs(wf[k] - gw[k] * K.WSCALE);
                 a[o + S_LEARNED] += d / (G.W2N / 4) * 8f;
             }
         }

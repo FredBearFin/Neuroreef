@@ -28,6 +28,8 @@ public sealed class Snapshot
     {
         if (!Requested) return;
         Requested = false;
+        int size = 12 + REC * _w.Cap;
+        if (_write.Length < size) _write = new byte[size];   // the world grew (the buffer is the sim thread's own until published)
         int len = Encode(_write);
         lock (this)
         {
@@ -79,14 +81,14 @@ public sealed class Snapshot
             span[7] = (byte)acts;
             BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(8), w.Serial[i]);
             // the organism's own body genes, from which the console draws its body (ICD: record bytes 12-19)
-            int g = i * G.LEN;
+            var gn = w.Genome.Slot(i);
             span[12] = (byte)G.ToGeneLog(w.PM[i], K.MASS_LO, K.MASS_HI);   // the body's actual size (its class floor included), on the mass gene's scale
-            span[13] = (byte)w.Genome[g + G.B_LEGS];
-            span[14] = (byte)w.Genome[g + G.B_FINS];
-            span[15] = (byte)w.Genome[g + G.B_WINGS];
-            span[16] = (byte)w.Genome[g + G.B_SIGHT];
-            span[17] = (byte)w.Genome[g + G.B_ARMOUR];
-            span[18] = (byte)w.Genome[g + G.B_STRIKE];
+            span[13] = (byte)gn[G.B_LEGS];
+            span[14] = (byte)gn[G.B_FINS];
+            span[15] = (byte)gn[G.B_WINGS];
+            span[16] = (byte)gn[G.B_SIGHT];
+            span[17] = (byte)gn[G.B_ARMOUR];
+            span[18] = (byte)gn[G.B_STRIKE];
             span[19] = (byte)(sbyte)Math.Clamp((int)MathF.Round(w.PDiet[i * Pools.N + (int)Pool.Meat] * 254f - 127f), -127, 127);   // meat-eating
             span[20] = w.PLegPairs[i];                                   // number of leg pairs (1..4)
             int cb = i * F.MAX_SYL;
@@ -94,7 +96,7 @@ public sealed class Snapshot
             span[22] = w.PFinPairs[i]; span[23] = w.PEyePairs[i];        // fin pairs, eye pairs (1..4)
             span[24] = (byte)(w.Call[cb + 1] | (w.Call[cb + 2] << 4));  // its second and third sounds (Revision N)
             span[25] = (byte)(((int)(w.PInsul[i] * 15f + 0.5f) << 4) | (int)(w.PAppend[i] * 15f + 0.5f));   // fur (high 4 bits) and appendages (low), 0..15 (Revision O)
-            for (int k = 0; k < G.NAPPEARANCE; k++) span[26 + k] = (byte)w.Genome[g + G.APPEARANCE + k];
+            for (int k = 0; k < G.NAPPEARANCE; k++) span[26 + k] = (byte)gn[G.APPEARANCE + k];
             o += REC; n++;
         }
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(8), (uint)n);

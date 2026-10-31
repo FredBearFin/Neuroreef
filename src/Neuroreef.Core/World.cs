@@ -1,5 +1,6 @@
 // The whole simulation state (DESIGN §3). Every array is allocated here, in the constructor, and
-// nowhere else (NR-101, NR-102). Animal state is struct-of-arrays, indexed by slot.
+// nowhere else (NR-101, NR-102), except that the per-slot arrays ([PerSlot]) are reallocated when the world
+// grows (Resize: there is no fixed animal cap). Animal state is struct-of-arrays, indexed by slot.
 
 using System;
 
@@ -7,66 +8,67 @@ namespace Neuroreef;
 
 public sealed class World
 {
-    public readonly int Cap;
+    /// <summary>Animal slots now. Not a limit: the world grows (Resize) when births need more. Set only by Resize.</summary>
+    public int Cap;
     public readonly uint Seed;
     public readonly Species[] Sp = new Species[K.CLADES];   // clade slots (DESIGN §7.9)
     public readonly int NS = K.CLADES;
     public ulong Step;
 
     // ---- agents: kinematics
-    public readonly float[] X, Y, Heading, Speed;
+    [PerSlot] public float[] X, Y, Heading, Speed;
     // ---- agents: physiology
-    public readonly float[] Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer;
-    public readonly float[] Grown;         // share of its growable tissue a juvenile has built (0 at birth, 1 = adult size; DESIGN §9.1)
-    public readonly float[] Reward, RewardMean, PendingR, LastFear;
+    [PerSlot] public float[] Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer;
+    [PerSlot] public float[] Grown;         // share of its growable tissue a juvenile has built (0 at birth, 1 = adult size; DESIGN §9.1)
+    [PerSlot] public float[] Reward, RewardMean, PendingR, LastFear;
     // ---- agents: path integration (Revision P), written by RESOLVE (own slot): the remembered vector (world units) from the
     // animal to where it last drank and to where it last fed well, kept up to date from its own (noisy) sense of how it moved
-    public readonly float[] MemDrinkX, MemDrinkY, MemFedX, MemFedY;
-    public readonly byte[] MemHas;         // Mem.Drink: it remembers a place it drank; Mem.Fed: a place it fed well
+    [PerSlot] public float[] MemDrinkX, MemDrinkY, MemFedX, MemFedY;
+    [PerSlot] public byte[] MemHas;         // Mem.Drink: it remembers a place it drank; Mem.Fed: a place it fed well
     // ---- agents: identity
-    public readonly byte[] Spc, StageOf, Sex, Flags;
-    public readonly ushort[] Gen;
-    public readonly uint[] Serial, MotherSerial;
-    public readonly int[] MotherSlot, Children, LastChildSlot, Matured;
-    public readonly uint[] LastChildSerial;
+    [PerSlot] public byte[] Spc, StageOf, Sex, Flags;
+    [PerSlot] public ushort[] Gen;
+    [PerSlot] public uint[] Serial, MotherSerial;
+    [PerSlot] public int[] MotherSlot, Children, LastChildSlot, Matured;
+    [PerSlot] public uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
-    public readonly float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
-    public readonly byte[] PLitter;
-    public readonly float[] PDiet;            // Cap * Pools.N digestive efficiencies
-    public readonly float[] PCare;
-    public readonly float[] PDrain;
-    public readonly float[] PFloor;            // the smallest body its size class allows
-    public readonly float[] PVoice;            // voice organ (0..1): loudness of its calls; mute below VOICE_MIN
-    public readonly float[] PImit, PImitAge;  // vocal learning (0..1) and its sensitive period (share of lifespan) (Revision N)
-    public readonly float[] PWaterEcon;       // water-economy gene expressed (0..1)
-    public readonly float[] PInsul, PAppend;  // fur (insulation) and appendages (0..1), for the heat budget (Revision O)
-    public readonly float[] PReadyE;
-    public readonly float[] PWire;            // scale of its recurrent memory weights: its wiring gain over the raw radius of its genome's (Revision P)          // share of its reserve it needs before breeding (Revision P)
-    public readonly float[] PEndo;            // endothermy (0..1): 0 its core follows its surroundings, 1 it is kept at T_BODY (Revision P)
+    [PerSlot] public float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
+    [PerSlot] public byte[] PLitter;
+    [PerSlot] public float[] PDiet;            // Cap * Pools.N digestive efficiencies
+    [PerSlot] public float[] PCare;
+    [PerSlot] public float[] PDrain;
+    [PerSlot] public float[] PFloor;            // the smallest body its size class allows
+    [PerSlot] public float[] PVoice;            // voice organ (0..1): loudness of its calls; mute below VOICE_MIN
+    [PerSlot] public float[] PImit, PImitAge;  // vocal learning (0..1) and its sensitive period (share of lifespan) (Revision N)
+    [PerSlot] public float[] PWaterEcon;       // water-economy gene expressed (0..1)
+    [PerSlot] public float[] PInsul, PAppend;  // fur (insulation) and appendages (0..1), for the heat budget (Revision O)
+    [PerSlot] public float[] PReadyE;
+    [PerSlot] public float[] PWire;            // scale of its recurrent memory weights: its wiring gain over the raw radius of its genome's (Revision P)          // share of its reserve it needs before breeding (Revision P)
+    [PerSlot] public float[] PEndo;            // endothermy (0..1): 0 its core follows its surroundings, 1 it is kept at T_BODY (Revision P)
     // ---- agents: body heat (Revision O), written by RESOLVE (own slot)
-    public readonly float[] ThermStrain;      // heat strain from shortfalls beyond what the body can make or lose (1 = death by cold or heat)
-    public readonly float[] HeatNeed;         // last step's heat need (HEAT_NEED sense): tanh(made - evaporated, in basal units)
-    public readonly float[] TOp;              // last step's operative temperature (°C), for telemetry
-    public readonly float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
-    public readonly float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
-    public readonly byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PHerm;
-    public readonly ushort[] PBrain;       // memory units in use (up to G.NH = 256: a byte held at most 255, so 256 read as 0)
+    [PerSlot] public float[] ThermStrain;      // heat strain from shortfalls beyond what the body can make or lose (1 = death by cold or heat)
+    [PerSlot] public float[] HeatNeed;         // last step's heat need (HEAT_NEED sense): tanh(made - evaporated, in basal units)
+    [PerSlot] public float[] TOp;              // last step's operative temperature (°C), for telemetry
+    [PerSlot] public float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
+    [PerSlot] public float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
+    [PerSlot] public byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PHerm;
+    [PerSlot] public ushort[] PBrain;       // memory units in use (up to G.NH = 256: a byte held at most 255, so 256 read as 0)
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
-    public readonly float[] CareLeft;         // care a mother can still give this step
-    public readonly uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
+    [PerSlot] public float[] CareLeft;         // care a mother can still give this step
+    [PerSlot] public uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
     // ---- pathogens (Revision R, Pathogens.cs): every infection carries its own pathogen genome. Per host slot:
-    public readonly float[] PgLoad;           // pathogen load (0 = not infected; 1 = all a host can hold)
-    public readonly byte[] PgGene;            // Cap * PG.N: the genome of the strain it carries (traits 0..255, and its founding lineage)
-    public readonly sbyte[] Strain;           // Cap * NMHC: that strain's antigen, matched against host recognition genes (G.B_MHC)
-    public readonly float[] PgFit;            // how well that strain fits this host (antigen against its MHC, with the strain's breadth)
-    public readonly float[] ImmEff;           // immune effector level now (0 = none)
-    public readonly float[] ImmMem;           // strength of its immune memory (0..1), of the antigen in ImmKey
-    public readonly sbyte[] ImmKey;           // Cap * NMHC: the antigen of the last infection it cleared
-    public readonly float[] PgDamage;         // tissue damage (1 = death by disease)
-    public readonly float[] PgShed;           // what it sheds this step to each animal in contact (contact route), read by DECIDE
-    public readonly float[] IDose;            // contact dose from shedding animals in contact, from DECIDE (own slot only)
-    public readonly int[] IStrainSrc;         // the contact shedding most to it, whose strain it is exposed to, from DECIDE (-1 none)
-    public readonly byte[] IInfNear;          // shedding animals in contact, counted by DECIDE (own slot only)
+    [PerSlot] public float[] PgLoad;           // pathogen load (0 = not infected; 1 = all a host can hold)
+    [PerSlot] public byte[] PgGene;            // Cap * PG.N: the genome of the strain it carries (traits 0..255, and its founding lineage)
+    [PerSlot] public sbyte[] Strain;           // Cap * NMHC: that strain's antigen, matched against host recognition genes (G.B_MHC)
+    [PerSlot] public float[] PgFit;            // how well that strain fits this host (antigen against its MHC, with the strain's breadth)
+    [PerSlot] public float[] ImmEff;           // immune effector level now (0 = none)
+    [PerSlot] public float[] ImmMem;           // strength of its immune memory (0..1), of the antigen in ImmKey
+    [PerSlot] public sbyte[] ImmKey;           // Cap * NMHC: the antigen of the last infection it cleared
+    [PerSlot] public float[] PgDamage;         // tissue damage (1 = death by disease)
+    [PerSlot] public float[] PgShed;           // what it sheds this step to each animal in contact (contact route), read by DECIDE
+    [PerSlot] public float[] IDose;            // contact dose from shedding animals in contact, from DECIDE (own slot only)
+    [PerSlot] public int[] IStrainSrc;         // the contact shedding most to it, whose strain it is exposed to, from DECIDE (-1 none)
+    [PerSlot] public byte[] IInfNear;          // shedding animals in contact, counted by DECIDE (own slot only)
     // per field cell, the environmental reservoir: load, the strain it holds (one per cell), and the river network it flows
     // down (receiver -1 = none; ResOrder lists the ResRivers river cells downstream first). ResNet: that network is built
     public readonly float[] ResLoad;
@@ -76,48 +78,59 @@ public sealed class World
     public int ResRivers; public bool ResNet;
     public readonly float[] PgCentre;         // PG_CLUSTERS * PG.D: strain centres, scratch for telemetry
     // ---- agents: brain
-    public readonly sbyte[] Genome;        // Cap * G.LEN
-    public readonly float[] W2f;           // Cap * G.W2N   working output weights = genome W2 + what was learned (not inherited)
-    public readonly float[] Trace;         // Cap * G.W2N   eligibility traces
-    public readonly float[] HistA, HistD, HistY;   // learning block history: advantage, perturbation, inputs (Brain.BLOCK steps)
-    public readonly float[] HistV;         // Cap * BLOCK  match of its own utterance to its template, less its running mean (0 when silent; Revision N)
-    public readonly float[] VMean;         // running mean of that match
-    public readonly byte[] Tmpl;           // Cap * Voice.NTMPL  remembered tutors' syllable pairs: (start or previous sound) -> next sound, counts
-    public readonly float[] Hidden;        // Cap * G.NH
+    [PerSlot] public readonly SlotArray<sbyte> Genome;   // G.LEN per slot (paged: no one array holds every genome)
+    [PerSlot] public readonly SlotArray<float> W2f;      // G.W2N per slot: working output weights = genome W2 + what was learned (not inherited)
+    [PerSlot] public readonly SlotArray<float> Trace;    // G.W2N per slot: eligibility traces
+    [PerSlot] public float[] HistA, HistD, HistY;   // learning block history: advantage, perturbation, inputs (Brain.BLOCK steps)
+    [PerSlot] public float[] HistV;         // Cap * BLOCK  match of its own utterance to its template, less its running mean (0 when silent; Revision N)
+    [PerSlot] public float[] VMean;         // running mean of that match
+    [PerSlot] public byte[] Tmpl;           // Cap * Voice.NTMPL  remembered tutors' syllable pairs: (start or previous sound) -> next sound, counts
+    [PerSlot] public float[] Hidden;        // Cap * G.NH
     /// <summary>Control experiment (--validate): when true, every animal's recurrent state (Hidden) is zeroed before its
     /// brain runs each step, so it keeps its genome and learned weights but remembers no past activity. Default off.</summary>
     public bool MemoryReset;
-    public readonly float[] Gain;          // Cap * P.N     last gains (after exploration)
-    public readonly float[] Feat;          // Cap * F.N     last features (for probe/telemetry)
+    [PerSlot] public float[] Gain;          // Cap * P.N     last gains (after exploration)
+    [PerSlot] public float[] Feat;          // Cap * F.N     last features (for probe/telemetry)
     // ---- agents: intents written by DECIDE (own slot only)
-    public readonly float[] IHeading, ISpeed;
-    public readonly uint[] IActs;          // bit p-FIRST_ACTION set = action fires
+    [PerSlot] public float[] IHeading, ISpeed;
+    [PerSlot] public uint[] IActs;          // bit p-FIRST_ACTION set = action fires
     // voices (Revision M, N): the utterance each organism made this step (MAX_SYL bytes per slot: sounds 1..8, 0 = none),
     // the last utterance it made (whenever), and what each heard: its focal caller's utterance
-    public readonly byte[] Call, LastUtt;
-    public readonly int[] IHeard;          // 0 nothing; else 1 + focal caller's clade x Voice.NTYPE + utterance type
-    public readonly float[] IHeardX, IHeardY;
-    public readonly byte[] IHeardUser;     // its focal caller this step was the person
-    public readonly int[] IFocal;          // the focal caller's slot (-1 none, -2 the person), written by DECIDE (own slot)
-    public readonly uint[] IFocalSerial;   // and its serial, so attention stays with the same animal
-    public readonly float[] CallR;         // how far its call carries this step (BUILD; 0 = silent)
-    public readonly int[] CallStart, CallSorted;   // this step's callers in hash-cell order (BUILD)
+    [PerSlot] public byte[] Call, LastUtt;
+    [PerSlot] public int[] IHeard;          // 0 nothing; else 1 + focal caller's clade x Voice.NTYPE + utterance type
+    [PerSlot] public float[] IHeardX, IHeardY;
+    [PerSlot] public byte[] IHeardUser;     // its focal caller this step was the person
+    [PerSlot] public int[] IFocal;          // the focal caller's slot (-1 none, -2 the person), written by DECIDE (own slot)
+    [PerSlot] public uint[] IFocalSerial;   // and its serial, so attention stays with the same animal
+    [PerSlot] public float[] CallR;         // how far its call carries this step (BUILD; 0 = silent)
+    public readonly int[] CallStart;              // this step's callers in hash-cell order (BUILD): per hash cell, where its callers start
+    [PerSlot] public int[] CallSorted;
     // the person speaking into the world (the console's translator): one utterance at a time, heard on the next step
     public float UserCallX, UserCallY; public ulong UserCallStep = ulong.MaxValue; public int UserCallId;
     public readonly byte[] UserCall = new byte[F.MAX_SYL];   // its sounds (1..8, 0 = none)
-    public readonly int[] ITarget, IMate;  // target slot for STRIKE, partner slot for MATE (-1 none)
-    public readonly float[] IFoodHere, IKinDensity;
-    public readonly byte[] IEatPrey;       // EAT means attacking the target in reach (it is worth more than the plants here)
-    public readonly byte[] IScanning;
+    [PerSlot] public int[] ITarget, IMate;  // target slot for STRIKE, partner slot for MATE (-1 none)
+    [PerSlot] public float[] IFoodHere, IKinDensity;
+    [PerSlot] public byte[] IEatPrey;       // EAT means attacking the target in reach (it is worth more than the plants here)
+    [PerSlot] public byte[] IScanning;
 
-    // ---- slot management
-    public readonly int[] FreeStack; public int FreeTop;
-    public readonly int[] Order;
+    // ---- slot management. Free slots are a stack: a death pushes its slot, a birth takes the top. Below what was ever
+    // freed lie the slots never used, the lowest on top (Cap - 1 at the bottom), so growing the world adds its new slots
+    // at the bottom and no birth takes a slot other than one a bigger world would have given it (Resize)
+    [PerSlot] public int[] FreeStack; public int FreeTop;
     public uint NextSerial = 1;
     public int AliveCount;
+    /// <summary>Slots ever taken: every slot in use is below it. RESOLVE visits [0, power of two above it) (Simulation).</summary>
+    public int SlotsUsed;
+    /// <summary>The most slots this world may grow to (World.MaxSlots unless the run sets a hard limit, --max-capacity).
+    /// Not state: a run setting, so a save does not keep it.</summary>
+    [NonSerialized] public int MaxCap = MaxSlots;
+    /// <summary>Times this world grew, and why it last could not (null: it never had to stop). Not state.</summary>
+    [NonSerialized] public int Grows;
+    [NonSerialized] public string? GrowLimit;
 
     // ---- spatial hash (counting sort)
-    public readonly int[] CellStart, CellCount, Sorted, CellOf;
+    public readonly int[] CellStart, CellCount;
+    [PerSlot] public int[] Sorted, CellOf;
 
     // ---- fields (DESIGN §10): food pools 0..12, then structure layers
     public readonly float[][] Pool;        // [Pools.NFIELD][FW*FW]
@@ -136,8 +149,8 @@ public sealed class World
     public readonly ushort[] WindAccMom, WindAccDad, WindDistMom, WindDistDad, RowFarMom, RowFarDad;
     public readonly PlantTable Flora;
     // per animal: the seed in its gut and coat (seed and pollen parent) and the pollen it carries
-    public readonly ushort[] GutSeedG, GutSeedDad, FurSeedG, FurSeedDad, PollenG;
-    public readonly float[] FurSeed;
+    [PerSlot] public ushort[] GutSeedG, GutSeedDad, FurSeedG, FurSeedDad, PollenG;
+    [PerSlot] public float[] FurSeed;
     public readonly float[] Moisture, Poll;
     public readonly float[] Temp;          // air temperature (°C), written by FIELDS every step (Revision O); water is at least T_WATER_MIN under it
     public float[] Fire, FireN;
@@ -191,7 +204,7 @@ public sealed class World
     /// </summary>
     public bool Prehistory;
     public readonly EvoSettings Evo = new();   // the evolutionary search's knobs (prehistory; mutation also in a live world)
-    /// <summary>Approximate memory per agent slot (bytes), for the setup screen's estimate.</summary>
+    /// <summary>Approximate memory per agent slot (bytes), for the setup screen's estimate (SlotBytes measures it).</summary>
     public const int BytesPerSlot = G.LEN + 2 * G.W2N * 4 + Brain.BLOCK * (2 + P.N + G.NIN) * 4 + (G.NH + P.N + F.N + Pools.N + G.NMHC) * 4 + 432
         + Voice.NTMPL + 2 * F.MAX_SYL + 6 * 4    // Revision N: template, utterances, focal caller, call range and list, match mean, learning genes
         + 5 * 4                                  // Revision O: fur, appendages, heat strain, heat need, operative temperature
@@ -208,12 +221,13 @@ public sealed class World
     /// written by Body.Express and BUILD, refreshed from the genomes by Derived.Refresh after a load.</summary>
     public readonly Derived D;
 
-    /// <summary>The most slots a world can have: one array holds every genome (.NET arrays have at most 2^31 elements).</summary>
-    public static int MaxSlots => int.MaxValue / G.LEN / 1024 * 1024;
+    /// <summary>The most slots a world can have: its largest plain per-slot array (the learning inputs, HistY) is indexed
+    /// by int (1.6 million slots, ~350 GB). The genomes, weights and traces are paged (SlotArray) and set no limit.</summary>
+    public static int MaxSlots => int.MaxValue / (Brain.BLOCK * G.NIN) / 1024 * 1024;
 
     public World(int capacity, uint seed, uint terrainSeed = 0)
     {
-        if (capacity > MaxSlots) throw new ArgumentOutOfRangeException(nameof(capacity), $"at most {MaxSlots:N0} slots per world (each holds a genome of {G.LEN:N0} bytes)");
+        if (capacity < 1 || capacity > MaxSlots) throw new ArgumentOutOfRangeException(nameof(capacity), $"1 to {MaxSlots:N0} slots per world");
         Cap = capacity; Seed = seed; TerrainSeed = terrainSeed == 0 ? seed : terrainSeed;
         int c = capacity;
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];
@@ -240,16 +254,16 @@ public sealed class World
         PgLoad = new float[c]; PgGene = new byte[c * PG.N]; Strain = new sbyte[c * G.NMHC]; PgFit = new float[c]; ImmEff = new float[c]; ImmMem = new float[c];
         ImmKey = new sbyte[c * G.NMHC]; PgDamage = new float[c]; PgShed = new float[c]; IDose = new float[c]; IStrainSrc = new int[c]; IInfNear = new byte[c];
         PgCentre = new float[K.PG_CLUSTERS * PG.D];
-        Genome = new sbyte[(long)c * G.LEN];
-        W2f = new float[(long)c * G.W2N];
-        Trace = new float[(long)c * G.W2N];
+        Genome = new SlotArray<sbyte>(G.LEN, c);
+        W2f = new SlotArray<float>(G.W2N, c);
+        Trace = new SlotArray<float>(G.W2N, c);
         Hidden = new float[c * G.NH];
         HistA = new float[c * Brain.BLOCK]; HistV = new float[c * Brain.BLOCK]; VMean = new float[c]; Tmpl = new byte[c * Voice.NTMPL]; HistD = new float[c * Brain.BLOCK * P.N]; HistY = new float[c * Brain.BLOCK * G.NIN];
         Gain = new float[c * P.N];
         Feat = new float[c * F.N];
         IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; Call = new byte[c * F.MAX_SYL]; LastUtt = new byte[c * F.MAX_SYL]; IFocal = new int[c]; IFocalSerial = new uint[c]; CallR = new float[c]; CallSorted = new int[c]; IHeard = new int[c]; IHeardX = new float[c]; IHeardY = new float[c]; IHeardUser = new byte[c]; ITarget = new int[c]; IMate = new int[c];
         IFoodHere = new float[c]; IKinDensity = new float[c]; IEatPrey = new byte[c]; IScanning = new byte[c];
-        FreeStack = new int[c]; Order = new int[c];
+        FreeStack = new int[c];
         for (int i = 0; i < c; i++) FreeStack[i] = c - 1 - i;
         FreeTop = c;
 
@@ -287,6 +301,104 @@ public sealed class World
 
         T = new Telemetry(this);
         D = new Derived(c);
+    }
+
+    // ---- growth (2026-10-31): no fixed cap. A world grows when births need slots, limited only by memory (or a hard
+    // limit the run sets, MaxCap). Growing changes nothing in the run: the new slots are what a world built bigger has
+    // there (zeros, the free stack's untouched bottom), and no slot is chosen by capacity (the free stack gives the same
+    // slot at any size; RESOLVE's order depends on SlotsUsed, not Cap). So a seed gives the same run from any start size.
+
+    /// <summary>The last step refused a birth for want of a slot: the world is full, at its limit (GrowLimit says which).</summary>
+    public bool FullNow => T.LastFullStep != ulong.MaxValue && T.LastFullStep + 1 >= Step;
+
+    /// <summary>Between steps (Simulation.Step) the world keeps at least this many slots free, and an eighth of its slots.</summary>
+    public const int MIN_FREE = 256;
+    /// <summary>A world grows to 3/2 of its slots (at least what is needed), in whole blocks of GROW_BLOCK.</summary>
+    public const int GROW_BLOCK = 1024;
+    /// <summary>Memory kept free of slots: an eighth of what the machine (or container) gives the process, at least 1 GB.</summary>
+    public static long MemoryReserve(long available) => Math.Max(available / 8, 1L << 30);
+
+    static long _slotBytes;
+    /// <summary>Memory one slot takes: every per-slot array of the world and of its derived cache (bytes).</summary>
+    public long SlotBytes => _slotBytes != 0 ? _slotBytes : _slotBytes = PerSlot.BytesPerSlot(this, Cap) + PerSlot.BytesPerSlot(D, Cap);
+
+    /// <summary>Between steps: if fewer than MIN_FREE (or Cap / 8) slots are free, grow, so that the next step's births find
+    /// slots without growing in the middle of the step (which Life.NewSlot does if a step needs more).</summary>
+    public void Reserve()
+    {
+        int want = Math.Max(MIN_FREE, Cap / 8);
+        if (FreeTop < want) Grow(want - FreeTop);
+    }
+
+    /// <summary>
+    /// Grow by at least need slots: to 3/2 of Cap or more, as far as MaxCap and memory allow (the machine's memory less
+    /// MemoryReserve, against what the process holds). True if there are need more slots. Call only when no parallel job
+    /// runs (between steps, or from the serial RESOLVE and founding).
+    /// </summary>
+    public bool Grow(int need)
+    {
+        long target = Math.Max(Cap + (long)Cap / 2, (long)Cap + need);
+        target = (target + GROW_BLOCK - 1) / GROW_BLOCK * GROW_BLOCK;
+        int limit = Math.Min(MaxCap, MaxSlots);
+        if (target > limit)
+        {
+            target = limit;
+            GrowLimit = MaxCap < MaxSlots ? $"its hard limit of {MaxCap:N0} slots (--max-capacity)" : $"the most slots one world can index ({MaxSlots:N0})";
+        }
+        if (target > Cap)
+        {
+            long afford = Cap + MemoryFree(false) / SlotBytes;
+            if (afford < target) afford = Cap + MemoryFree(true) / SlotBytes;   // collect first: the old copies of the last growth may still count
+            if (afford < target)
+            {
+                target = Math.Max(Cap, afford);
+                var info = GC.GetGCMemoryInfo();
+                GrowLimit = $"the memory limit ({Cap:N0} slots of {SlotBytes / 1024:N0} KB; {GC.GetTotalMemory(false) / (1 << 20):N0} MB in use of " +
+                    $"{info.TotalAvailableMemoryBytes / (1 << 20):N0} MB available, {MemoryReserve(info.TotalAvailableMemoryBytes) / (1 << 20):N0} MB kept free)";
+            }
+        }
+        if (target > Cap) Resize((int)target);
+        return FreeTop >= need;
+    }
+
+    /// <summary>Memory the slots may still take (bytes, may be negative).</summary>
+    static long MemoryFree(bool collect)
+    {
+        long avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        return avail - MemoryReserve(avail) - GC.GetTotalMemory(collect);
+    }
+
+    /// <summary>Grow to newCap slots: every per-slot array is reallocated and its slots kept; the new slots are as a world
+    /// built with newCap slots has them, and go to the bottom of the free stack (the slots never used, lowest on top).</summary>
+    public void Resize(int newCap)
+    {
+        if (newCap <= Cap) throw new ArgumentOutOfRangeException(nameof(newCap), $"a world grows: {newCap:N0} slots is not more than {Cap:N0}");
+        if (newCap > MaxSlots) throw new ArgumentOutOfRangeException(nameof(newCap), $"at most {MaxSlots:N0} slots per world");
+        int old = Cap, add = newCap - old;
+        PerSlot.Resize(this, old, newCap);
+        PerSlot.Resize(D, old, newCap);
+        Array.Fill(TOp, K.T_REF, old, add);
+        Array.Copy(FreeStack, 0, FreeStack, add, FreeTop);
+        for (int k = 0; k < add; k++) FreeStack[k] = newCap - 1 - k;
+        FreeTop += add;
+        Grows++;
+        System.Threading.Volatile.Write(ref Cap, newCap);   // last: a reader that sees the new Cap sees the new arrays
+    }
+
+    /// <summary>Hold exactly cap slots, before a save of that size is loaded into this world (Checkpoint): every slot's
+    /// state comes from the save, so what the world held is not kept.</summary>
+    internal void SetCapacityForLoad(int cap)
+    {
+        if (cap == Cap) return;
+        if (cap < 1 || cap > MaxSlots) throw new System.IO.InvalidDataException($"a saved world of {cap:N0} slots (this program holds 1 to {MaxSlots:N0})");
+        int old = Cap;
+        PerSlot.Resize(this, old, cap);
+        PerSlot.Resize(D, old, cap);
+        Array.Fill(TOp, K.T_REF);
+        for (int i = 0; i < cap; i++) FreeStack[i] = cap - 1 - i;
+        FreeTop = cap; AliveCount = 0; SlotsUsed = 0;
+        Array.Clear(StageOf);
+        System.Threading.Volatile.Write(ref Cap, cap);
     }
 
     // ---- small helpers used by every phase
@@ -420,7 +532,7 @@ public sealed class World
 
     public void FireSwap() { (Fire, FireN) = (FireN, Fire); }
 
-    public Span<sbyte> GenomeOf(int i) => new Span<sbyte>(Genome, i * G.LEN, G.LEN);
+    public Span<sbyte> GenomeOf(int i) => Genome.Slot(i);
 }
 
 /// <summary>
@@ -430,10 +542,10 @@ public sealed class World
 /// </summary>
 public sealed class Derived
 {
-    public readonly sbyte[] Look;    // Cap * Body.NLOOK: the genes LooksAlike compares (Body.Signature)
-    public readonly float[] MhcDiv;  // Pathogens.Diversity of each slot's recognition genes
+    [PerSlot] public sbyte[] Look;    // Cap * Body.NLOOK: the genes LooksAlike compares (Body.Signature)
+    [PerSlot] public float[] MhcDiv;  // Pathogens.Diversity of each slot's recognition genes
     /// <summary>BUILD's packed copy of what DECIDE reads of every neighbour, in W.Sorted order (index = sorted position).</summary>
-    public readonly Neighbour[] Near;
+    [PerSlot] public Neighbour[] Near;
 
     public Derived(int cap) { Look = new sbyte[cap * Body.NLOOK]; MhcDiv = new float[cap]; Near = new Neighbour[cap]; }
 

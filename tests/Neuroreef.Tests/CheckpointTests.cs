@@ -28,7 +28,7 @@ public class CheckpointTests
     static void OldWrite(BinaryWriter bw, object o, Func<string, bool> drop, string path = "")
     {
         const BindingFlags fl = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        foreach (var f in o.GetType().GetFields(fl).Where(x => x.FieldType != typeof(World)).OrderBy(x => x.Name, StringComparer.Ordinal))
+        foreach (var f in o.GetType().GetFields(fl).Where(x => x.FieldType != typeof(World) && !x.IsNotSerialized).OrderBy(x => x.Name, StringComparer.Ordinal))
         {
             if (drop(path + f.Name)) continue;
             var t = f.FieldType; object? v = f.GetValue(o);
@@ -46,6 +46,14 @@ public class CheckpointTests
             }
             else if (t == typeof(string)) { bw.Write(f.Name); bw.Write((string?)v ?? ""); }
             else if (t.IsArray && t.GetElementType()!.IsPrimitive) { bw.Write(f.Name); OldArray(bw, (Array?)v); }
+            else if (v is ISlotArray sa)
+            {
+                // the genomes, weights and traces were one array each: written whole
+                bw.Write(f.Name);
+                long bytes = (long)sa.Slots * sa.Stride * sa.ElementSize;
+                bw.Write(sa.Slots * sa.Stride); bw.Write(checked((int)bytes));
+                for (int s = 0; s < sa.Slots; s++) bw.Write(sa.Bytes(s, 1));
+            }
             else if (t == typeof(float[][])) { bw.Write(f.Name); var a = (float[][])v!; bw.Write(a.Length); foreach (var x in a) OldArray(bw, x); }
             else if (t.IsArray && Walk.Contains(t.GetElementType()!)) { bw.Write(f.Name); var a = (Array)v!; bw.Write(a.Length); foreach (var x in a) OldWrite(bw, x!, drop, path + f.Name + "[]."); }
             else if (Walk.Contains(t) && v != null) { bw.Write(f.Name); OldWrite(bw, v, drop, path + f.Name + "."); }
@@ -117,7 +125,7 @@ public class CheckpointTests
                 alive++;
                 Assert.Equal(w.Serial[i], r.Serial[i]); Assert.Equal(w.Spc[i], r.Spc[i]); Assert.Equal(w.Energy[i], r.Energy[i]);
                 Assert.True(w.GenomeOf(i).SequenceEqual(r.GenomeOf(i)));
-                Assert.True(new ReadOnlySpan<float>(w.W2f, i * G.W2N, G.W2N).SequenceEqual(new ReadOnlySpan<float>(r.W2f, i * G.W2N, G.W2N)));
+                Assert.True(w.W2f.Slot(i).SequenceEqual(r.W2f.Slot(i)));
                 Assert.Equal(w.PImmune[i], r.PImmune[i]);   // expressed again from the genes: the trait the save did not hold
             }
             Assert.True(alive > 100, $"only {alive} animals in the save");
@@ -180,6 +188,60 @@ public class CheckpointTests
             Assert.True(State(a.W).AsSpan().SequenceEqual(State(b.W)));
             for (int k = 0; k < 300; k++) { a.Step(); b.Step(); }
             Assert.True(State(a.W).AsSpan().SequenceEqual(State(b.W)), "continued world differs");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact] // a world that grew is saved at its size and continues exactly, loaded into a world built at any size
+    public void GrownWorldRoundTrips()
+    {
+        using var a = new Simulation(1024, 96, 2);
+        for (int k = 0; k < 150; k++) a.Step();
+        Assert.True(a.W.Cap > 1024, $"the world never grew ({a.W.Cap} slots)");
+        string path = Path.GetTempFileName();
+        try
+        {
+            Checkpoint.SaveWorld(a.W, path);
+            var (cap, seed, ts) = Checkpoint.WorldHeader(path);
+            Assert.Equal(a.W.Cap, cap);
+            foreach (int built in new[] { 1024, cap + 2048 })   // smaller and bigger than the save: it is given the save's size
+            {
+                using var b = new Simulation(built, seed, 1, restore: true, terrainSeed: ts);
+                Assert.False(Checkpoint.LoadWorld(b, path).Migrated);
+                Assert.Equal(cap, b.W.Cap);
+                Assert.True(State(a.W).AsSpan().SequenceEqual(State(b.W)), $"the loaded world (built with {built} slots) differs");
+                Assert.Equal(EngineeringTests.RunHash(a.W), EngineeringTests.RunHash(b.W));
+            }
+            using var c = new Simulation(1024, seed, 1, restore: true, terrainSeed: ts);
+            Checkpoint.LoadWorld(c, path);
+            for (int k = 0; k < 250; k++) { a.Step(); c.Step(); }
+            Assert.Equal(EngineeringTests.RunHash(a.W), EngineeringTests.RunHash(c.W));
+            if (a.W.Cap == c.W.Cap) Assert.True(State(a.W).AsSpan().SequenceEqual(State(c.W)), "the continued world differs");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact] // the branches of a prehistory grow each on its own; a checkpoint keeps each branch's size and resumes exactly
+    public void GrownPrehistoryResumes()
+    {
+        string path = Path.GetTempFileName();
+        try
+        {
+            using var a = new Prehistory(2, 1024, 87, 2);
+            for (int k = 0; k < 60; k++) foreach (var s in a.B) s.Step();
+            Assert.True(a.B[0].W.Cap > 1024 || a.B[1].W.Cap > 1024, "no branch grew");
+            Checkpoint.Save(a, path);
+            var (n, cap, seed) = Checkpoint.PrehistoryHeader(path);
+            Assert.Equal(Math.Max(a.B[0].W.Cap, a.B[1].W.Cap), cap);
+            using var c = new Prehistory(n, 2048, seed, 2, restore: true);
+            c.LoadCheckpoint(path);
+            for (int b = 0; b < 2; b++)
+            {
+                Assert.Equal(a.B[b].W.Cap, c.B[b].W.Cap);
+                Assert.True(State(a.B[b].W).AsSpan().SequenceEqual(State(c.B[b].W)), $"branch {b} differs");
+            }
+            for (int k = 0; k < 60; k++) for (int b = 0; b < 2; b++) { a.B[b].Step(); c.B[b].Step(); }
+            for (int b = 0; b < 2; b++) Assert.Equal(EngineeringTests.RunHash(a.B[b].W), EngineeringTests.RunHash(c.B[b].W));
         }
         finally { File.Delete(path); }
     }
@@ -292,7 +354,8 @@ public class CheckpointTests
             {
                 Assert.True(ms[b].LandRebuilt);
                 Assert.Equal(a.B[b].W.AliveCount, c.B[b].W.AliveCount);
-                Assert.True(a.B[b].W.Genome.AsSpan().SequenceEqual(c.B[b].W.Genome));
+                for (int i = 0; i < a.B[b].W.Cap; i++)
+                    if (a.B[b].W.StageOf[i] != St.Dead) Assert.True(a.B[b].W.GenomeOf(i).SequenceEqual(c.B[b].W.GenomeOf(i)));
                 Assert.True(a.B[b].W.POcc.AsSpan().SequenceEqual(c.B[b].W.POcc), "the rebuilt plants are not the ones the branch grew");
             }
         }
