@@ -76,7 +76,8 @@ public class ClimateTests
         // 0xC7DCAB9771F0850D on the merged mountains, rivers and caves before.
         // 2026-11-01: water depths in metres (rivers 0.3 m by discharge, standing water on a shoreface profile with its bed
         // raised to it), SHALLOW 2 m, wetlands and peat, and a 21st plant trait (flood tolerance) re-pinned it from 0xA072ED289084F27E.
-        Assert.Equal(0xA6028B8F1955E0F1UL, h);
+        // (2026-11-01: re-pinned after the wetlands merge (peat and waterlogging change the fields) and the creature-variety merge)
+        Assert.Equal(0xCDEE23A10F68B3AAUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
