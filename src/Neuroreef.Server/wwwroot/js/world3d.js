@@ -23,9 +23,9 @@ import { splitChunks, copyColors } from './terrain/chunks.js';
 // degrees, under 33 almost everywhere. (Before Geology worked at this scale, 55 units drew 2-4 % plate-scale slopes as cliffs.)
 const RELIEF = 55;
 const SHADE_Z = 1;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
-const LAND_LIFT = 0.06;
+const LAND_LIFT = 0.06;      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
 const CHUNKS = 8;             // river ribbons and karst rocks are cut into CHUNKS x CHUNKS squares of the map ...
-const RIBBON_FAR = 420, KARST_FAR = 260;   // ... and drawn only within this distance of the camera (units)      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
+const RIBBON_FAR = 420, KARST_FAR = 260;   // ... and drawn only within this distance of the camera (units)
 const RIVER_W0 = 1.0, RIVER_WMAX = 3.6;   // river water width (units) at the river threshold, and the widest (a cell is 4)
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
 const CALL_MAX = 768;         // call rings drawn at once (up to 3 per utterance)
@@ -128,7 +128,7 @@ export class World3D {
       if (!riv[i]) continue;
       const x = i % fw, y = (i / fw) | 0; let c = 0;
       for (let k = 0; k < 8; k++) if (w.cell[((y + DIRY[k] + fw) % fw) * fw + ((x + DIRX[k] + fw) % fw)] !== 1) c++;
-      broad[i] = c >= 4 ? 1 : 0;
+      broad[i] = c >= 4 && !w.riverPaths ? 1 : 0;   // (the hydrology's lines draw wide rivers at their own width)
     }
     for (let i = 0; i < n; i++) {
       const h = (w.elev[i] / 255 - sea) * U;

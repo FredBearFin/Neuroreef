@@ -5,7 +5,7 @@
 //     depth: number[] (channel depth, units), flow: number[] (0..1, size class / 31), steep: number[] (0..1),
 //     cell: number[] (the map cell each point colours from) }
 // sampled about every STEP units. Two sources:
-// - the hydrology data, if the WORLD frame carries it (w.riverPaths, see fromWire below): used as given, resampled;
+// - the hydrology's rivers as lines, if the WORLD frame carries them (w.riverPaths, see fromWire below): used as given;
 // - otherwise the WORLD frame's river plane (one drain direction and size per cell): each run of cells between sources,
 //   confluences and mouths becomes a chain through the cell centres, smoothed (the D8 staircase removed), given a gentle
 //   meander on the flats (at most MEANDER x a cell off its cells, none in steep reaches or at the ends, so it stays in
@@ -23,27 +23,31 @@ const DIRX = [1, 1, 0, -1, -1, -1, 0, 1], DIRY = [0, 1, 1, 1, 0, -1, -1, -1];
 export const riverWidth = (cls, w0, wmax) => Math.min(wmax, w0 * Math.pow(2, ((cls || 1) - 1) / 8));
 
 /**
- * The hydrologist's river geometry, if the WORLD frame carries it. Expected (decoded by net.js) as
- *   w.riverPaths = [{ x: Float32Array, y: Float32Array (world units along the course, upstream first),
- *                     width?: Float32Array (units), surf?: Float32Array (water surface as normalised elevation, like
- *                     w.surf / 65535), flow?: Float32Array (0..1), depth?: Float32Array (units) }, ...]
- * Missing per-point arrays are filled from the cell under each point. Returns null when there is none.
+ * The rivers as lines, when the WORLD frame carries its RIVERS section (ICD; Hydrology.Lines; decoded by net.js as
+ *   w.riverPaths = [{ x, y: Float32Array (field cells, cell (i, j) spanning [i, i+1) x [j, j+1); unwrapped along the
+ *   river, head first), width: Float32Array (cells), depth: Float32Array (normalised elevation), joins (the river it
+ *   joins, -1: none), order (Strahler), end (0 a river, 1 a lake, 2 the sea) }, ...]):
+ * drawn as given, through a Catmull-Rom spline, each ending where its last point lies (on the river it joins, or in its
+ * lake or the sea). A cell's centre (i + 0.5) is where this view draws that cell's vertex (i x S). The water level at
+ * each point is the surface of the cell under it. Returns null without the section.
  */
 export function fromWire(w, ctx) {
   const list = w.riverPaths;
   if (!Array.isArray(list) || !list.length) return null;
-  const { S, fw, U, sea, SF, cellOf } = ctx, out = [];
+  const { S, U, SF, cellOf } = ctx, out = [];
   for (const p of list) {
     const n = Math.min(p.x?.length || 0, p.y?.length || 0); if (n < 2) continue;
-    const r = { x: [], z: [], w: [], lvl: [], depth: [], flow: [], steep: [], cell: [] };
+    const r = { x: [], z: [], w: [], lvl: [], depth: [], flow: [], cell: [], spline: true };
     for (let k = 0; k < n; k++) {
-      const x = p.x[k], z = p.y[k], i = cellOf(x, z);
+      const x = (p.x[k] - 0.5) * S, z = (p.y[k] - 0.5) * S, i = cellOf(x, z);
+      const wc = p.width ? p.width[k] : 1;
       r.x.push(x); r.z.push(z); r.cell.push(i);
-      r.w.push(p.width ? p.width[k] : ctx.widthOf(i));
-      r.lvl.push(p.surf ? (p.surf[k] - sea) * U + ctx.lift : (SF[i] === SF[i] ? SF[i] : ctx.ground(x, z)));
-      r.depth.push(p.depth ? p.depth[k] : ctx.depthOf(i));
-      r.flow.push(p.flow ? p.flow[k] : ctx.flowOf(i));
+      r.w.push(wc * S);
+      r.lvl.push(SF[i] === SF[i] ? SF[i] : ctx.ground(x, z) + 0.02);
+      r.depth.push(p.depth ? Math.min(1.5, Math.max(0.15, p.depth[k] * U)) : ctx.depthOf(i));
+      r.flow.push(Math.min(1, Math.max((wc - 1) / 3, (p.order || 1) / 8)));
     }
+    r.w[0] *= 0.6;   // every river starts at its head (it ends on another, or in a lake or the sea): narrower there
     out.push(finish(resample(r)));
   }
   return out;

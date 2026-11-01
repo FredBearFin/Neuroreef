@@ -38,7 +38,27 @@ export class Link {
         // cave features (CaveKind bits) and cave courses per cell (2026-11-01; null from a server without the planes: no karst drawn)
         const caves = buf.byteLength >= 16 + 7 * n ? new Uint8Array(buf, 16 + 6 * n, n) : null;
         const caveCourse = buf.byteLength >= 16 + 8 * n ? new Uint8Array(buf, 16 + 7 * n, n) : null;
-        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse });
+        // the rivers as lines (2026-11-01; null from a server without the section: world3d.js draws them from the river plane)
+        let riverPaths = null;
+        const ro = 16 + 8 * n;
+        if (buf.byteLength >= ro + 8) {
+          const R = dv.getUint32(ro, true), V = dv.getUint32(ro + 4, true), po = ro + 8 + 16 * R;
+          if (buf.byteLength >= po + 16 * V) {
+            riverPaths = [];
+            for (let r = 0; r < R; r++) {
+              const o = ro + 8 + 16 * r, first = dv.getUint32(o, true), m = dv.getUint32(o + 4, true);
+              if (first + m > V) continue;
+              const p = { x: new Float32Array(m), y: new Float32Array(m), width: new Float32Array(m), depth: new Float32Array(m),
+                          joins: dv.getInt32(o + 8, true), order: dv.getUint8(o + 12), end: dv.getUint8(o + 13) };
+              for (let k = 0; k < m; k++) {
+                const q = po + 16 * (first + k);
+                p.x[k] = dv.getFloat32(q, true); p.y[k] = dv.getFloat32(q + 4, true); p.width[k] = dv.getFloat32(q + 8, true); p.depth[k] = dv.getFloat32(q + 12, true);
+              }
+              riverPaths.push(p);
+            }
+          }
+        }
+        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse, riverPaths });
         break;
       }
       case T_AGENTS: {
