@@ -31,7 +31,7 @@ import { NOISE_GLSL, noiseTexture, ridged, RIDGE_MEAN } from './noise.js';
 
 export const LEAF = 32;          // the smallest node (world units): GRID quads of 1 unit
 export const GRID = 32;          // quads per node side
-export const SPLIT = 3.2;        // a node splits while the camera is within SPLIT x its size
+export const SPLIT = 2.8;        // a node splits while the camera is within SPLIT x its size
 export const DISP_MAX = 0.9, DISP_NEAR = 55, DISP_FAR = 95;   // crag displacement: amplitude (units), fade with distance
 const NONE = 1e4;                // carve: no cap
 
@@ -74,7 +74,7 @@ const VERT_MAIN = /* glsl */`
   vec2 lp = position.xz;
   vec2 wp = iNode.xy + lp * iNode.z;
   // morph towards the parent's grid (every other vertex) as the distance nears where the parent takes over
-  float d0 = distance(uCam, vec3(wp.x, groundTri(wp).x, wp.y));
+  float d0 = distance(uCam, vec3(wp.x, cellAt(floor(wp / uS + 0.5)).r, wp.y));   // one fetch: any fixed function of wp will do
   float R = uSplit * 2.0 * iNode.z;
   float mk = clamp((d0 - 0.78 * R) / (0.18 * R), 0.0, 1.0);
   lp -= fract(lp * uGrid * 0.5) * 2.0 / uGrid * mk;
@@ -107,7 +107,7 @@ float shoreAt(vec2 wp) {
   vec2 g = wp / uS, c0 = floor(g), t = g - c0;
   return mix(mix(cellAt(c0).b, cellAt(c0 + vec2(1.0, 0.0)).b, t.x), mix(cellAt(c0 + vec2(0.0, 1.0)).b, cellAt(c0 + vec2(1.0, 1.0)).b, t.x), t.y);
 }
-vec3 riverWater(float flow) { return mix(vec3(0.20, 0.42, 0.50), vec3(0.08, 0.26, 0.38), flow); }
+vec3 riverWater(float flow) { return mix(vec3(0.07, 0.24, 0.30), vec3(0.03, 0.10, 0.17), flow); }
 `;
 
 const FRAG_MAIN = /* glsl */`
@@ -133,36 +133,42 @@ const FRAG_MAIN = /* glsl */`
     rockF = clamp(rockF * (1.0 - 0.8 * smoothstep(0.35, 0.9, plants)), 0.0, 1.0);
     float scree = nr.a * smoothstep(0.05, 0.12, sl) * (1.0 - rockF) * (1.0 - 0.85 * plants);
     float vol = mat.g, sed = mat.b, cry = max(0.0, 1.0 - vol - sed);
-    float band = sin(vWP.y * 2.4 + (nMid - 0.5) * 6.0) * 0.5 + 0.5;
-    vec3 cC = mix(vec3(0.44, 0.43, 0.42), vec3(0.63, 0.61, 0.58), nMid) * (0.80 + 0.40 * nFine);
-    vec3 cV = mix(vec3(0.17, 0.16, 0.16), vec3(0.32, 0.26, 0.23), nMid) * (0.80 + 0.40 * nFine);
-    vec3 cS = mix(vec3(0.55, 0.47, 0.37), vec3(0.73, 0.67, 0.56), band) * (0.85 + 0.30 * nFine);
+    float band = mix(0.5, sin(vWP.y * 2.4 + (nMid - 0.5) * 6.0) * 0.5 + 0.5, 1.0 - smoothstep(0.4, 1.2, fwidth(vWP.y * 2.4)));
+    vec3 cC = mix(vec3(0.1643, 0.1562, 0.1483), vec3(0.3619, 0.3371, 0.3017), nMid) * (0.80 + 0.40 * nFine);
+    vec3 cV = mix(vec3(0.035, 0.032, 0.032), vec3(0.11, 0.075, 0.06), nMid) * (0.80 + 0.40 * nFine);
+    vec3 cS = mix(vec3(0.2684, 0.1899, 0.1122), vec3(0.5004, 0.4143, 0.2793), band) * (0.85 + 0.30 * nFine);
     vec3 rockC = cC * cry + cV * vol + cS * sed;
+    // ledges: rock weathers into steps along its beds and joints (dark lines where a warped height crosses a step)
+    float ledgeArg = vWP.y * 0.9 + (nMid - 0.5) * 2.5 + (nBig - 0.5) * 4.0;
+    float ledge = fract(ledgeArg);
+    float ledgeAA = (1.0 - smoothstep(0.12, 0.35, fwidth(ledgeArg))) * smoothstep(0.5, 0.9, rockF);   // on bare rock; gone before finer than a pixel
+    float ledgeLine = smoothstep(0.82, 0.97, ledge) * ledgeAA;
+    rockC *= 1.0 - 0.45 * ledgeLine;
     // alluvium: silt and sand on the flats beside rivers, under what grows there
     float allu = max(ch.a, mat.a) * (1.0 - smoothstep(0.03, 0.10, sl));
-    col = mix(col, vec3(0.56, 0.50, 0.40) * (0.9 + 0.2 * nFine), allu * (1.0 - plants) * 0.65);
+    col = mix(col, vec3(0.2793, 0.2176, 0.1332) * (0.9 + 0.2 * nFine), allu * (1.0 - plants) * 0.65);
     // beaches and wet ground along standing water
     float above = vWP.y - shoreAt(vWP.xz);
     float beach = (1.0 - smoothstep(0.1, 0.9, above)) * (1.0 - smoothstep(0.05, 0.15, sl)) * (1.0 - 0.7 * plants);
-    col = mix(col, vec3(0.68, 0.62, 0.48) * (0.92 + 0.16 * nFine), beach * 0.65);
-    col = mix(col, mix(rockC, vec3(0.47, 0.44, 0.40), 0.45) * (0.65 + 0.7 * nFine), scree);
+    col = mix(col, vec3(0.4281, 0.3494, 0.1989) * (0.92 + 0.16 * nFine), beach * 0.65);
+    col = mix(col, mix(rockC, vec3(0.1899, 0.1643, 0.1332), 0.45) * (0.65 + 0.7 * nFine), scree);
     col = mix(col, rockC, rockF);
     // river beds: dark and wet under the water
     float bed = smoothstep(0.0, 0.3, ch.r);
-    col = mix(col, vec3(0.19, 0.18, 0.14) * (0.85 + 0.3 * nFine), bed * 0.85);
+    col = mix(col, vec3(0.0259, 0.0230, 0.0132) * (0.85 + 0.3 * nFine), bed * 0.85);
     // cave mouths, sinkholes and springs
-    col = mix(col, mix(rockC * 0.55, vec3(0.03, 0.028, 0.025), smoothstep(0.75, 0.95, ft.g)), smoothstep(0.05, 0.5, ft.g) * 0.9);
+    col = mix(col, mix(rockC * 0.55, vec3(0.0004, 0.0004, 0.0003), smoothstep(0.75, 0.95, ft.g)), smoothstep(0.05, 0.5, ft.g) * 0.9);
     col = mix(col, col * vec3(0.5, 0.72, 0.45), ft.b * 0.8);
-    col = mix(col, vec3(0.012, 0.010, 0.009), smoothstep(0.35, 0.6, ft.r));
+    col = mix(col, vec3(0.0001, 0.0000, 0.0000), smoothstep(0.35, 0.6, ft.r));
     // snow and ice where the snowpack lies, never on cliffs
     float snowF = smoothstep(0.25, 0.55, mat.r + (nMid - 0.5) * 0.35 + (nBig - 0.5) * 0.25) * (1.0 - smoothstep(0.36, 0.55, sl)) * (1.0 - bed);
-    col = mix(col, mix(vec3(0.78, 0.84, 0.92), vec3(0.97, 0.98, 1.0), smoothstep(0.55, 0.95, n.y) * (0.8 + 0.2 * nFine)), snowF);
+    col = mix(col, mix(vec3(0.5789, 0.6814, 0.8324), vec3(0.97, 0.98, 1.0), smoothstep(0.55, 0.95, n.y) * (0.8 + 0.2 * nFine)), snowF);
     col *= 1.0 - 0.32 * (1.0 - smoothstep(0.0, 0.35, above)) * (1.0 - snowF);
     // far away the river's own ribbon is under a pixel: its water is painted here
     col = mix(col, riverWater(ch.g), smoothstep(110.0, 320.0, vDist) * smoothstep(0.0, 0.25, ch.r));
     // close up: the grain of rock and rubble as a bump (Mikkelsen's surface gradient, as three's bump maps)
-    float hb = nFine * 0.7 + nMid * 0.3 + band * sed * 0.25;
-    float bump = (rockF + 0.6 * scree) * fine * (1.0 - snowF) * 1.4;
+    float hb = nFine * 0.7 + nMid * 0.3 + band * sed * 0.25 + ledge * 0.35 * ledgeAA;
+    float bump = (smoothstep(0.4, 0.9, rockF) + 0.6 * scree) * (1.0 - plants) * fine * (1.0 - snowF) * 1.4;
     vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
     float det = dot(dpx, r1);
     vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2) * bump;

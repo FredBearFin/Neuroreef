@@ -74,6 +74,21 @@ export function fromCells(w, riv, ctx) {
   const chains = [];
   for (let i = 0; i < n; i++) if (riv[i] && inDeg[i] !== 1) chains.push(trace(i));
   for (let i = 0; i < n; i++) if (riv[i] && !seen[i]) chains.push(trace(i));   // loops: none expected
+  // where the river spreads into a broad sheet of river cells (ctx.broad: drawn as standing water, a flat sheet at its
+  // level), its chains are cut: only the runs with a narrow end become ribbons
+  if (ctx.broad) {
+    const B = ctx.broad, cut = [];
+    for (const c of chains) {
+      let run = null;
+      for (let k = 0; k < c.cells.length - 1; k++) {
+        if (B[c.cells[k]] && B[c.cells[k + 1]]) { if (run) { cut.push(run); run = null; } continue; }
+        if (!run) run = { cells: [c.cells[k]], px: [c.px[k]], pz: [c.pz[k]] };
+        run.cells.push(c.cells[k + 1]); run.px.push(c.px[k + 1]); run.pz.push(c.pz[k + 1]);
+      }
+      if (run) cut.push(run);
+    }
+    chains.length = 0; chains.push(...cut);
+  }
   let seed = 0;
   for (const c of chains) {
     const m = c.cells.length; if (m < 2) continue;
@@ -137,7 +152,7 @@ function resample(r) {
   return o;
 }
 
-/** Smooth the level (still monotone) and measure the steepness: fall per unit length, 0 below 4 %, 1 above 15 %. */
+/** Smooth the level (still monotone) and measure the steepness: fall per unit length, 0 below 5 %, 1 above 25 %. */
 function finish(o) {
   const n = o.x.length, L = o.lvl.slice();
   for (let k = 0; k < n; k++) {
@@ -151,7 +166,7 @@ function finish(o) {
     const a = Math.max(0, k - 3), b = Math.min(n - 1, k + 3);
     let len = 0; for (let j = a; j < b; j++) len += Math.hypot(o.x[j + 1] - o.x[j], o.z[j + 1] - o.z[j]);
     const fall = len > 0 ? (o.lvl[a] - o.lvl[b]) / len : 0;
-    const t = Math.min(1, Math.max(0, (fall - 0.04) / 0.11));
+    const t = Math.min(1, Math.max(0, (fall - 0.05) / 0.2));
     o.steep.push(t * t * (3 - 2 * t));
   }
   return o;
@@ -234,8 +249,9 @@ export function patchRiverMaterial(m, U) {
         float a2 = texture(tNoise, vec2(vRiv.x * 0.11 - uTime * speed * 0.11, vRiv.y * 0.23 + 0.7)).r;
         float streak = a1 * 0.6 + a2 * 0.4;
         diffuseColor.rgb *= 0.9 + 0.22 * streak;
-        float foam = smoothstep(0.55, 0.75, streak + 0.35 * st) * smoothstep(0.15, 0.6, st);
-        foam = max(foam, smoothstep(0.75, 1.0, across) * smoothstep(0.2, 0.7, st) * a2);
+        float foam = smoothstep(0.58, 0.78, streak + 0.3 * st) * smoothstep(0.3, 0.8, st);
+        foam = max(foam, smoothstep(0.75, 1.0, across) * smoothstep(0.4, 0.9, st) * a2);
+        foam *= 1.0 - smoothstep(0.25, 0.8, fwidth(vRiv.x));   // white water is a close-up thing: none once it is under a pixel
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.96), foam * 0.85);
         diffuseColor.a = (1.0 - smoothstep(0.62, 1.0, across)) * mix(0.82, 0.97, foam);
       }`);

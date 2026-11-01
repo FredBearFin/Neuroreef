@@ -51,16 +51,17 @@ export function noise(u, v) {
   return ((a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy) / 255;
 }
 
-// three octaves of ridged noise, each rotated and offset so their grids never line up
-const OCT = [[1.0, 0.0, 0.0, 0.0, 0.55], [2.03, 0.6, 37.1, 11.7, 0.30], [4.11, 1.3, 71.3, 53.9, 0.15]];
+// three octaves, each rotated and offset so their grids never line up; the first ridged (sharp crests), the finer ones
+// plain (blocky knobs, not more creases)
+const OCT = [[1.0, 0.0, 0.0, 0.0, 0.55, 1], [2.03, 0.6, 37.1, 11.7, 0.30, 0], [4.11, 1.3, 71.3, 53.9, 0.15, 0]];
 
-/** Ridged multi-octave noise at a world position (x, z): sharp crests, 0..1, about 0.5 on average. */
+/** Crag noise at a world position (x, z): ridged crests with knobbly detail, 0..1. */
 export function ridged(x, z) {
   let s = 0;
-  for (const [f, r, ox, oz, a] of OCT) {
+  for (const [f, r, ox, oz, a, rg] of OCT) {
     const c = Math.cos(r), si = Math.sin(r), px = (c * x - si * z) * f + ox, pz = (si * x + c * z) * f + oz;
     const n = noise(px / (NOISE_UNIT * NOISE_N), pz / (NOISE_UNIT * NOISE_N));
-    s += a * (1 - Math.abs(2 * n - 1));
+    s += a * (rg ? 1 - Math.abs(2 * n - 1) : n);
   }
   return s;
 }
@@ -77,10 +78,10 @@ export const NOISE_GLSL = `
 float nzL(vec2 p) { return textureLod(tNoise, p, 0.0).r; }
 float ridgedNoise(vec2 w) {
   float s = 0.0; vec2 p; float n;
-  ${OCT.map(([f, r, ox, oz, a]) => `
+  ${OCT.map(([f, r, ox, oz, a, rg]) => `
   p = vec2(${Math.cos(r).toFixed(8)} * w.x - ${Math.sin(r).toFixed(8)} * w.y, ${Math.sin(r).toFixed(8)} * w.x + ${Math.cos(r).toFixed(8)} * w.y) * ${f.toFixed(4)} + vec2(${ox.toFixed(4)}, ${oz.toFixed(4)});
   n = nzL(p / ${(NOISE_UNIT * NOISE_N).toFixed(4)});
-  s += ${a.toFixed(4)} * (1.0 - abs(2.0 * n - 1.0));`).join('')}
+  s += ${a.toFixed(4)} * ${rg ? '(1.0 - abs(2.0 * n - 1.0))' : 'n'};`).join('')}
   return s;
 }
 `;

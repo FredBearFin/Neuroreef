@@ -10,7 +10,7 @@ export function patchLakeMaterial(m, U) {
     sh.vertexShader = 'varying vec3 vLakeWP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvLakeWP = position;');
     sh.fragmentShader = 'uniform float uTime;\nvarying vec3 vLakeWP;\n' + GLSL_COMMON + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       {
-        float dep = vLakeWP.y - groundTri(vLakeWP.xz).x;
+        float dep = vLakeWP.y - min(groundTri(vLakeWP.xz).x, carveCap(vLakeWP.xz));
         float n = texture(tNoise, vLakeWP.xz / 45.0 + vec2(uTime * 0.004, 0.0)).r;
         float foam = (1.0 - smoothstep(0.02, 0.16 + 0.12 * n, dep)) * smoothstep(-0.02, 0.02, dep);
         diffuseColor.a *= mix(0.15, 1.0, smoothstep(0.0, 0.5, dep));

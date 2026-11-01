@@ -35,7 +35,10 @@ export class Link {
         // standing water surface per cell (elevation x 65535, 0 = none; a server without the plane sends null: the sea level then)
         let surf = null;
         if (buf.byteLength >= 16 + 6 * n) { surf = new Uint16Array(n); for (let i = 0, o = 16 + 4 * n; i < n; i++, o += 2) surf[i] = dv.getUint16(o, true); }
-        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf });
+        // cave features (CaveKind bits) and cave courses per cell (2026-11-01; null from a server without the planes: no karst drawn)
+        const caves = buf.byteLength >= 16 + 7 * n ? new Uint8Array(buf, 16 + 6 * n, n) : null;
+        const caveCourse = buf.byteLength >= 16 + 8 * n ? new Uint8Array(buf, 16 + 7 * n, n) : null;
+        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse });
         break;
       }
       case T_AGENTS: {

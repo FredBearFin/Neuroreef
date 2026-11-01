@@ -10,6 +10,11 @@ import { OrbitControls } from '../lib/OrbitControls.js';
 import { agentState, agentGenes, REC } from './net.js';
 import { merge } from './creatures/kit.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBodies, bodySize, appearanceColor } from './creatures/body.js';
+import { Ground, CARVE_NONE } from './terrain/ground.js';
+import { fromWire, fromCells, stampRivers, ribbonGeometry, patchRiverMaterial, riverWidth, preparePath } from './terrain/rivers.js';
+import { decodeFeatures, stampFeatures, featureMeshes } from './terrain/caves.js';
+import { patchLakeMaterial } from './terrain/water.js';
+import { splitChunks, copyColors } from './terrain/chunks.js';
 
 // Vertical scale (2026-10-31). Elevation is 0..1 with the lakes at w.sea; Climate reads (e - sea) / (1 - sea) x H_RELIEF
 // (3000 m) as the height above the lakes. Geology measures slopes, drainage and hillslopes on a field cell of GEO_CELL_M
@@ -18,8 +23,10 @@ import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBod
 // degrees, under 33 almost everywhere. (Before Geology worked at this scale, 55 units drew 2-4 % plate-scale slopes as cliffs.)
 const RELIEF = 55;
 const SHADE_Z = 1;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
-const LAND_LIFT = 0.06;      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
-const RIVER_W0 = 1.1, RIVER_WMAX = 3.6;   // river ribbon width (units) at the river threshold, and the widest (a cell is 4)
+const LAND_LIFT = 0.06;
+const CHUNKS = 8;             // river ribbons and karst rocks are cut into CHUNKS x CHUNKS squares of the map ...
+const RIBBON_FAR = 420, KARST_FAR = 260;   // ... and drawn only within this distance of the camera (units)      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
+const RIVER_W0 = 1.0, RIVER_WMAX = 3.6;   // river water width (units) at the river threshold, and the widest (a cell is 4)
 export const SOUND_RGB = [[1, 0.35, 0.35], [1, 0.7, 0.25], [1, 0.95, 0.3], [0.45, 1, 0.45], [0.3, 0.95, 1], [0.4, 0.55, 1], [0.8, 0.45, 1], [1, 0.5, 0.85]];   // the 8 sounds
 const CALL_MAX = 768;         // call rings drawn at once (up to 3 per utterance)
 const FX_MAX = 256;           // fight flashes and blood stains drawn at once
@@ -89,50 +96,64 @@ export class World3D {
 
   // ------------------------------------------------------------------ terrain and water
   //
-  // Everything here draws what the WORLD and FIELDS frames hold, nothing else (2026-10-31):
-  // - ground: one vertex per cell at its elevation, RELIEF units for the sim's whole height range above the lakes;
+  // Everything here draws what the WORLD and FIELDS frames hold, nothing else (2026-10-31, 2026-11-01):
+  // - ground (terrain/ground.js): one height per cell at its elevation, RELIEF units for the sim's whole height range above
+  //   the lakes, drawn with a continuous level of detail (fine near the camera, coarse far away, one draw call), crags
+  //   on bare rock close up (bounded), and materials from the data (rock by kind, scree, snow, alluvium, beaches);
   // - standing water (the sea and every lake, each at its own level: the WORLD frame's surface plane, w.surf): a flat
   //   surface over the quads that touch a cell of it, at that water's level, so the shore is where the ground crosses
-  //   the level and nowhere else (a server without the plane: every water cell below w.sea, at the sea level);
-  // - rivers: ribbons along each river cell's course to the cell it drains to (the WORLD frame's river plane), as wide
-  //   as its flow gives, in a channel cut as deep as its depth;
+  //   the level and nowhere else (a server without the plane: every water cell below w.sea, at the sea level); it
+  //   fades out over its last half unit of depth, with a line of foam (terrain/water.js);
+  // - rivers (terrain/rivers.js): smooth curves through the river plane's cells (or the hydrology's own geometry when the
+  //   frame carries it), cut into the ground as channels as deep as their depth, as wide as their flow, foaming in steep
+  //   reaches;
+  // - caves, sinkholes and springs (terrain/caves.js) from the cave-features plane, when the frame carries it;
   // - ponds (FIELDS 'pond', Wet = 2) and flooded floodplains (FIELDS 'flood', Wet = 3): shallow water painted on the ground.
-  // The map is a torus: the ground is drawn as a 3x3 tiling so the view never runs out of land, but in the overview one
+  // The map is a torus: the ground is drawn over a 3x3 tiling so the view never runs out of land, but in the overview one
   // map's worth around the view centre is drawn in full, a thin line marks where the map wraps, the copies beyond it
   // are dimmed, and the tiling's outer edge fades into the background (no edge, skirt or underside ever shows).
 
   setWorld(w) {
     this._dropTerrain();
     this.world = w;
-    const fw = w.fw, N = fw + 1, S = this.W / fw, n = fw * fw, sea = w.sea, U = RELIEF / (1 - sea);
+    const fw = w.fw, S = this.W / fw, n = fw * fw, sea = w.sea, U = RELIEF / (1 - sea);
     const riv = this.riv = w.river || deriveRivers(w);
     const H = this.cellH = new Float32Array(n);                // ground height at each cell's vertex
     const SF = this.surfH = new Float32Array(n).fill(NaN);     // water surface there (NaN: dry ground)
     const lake = this.isLake = new Uint8Array(n);
+    // a river spread over a broad sheet of cells (4 or more of its 8 neighbours are water): drawn as standing water, a
+    // flat sheet over a shallow bed, not as a tangle of ribbons
+    const broad = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      if (!riv[i]) continue;
+      const x = i % fw, y = (i / fw) | 0; let c = 0;
+      for (let k = 0; k < 8; k++) if (w.cell[((y + DIRY[k] + fw) % fw) * fw + ((x + DIRX[k] + fw) % fw)] !== 1) c++;
+      broad[i] = c >= 4 ? 1 : 0;
+    }
     for (let i = 0; i < n; i++) {
       const h = (w.elev[i] / 255 - sea) * U;
       if (w.cell[i] === 1) H[i] = Math.max(0, h) + LAND_LIFT;   // land is never below the sea level (elevation is sent in 1/255 steps)
-      else if (riv[i]) {                                          // a river: its surface at the cell's level, its bed its depth below
+      else if (riv[i]) {                                          // a river: its surface at the cell's level (its channel is carved below)
         const top = Math.max(0, h) + LAND_LIFT;
-        H[i] = top - Math.max(0.12, (w.depth[i] / 2000) * U); SF[i] = top + 0.02;
+        H[i] = broad[i] ? top - 0.35 : top; SF[i] = top + 0.02;
       } else {                                                    // the sea or a lake: its bed, under its own level
         let s = w.surf && w.surf[i] ? (w.surf[i] / 65535 - sea) * U : 0;
         if (Math.abs(s) < 0.01) s = 0;                            // the sea (its level sent in 1/65535 steps): exactly 0 as ever
         H[i] = Math.min(h, s - 0.05); SF[i] = s; lake[i] = 1;
       }
     }
+    const at = (x, y) => (((y % fw) + fw) % fw) * fw + (((x % fw) + fw) % fw);
     // land beside standing water is never below its level (its 1/255 elevation steps could put a shore under an upland lake)
     if (w.surf) for (let i = 0; i < n; i++) {
       if (w.cell[i] !== 1) continue;
       const x = i % fw, y = (i / fw) | 0;
       for (let k = 0; k < 8; k++) {
-        const j = ((y + DIRY[k] + fw) % fw) * fw + ((x + DIRX[k] + fw) % fw);
+        const j = at(x + DIRX[k], y + DIRY[k]);
         if (lake[j] && H[i] < SF[j] + LAND_LIFT) H[i] = SF[j] + LAND_LIFT;
       }
     }
     // each quad is split along the diagonal its water follows (a river running diagonally stays in one channel)
     const D = this.diag = new Uint8Array(n);
-    const at = (x, y) => (((y % fw) + fw) % fw) * fw + (((x % fw) + fw) % fw);
     const wet = (i) => w.cell[i] !== 1;
     for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
       const a = at(x, y), b = at(x + 1, y), c = at(x, y + 1), d = at(x + 1, y + 1);
@@ -141,100 +162,99 @@ export class World3D {
       else if ((riv[b] && rb === 3) || (riv[c] && rc === 7)) D[a] = 0;
       else D[a] = wet(a) && wet(d) && !(wet(b) && wet(c)) ? 1 : 0;
     }
-    // ground mesh: lighting normals from the relief x SHADE_Z (a hillshade z-factor: the shape reads, the geometry stays true)
-    const pos = new Float32Array(N * N * 3), nor = new Float32Array(N * N * 3);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const i = at(x, y), k = (y * N + x) * 3;
-      pos[k] = x * S; pos[k + 1] = H[i]; pos[k + 2] = y * S;
-      const hx = (H[at(x + 1, y)] - H[at(x - 1, y)]) * SHADE_Z / (2 * S), hz = (H[at(x, y + 1)] - H[at(x, y - 1)]) * SHADE_Z / (2 * S);
-      const l = Math.hypot(hx, 1, hz); nor[k] = -hx / l; nor[k + 1] = 1 / l; nor[k + 2] = -hz / l;
+    // per cell: the smooth normal (shading), rockiness (steep, high or ridge ground: crags and bare rock), a halo of it
+    // (scree), and the level of standing water beside it (beaches)
+    const nx = new Float32Array(n), nz = new Float32Array(n), rock = new Float32Array(n), halo = new Float32Array(n), shore = new Float32Array(n);
+    const nearWater = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (w.cell[i] !== 1) { const x = i % fw, y = (i / fw) | 0; for (let k = 0; k < 8; k++) nearWater[at(x + DIRX[k], y + DIRY[k])] = 1; nearWater[i] = 1; }
+    for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
+      const i = y * fw + x, h = H[i];
+      const hx = (H[at(x + 1, y)] - H[at(x - 1, y)]) / (2 * S), hz = (H[at(x, y + 1)] - H[at(x, y - 1)]) / (2 * S);
+      const l = Math.hypot(hx, 1, hz); nx[i] = -hx / l; nz[i] = -hz / l;
+      const slope = Math.hypot(hx, hz), ea = h / RELIEF;
+      const lap = (H[at(x + 1, y)] + H[at(x - 1, y)] + H[at(x, y + 1)] + H[at(x, y - 1)] - 4 * h) / (S * S);
+      const r = Math.max(smooth(0.42, 0.85, slope), smooth(0.7, 0.95, ea) * smooth(0.1, 0.3, slope), smooth(0.04, 0.12, -lap) * smooth(0.2, 0.45, slope));
+      rock[i] = nearWater[i] ? 0 : r;
+      let s = -1e4;
+      for (let k = 0; k < 8; k++) { const j = at(x + DIRX[k], y + DIRY[k]); if (lake[j] && SF[j] > s) s = SF[j]; }
+      if (lake[i]) s = Math.max(s, SF[i]);
+      shore[i] = s;
     }
-    const idx = new Uint32Array(fw * fw * 6);
-    for (let y = 0, o = 0; y < fw; y++) for (let x = 0; x < fw; x++, o += 6) {
-      const a = y * N + x, b = a + 1, c = a + N, d = c + 1;
-      if (D[y * fw + x]) idx.set([a, c, d, a, d, b], o); else idx.set([a, c, b, b, c, d], o);
+    for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
+      let m = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) m = Math.max(m, rock[at(x + dx, y + dy)] * (1 - 0.15 * Math.max(Math.abs(dx), Math.abs(dy))));
+      halo[y * fw + x] = m;
     }
-    const tg = new THREE.BufferGeometry();
-    tg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    tg.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    tg.setIndex(new THREE.BufferAttribute(idx, 1));
-    this.tColor = new Float32Array(N * N * 3).fill(0.4);
-    tg.setAttribute('color', new THREE.BufferAttribute(this.tColor, 3));
-    // standing water: the quads touching a cell of the sea or a lake, flat at its level (the highest of the quad's water
-    // cells, where two waters meet); colour (by depth below that level) per corner cell
+    // channels, sinkholes, cave notches: a cap on the ground's height, CR texels per cell
+    const CR = fw <= 256 ? 4 : fw <= 512 ? 2 : 1, K = fw * CR;
+    const carve = new Float32Array(K * K).fill(CARVE_NONE), chan = new Uint8Array(K * K * 4), feat = new Uint8Array(K * K * 4);
+    const groundRaw = (x, z) => this._ground(x, z);
+    const ctx = {
+      S, fw, U, sea, SF, H, broad, lift: LAND_LIFT, ground: groundRaw, cellOf: (x, z) => this._cellOf(x, z),
+      widthOfClass: (c) => riverWidth(c, RIVER_W0, RIVER_WMAX), widthOf: (i) => riverWidth(riv[i] >> 3, RIVER_W0, RIVER_WMAX),
+      depthOf: (i) => Math.min(1.2, Math.max(0.15, (w.depth[i] / 2000) * U)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
+    };
+    const paths = fromWire(w, ctx) || fromCells(w, riv, ctx);
+    const feats = decodeFeatures(w, S, groundRaw);
+    const karst = stampFeatures(feats, {
+      carve, feat, fw, CR, S, groundRaw, cellOf: ctx.cellOf,
+      water: (x, z) => !!lake[this._cellOf(x, z)], isRiver: (x, z) => !!riv[this._cellOf(x, z)],
+    });
+    for (const p of karst.streams) paths.push(preparePath(p));
+    stampRivers(paths, carve, chan, fw, CR, S);
+    this.karst = { features: karst.placed.length, streams: karst.streams.length, rivers: paths.length };
+    this.ground = new Ground({ W: this.W, fw, S, H, diag: D, shore, rock, halo, nx, nz, CR, carve, chan, feat }, (m, key) => wrapPatch(m, this.wrapU, key));
+    this.scene.add(this.ground.mesh);
+    // standing water: the quads touching a cell of the sea, a lake or a broad river sheet, flat at its level (the highest
+    // of the quad's water cells, where two waters meet); colour (by depth below that level) per corner cell
     const lp = [], lv = [], ll = [];
     for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
       const cs = [at(x, y), at(x + 1, y), at(x, y + 1), at(x + 1, y + 1)];
       let L = -Infinity;
-      for (const c of cs) if (lake[c] && SF[c] > L) L = SF[c];
+      for (const c of cs) if ((lake[c] || broad[c]) && SF[c] > L) L = SF[c];
       if (L === -Infinity) continue;
-      lp.push(x * S, L, y * S, (x + 1) * S, L, y * S, x * S, L, (y + 1) * S, (x + 1) * S, L, (y + 1) * S); lv.push(...cs); ll.push(L, L, L, L);
+      // a lake's corners all stand at its level; a broad river's at each cell's own (its sheet slopes as the river falls)
+      const Y = cs.map((c) => broad[c] && !lake[c] ? SF[c] : L);
+      lp.push(x * S, Y[0], y * S, (x + 1) * S, Y[1], y * S, x * S, Y[2], (y + 1) * S, (x + 1) * S, Y[3], (y + 1) * S); lv.push(...cs); ll.push(...Y);
     }
     const lg = quadGeometry(lp, 4);
-    this.lakeVC = Int32Array.from(lv); this.lakeVL = Float32Array.from(ll); this.lakeColor = lg.attributes.color.array;
-    // rivers
-    const rg = this._riverGeometry(at, S);
-    this.rivColor = rg.attributes.color.array;
-    const tm = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.lakeVC = Int32Array.from(lv); this.lakeVL = Float32Array.from(ll); this.lakeColor = lg.attributes.color.array; this.lakeGeo = lg;
+    // rivers: their ribbons in chunks of the map, drawn within RIBBON_FAR of the camera (beyond it the ground paints them)
+    const rg = ribbonGeometry(paths);
+    this.rivVC = rg.userData.cells; this.rivColor = rg.attributes.color.array;
+    this.rivChunks = splitChunks(rg, this.W, CHUNKS); rg.dispose();
+    const WU = this.waterU = { ...this.ground.uniforms, uTime: { value: 0 } };
     // the lake surface loses depth ties to the ground (polygon offset away from the camera): low shores just above the
     // lake level never flicker through it
     const lm = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, shininess: 90, specular: 0x6688aa, depthWrite: false,
                                              polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
-    const rm = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 70, specular: 0x557799, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
-    for (const m of [tm, lm, rm]) wrapPatch(m, this.wrapU);
-    this.tiles = [];
+    patchLakeMaterial(lm, WU); wrapPatch(lm, this.wrapU, 'nr-lake-1');
+    const rm = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, depthWrite: false, shininess: 70, specular: 0x557799,
+                                             polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    patchRiverMaterial(rm, WU); wrapPatch(rm, this.wrapU, 'nr-river-1');
+    // the karst's rocks and spring pools, in chunks drawn within KARST_FAR
+    const fm = featureMeshes(karst.placed);
+    const km = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    wrapPatch(km, this.wrapU, 'nr-karst-rock');
+    const pm = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 90, specular: 0x6688aa, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    wrapPatch(pm, this.wrapU, 'nr-karst-pool');
+    const near = [[this.rivChunks, rm, RIBBON_FAR, 1]];
+    if (fm.rocks) { near.push([splitChunks(fm.rocks, this.W, CHUNKS), km, KARST_FAR, 0]); fm.rocks.dispose(); }
+    if (fm.pools) { near.push([splitChunks(fm.pools, this.W, CHUNKS), pm, KARST_FAR, 0]); fm.pools.dispose(); }
+    // per map copy: the standing water (whole), and the near-only chunks (each with its square and reach)
+    this.tiles = []; this.nearTiles = [];
     for (let k = 0; k < 9; k++) {
-      const t = new THREE.Mesh(tg, tm), wt = new THREE.Mesh(lg, lm), rt = new THREE.Mesh(rg, rm);
+      const wt = new THREE.Mesh(lg, lm), set = [wt], nearSet = [];
       wt.renderOrder = 2;
-      this.scene.add(t, wt, rt);
-      this.tiles.push([t, wt, rt]);
+      for (const [chunks, mat, far, order] of near) for (const ch of chunks) {
+        const m = new THREE.Mesh(ch.geo, mat); m.renderOrder = order;
+        set.push(m); nearSet.push([m, ch, far]);
+      }
+      this.scene.add(...set);
+      this.tiles.push(set); this.nearTiles.push(nearSet);
     }
-    this.N = N;
     this._paint(this.fields || null);
     if (this.fields) this._plants(true);
-  }
-
-  /** Ribbons along the rivers: a strip from each river cell to the cell it drains to, a disc at each cell to join the bends.
-   *  Width follows the flow (width ~ Q^0.5, Leopold & Maddock 1953), widened to read at the overview (RIVER_W0 at the
-   *  smallest river). Each point lies on the water surface or just above the ground, whichever is higher. */
-  _riverGeometry(at, S) {
-    const w = this.world, fw = w.fw, riv = this.riv, SF = this.surfH;
-    const P = [], C = [], I = [];
-    const width = (code) => Math.min(RIVER_WMAX, RIVER_W0 * Math.pow(2, (((code >> 3) || 1) - 1) / 8));
-    const put = (x, z, s, cell) => { P.push(x, Math.max(s, this._ground(x, z) + 0.06), z); C.push(cell); return P.length / 3 - 1; };
-    for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
-      const i = y * fw + x, code = riv[i]; if (!code) continue;
-      const k = code & 7, dx = DIRX[k], dy = DIRY[k], j = at(x + dx, y + dy);
-      const w0 = width(code), w1 = riv[j] ? width(riv[j]) : w0 * 1.3;
-      const s0 = SF[i], s1 = SF[j] === SF[j] ? SF[j] : s0;
-      const x0 = x * S, z0 = y * S, x1 = (x + dx) * S, z1 = (y + dy) * S, L = Math.hypot(x1 - x0, z1 - z0);
-      const px = -(z1 - z0) / L, pz = (x1 - x0) / L;
-      const M = 4; let prev = -1;
-      for (let m = 0; m <= M; m++) {
-        const t = m / M, cx = x0 + (x1 - x0) * t, cz = z0 + (z1 - z0) * t, hw = (w0 + (w1 - w0) * t) / 2, sl = s0 + (s1 - s0) * t;
-        const cell = t < 0.5 ? i : j;
-        const l = put(cx + px * hw, cz + pz * hw, sl, cell); put(cx - px * hw, cz - pz * hw, sl, cell);
-        if (prev >= 0) I.push(prev, prev + 1, l, l, prev + 1, l + 1);
-        prev = l;
-      }
-      // the joint: a disc of the river's width at the cell
-      const ctr = put(x0, z0, s0, i), seg = 10;
-      for (let m = 0; m < seg; m++) { const a = (m / seg) * Math.PI * 2; put(x0 + Math.cos(a) * w0 / 2, z0 + Math.sin(a) * w0 / 2, s0, i); }
-      for (let m = 0; m < seg; m++) I.push(ctr, ctr + 1 + ((m + 1) % seg), ctr + 1 + m);
-    }
-    // every triangle faces up (the strips and discs were wound whichever way their river runs)
-    for (let t = 0; t < I.length; t += 3) {
-      const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
-      if ((P[b + 2] - P[a + 2]) * (P[c] - P[a]) - (P[b] - P[a]) * (P[c + 2] - P[a + 2]) < 0) { const k = I[t + 1]; I[t + 1] = I[t + 2]; I[t + 2] = k; }
-    }
-    const g = new THREE.BufferGeometry(), nv = P.length / 3, nor = new Float32Array(nv * 3);
-    for (let v = 0; v < nv; v++) nor[v * 3 + 1] = 1;
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P), 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
-    g.setIndex(I);
-    this.rivVC = Int32Array.from(C);
-    return g;
   }
 
   _dropTerrain() {
@@ -243,9 +263,9 @@ export class World3D {
     for (const set of this.tiles) for (const m of set) { this.scene.remove(m); seen.add(m.geometry); seen.add(m.material); }
     for (const o of seen) o.dispose();
     this.tiles = null;
+    if (this.ground) { this.scene.remove(this.ground.mesh); this.ground.dispose(); this.ground = null; }
   }
-
-  /** Height of the drawn ground (its triangles) at a world position. */
+  /** Height of the sim's own surface (its triangles, before channels and crags) at a world position. */
   _ground(x, y) {
     const fw = this.world.fw, S = this.W / fw;
     const gx = ((x / S) % fw + fw) % fw, gy = ((y / S) % fw + fw) % fw;
@@ -257,10 +277,11 @@ export class World3D {
     return tx + ty <= 1 ? a + (b - a) * tx + (c - a) * ty : d + (c - d) * (1 - tx) + (b - d) * (1 - ty);
   }
 
-  /** Ground or water surface height at a world position (on the drawn triangles; at the water surface where there is water). */
+  /** Ground or water surface height at a world position (on the drawn ground, its channels and crags; at the water
+   *  surface where there is water). */
   heightAt(x, y, swim) {
     const w = this.world; if (!w) return 0;
-    const h = this._ground(x, y), sf = this.surfH[this._cellOf(x, y)];
+    const h = this.ground ? this.ground.heightAt(x, y, this.camera.position) : this._ground(x, y), sf = this.surfH[this._cellOf(x, y)];
     if (sf === sf) return swim ? Math.max(h, sf - 0.25) : Math.max(h, sf - 0.6);   // sf === sf: not NaN, a water cell
     return h;
   }
@@ -269,26 +290,30 @@ export class World3D {
 
   _layer(name) { return this.meta.fieldLayers.indexOf(name); }
 
+  /** The FIELDS frame onto the ground's textures (cover colour and plant density; snow, rock kinds, alluvium), the
+   *  lakes' and the rivers' colours. Rock, scree, snow and the rest are laid over the cover in the ground's shader. */
   _paint(f) {
-    const w = this.world; if (!w || !this.tiles) return;
-    const fw = w.fw, N = this.N, C = this.tColor;
-    const d = f ? f.d : 0, L = f ? (n) => f.data.subarray(this._layer(n) * d * d, (this._layer(n) + 1) * d * d) : null;
-    const grass = f && L('grass'), shrub = f && L('shrub'), tree = f && L('tree'), fire = f && L('fire'), moist = f && L('moisture'),
-          carrion = f && L('carrion'), algae = f && L('algae'), phyto = f && L('phyto'), nectar = f && L('nectar'), pond = f && L('pond'),
-          frozen = f && this._layer('frozen') >= 0 && L('frozen'), temp = f && this._layer('temp') >= 0 && L('temp'),
-          flood = f && this._layer('flood') >= 0 && L('flood');
-    const sea = w.sea;
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const cx = x % fw, cy = y % fw, i = cy * fw + cx, k = y * N + x;
-      const fi = f ? (cy >> 1) * d + (cx >> 1) : 0;
+    const w = this.world; if (!w || !this.tiles || !this.ground) return;
+    const fw = w.fw, C = this.ground.cover, M = this.ground.mat;
+    const d = f ? f.d : 0, L = f ? (n) => { const k = this._layer(n); return k >= 0 ? f.data.subarray(k * d * d, (k + 1) * d * d) : null; } : () => null;
+    const grass = L('grass'), shrub = L('shrub'), tree = L('tree'), fire = L('fire'), moist = L('moisture'),
+          carrion = L('carrion'), algae = L('algae'), phyto = L('phyto'), nectar = L('nectar'), pond = L('pond'),
+          frozen = L('frozen'), temp = L('temp'), flood = L('flood'),
+          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), allu = L('alluvium');
+    // the sim's snowpack when it sends one (the water cycle on); else snow where the air is below freezing
+    let hasSnow = false; if (snow) for (let k = 0; k < snow.length; k++) if (snow[k]) { hasSnow = true; break; }
+    const sea = w.sea, b8 = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
+    for (let i = 0; i < fw * fw; i++) {
+      const cx = i % fw, cy = (i / fw) | 0;
+      const fi = f ? Math.min(d - 1, cy >> 1) * d + Math.min(d - 1, cx >> 1) : 0;
       const e = w.elev[i] / 255, ea = Math.max(0, (e - sea) / (1 - sea));   // height above the lakes, 0..1
-      let r, g, b;
+      let r, g, b, plants = 0;
       if (!f) { r = 0.35 + ea * 0.2; g = 0.33 + ea * 0.15; b = 0.25; }
       else {
         const m = moist[fi] / 255, G = grass[fi] / 255, S = shrub[fi] / 255, T = tree[fi] / 255;
-        // bare soil: dry tan to moist dark earth; rock on the highest ground
+        plants = Math.min(1, 0.6 * G + 0.8 * S + T);
+        // bare soil: dry tan to moist dark earth
         r = 0.50 - 0.20 * m; g = 0.42 - 0.17 * m; b = 0.30 - 0.12 * m;
-        const rock = Math.max(0, (ea - 0.78) * 4); r += (0.55 - r) * rock; g += (0.55 - g) * rock; b += (0.56 - b) * rock;
         const dryG = 1 - m;
         const gr = 0.30 + 0.30 * dryG, gg = 0.58 - 0.12 * dryG, gb = 0.18;      // green grass, yellowing when dry
         r += (gr - r) * G; g += (gg - g) * G; b += (gb - b) * G;
@@ -297,11 +322,11 @@ export class World3D {
         const nc = nectar[fi] / 255; r += nc * 0.25; b += nc * 0.18;          // flowers
         const ca = carrion[fi] / 255; r += (0.35 - r) * ca * 0.5; g *= 1 - ca * 0.4; b *= 1 - ca * 0.4;
         // a seasonal pond holding water (Wet = 2; the layer is the share of the field cell's 4 cells): open water
-        if (pond && pond[fi] && w.cell[i] === 1) { const p = Math.min(1, 0.35 + pond[fi] / 255); r += (0.12 - r) * p; g += (0.30 - g) * p; b += (0.44 - b) * p; }
+        if (pond && pond[fi] && w.cell[i] === 1) { const p = Math.min(1, 0.35 + pond[fi] / 255); r += (0.12 - r) * p; g += (0.30 - g) * p; b += (0.44 - b) * p; plants *= 1 - p; }
         // a flooded floodplain (Wet = 3; the share of the field cell's 4 cells): shallow, silty water over the ground
-        if (flood && flood[fi] && w.cell[i] === 1) { const p = Math.min(0.9, 0.4 + 0.5 * flood[fi] / 255); r += (0.20 - r) * p; g += (0.36 - g) * p; b += (0.42 - b) * p; }
-        if (frozen && frozen[fi]) { const fr = 0.75 * frozen[fi] / 255; r += (0.92 - r) * fr; g += (0.94 - g) * fr; b += (0.97 - b) * fr; }   // frost and snow (Revision O)
-        if (fire[fi]) { r = 1.0; g = 0.42; b = 0.08; }
+        if (flood && flood[fi] && w.cell[i] === 1) { const p = Math.min(0.9, 0.4 + 0.5 * flood[fi] / 255); r += (0.20 - r) * p; g += (0.36 - g) * p; b += (0.42 - b) * p; plants *= 1 - p; }
+        if (frozen && frozen[fi]) { const fr = 0.3 * frozen[fi] / 255; r += (0.92 - r) * fr; g += (0.94 - g) * fr; b += (0.97 - b) * fr; }   // hoar frost (Revision O); snow is the shader's
+        if (fire[fi]) { r = 1.0; g = 0.42; b = 0.08; plants = 1; }
         if (this.tempOverlay && temp) {
           // air temperature: -40 °C deep blue, 5 °C white, 50 °C red
           const t = temp[fi] / 255, u = Math.min(1, Math.abs(t - 0.5) * 2);
@@ -309,12 +334,17 @@ export class World3D {
           r += (tr - r) * 0.7; g += (tg - g) * 0.7; b += (tb - b) * 0.7;
         }
       }
-      // a river cell is open water (the sim's realm: the whole cell): its ground is tinted wet, which keeps the river's
-      // course legible from far away, where its ribbon is a pixel or two
-      if (this.riv[i]) { r += (0.13 - r) * 0.55; g += (0.33 - g) * 0.55; b += (0.45 - b) * 0.55; }
-      C[k * 3] = r; C[k * 3 + 1] = g; C[k * 3 + 2] = b;
+      C[i * 4] = b8(r); C[i * 4 + 1] = b8(g); C[i * 4 + 2] = b8(b); C[i * 4 + 3] = b8(plants);
+      let sn = 0;
+      if (f && w.cell[i] === 1) {
+        if (hasSnow) sn = snow[fi] / 255;
+        else if (temp) sn = Math.min(1, Math.max(0, (-(temp[fi] / 255 * 90 - 40) - 0.5) / 5));
+      }
+      M[i * 4] = b8(sn); M[i * 4 + 1] = volc ? volc[fi] : 0; M[i * 4 + 2] = sedi ? sedi[fi] : 0; M[i * 4 + 3] = allu ? allu[fi] : 0;
     }
-    const fieldOf = (i) => f ? (((i / fw) | 0) >> 1) * d + ((i % fw) >> 1) : 0;
+    this.ground.coverUpdated(); this.ground.matUpdated();
+    this.ground.uniforms.uPlain.value = this.tempOverlay ? 1 : 0;
+    const fieldOf = (i) => f ? Math.min(d - 1, ((i / fw) | 0) >> 1) * d + Math.min(d - 1, (i % fw) >> 1) : 0;
     // lakes: shallow water turquoise, deep water dark blue (depth below the water's level at each corner); algae and plankton tint it green
     const LC = this.lakeColor, LV = this.lakeVC, LL = this.lakeVL;
     for (let v = 0; v < LV.length; v++) {
@@ -324,15 +354,16 @@ export class World3D {
       LC[v * 4 + 3] = 0.62 + 0.33 * dd;
       if (frozen && frozen[fi] && this.isLake[i]) { LC[v * 4] = 0.80; LC[v * 4 + 1] = 0.88; LC[v * 4 + 2] = 0.94; LC[v * 4 + 3] = 0.95; }   // pale ice (Revision O)
     }
-    // rivers: lighter where shallow, darker where deep (their depth in the WORLD frame)
+    // rivers: clear and light where small or shallow, deep green-blue where big and deep; algae tint them green
     const RC = this.rivColor, RV = this.rivVC, U = RELIEF / (1 - sea);
     for (let v = 0; v < RV.length; v++) {
-      const i = RV[v], fi = fieldOf(i), dd = Math.min(1, (w.depth[i] / 2000) * U / 0.6), al = f ? algae[fi] / 255 : 0;
-      RC[v * 3] = 0.20 - 0.10 * dd + 0.05 * al; RC[v * 3 + 1] = 0.52 - 0.16 * dd + 0.12 * al; RC[v * 3 + 2] = 0.66 - 0.10 * dd;
+      const i = RV[v], fi = fieldOf(i), al = f ? algae[fi] / 255 : 0;
+      const dd = Math.min(1, Math.max((w.depth[i] / 2000) * U / 0.6, (this.riv[i] >> 3) / 24));
+      RC[v * 3] = 0.24 - 0.15 * dd + 0.05 * al; RC[v * 3 + 1] = 0.52 - 0.20 * dd + 0.12 * al; RC[v * 3 + 2] = 0.58 - 0.12 * dd;
       if (frozen && frozen[fi]) { RC[v * 3] = 0.82; RC[v * 3 + 1] = 0.89; RC[v * 3 + 2] = 0.95; }
     }
-    const [t0, l0, r0] = this.tiles[0];
-    t0.geometry.attributes.color.needsUpdate = true; l0.geometry.attributes.color.needsUpdate = true; r0.geometry.attributes.color.needsUpdate = true;
+    this.lakeGeo.attributes.color.needsUpdate = true;
+    copyColors(this.rivChunks, RC, 3);
   }
 
   // ------------------------------------------------------------------ vegetation instances (LOD within a budget)
@@ -818,19 +849,30 @@ export class World3D {
     }
     const cx = c.x, cz = c.z;
 
-    // terrain tiles around the anchor
+    // the water and karst tiles around the anchor (each only if some of it is within fog distance of the camera), and
+    // the ground's level of detail for this view (terrain/ground.js: nodes of the same 3x3 tiling)
     const tx = Math.floor(cx / W), tz = Math.floor(cz / W);
     let k = 0;
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const set = this.tiles[k++];
       if (!set) continue;
-      const t = set[0];
-      t.position.set((tx + dx) * W, 0, (tz + dz) * W);
-      // draw a tile only if some of it is within fog distance of the camera
-      const qx = Math.max(t.position.x, Math.min(this.camera.position.x, t.position.x + W));
-      const qz = Math.max(t.position.z, Math.min(this.camera.position.z, t.position.z + W));
+      const ox = (tx + dx) * W, oz = (tz + dz) * W;
+      const qx = Math.max(ox, Math.min(this.camera.position.x, ox + W)), qz = Math.max(oz, Math.min(this.camera.position.z, oz + W));
       const vis = Math.hypot(qx - this.camera.position.x, qz - this.camera.position.z) < this.scene.fog.far;
-      for (const o of set) { o.position.copy(t.position); o.visible = vis; }
+      for (const o of set) { o.position.set(ox, 0, oz); o.visible = vis; }
+      // ribbons and karst only near the camera
+      if (vis) for (const [m, ch, far] of this.nearTiles[k - 1]) {
+        const x0 = ox + ch.x0, z0 = oz + ch.z0;
+        const ddx = Math.max(x0 - this.camera.position.x, 0, this.camera.position.x - x0 - ch.size), ddz = Math.max(z0 - this.camera.position.z, 0, this.camera.position.z - z0 - ch.size);
+        m.visible = Math.hypot(ddx, ddz) < far;
+      }
+    }
+    if (this.ground) {
+      const tf = this._tFrustum ||= new THREE.Frustum();
+      this.camera.updateMatrixWorld();
+      tf.setFromProjectionMatrix((this._tpv ||= new THREE.Matrix4()).multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
+      this.ground.update(this.camera, tf, tx, tz, this.scene.fog.far);
+      this.waterU.uTime.value = now / 1000;
     }
     // the wrap: shown in the overview once the view takes in a good part of the map, invisible close up
     {
@@ -1045,8 +1087,13 @@ function quadGeometry(pos, colorSize) {
  * seam, and from 0.8 to 0.98 of a map away everything fades into the background, so the tiling's outer edge (where the
  * ground would end) never shows. U's uniform objects are shared, so setting them once a frame updates every material.
  */
-function wrapPatch(mat, U) {
-  mat.onBeforeCompile = (sh) => {
+function wrapPatch(mat, U, key) {
+  // it runs after any shader additions the material already has (the terrain's), and names the result for three's
+  // program cache (two materials with different additions must never share a program)
+  const prev = mat.onBeforeCompile;
+  if (key) mat.customProgramCacheKey = () => key + '+wrap';
+  mat.onBeforeCompile = (sh, r) => {
+    prev.call(mat, sh, r);
     Object.assign(sh.uniforms, U);
     sh.vertexShader = 'varying vec2 vWrapXZ;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       {

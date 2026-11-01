@@ -1,13 +1,15 @@
 // Caves, sinkholes and springs (2026-11-01): drawn from the karst data once the server sends it; nothing without it.
 //
-// PLACEHOLDER INTERFACE (until the caves expert's Wire field lands; net.js decodes it into the world object). Either:
-//  a) w.caves = Uint8Array(FW²), a per-cell WORLD plane: 0 = nothing; bits 0-1 the kind (1 cave entrance, 2 sinkhole
-//     or doline, 3 spring); bits 2-4 a direction code as the river plane's (0 +x, 1 +x+y, 2 +y, 3 -x+y, 4 -x, 5 -x-y,
-//     6 -y, 7 +x-y): the way a cave mouth faces or a spring's water leaves; bits 5-7 a size class s (radius 0.8 + 0.4 s
-//     units, a cell being 4);
-//  b) w.caves = [{ kind: 'cave' | 'sinkhole' | 'spring' (or 1 | 2 | 3), x, y (world units), dir?: radians (0 = +x, pi/2
-//     = +y; default: downhill), r?: radius in units (default 1.6) }, ...].
-// Anything else (or nothing) draws no karst. A feature on standing water is skipped.
+// The data (ICD WORLD frame, decoded by net.js):
+//  a) w.caves = Uint8Array(FW²), the cave-features plane (World.CaveKind bits, Caves.cs): 1 karst passage, 2 lava tube
+//     (both underground: not drawn here), 4 sinkhole, 8 entrance, 16 karst spring, 32 losing river, 64 ponor; and
+//     w.caveCourse, the conduit plane (bits 3-7 a size class, used for the size of springs and entrances on a conduit).
+//     An entrance on a slope is drawn as a mouth facing downhill; on the flat (a lava-tube skylight) as a pit with an
+//     open throat; a sinkhole with an entrance (a collapse doline) as a bowl with an open throat; a ponor as a small
+//     sinkhole with an open throat;
+//  b) for tests and future data, w.caves = [{ kind: 'cave' | 'sinkhole' | 'spring' (or 1 | 2 | 3), x, y (world units),
+//     dir?: radians (0 = +x, pi/2 = +y; default: downhill), r?: radius in units (default 1.6) }, ...].
+// Anything else (or nothing: a server without the plane) draws no karst. A feature on standing water is skipped.
 //
 // How each is drawn:
 // - cave entrance: a notch cut into the slope (a flat floor, a steep back wall: the carve texture), the wall's arch
@@ -32,10 +34,18 @@ export function decodeFeatures(w, S, groundRaw) {
   };
   if (ArrayBuffer.isView(src)) {
     const fw = w.fw; if (src.length < fw * fw) return out;
+    const course = w.caveCourse && w.caveCourse.length >= fw * fw ? w.caveCourse : null;
     for (let i = 0; i < fw * fw; i++) {
-      const v = src[i], kind = v & 3; if (!kind) continue;
-      const d = (v >> 2) & 7, s = v >> 5, x = (i % fw) * S, z = ((i / fw) | 0) * S;
-      out.push({ kind, x, z, dir: Math.atan2(DIRY[d], DIRX[d]), r: 0.8 + 0.4 * s });
+      const v = src[i]; if (!(v & (4 | 8 | 16 | 64))) continue;
+      const x = (i % fw) * S, z = ((i / fw) | 0) * S, cls = course ? course[i] >> 3 : 0;
+      const big = 1 + Math.min(0.8, cls / 20);      // a mouth or spring on a big conduit is bigger
+      const e = 1.5, gx = groundRaw(x + e, z) - groundRaw(x - e, z), gz = groundRaw(x, z + e) - groundRaw(x, z - e);
+      const slope = Math.hypot(gx, gz) / (2 * e), dir = Math.atan2(-gz, -gx);
+      if (v & 8) {
+        if ((v & 4) || slope < 0.12) out.push({ kind: 2, x, z, dir, r: (v & 4 ? 2.2 : 1.3) * big, open: true });   // collapse doline, skylight
+        else out.push({ kind: 1, x, z, dir, r: 1.5 * big });
+      } else if (v & 4) out.push({ kind: 2, x, z, dir, r: v & 64 ? 1.4 : 1.9, open: !!(v & 64) });
+      if (v & 16) out.push({ kind: 3, x: x + Math.cos(dir) * 1.2, z: z + Math.sin(dir) * 1.2, dir, r: 1.4 * big });
     }
   } else if (Array.isArray(src)) {
     for (const f of src) {
@@ -88,7 +98,8 @@ export function stampFeatures(feats, ctx) {
         const d = Math.hypot(dx, dz);
         const cap = d < r ? rim - dep * (1 - (d / r) ** 2) : rim + 1.2 * (d - r);
         if (cap < carve[t]) carve[t] = cap;
-        if (d < r * 1.1) { const v = Math.round(Math.min(1, 1.1 - d / r) * 255); if (v > feat[t * 4 + 1]) feat[t * 4 + 1] = v; }
+        // the bowl darkens inward; only an open one (a ponor, a collapse into a cave) has a black throat
+        if (d < r * 1.1) { const v = Math.round(Math.min(f.open ? 1 : 0.7, 1.1 - d / r) * 255); if (v > feat[t * 4 + 1]) feat[t * 4 + 1] = v; }
       });
       placed.push({ ...f, rim });
     } else {
@@ -146,14 +157,13 @@ export function featureMeshes(placed) {
   const rock = (x, y, z, sx, sy, sz, rot, shade, seed) => {
     const g = new THREE.IcosahedronGeometry(1, 1);
     const p = g.attributes.position;
-    for (let v = 0; v < p.count; v++) {   // lumpy: each vertex pushed in or out
-      const k = 0.75 + 0.5 * hashf(seed * 31 + v, seed);
+    for (let v = 0; v < p.count; v++) {   // lumpy: each corner pushed in or out (by its position: faces sharing it stay joined)
+      const k = 0.75 + 0.5 * hashf(Math.round(p.getX(v) * 97) * 7919 + Math.round(p.getY(v) * 97) + seed * 131, Math.round(p.getZ(v) * 97));
       p.setXYZ(v, p.getX(v) * k, p.getY(v) * k, p.getZ(v) * k);
     }
-    g.deleteAttribute('normal'); g.computeVertexNormals();
-    const ng = g.toNonIndexed(); g.dispose(); ng.computeVertexNormals();
+    const ng = g; ng.computeVertexNormals();   // non-indexed: flat, faceted normals
     ng.scale(sx, sy, sz); ng.rotateY(rot); ng.translate(x, y, z);
-    rocks.push([ng, [0.36 * shade, 0.33 * shade, 0.30 * shade]]);
+    rocks.push([ng, [0.20 * shade, 0.185 * shade, 0.17 * shade]]);
   };
   let seed = 1;
   for (const f of placed) {
