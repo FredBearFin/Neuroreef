@@ -27,8 +27,8 @@ jobs:
         run: dotnet test tests/Neuroreef.Tests -c Release
 
   publish:
-    needs: test
-    if: ${{ !cancelled() && (needs.test.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.skip_tests)) }}
+    # runs alongside the tests, not after them, so a download is ready in ~15 minutes; check the test jobs' result
+    # before trusting a build (the owner, 2026-11-01: "I want a download as soon as possible")
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
