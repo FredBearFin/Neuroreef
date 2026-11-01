@@ -187,18 +187,121 @@ public static class Life
         // with a climate, a day here costs what this body pays at the temperature around it (Revision P): its basal
         // cost at its core temperature, and the heat it must make to keep its core where its endothermy holds it
         if (Climate.On) need = MathF.Max(1e-6f, (float)(heatNeed / n));
+        // the food the animals already living in the range make (2026-11-01): their production as prey, their bodies
+        // as carrion and their dung (AnimalFood). Before, only growing plant food counted, so an ancestor that eats
+        // mostly meat, carrion or dung was never founded: no prey existed when it was tested
+        var an = AnimalFood(w, c, hx, hy, r, realm, diet, need);
         // how fast it can eat: one bite a step, of what stands in a cell once grazed to half (the stock of the
         // maximum sustained yield), and no faster than its gut passes food (a Holling type II limit). It must
-        // cover FORAGE_MARGIN days of need, as a naive forager spends most steps doing other things than eating
-        float rate = 0f;
+        // cover FORAGE_MARGIN days of need, as a naive forager spends most steps doing other things than eating.
+        // (2026-11-01) A kind of food counts only if it could live on it so: plant food (and what falls from plants and
+        // animals into the water), prey, carrion and dung each. Before, the energy of every food was counted once any one
+        // passed, so a meat-eater could be founded on plants its gut cannot pass fast enough to live on
+        float margin = K.FORAGE_MARGIN * need, rate = 0f;
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
             float pass = MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(stock[p] / n));
             rate = MathF.Max(rate, MathF.Min(w.PAbsorb[c], diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
-        if (rate < K.FORAGE_MARGIN * need) return 0f;
-        return (float)(y / need);
+        double fed = rate >= margin ? y + an.Detritus : 0;
+        // a kill goes into the gut whole, as much of it as fits (Resolve.Strike), and passes as fast as the gut digests
+        if (an.MeatKg > 0f && MathF.Min(w.PAbsorb[c], diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(w.PDig[c], w.PGut[c]), an.MeatKg)) >= margin)
+            fed += an.Meat;
+        // carrion and dung are bitten from what lies about: their stock where nothing eats them is inflow over rot
+        // (per cell of the range), and a forager finds it half eaten, as plants are
+        if (an.CarrionKg > 0 && MathF.Min(w.PAbsorb[c], diet[(int)Pool.Carrion] * K.RHO_CARRION * MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(an.CarrionKg / K.ROT_CARRION / n))) >= margin)
+            fed += an.Carrion;
+        if (an.DungKg > 0 && MathF.Min(w.PAbsorb[c], diet[(int)Pool.Dung] * K.RHO_DUNG * MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(an.DungKg / K.ROT_DUNG / n))) >= margin)
+            fed += an.Dung;
+        return (float)(fed / need);
+    }
+
+    /// <summary>
+    /// The body mass (kg) organism j makes in a step, from its own life history (2026-11-01): a juvenile grows the rest of
+    /// its adult mass over its maturation (PMature); an adult that bears young makes a litter of its birth share of its mass
+    /// each breeding cycle (gestation and cooldown); a male, nothing of its own. This is a fed animal's rate: the
+    /// production of a population below its carrying capacity, as the founders are.
+    /// </summary>
+    public static float BodyMade(World w, int j)
+    {
+        if (w.StageOf[j] == St.Juvenile) return (1f - w.PBirth[j]) * w.PM[j] / MathF.Max(1f, w.PMature[j]);
+        if (w.PSexual[j] != 0 && w.PHerm[j] == 0 && w.Sex[j] != 0) return 0f;
+        return w.PLitter[j] * w.PBirth[j] * w.PM[j] / MathF.Max(1f, w.PGest[j] + w.PCool[j]);
+    }
+
+    /// <summary>What the animals in a range make as food for one organism (Life.AnimalFood): energy per step from live
+    /// prey, carrion on land, dung on land and the carcasses and dung that fall into the water as detritus; and the
+    /// mean edible carcass of its catchable prey (kg) and the carrion and dung inflow on land (kg per step).</summary>
+    public struct AnimalYield { public double Meat, Carrion, Dung, Detritus, CarrionKg, DungKg; public float MeatKg; }
+
+    /// <summary>
+    /// The energy per step organism c could take, year in and year out, from the animals already living within r of
+    /// (hx, hy) in cells it can live and breathe in (2026-11-01). Each animal's production is the body it makes from its
+    /// own life history (BodyMade), at TISSUE_E a kilogram.
+    /// <list type="bullet">
+    /// <item>Live prey: it must strike at all and digest meat. It can take a prey while its strike power (strike x mass,
+    /// Resolve.Strike) is not less than the prey's counterblow (its strike x its mass), so a miss does not wound it:
+    /// all of a weaker prey's production, and of a stronger one the share it makes while still small enough (power over
+    /// the adult's counterblow, as the counterblow grows with the body). It eats, at its meat efficiency, the intake that
+    /// would make TROPHIC_EFF of that production into its own production at its own production efficiency (the young a
+    /// population of adults like it bears, against that plus its day's need: 1-5% for the founders' bodies, as mammals'
+    /// 1-3%; Begon, Townsend &amp; Harper, Ecology), and never more than the edible tissue (CarcassKg) of that production.</item>
+    /// <item>Carrion: every body dies at last, and in a steady population as much dies as is made (production over
+    /// biomass equals the mortality rate; Allen 1971): the edible tissue of what it makes falls as carrion on land,
+    /// detritus in water (Resolve.Die), counted at its inflow as plant litter is (Plants.Yield).</item>
+    /// <item>Dung: what each animal's gut leaves of the food that pays its day (FIELD_METAB x basal, eaten at its best
+    /// food's energy and efficiency), dung on land, detritus in water, at its inflow.</item>
+    /// </list>
+    /// Nothing is counted for an animal of c's own clade.
+    /// </summary>
+    public static AnimalYield AnimalFood(World w, int c, float hx, float hy, float r, Realm realm, ReadOnlySpan<float> diet, float need)
+    {
+        var a = new AnimalYield();
+        double preyKg = 0, preyProd = 0, preyEdible = 0, nPrey = 0;
+        float power = w.PStrike[c] * w.PM[c];
+        bool strikes = w.PStrike[c] > 0f && diet[(int)Pool.Meat] > 0f;
+        int clade = w.Spc[c];
+        for (int j = 0; j < w.Cap; j++)
+        {
+            if (j == c || w.StageOf[j] < St.Juvenile || w.Spc[j] == clade) continue;
+            float dx = World.Delta1(w.X[j] - hx), dy = World.Delta1(w.Y[j] - hy);
+            if (dx * dx + dy * dy > r * r) continue;
+            int cell = World.FIdx(w.X[j], w.Y[j]);
+            if (!w.CellAllows(c, cell, realm) || !Respiration.Breathable(w, c, cell)) continue;
+            bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
+            float made = BodyMade(w, j);                    // body mass it makes a step, kg
+            float madeKg = Resolve.CarcassKg(made, 0f);     // the edible tissue of it, in kg of meat
+            if (strikes)
+            {
+                float back = w.PStrike[j] * w.PM[j];
+                float share = back <= power ? 1f : power / back;   // the share of its growth it makes while weaker than c
+                preyProd += share * K.TISSUE_E * made;
+                preyEdible += share * K.RHO_MEAT * madeKg;
+                preyKg += share * Resolve.CarcassKg(share * w.MassOf(j), 0f); nPrey += share;
+            }
+            // what is made dies at last (in a steady population deaths match production): carrion on land, detritus in water
+            if (water) a.Detritus += diet[(int)Pool.Detritus] * K.RHO_DETRITUS * madeKg;
+            else { a.Carrion += diet[(int)Pool.Carrion] * K.RHO_CARRION * madeKg; a.CarrionKg += madeKg; }
+            // its dung: the food that pays its day, at its best food's energy and efficiency, less what it absorbs
+            var dj = w.DietOf(j);
+            float best = 0f, bestEff = 0f;
+            for (int p = 0; p < Pools.N; p++) if (dj[p] * Pools.Rho[p] > best) { best = dj[p] * Pools.Rho[p]; bestEff = dj[p]; }
+            if (best <= 0f) continue;
+            float waste = K.FIELD_METAB * w.PBasal[j] / best * (1f - bestEff);   // kg per step
+            if (water) a.Detritus += diet[(int)Pool.Detritus] * K.RHO_DETRITUS * waste;
+            else { a.Dung += diet[(int)Pool.Dung] * K.RHO_DUNG * waste; a.DungKg += waste; }
+        }
+        if (nPrey > 0)
+        {
+            a.MeatKg = (float)(preyKg / nPrey);
+            // its own production per step: a population of adults like it, half of them mothers if the sexes are separate
+            float mothers = w.PSexual[c] != 0 && w.PHerm[c] == 0 ? 0.5f : 1f;
+            double own = K.TISSUE_E * mothers * w.PLitter[c] * w.PBirth[c] * w.PM[c] / MathF.Max(1f, w.PGest[c] + w.PCool[c]);
+            double eps = K.TROPHIC_EFF * preyProd * (own + need) / own;      // the intake that makes TROPHIC_EFF of theirs its own
+            a.Meat = Math.Min(eps, diet[(int)Pool.Meat] * preyEdible);
+        }
+        return a;
     }
 
     /// <summary>A day of living for organism c in a cell: FIELD_METAB x basal at its core temperature, plus the heat it must make (Revision P).</summary>
@@ -214,13 +317,15 @@ public static class Life
     /// <summary>
     /// The home range of a founding lineage like organism c (Revision P): from HOME_R of the map side, widened step by
     /// step up to HOME_R_MAX until it can feed FOUND_MIN founders at FOUND_FILL. A big body needs a big range, as home
-    /// ranges grow about in proportion to body mass (Kelt &amp; Van Vuren 2001). Returns the radius; cap its capacity.
+    /// ranges grow about in proportion to body mass (Kelt &amp; Van Vuren 2001), and a predator's about ten times a plant
+    /// eater's of its size, from scarcer food (Jetz et al. 2004). (2026-11-01) A range that feeds none is widened too:
+    /// a meat-eater's prey live in the other lineages' ranges, and it fed none in its own. Returns the radius; cap its capacity.
     /// </summary>
     public static float RangeFor(World w, int c, float hx, float hy, out float cap)
     {
         float r = K.HOME_R * Map.W;
         cap = RangeCapacity(w, c, hx, hy, r);
-        while (cap > 0f && K.FOUND_FILL * cap < K.FOUND_MIN && r < K.HOME_R_MAX * Map.W)
+        while (K.FOUND_FILL * cap < K.FOUND_MIN && r < K.HOME_R_MAX * Map.W)
         {
             r = MathF.Min(r * 1.25f, K.HOME_R_MAX * Map.W);
             cap = RangeCapacity(w, c, hx, hy, r);

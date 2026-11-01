@@ -28,16 +28,42 @@ public sealed class EcoWatch
     double _sNpp, _sNppHerb, _sOff, _sIn0, _sIn1, _sIn2, _sP1, _sP2, _sSteps, _sBio1, _sBio2, _sN1, _sN2, _nS, _sMeat, _sCarrion;
 
     void Line(string l) { Series.AppendLine(l); Console.WriteLine(l); }
+    // clades founded as eaters of animal food (most of their founders get the most energy per kg from meat, blood,
+    // carrion or dung: Simulation.EatsAnimalFood), and the feeding census's juvenile strikes and kills at the last sample
+    readonly bool[] _animalFounded = new bool[K.CLADES];
+    double _jStr, _jSteps; long _jKilled;
 
-    public EcoWatch(World w)
+    public EcoWatch(Simulation sim)
     {
+        var w = sim.W;
         for (int i = 0; i < Map.FW * Map.FW; i++) if ((w.Cell[i] & (byte)Realm.Land) != 0) _land++;
         _moist = new double[Map.FW * Map.FW]; _tree = new double[Map.FW * Map.FW];
         _landKm2 = _land * (K.GEO_CELL_M / 1000.0) * (K.GEO_CELL_M / 1000.0);
         Reset(w);
         Series.AppendLine($"ECO: land {_land} cells = {_landKm2:F0} km2 (map {Map.FW * K.GEO_CELL_M / 1000.0:F1} km); one energy unit = {K.BMR_W * K.STEP_S / K.C_BASAL / 1e6:F2} MJ");
         Series.AppendLine($"ECO: a unit of plant cover is {K.PLANT_KG_M2} kg dry/m2 at {K.PLANT_KJ_G} kJ/g ({Pools.Kg[(int)Pool.Grass]:F0} kg of food per unit in a {K.GEO_CELL_M} m cell)");
-        Series.AppendLine("ECO   step  alive  | herbiv n  kg/km2 | omniv n kg/km2 | carniv n kg/km2 | detr n | green kg/m2 herb woody | NPP kgdry/m2/yr offtake% | P2/NPP  P3/P2 | infected% | deaths: starve thirst killed disease old other");
+        // the founding (2026-11-01): each clade's founders, their mean mass, the food they get most energy from, and
+        // whether its ancestor was tested after the others, on the animals living in its range
+        var nF = new int[K.CLADES]; var nA = new int[K.CLADES]; var mF = new double[K.CLADES]; var best = new double[K.CLADES * Pools.N];
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] == St.Dead) continue;
+            int s = w.Spc[i]; nF[s]++; mF[s] += w.PM[i]; if (Simulation.EatsAnimalFood(w, i)) nA[s]++;
+            var d = w.DietOf(i); for (int p = 0; p < Pools.N; p++) best[s * Pools.N + p] += d[p] * Pools.Rho[p];
+        }
+        int fa = 0, fc = 0;
+        var fl = new StringBuilder("ECO FOUNDING: clade founders mean-mass best-food(E/kg) [A = most get the most from animal food, W = tested after the others]:");
+        for (int s = 0; s < K.CLADES; s++)
+        {
+            if (nF[s] == 0) continue;
+            fc++; _animalFounded[s] = 2 * nA[s] > nF[s]; if (_animalFounded[s]) fa++;
+            int bp = 0; for (int p = 1; p < Pools.N; p++) if (best[s * Pools.N + p] > best[s * Pools.N + bp]) bp = p;
+            fl.Append($"  {w.Sp[s].Name} {nF[s]} {mF[s] / nF[s]:F2}kg {Pools.Names[bp]}({best[s * Pools.N + bp] / nF[s]:F2}){(_animalFounded[s] ? " A" : "")}{(sim.WaitedClades.Contains(s) ? " W" : "")}");
+        }
+        Series.AppendLine(fl.ToString());
+        Series.AppendLine($"ECO FOUNDING: {fc} clades founded, {fa} of them animal-food eaters; {sim.WaitedClades.Count} ancestors tested after the others");
+        Console.WriteLine(fl.ToString()); Console.WriteLine($"ECO FOUNDING: {fc} clades founded, {fa} of them animal-food eaters; {sim.WaitedClades.Count} ancestors tested after the others");
+        Series.AppendLine("ECO   step  alive  | herbiv n  kg/km2 | omniv n kg/km2 | carniv n kg/km2 | detr n | green kg/m2 herb woody | NPP kgdry/m2/yr offtake% | P2/NPP  P3/P2 | infected% | deaths: starve thirst killed disease old other | clades alive (carn by intake, animal-founded) | juvenile strikes/step, killed");
     }
 
     void Reset(World w)
@@ -120,8 +146,18 @@ public sealed class EcoWatch
         var dc = new long[Cause.N];
         for (int s = 0; s < w.NS; s++) for (int c = 0; c < Cause.N; c++) dc[c] += T.Deaths[s * Cause.N + c] - _deaths[s * Cause.N + c];
         long other = dc.Sum() - dc[Cause.Starve] - dc[Cause.Thirst] - dc[Cause.Killed] - dc[Cause.Disease] - dc[Cause.Old];
+        int cAlive = 0, cCarn = 0, cAnimal = 0;
+        for (int s = 0; s < w.NS; s++) { if (sim.ActiveCount[s] <= 0) continue; cAlive++; if (grp[s] == 2) cCarn++; if (s < K.CLADES && _animalFounded[s]) cAnimal++; }
+        string juv = "";
+        if (Diag.D is { } dg)
+        {
+            double str = dg.StrTry[2] + dg.StrTry[3], st = dg.Steps[2] + dg.Steps[3];
+            long kd = dg.Deaths[2 * Cause.N + Cause.Killed] + dg.Deaths[3 * Cause.N + Cause.Killed];
+            juv = $" | {(st - _jSteps > 0 ? (str - _jStr) / (st - _jSteps) : 0),6:P2} {kd - _jKilled,5}";
+            _jStr = str; _jSteps = st; _jKilled = kd;
+        }
         double P2 = prE[0] + prE[1] * 0.5, P3 = prE[2] + prE[1] * 0.5;
-        Line($"ECO {w.Step,6} {alive,6}  | {n[0],7} {bio[0] / _landKm2,7:F1} | {n[1],6} {bio[1] / _landKm2,6:F1} | {n[2],7} {bio[2] / _landKm2,7:F2} | {n[3],5} | {herb / _land,6:F3} {browse / _land,6:F3} | {prod / years / _land * K.PLANT_KG_M2,9:F3}  {(prod > 0 ? 100 * off / prod : 0),8:F2} | {(nppE > 0 ? P2 / nppE : 0),6:P2} {(P2 > 0 ? P3 / P2 : 0),6:P1} | {(alive > 0 ? 100.0 * infected / alive : 0),8:F1} | {dc[Cause.Starve],6} {dc[Cause.Thirst],6} {dc[Cause.Killed],6} {dc[Cause.Disease],7} {dc[Cause.Old],4} {other,5}{topS}");
+        Line($"ECO {w.Step,6} {alive,6}  | {n[0],7} {bio[0] / _landKm2,7:F1} | {n[1],6} {bio[1] / _landKm2,6:F1} | {n[2],7} {bio[2] / _landKm2,7:F2} | {n[3],5} | {herb / _land,6:F3} {browse / _land,6:F3} | {prod / years / _land * K.PLANT_KG_M2,9:F3}  {(prod > 0 ? 100 * off / prod : 0),8:F2} | {(nppE > 0 ? P2 / nppE : 0),6:P2} {(P2 > 0 ? P3 / P2 : 0),6:P1} | {(alive > 0 ? 100.0 * infected / alive : 0),8:F1} | {dc[Cause.Starve],6} {dc[Cause.Thirst],6} {dc[Cause.Killed],6} {dc[Cause.Disease],7} {dc[Cause.Old],4} {other,5} | {cAlive,3} ({cCarn}, {cAnimal}){juv}{topS}");
         if (w.Step <= From) _cellProd0 = (float[])t.CellProd.Clone();
         else for (int i = 0; i < Map.FW * Map.FW; i++) { _moist[i] += w.Moisture[i]; _tree[i] += w.Tree[i]; }
         if (w.Step > From)

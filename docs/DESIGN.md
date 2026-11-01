@@ -742,6 +742,42 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   range can feed FOUND_MIN founders and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
   digestion rate, must give FORAGE_MARGIN days' need (a Holling type II limit). Nothing chooses a diet or a size: a
   20-unit nectar eater, a water animal with a grass diet or a meat-eater with nothing to eat is simply never an ancestor.
+- *Founding on the food animals make (2026-11-01).* Only growing plant food was counted, and no animal existed when an
+  ancestor was tested, so a body that eats mostly meat, carrion or dung could never be founded. Now:
+  - *Order, not quota.* The ancestors are tested in turn as before. If a draw gets the most energy per kilogram from
+    animal food (meat, blood, carrion or dung: Simulation.EatsAnimalFood) and cannot be fed yet, that ancestor waits;
+    once every other ancestor is founded it is tested again, the same draws in the same order, on the animals now living
+    in its range. Prey before predators, as food webs are built from the bottom. Nothing forces a diet, a draw or a
+    carnivore clade; if the test feeds none, none is founded.
+  - *What the animals make* (Life.AnimalFood, over the animals of other clades in its range, in cells it can live and
+    breathe in). Each animal's production is the body it makes from its own life history (Life.BodyMade): a juvenile
+    grows the rest of its adult mass over its maturation, an adult that bears young makes a litter of its birth share
+    of its mass each breeding cycle (gestation plus cooldown), at TISSUE_E a kilogram. Live prey count only if the
+    eater strikes and digests meat, and only while its strike power (strike·M) is not less than the prey's counterblow:
+    all of a weaker prey's production, of a stronger one the share it makes while still small enough (power over the
+    adult's counterblow). It eats, at its meat efficiency, the intake that would turn TROPHIC_EFF (10%: Lindeman 1942;
+    Pauly & Christensen 1995) of that production into its own production at its own production efficiency (the young a
+    population of adults like it bears, against that plus its day's need; 1-5% for the founders' bodies, as mammals'
+    1-3%), and never more than that production's edible tissue (CarcassKg). For a warm-blooded predator this bound is
+    the edible tissue itself: it can eat all the production of what it can catch, as vertebrate predators take 50-100% of
+    vertebrate prey production (Begon, Townsend & Harper). Carrion: in a steady population as much dies as is made
+    (Allen 1971), so the edible tissue of that production falls as carrion on land, detritus in water, counted at its
+    inflow as plant litter is. Dung: what each animal's gut leaves of the food that pays its day (FIELD_METAB × basal at
+    its best food), dung on land, detritus in water.
+  - *Each kind of food counts only if it could live on it.* The gut-rate test (FORAGE_MARGIN days' need a step) is made
+    for plant food, prey (a kill goes into the gut whole: digestion rate, gut and carcass bound it), carrion and dung
+    (bites of their steady stock, inflow over rot) separately, and only the kinds that pass are counted. Before, the
+    energy of every food was counted once any one passed, so a meat-eater could have been founded on plants it cannot
+    eat fast enough to live on.
+  - *A range that feeds none is widened too* (Life.RangeFor, up to HOME_R_MAX): homes are placed far apart, so a
+    meat-eater's prey live in the other lineages' ranges.
+  Measured (valley map, seeds 3, 5, 7, 2,000 steps): two ancestors waited in each world; none of them was founded as a
+  meat-, carrion- or dung-eater: each was retested and its first viable draw was again a plant eater. The plant yield
+  of a range is thousands of times a plant eater's founders, so the gut-rate test decides; the prey present at
+  founding are the other lineages' founders (at most Founders each, far below their capacity, in their own parts of the
+  map), and their production (P/B ~0.3 a year from their genes, about what Carbone &amp; Gittleman 2002's ~1 kg of
+  predator per 111 kg of prey implies) feeds a founding group of FOUND_MIN only for meat-eaters of about a kilogram or
+  less, with a gut that passes meat at three days' need a step. No such draw came up first on these seeds.
 - *Food sensed as worth to the eater.* FOOD_HERE (and the food gradient) was the cell's food against the best food the
   diet could ever give, so a nectar eater in a meadow sensed ~0.02 and its eating instinct hardly fired: hungry
   founders stood on food and starved. It is now one bite's energy against a step's need, 1 - exp(-bite/need).

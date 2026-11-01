@@ -31,7 +31,7 @@ public static class Headless
         double moved = 0, movedMax = 0; long animalSteps = 0;
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop = true; Console.WriteLine("stopping after this step (saving)..."); };
         var water = new WaterWatch();
-        var eco = Environment.GetEnvironmentVariable("NR_ECO") == "1" ? new EcoWatch(w) : null;   // ecology census (2026-11-01)
+        var eco = Environment.GetEnvironmentVariable("NR_ECO") == "1" ? new EcoWatch(sim) : null;   // ecology census (2026-11-01)
         for (long k = 0; k < o.Steps && !stop; k++)
         {
             sim.Step();
