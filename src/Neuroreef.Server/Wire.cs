@@ -17,7 +17,8 @@ public static class Wire
         { "grass", "shrub", "tree", "browse", "fruit", "seed", "nectar", "root", "carrion", "dung+litter", "wood",
           "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen",
           "plant height", "toxin", "thorns", "drought tolerance", "fleshy fruit", "leaf-on", "flora",   // Revision S: the plants' genes
-          "flood" };   // 2026-10-31: a flooded floodplain (Wet = 3)
+          "flood",     // 2026-10-31: a flooded floodplain (Wet = 3)
+          "snow", "volcanic", "sedimentary", "alluvium", "limestone" };   // 2026-11-01, terrain materials: snow cover, surface rock, alluvium
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -37,14 +38,15 @@ public static class Wire
     }
 
     /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River),
-    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit), then
-    /// the rivers as lines (2026-11-01, Rivers).</summary>
+    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit),
+    /// u16[FW²] elevation x 65535 (2026-11-01: the u8 plane's ~35 m steps terrace high mountains; it stays for older clients),
+    /// then the rivers as lines (2026-11-01, Rivers).</summary>
     public static byte[] EncodeWorld(World w)
     {
         int n = Map.FW * Map.FW;
         var lines = Hydrology.Lines(w);
         int nv = 0; foreach (var l in lines) nv += l.Points.Count;
-        var b = new byte[16 + 8 * n + RiversSize(lines.Count, nv)];
+        var b = new byte[16 + 10 * n + RiversSize(lines.Count, nv)];
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -57,8 +59,9 @@ public static class Wire
             BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 4 * n + 2 * i), Surface(w, i));
             b[16 + 6 * n + i] = w.CaveKind[i];
             b[16 + 7 * n + i] = Conduit(w, i);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 8 * n + 2 * i), (ushort)Math.Clamp((int)MathF.Round(w.Elev[i] * 65535f), 0, 65535));
         }
-        Rivers(b.AsSpan(16 + 8 * n), lines, nv);
+        Rivers(b.AsSpan(16 + 10 * n), lines, nv);
         return b;
     }
 
@@ -193,6 +196,14 @@ public static class Wire
             20 => (w.Temp[i] + 40f) / 90f, 21 => w.Temp[i] < 0f ? 1f : 0f,   // air temperature (-40..50 °C) and frost or ice (Revision O)
             >= 22 and <= 28 => PlantLayer(w, layer - 22, i),
             29 => w.Wet[i] == 3 ? 1f : 0f,
+            // terrain materials (2026-11-01, display only): the snowpack's cover (1 - e^(-SWE / 30 mm); 0 without the water
+            // cycle), the share of the surface rock that is volcanic, sedimentary or limestone (34; the rest crystalline), the alluvium's
+            // depth as 1 - e^(-depth / ALLUV_D)
+            30 => w.WaterOn && w.Cell[i] == (byte)Realm.Land ? 1f - MathF.Exp(-w.Snow[i] / 30f) : 0f,
+            31 => w.Rock[i] == Neuroreef.Rock.Volcanic ? 1f : 0f,
+            32 => w.Rock[i] == Neuroreef.Rock.Sedimentary ? 1f : 0f,
+            33 => 1f - MathF.Exp(-w.Alluvium[i] / K.ALLUV_D),
+            34 => w.Rock[i] == Neuroreef.Rock.Limestone ? 1f : 0f,
             _ => 0f,
         };
     }

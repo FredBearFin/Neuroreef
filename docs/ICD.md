@@ -37,7 +37,8 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | 16 + 4·FW² | u16[FW²] | standing water surface (2026-10-31, display only): for a cell of the sea or a lake, its water level (bed + depth) as normalised elevation × 65535, at least 1; 0 for land and rivers. Lakes in upland basins stand at their own levels, above or below the sea level. A client that predates it ignores the trailing plane and draws all standing water at the sea level |
 | 16 + 6·FW² | u8[FW²] | cave features (2026-11-01, Caves.cs; World.CaveKind), bits: 1 karst passage under the cell, 2 lava tube under the cell, 4 sinkhole (a doline or ponor that swallows surface water), 8 cave entrance (a resurgence, a collapse doline, a valley-wall opening or a lava-tube skylight; an animal there shelters in cave air), 16 karst spring (where a conduit discharges), 32 losing river (a river cell over karst that leaks into the conduits), 64 ponor (the sinkhole takes a stream from other rock). Bits combine (a collapse doline is 1+4+8). A client that predates it ignores the trailing planes |
 | 16 + 7·FW² | u8[FW²] | cave courses (2026-11-01, display only): 0 = none; for a cell with bit 1 or 2 above, bits 0-2 = the neighbour its conduit or tube runs to (the river direction codes; 0 also where it ends: a spring or a tube's lower end) and bits 3-7 = size class 1 + round(4·log2(conduit discharge / CAVE_Q_MIN)), 1..31 (quarter octaves; 1 for a lava tube). Following the directions from any cell with bit 1 stays on passage cells and leads to its spring |
-| 16 + 8·FW² | RIVERS | the rivers as lines (2026-11-01, display only; below). A client that predates it ignores the trailing section |
+| 16 + 8·FW² | u16[FW²] | elevation × 65535 (2026-11-01): the same elevation as the u8 plane at offset 16, finer (the u8 plane's 1/255 steps are ~35 m at H_RELIEF 8000 m, and terrace high mountains); the u8 plane stays, for clients that predate this one |
+| 16 + 10·FW² | RIVERS | the rivers as lines (2026-11-01, display only; below). A client that predates it ignores the trailing section |
 
 **RIVERS section** (`Wire.Rivers`, built by `Hydrology.Lines`). Rivers are no longer chains of cell centres: each runs along a
 smooth line through the plane, meandering on low gradients, and its channel cells are the cells that line crosses. Draw a
@@ -122,7 +123,7 @@ The first 26 record bytes retain their format-5 meaning.
 |---|---|---|
 | 8 | u16 | side D = FW / 2 (2×2 cells averaged) |
 | 10 | u16 | layer count L |
-| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood |
+| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood, snow, volcanic, sedimentary, alluvium, limestone |
 
 Layer values are 0..255 for 0..1. Pools that can exceed 1 are sent as tanh(amount) (carrion,
 dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)). `pond` is 1 where a seasonal
@@ -132,6 +133,10 @@ cover above 0.02 on the height trait's log scale (5 cm..40 m); `toxin`, `thorns`
 cover-weighted trait levels /15 of the cell's slots; `fleshy fruit` is the FRUIT level /15 of the fruit there; `leaf-on`
 is the leafy share of the cover; `flora` is (founding lineage + 1) / 129 of the plant with most cover (0 = none). `flood` (2026-10-31) is 1 where a
 river has flooded its floodplain (Wet = 3); clients look layers up by name, so one that predates it ignores it.
+The terrain-material layers (2026-11-01, display only): `snow` is the snowpack's cover, 1 − e^(−SWE / 30 mm) (0 on water,
+and everywhere when the water cycle is off: the client then falls back on `temp`); `volcanic`, `sedimentary` and
+`limestone` are the share of the 2×2 cells whose surface rock (World.Rock) is of that kind (the rest is crystalline); `alluvium` is the
+alluvium's depth as 1 − e^(−depth / ALLUV_D).
 
 ### 0x04 TELEMETRY (when a new sample exists, checked every 0.5 s)
 
