@@ -304,6 +304,16 @@ public static class Life
         return a;
     }
 
+    /// <summary>
+    /// The smallest group of organism c's kind that can breed (2026-11-01): one if it reproduces alone (asexual, LAY),
+    /// else a pair (separate sexes, or hermaphrodites, which here still mate with a partner: Resolve.Mate). A lineage can
+    /// be founded by so few: single pairs and single gravid females found island populations (the Daphne Major "Big Bird"
+    /// lineage of Darwin's finches from one immigrant male and local females; Lamichhaney et al. 2018), though most such
+    /// small groups die out by chance (Allee effects, demographic stochasticity; Courchamp et al. 1999). With separate
+    /// sexes the founders' sexes are drawn at random (Life.Place), so a pair can be two of one sex.
+    /// </summary>
+    public static int BreedingGroup(World w, int c) => w.PSexual[c] == 0 ? 1 : 2;
+
     /// <summary>A day of living for organism c in a cell: FIELD_METAB x basal at its core temperature, plus the heat it must make (Revision P).</summary>
     static float DayNeed(World w, int c, int cell)
     {
@@ -316,16 +326,19 @@ public static class Life
 
     /// <summary>
     /// The home range of a founding lineage like organism c (Revision P): from HOME_R of the map side, widened step by
-    /// step up to HOME_R_MAX until it can feed FOUND_MIN founders at FOUND_FILL. A big body needs a big range, as home
+    /// step up to HOME_R_MAX until it can feed, at FOUND_FILL, the founders a lineage may start with (founders, by default
+    /// the world's Founders; 2026-11-01: it was FOUND_MIN = 50, so a range stopped widening once it fed 50 at a quarter
+    /// of its capacity, and a meat-eater's range stayed as small as fed 50). A big body needs a big range, as home
     /// ranges grow about in proportion to body mass (Kelt &amp; Van Vuren 2001), and a predator's about ten times a plant
     /// eater's of its size, from scarcer food (Jetz et al. 2004). (2026-11-01) A range that feeds none is widened too:
     /// a meat-eater's prey live in the other lineages' ranges, and it fed none in its own. Returns the radius; cap its capacity.
     /// </summary>
-    public static float RangeFor(World w, int c, float hx, float hy, out float cap)
+    public static float RangeFor(World w, int c, float hx, float hy, out float cap, int founders = 0)
     {
+        if (founders <= 0) founders = w.Evo.Founders;
         float r = K.HOME_R * Map.W;
         cap = RangeCapacity(w, c, hx, hy, r);
-        while (K.FOUND_FILL * cap < K.FOUND_MIN && r < K.HOME_R_MAX * Map.W)
+        while (K.FOUND_FILL * cap < founders && r < K.HOME_R_MAX * Map.W)
         {
             r = MathF.Min(r * 1.25f, K.HOME_R_MAX * Map.W);
             cap = RangeCapacity(w, c, hx, hy, r);
