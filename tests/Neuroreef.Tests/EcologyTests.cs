@@ -28,7 +28,8 @@ public class EcologyTests
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             Assert.True(w.CellAllows(i, World.FIdx(w.X[i], w.Y[i]), w.RealmOf(i) & (land ? Realm.Land : Realm.Water)));
             var c = w.Sp[s];
-            founders[s]++; if (Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR) > 0f) fed[s]++;
+            // in the realm it was founded in, as the founding judges it (2026-11-01: a water lineage on water foods)
+            founders[s]++; if (Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR, land ? Realm.Land : Realm.Water) > 0f) fed[s]++;
             Assert.True(w.PStrike[i] <= 0.65f * K.STRIKE_MAX, $"clade {s} strike {w.PStrike[i]}");   // weapons and armour start in the same range (Revision L)
         }
         // nearly every ancestor is a body its home range can feed (of ANCESTOR_TRIES random bodies; a big size class may find
@@ -41,9 +42,11 @@ public class EcologyTests
         Assert.True(nv >= ns - 2, $"only {nv} of {ns} ancestors can live on their home range");
         // the ancestors differ from each other: their bodies are random, not designed
         // (by their mass genes: several bodies of one size class can sit exactly at its floor)
-        var masses = new int[used];
-        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) masses[w.Spc[i]] = w.Genome[i * G.LEN + G.B_MASS] * 8 + w.Genome[i * G.LEN + G.B_SPEED];
-        Assert.True(masses.Distinct().Count() >= used - 1, $"{masses.Distinct().Count()} different of {used}");
+        // (of the founded ones: an ancestor no body of which can live where it starts is not founded, Simulation.FoundAncestors)
+        var masses = new int[used]; var hasBody = new bool[used];
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) { masses[w.Spc[i]] = w.Genome[i * G.LEN + G.B_MASS] * 8 + w.Genome[i * G.LEN + G.B_SPEED]; hasBody[w.Spc[i]] = true; }
+        var founded = Enumerable.Range(0, used).Where(s => hasBody[s]).Select(s => masses[s]).ToArray();
+        Assert.True(founded.Distinct().Count() >= founded.Length - 1, $"{founded.Distinct().Count()} different of {founded.Length} founded");
     }
 
     [Fact] // NR-320: founders vary around their ancestor (standing variation), as a natural population does
@@ -459,6 +462,8 @@ public class EcologyTests
     public void SexualLiveBirthProducesEmbryosThenJuveniles()
     {
         var (w, a, b) = Pair(true, true);
+        // a warm-blooded mother: her embryos develop at T_BODY, in PGest steps (a cold-blooded one's take longer in the cold, 2026-11-01)
+        w.Genome[a * G.LEN + G.B_ENDO] = 127; Body.Express(w, a);
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         int embryos = Count(w, St.Embryo);

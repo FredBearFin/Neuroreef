@@ -149,7 +149,9 @@ public static class Life
     /// (FIELD_METAB x its basal cost, brain included). None if its gut cannot pass enough of the best of those foods to
     /// pay for a day even when there is plenty (digestion rate x energy x efficiency below the need).
     /// </summary>
-    public static float RangeCapacity(World w, int c, float hx, float hy, float r)
+    /// <param name="habitat">the realm the lineage is founded in (2026-11-01): a lineage founded in water must feed and
+    /// breathe in water, so only those of its cells count (Realm.Any: every cell its locomotion allows)</param>
+    public static float RangeCapacity(World w, int c, float hx, float hy, float r, Realm habitat = Realm.Any)
     {
         // where it can forage is where it moves well: a swimmer in water, a walker on land, a wader on both and in
         // the shallows, a flier anywhere (a swimmer can crawl ashore, but cannot live there)
@@ -159,7 +161,8 @@ public static class Life
             Loco.Walk => Realm.Land,
             Loco.Wade => Realm.Land | Realm.Shallow,
             _ => w.RealmOf(c),
-        };
+        } & habitat;
+        if (realm == 0) return 0f;
         var diet = w.DietOf(c);
         float need = K.FIELD_METAB * MathF.Max(w.PBasal[c], 1e-6f);
         // a brain the body cannot pay for: more than BRAIN_SHARE_MAX of its basal cost
@@ -167,7 +170,7 @@ public static class Life
         if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) return 0f;
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
-        double y = 0, heatNeed = 0; int n = 0;
+        double y = 0, heatNeed = 0, breathCost = 0, actSum = 0; int n = 0;
         Span<double> stock = stackalloc double[Pools.NFIELD];
         Span<float> reached = stackalloc float[Pools.N];
         for (int dy = -rc; dy <= rc; dy++)
@@ -177,16 +180,23 @@ public static class Life
                 int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
                 if (!w.CellAllows(c, cell, realm)) continue;
                 // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
-                if (!Respiration.Breathable(w, c, cell, out float z, out float share)) continue;
+                if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
+                breathCost += bc;   // ventilation, osmoregulation and buoyancy there (2026-11-01)
                 for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share);
                 y += Fields.Yield(w, cell, reached); n++;
                 for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share);   // kg
-                if (Climate.On) heatNeed += DayNeed(w, c, cell);
+                if (Climate.On)
+                {
+                    heatNeed += DayNeed(w, c, cell);
+                    bool imm = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
+                    actSum += Heat.Rate(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]));   // the gut's pace: the core's temperature
+                }
             }
         if (n == 0) return 0f;
         // with a climate, a day here costs what this body pays at the temperature around it (Revision P): its basal
         // cost at its core temperature, and the heat it must make to keep its core where its endothermy holds it
         if (Climate.On) need = MathF.Max(1e-6f, (float)(heatNeed / n));
+        need += (float)(breathCost / n);   // what breathing there costs (Respiration.Cost): gills in water, lungs at depth
         // the food the animals already living in the range make (2026-11-01): their production as prey, their bodies
         // as carrion and their dung (AnimalFood). Before, only growing plant food counted, so an ancestor that eats
         // mostly meat, carrion or dung was never founded: no prey existed when it was tested
@@ -198,21 +208,25 @@ public static class Life
         // animals into the water), prey, carrion and dung each. Before, the energy of every food was counted once any one
         // passed, so a meat-eater could be founded on plants its gut cannot pass fast enough to live on
         float margin = K.FORAGE_MARGIN * need, rate = 0f;
+        // its gut passes and absorbs food at its core temperature's pace (2026-11-01: a cold gut digests slowly, as in
+        // RESOLVE), whatever the food
+        float act = Climate.On ? (float)(actSum / n) : 1f;
+        float dig = w.PDig[c] * act, absorb = w.PAbsorb[c] * act;
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
-            float pass = MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(stock[p] / n));
-            rate = MathF.Max(rate, MathF.Min(w.PAbsorb[c], diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
+            float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+            rate = MathF.Max(rate, MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         double fed = rate >= margin ? y + an.Detritus : 0;
         // a kill goes into the gut whole, as much of it as fits (Resolve.Strike), and passes as fast as the gut digests
-        if (an.MeatKg > 0f && MathF.Min(w.PAbsorb[c], diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(w.PDig[c], w.PGut[c]), an.MeatKg)) >= margin)
+        if (an.MeatKg > 0f && MathF.Min(absorb, diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(dig, w.PGut[c]), an.MeatKg)) >= margin)
             fed += an.Meat;
         // carrion and dung are bitten from what lies about: their stock where nothing eats them is inflow over rot
         // (per cell of the range), and a forager finds it half eaten, as plants are
-        if (an.CarrionKg > 0 && MathF.Min(w.PAbsorb[c], diet[(int)Pool.Carrion] * K.RHO_CARRION * MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(an.CarrionKg / K.ROT_CARRION / n))) >= margin)
+        if (an.CarrionKg > 0 && MathF.Min(absorb, diet[(int)Pool.Carrion] * K.RHO_CARRION * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.CarrionKg / K.ROT_CARRION / n))) >= margin)
             fed += an.Carrion;
-        if (an.DungKg > 0 && MathF.Min(w.PAbsorb[c], diet[(int)Pool.Dung] * K.RHO_DUNG * MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(an.DungKg / K.ROT_DUNG / n))) >= margin)
+        if (an.DungKg > 0 && MathF.Min(absorb, diet[(int)Pool.Dung] * K.RHO_DUNG * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.DungKg / K.ROT_DUNG / n))) >= margin)
             fed += an.Dung;
         return (float)(fed / need);
     }
@@ -319,8 +333,9 @@ public static class Life
     {
         bool immersed = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
         float top = Heat.Operative(w, cell, w.PInsul[c], immersed), core = Heat.Core(top, w.PEndo[c]);
-        float basal = w.PBasal[c] * Heat.Rate(core);
+        float basal = w.PBasal[c] * Heat.Activity(core, w.PEndo[c]);   // its core's temperature and metabolic level (2026-11-01)
         Heat.Balance(w.PM[c], w.PInsul[c], w.PAppend[c], top, immersed, basal, w.PBasal[c], out float thermo, out _, out float cold, out _, core);
+        cold += Heat.Freeze(w.PM[c], w.PInsul[c], w.PAppend[c], immersed, core);   // a frost a cold-blooded body cannot survive
         return K.FIELD_METAB * basal + thermo + cold;   // heat it cannot make counts as a cost too: it must not live there
     }
 
@@ -333,15 +348,16 @@ public static class Life
     /// eater's of its size, from scarcer food (Jetz et al. 2004). (2026-11-01) A range that feeds none is widened too:
     /// a meat-eater's prey live in the other lineages' ranges, and it fed none in its own. Returns the radius; cap its capacity.
     /// </summary>
-    public static float RangeFor(World w, int c, float hx, float hy, out float cap, int founders = 0)
+    /// <param name="habitat">the realm the lineage is founded in (RangeCapacity; 2026-11-01)</param>
+    public static float RangeFor(World w, int c, float hx, float hy, out float cap, int founders = 0, Realm habitat = Realm.Any)
     {
         if (founders <= 0) founders = w.Evo.Founders;
         float r = K.HOME_R * Map.W;
-        cap = RangeCapacity(w, c, hx, hy, r);
+        cap = RangeCapacity(w, c, hx, hy, r, habitat);
         while (K.FOUND_FILL * cap < founders && r < K.HOME_R_MAX * Map.W)
         {
             r = MathF.Min(r * 1.25f, K.HOME_R_MAX * Map.W);
-            cap = RangeCapacity(w, c, hx, hy, r);
+            cap = RangeCapacity(w, c, hx, hy, r, habitat);
         }
         return r;
     }
@@ -428,18 +444,34 @@ public static class Life
                 if (m < 0) { Resolve.DieNoBody(w, i, Cause.Orphan, -1); continue; }
                 w.X[i] = w.X[m]; w.Y[i] = w.Y[m];
                 // the mother builds the embryo's tissue during gestation; a starving mother loses it
-                float cost = Resolve.TissueCost(w.PBirth[m], w.PM[m]) / MathF.Max(1f, w.PGest[m]);
+                // an embryo develops at its mother's core temperature (2026-11-01): a warm-blooded mother's at full pace,
+                // a cold-blooded one's slower in the cold (Gillooly et al. 2002); its tissue is built at the same pace
+                float dev = Climate.On ? Heat.Rate(Heat.Core(w.TOp[m], w.PEndo[m])) : 1f;
+                float cost = dev * Resolve.TissueCost(w.PBirth[m], w.PM[m]) / MathF.Max(1f, w.PGest[m]);
                 if (w.Energy[m] < cost + 0.1f * w.EmaxOf(m)) { Resolve.DieNoBody(w, i, Cause.Orphan, -1); continue; }
                 w.Energy[m] -= cost;
                 w.T.SpendRepro[w.Spc[m]] += cost;
-                if (--w.Timer[i] <= 0) { Hatch(w, i); ClearCarrying(w, m); }
+                w.Timer[i] -= dev;
+                if (w.Timer[i] <= 0) { Hatch(w, i); ClearCarrying(w, m); }
                 continue;
             }
             if (st == St.Egg)
             {
                 int cell = World.FIdx(w.X[i], w.Y[i]);
                 if (w.Fire[cell] > 0) { Resolve.Die(w, i, Cause.Fire, -1); continue; }
-                w.Timer[i] -= 1;
+                if (Climate.On)
+                {
+                    // an egg develops at its own temperature (2026-11-01; Gillooly et al. 2002): the water's or the air's, warmed
+                    // toward T_BODY by a warm-blooded mother that broods (her endothermy x her care), while she lives; it
+                    // freezes below T_FREEZE. (Before, every egg hatched on a fixed timer, so warmth bought nothing.)
+                    float amb = (w.Cell[cell] & (byte)Realm.Water) != 0 ? Climate.Water(w.Temp[cell]) : w.Temp[cell];
+                    int mo = w.MotherOf(i);
+                    float brood = mo >= 0 ? w.PEndo[mo] * w.PCare[mo] : 0f;
+                    float te = amb < K.T_BODY ? amb + brood * (K.T_BODY - amb) : amb;
+                    if (te < K.T_FREEZE) { Resolve.Die(w, i, Cause.Cold, -1); continue; }
+                    w.Timer[i] -= Heat.Rate(te);
+                }
+                else w.Timer[i] -= 1;
                 if (w.Timer[i] <= 0) Hatch(w, i);
                 continue;
             }

@@ -245,7 +245,10 @@ public sealed class Simulation : IDisposable
         // it must breathe where its founders are put, in the realm it is founded in (2026-11-01: a gill-breather founded
         // on land, or an air-breather that cannot keep its head up in the water it is founded in, would not live a step)
         if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.FreeSlot(w, c); w.T.Created[clade]--; return 0f; }
-        range = Life.RangeFor(w, c, hx, hy, out float cap);
+        // what it can live on in the realm it is founded in (2026-11-01): a water lineage on water foods, where it can breathe
+        // in water at the depth it holds, its organs' upkeep and running costs paid (before, a wading ancestor put in
+        // water was fed by the land around it, and water lineages lived ashore on grass and roots, with lungs)
+        range = Life.RangeFor(w, c, hx, hy, out float cap, habitat: realm);
         Life.FreeSlot(w, c);
         w.T.Created[clade]--;
         return cap;
