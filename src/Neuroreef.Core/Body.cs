@@ -144,7 +144,7 @@ public static class Body
         // sets how far above the speed of least power it can fly
         float margin = FlightMargin(wings, m);
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
-        vLand *= WingGroundFactor(wings);   // wing-assisted running against the flight muscle's dead load: one smooth function (2026-11-01)
+        vLand *= WingGroundFactor(wings);   // the flight muscle's dead load on the flat; flapping helps on slopes (World.GroundSpeed, WingInclineGain)
         float vAir = flies ? MathF.Min(K.FLY_V_CAP, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
@@ -290,14 +290,33 @@ public static class Body
     }
 
     /// <summary>
-    /// Land speed kept by a body with wing gene w, flier or not (2026-11-01, one continuous function; until then wing-assisted
-    /// running applied below the flight threshold and clumsiness above it, a jump from x1.13 to x0.84 at FLY_WING_MIN).
-    /// Its flight muscle is FLY_MUSCLE_MAX x w of its mass: tissue that is not leg, so leg power per unit weight, and the
-    /// speed, fall by that share (flight and leg muscle trade off in the avian body plan, Heers &amp; Dial 2015; strong
-    /// fliers walk badly: swifts, bats). Flapping while running gives part of it back as thrust, GLIDE x w (wing-assisted
-    /// running, Dial 2003): (1 + GLIDE w)(1 - FLY_MUSCLE_MAX w). Net, wings cost a runner a little on flat ground.
+    /// Land speed kept on flat ground by a body with wing gene w, flier or not (2026-11-01): its flight muscle is
+    /// FLY_MUSCLE_MAX x w of its mass, tissue that is not leg, so leg power per unit weight, and the speed, fall by that
+    /// share (flight and leg muscle trade off in the avian body plan, Heers &amp; Dial 2015; strong fliers walk badly:
+    /// swifts, bats). Flapping does not help on the flat; on a slope it does (WingInclineGain).
     /// </summary>
-    public static float WingGroundFactor(float wings) => (1f + K.GLIDE * wings) * (1f - K.FLY_MUSCLE_MAX * wings);
+    public static float WingGroundFactor(float wings) => 1f - K.FLY_MUSCLE_MAX * wings;
+
+    /// <summary>
+    /// Speed gained on a slope by flapping while running, with wing gene w on ground whose steepest slope has sine
+    /// sinSlope (2026-11-01): 1 + WAIR_GAIN x w x sin(slope). The wings' aerodynamic force presses the feet onto the
+    /// incline and adds to the legs' push against the slope's share of gravity, so partly feathered young birds run up
+    /// slopes they could not climb on their legs alone, and the gain grows with the slope (wing-assisted incline running,
+    /// Dial 2003; Tobalske &amp; Dial 2007); going down, flapping controls the descent (Dial, Jackson &amp; Segre 2008). On
+    /// flat ground it is 1. This, not flat-ground running, is the physical way up to flight.
+    /// </summary>
+    public static float WingInclineGain(float wings, float sinSlope) => 1f + K.WAIR_GAIN * wings * sinSlope;
+
+    /// <summary>The most any wing gene multiplies a land speed by, on the steepest ground (sine 1): the largest of
+    /// WingGroundFactor x WingInclineGain over w in 0..1 (for bounds on travel, BodySize.WalkerPerceive).</summary>
+    public static float WingGroundGainMax
+    {
+        get
+        {
+            float wStar = Math.Clamp((K.WAIR_GAIN - K.FLY_MUSCLE_MAX) / (2f * K.WAIR_GAIN * K.FLY_MUSCLE_MAX), 0f, 1f);
+            return WingGroundFactor(wStar) * WingInclineGain(wStar, 1f);
+        }
+    }
 
     /// <summary>
     /// A juvenile's flight muscle as a share of its body, against an adult's of the same wing gene (2026-11-01): flight

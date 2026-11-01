@@ -62,19 +62,23 @@ public static class Resolve
         // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
         // drinking water within reach, it lands and walks (or stands) on its legs; it stays in the air only over ground it
         // cannot stand on (2026-10-31). An urge to eat with nothing here to eat does not ground it: it flies on to look
-        bool flier = loco == Loco.Fly, airborne = false, canLand = true;
+        bool flier = loco == Loco.Fly, airborne = false, canLand = true, downed = false;
         if (flier)
         {
             int c0 = World.FIdx(nx, ny);
-            float vGround = w.GroundVmax(i, c0);
+            float vGround = w.GroundVmax(i, c0), spd0 = w.Speed[i];
             bool feed = (acts & BIT_EAT) != 0 && w.IFoodHere[i] > 0f, sip = (acts & BIT_DRINK) != 0 && w.DistDrink[c0] <= 1.5f && w.Thirst[i] > 0f;
             bool settle = rest || feed || sip || spd <= vGround;
             canLand = w.GroundAllows(i, c0);
             airborne = !(settle && canLand);
-            // one on the ground takes off only if its flight muscle is warm enough and its load light enough (Body.CanTakeOff,
-            // 2026-11-01: a cold ectotherm cannot fly until it is warm, a full gut raises its wing loading); in the air its
-            // muscle's own heat keeps it warm. Where it cannot stand it is in the air already
-            if (airborne && canLand && !w.Airborne(i))
+            // flying when this step began: its last step's state; before its first, faster than it walks (not merely over
+            // water it cannot stand in: a newborn placed there has not flown)
+            bool aloft = (w.Flags[i] & Flag.Aloft) != 0 || ((w.Flags[i] & Flag.Landed) == 0 && spd0 > vGround * 1.0001f + 1e-6f);
+            float load = Body.FlightLoad(w, i);
+            // one on the ground (or in the water) takes off only if its flight muscle is warm enough, grown enough and its
+            // load light enough (Body.CanTakeOff, 2026-11-01: a cold ectotherm cannot fly until it is warm, a newborn until it
+            // fledges, a full gut raises its wing loading); in the air its muscle's own heat keeps it warm
+            if (airborne && !aloft)
             {
                 float muscleT = 1f;
                 if (Climate.On)
@@ -82,18 +86,24 @@ public static class Resolve
                     bool wet = (w.Cell[c0] & (byte)Realm.Water) != 0;
                     muscleT = Heat.Rate(Heat.Core(Heat.Operative(w, c0, w.PInsul[i], wet), w.PEndo[i]));
                 }
-                if (!Body.CanTakeOff(w.PWings[i], w.PM[i], mass, Body.FlightLoad(w, i), muscleT)) airborne = false;
+                if (!Body.CanTakeOff(w.PWings[i], w.PM[i], mass, load, muscleT)) airborne = false;
             }
+            // one in the air stays up only while its power holds level flight with its load (Body.LoadedMargin)
+            else if (airborne && Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f) < 1f) airborne = false;
+            // over water it cannot stand in, one that cannot fly is in the water (2026-11-01: a newborn placed there counted
+            // as airborne and escaped the fledging rule): it swims or paddles at its speed there, breathes as its organs let
+            // it (Respiration) and is immersed, until it reaches ground it can stand on or can take off
+            if (!airborne && !canLand) downed = true;
             // in the air its load (and a juvenile's smaller flight muscle) sets how fast it can fly (Body.LoadedTopAirSpeed)
             if (airborne)
             {
-                float load = Body.FlightLoad(w, i);
                 float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
                 spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f)));
             }
             if (!airborne) spd = MathF.Min(spd, vGround);
+            w.Flags[i] = (byte)((w.Flags[i] & ~(Flag.Aloft | Flag.Landed)) | (airborne ? Flag.Aloft : Flag.Landed));
         }
-        if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne, out nx, out ny, out float fraction))
+        if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne && !downed, out nx, out ny, out float fraction))   // in the water it may paddle across it
         {
             spd *= fraction;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
@@ -249,7 +259,7 @@ public static class Resolve
                     if (airborne && !victimAloft && w.StageOf[v] == St.Dead)   // killed (its slot freed)
                     {
                         int vc = World.FIdx(vx, vy);
-                        if (w.GroundAllows(i, vc)) { PathMemory.Integrate(w, i, World.Delta1(vx - w.X[i]), World.Delta1(vy - w.Y[i])); w.X[i] = vx; w.Y[i] = vy; w.Speed[i] = 0f; }
+                        if (w.GroundAllows(i, vc)) { PathMemory.Integrate(w, i, World.Delta1(vx - w.X[i]), World.Delta1(vy - w.Y[i])); w.X[i] = vx; w.Y[i] = vy; w.Speed[i] = 0f; w.Flags[i] = (byte)((w.Flags[i] & ~Flag.Aloft) | Flag.Landed); }
                     }
                 }
             }

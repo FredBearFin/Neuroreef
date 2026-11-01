@@ -1898,11 +1898,18 @@ because its genes differ moves to the nearest allowed cell, or dies.
   (Pennycuick 1975, 2008): a full gut makes flight dearer and can ground a weak flier. Each airborne step that starts
   or ends on the ground pays a take-off and climb-out of TAKEOFF_S = 15 s of least power (Askew et al. 2001; Nudds &
   Bryant 2000), small against a step of hours.
-- **Wings on the ground (2026-11-01, round 2).** One continuous function of the wing gene w for every body, flier or not:
-  land speed × (1 + GLIDE·w)(1 − FLY_MUSCLE_MAX·w). Flight muscle (FLY_MUSCLE_MAX·w of its mass, 35% at w = 1) is
-  tissue that is not leg (Heers & Dial 2015); flapping while running gives part back (Dial 2003). Net, wings cost a
-  runner a little (×0.96 at w = 0.45, ×0.85 at w = 1). Until then the gain applied below the flight threshold and the
-  clumsiness above it, a jump from ×1.13 to ×0.84.
+- **Wings on the ground (2026-11-01).** Flight muscle (FLY_MUSCLE_MAX·w of its mass, 35% at w = 1) is tissue that
+  is not leg (Heers & Dial 2015): on flat ground every winged body, flier or not, walks at (1 − FLY_MUSCLE_MAX·w).
+  Flapping helps only on slopes: × (1 + WAIR_GAIN·w·sin slope), the steepest slope of the cell (World.SlopeSin: rise
+  in metres over GEO_CELL_M) (wing-assisted incline running, Dial 2003; Tobalske & Dial 2007; controlled flapping
+  descent, Dial, Jackson & Segre 2008). Small wings (0.4) are a net gain above ~31°, full wings above ~42°: the
+  physical way up to flight is steep ground. One continuous function of w (no jump at the flight threshold); the
+  slope is not directional (ascents and descents both use the wings; the speed limit is per cell, not per heading).
+- **In the water, not in the air.** Resolve records each flier's state (Flag.Aloft, Flag.Landed) and World.Airborne
+  reads it. A flier over water it cannot stand in that cannot fly (a newborn, one too cold, too heavy, or whose loaded
+  margin falls below 1 in the air) is in the water: it paddles at its speed there, is immersed and breathes as its
+  organs let it, until it reaches ground it can stand on or can take off. (Before, being over such water counted as
+  flying, so a newborn placed there escaped the fledging rule.)
 - **Fledging.** A juvenile's flight-muscle share is the adult's × (mass/adult mass)^FLY_MUSCLE_ALLO (1.2; Ricklefs
   1979, Choi et al. 1993), and its take-off test (muscle share, power margin at its own mass) uses it: with full wings
   it flies from ~52% of adult mass, with w = 0.6 from ~79%, at the smallest flying wing only as an adult.
@@ -1916,6 +1923,17 @@ because its genes differ moves to the nearest allowed cell, or dies.
 - **Raptors land on the kill.** A flier that kills prey on the ground from the air comes down on it (its position is
   the kill's, speed 0) when it can stand there, and must take off again (warm muscle, the meal as load). Prey taken in
   the air, or over water it cannot stand in, is eaten on the wing.
+- **Proposal, not built (2026-11-01): a daily temperature cycle.** There is none: a cell's temperature is its daily
+  mean and SOLAR is the day-averaged sun (Climate.cs). With ~8.2 steps a day a cycle could be sampled: the operative
+  temperature an animal feels (Heat.Operative only; plants, soil and water keep the daily means they integrate) would
+  add A·Cont·cos(2π(phase − peak)) for air, A the half diurnal range (~5-7 K inland under clear skies, damped by water
+  through Cont, and by cloud and moist soil, Dai, Trenberth & Karl 1999), and the sun by day only (~2.5 x SOLAR at
+  midday, 0 at night), the phase from Step mod STEPS_PER_DAY (one MathK.Cos per step). Bodies above ~10 kg should feel
+  it damped by their thermal inertia (Bakken 1976). Cheap in code, but it moves every animal's heat budget every step:
+  night cold strain (ThermStrain) for marginal endotherms, founder viability (Life.DayNeed) and FIELD_METAB measured on
+  daily means, the AIR_T sense and heat-gradient moves oscillating, and no time-of-day sense for brains to use. It needs
+  the owner's world runs to calibrate, so it is written up, not built. With it, a cold-blooded flier would fly by day
+  where the daily mean is too cold.
 - **Landed.** There is no "take off" output. A flier that rests, eats food that is here, drinks water within
   reach, or goes no faster than it walks,
   lands wherever it can stand (land; shallow water if it has legs or swims; deep water if it swims well enough)
