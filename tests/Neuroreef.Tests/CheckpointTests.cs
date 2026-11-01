@@ -150,14 +150,18 @@ public class CheckpointTests
     [Fact] // a save of format 17 (the same land rules, the format before the kind byte): everything is kept, and it goes on exactly
     public void Format17SaveContinuesExactly()
     {
-        using var a = new Simulation(8192, 94, 2, maxCapacity: 8192);
+        // 60 founders per ancestor (2026-11-01): since plant food is kg per m2 (Pools.Kg) every clade founds at its limit
+        // (600), the world grew to 27,648 slots by step 200 and its genomes alone to 2.7 GB, more than one array of format
+        // 17 can hold (a byte count of i32, before format 19); the migration is the point, not the size
+        var evo = new EvoSettings { Founders = 60 };
+        using var a = new Simulation(8192, 94, 2, evo: evo, maxCapacity: 8192);
         for (int k = 0; k < 200; k++) a.Step();
         string path = Path.GetTempFileName();
         try
         {
             OldSave(a.W, path, 17, p => p is "Flora.Cap" or "Flora.HCap");   // the first saves of format 17 had a fixed plant table size (a constant)
             var (cap, seed, ts) = Checkpoint.WorldHeader(path);
-            using var b = new Simulation(cap, seed, 2, restore: true, terrainSeed: ts, maxCapacity: 8192);
+            using var b = new Simulation(cap, seed, 2, restore: true, terrainSeed: ts, evo: evo, maxCapacity: 8192);
             var m = Checkpoint.LoadWorld(b, path);
             Assert.True(m.Migrated);
             Assert.False(m.LandRebuilt);

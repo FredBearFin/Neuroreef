@@ -195,8 +195,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| GROUP_SIZE | 8 | agents | founders start in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
-| HOME_R_MAX | 0.33 | - | largest radius of a founding lineage's home range, as a share of the map side (a big body's range widens up to this until it can feed FOUND_MIN founders) | HT: a third of the map; home ranges grow about in proportion to body mass (Kelt & Van Vuren 2001) |
+| GROUP_SIZE | 8 | agents | founders start in groups of up to this size at one site (a lineage its food feeds fewer starts as one group) | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
+| HOME_R_MAX | 0.33 | - | largest radius of a founding lineage's home range, as a share of the map side (a range widens up to this until it can feed the most founders a lineage may start with, or as far as it goes) | HT: a third of the map; home ranges grow about in proportion to body mass (Kelt & Van Vuren 2001) |
 | HOME_R | 0.12 | - | radius of an ancestor's home range, as a share of the map side | Revision N (the user): each lineage starts in its own part of the map; species have homelands and meet as they spread |
 | HOME_TRIES | 24 | - | random sites tried when choosing a home range (the one farthest from the others is taken) | HT |
 | BANK_LIVING | 48 | genomes | genomes per species stored in a gene bank (living sample) | HT (Revision M: 96 before) |
@@ -341,7 +341,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BRAIN_SHARE_MAX | 0.25 | - | the largest share of an ancestor's basal cost its brain may take | ECO: brain tissue takes at most ~20-25% of basal metabolism (humans ~20%; Aiello & Wheeler 1995; Mink et al. 1981); 2026-10-30: the big-brained ancestor drew a 0.1-0.4 body whose 256-unit brain cost more than the body, and died in 9 worlds of 9 |
 | ANCESTOR_TRIES | 64 | - | random ancestor bodies tried per ancestor for one its home range can feed | HT: enough that almost every ancestor finds a viable body |
 | TROPHIC_EFF | 0.1 | - | ecological (Lindeman) efficiency: a predator level's production over the production of the prey it eats. A founding predator lineage is fed by its catchable prey's production (Life.AnimalFood) up to the intake that would make this share of it into its own production at its own production efficiency, and never more than its prey make | ECO: trophic transfer efficiency ~10%, range 2-24% (Lindeman 1942; Pauly & Christensen 1995, mean 10.1% over 48 ecosystem models; Krebs, Ecology) |
-| FOUND_MIN | 50 | organisms | the smallest founding group an ancestor must be able to feed (FOUND_FILL x capacity) | ECO: the 50 of the 50/500 rule for a minimum viable population (Franklin 1980); smaller founding groups go extinct by chance (Allee effect) |
 | SPEC_EVERY | 2000 | steps | steps between speciation checks | - |
 | MIN_SPLIT | 40 | organisms | smallest cluster that can become a species | ECO: a viable population |
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |
