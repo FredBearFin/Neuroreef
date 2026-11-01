@@ -109,6 +109,11 @@ public static class Respiration
         return MathF.Max(1e-9f, (w.PBasal[i] - brain) * MathK.Pow(MathF.Max(w.MassOf(i), 1e-4f) / w.PM[i], K.EXP_BASAL) + brain);
     }
 
+    /// <summary>Upkeep of the respiratory organs of a body with this lung share, x basal: COST_LUNG x lungs^ORGAN_EXP +
+    /// COST_GILL x gills^ORGAN_EXP. A specialist pays for one organ; a body with both pays more (each has its overhead).</summary>
+    public static float OrganUpkeep(float lungs)
+        => K.COST_LUNG * MathK.Pow(lungs, K.ORGAN_EXP) + K.COST_GILL * MathK.Pow(1f - lungs, K.ORGAN_EXP);
+
     /// <summary>Oxygen debt that kills body i (its current mass): DEBT_MAX x basal at M = 1 x M.</summary>
     public static float DebtMax(World w, int i) => K.DEBT_MAX * K.C_BASAL * MathF.Max(w.MassOf(i), 1e-4f);
 
@@ -120,16 +125,81 @@ public static class Respiration
     public struct Breath
     {
         public float Air, Water, Skin, AAir, AWater;
+        /// <summary>Energy per step of keeping its organs working here, beyond ventilation: the gills' osmoregulation
+        /// in water (GILL_OSMO) and holding its depth against its lungs' buoyancy (BUOY_COST).</summary>
+        public float Extra;
         public readonly float Uptake => Air + Water + Skin;
     }
 
     /// <summary>
     /// Where in the water column body i holds this step, and the oxygen it draws there (pure: writes nothing). Out of
     /// water, or airborne, it is at the surface (z 0, share 0). debt: its oxygen debt now (it pulls a swimmer up).
+    /// In water, also what its organs cost there (Breath.Extra).
     /// </summary>
     public static Breath Uptake(World w, int i, int cell, bool airborne, float debt, out float z, out float share)
     {
-        float m = MathF.Max(w.MassOf(i), 1e-4f), basal = OrganBase(w, i);
+        var b = UptakeAt(w, i, cell, airborne, debt, out z, out share);
+        if (!airborne && (w.Cell[cell] & (byte)Realm.Water) != 0)
+        {
+            float basal = OrganBase(w, i) * Pace(w, i, cell, airborne), L = w.PLungs[i];   // the pumps work at its metabolic pace
+            // the gills' surface leaks salts (or water) and ion pumps make up for it; air in the lungs pulls up, less
+            // as it compresses with depth (Boyle: 1 atmosphere per 10 m), for the share of the step it is down
+            b.Extra = basal * (K.GILL_OSMO * (1f - L) + K.BUOY_COST * L * share / (1f + z / 10f));
+        }
+        return b;
+    }
+
+    /// <summary>
+    /// The capacity of body i's respiratory organs here against their full capacity: its metabolic pace (Pace) to the
+    /// power AEROBIC_T. At 1, a cold or cold-blooded body has less aerobic machinery and cannot keep up sustained activity
+    /// (Bennett &amp; Ruben 1979: the aerobic capacity model of endothermy). AEROBIC_T is 0 (not active) since 2026-11-01,
+    /// so this is 1; its need and running costs follow Pace either way. 1 with no climate.
+    /// </summary>
+    public static float Aerobic(World w, int i, int cell, bool airborne)
+    {
+        if (!Climate.On || K.AEROBIC_T <= 0f) return 1f;   // not active (AEROBIC_T 0): organs at their full capacity
+        return MathK.Pow(Pace(w, i, cell, airborne), K.AEROBIC_T);
+    }
+
+    /// <summary>How fast body i burns here against a warm-blooded body at T_BODY (Heat.Activity at the core its endothermy
+    /// keeps in this cell): its resting oxygen need and the running costs of its organs follow it, whatever its organs'
+    /// capacity does (Aerobic). 1 with no climate.</summary>
+    public static float Pace(World w, int i, int cell, bool airborne)
+    {
+        if (!Climate.On) return 1f;
+        bool immersed = !airborne && (w.Cell[cell] & (byte)Realm.Water) != 0;
+        float e = w.PEndo[i];
+        return Heat.Activity(Heat.Core(Heat.Operative(w, cell, w.PInsul[i], immersed), e), e);
+    }
+
+    /// <summary>
+    /// The depth a swimmer heads for (2026-11-01): of the surface, its preferred depth (B_DIVE) and the bottom, the one
+    /// where the food its gut digests is richest within its reach there (plankton by the light, algae and detritus on the
+    /// bottom; Access), as it climbs toward food on land (CLIMB_FOOD); the preferred depth when none is richer. Its
+    /// breath then limits how deep and how long it stays (Uptake).
+    /// </summary>
+    static float ForageDepth(World w, int i, int cell, float col)
+    {
+        float pref = w.PDive[i] * col;
+        float best = pref, bv = FoodAt(w, i, cell, pref);
+        float v0 = FoodAt(w, i, cell, 0f); if (v0 > bv) { bv = v0; best = 0f; }
+        float vb = FoodAt(w, i, cell, col); if (vb > bv) best = col;
+        return best;
+    }
+
+    /// <summary>The richest food body i digests within reach at depth z in a cell (diet x energy x stock x Access).</summary>
+    static float FoodAt(World w, int i, int cell, float z)
+    {
+        var diet = w.DietOf(i);
+        float v = 0f;
+        for (int p = 0; p < Pools.NFIELD; p++)
+            if (diet[p] > 0f) v = MathF.Max(v, diet[p] * Pools.Rho[p] * w.Pool[p][cell] * Access(w, cell, p, z, 1f));
+        return v;
+    }
+
+    static Breath UptakeAt(World w, int i, int cell, bool airborne, float debt, out float z, out float share)
+    {
+        float m = MathF.Max(w.MassOf(i), 1e-4f), basal = OrganBase(w, i) * Aerobic(w, i, cell, airborne);
         float L = w.PLungs[i], Gi = 1f - L;
         // the skin is passive diffusion: it does not grow with what the body's tissues cost, only with its surface
         float skin = K.SKIN * K.C_BASAL * MathK.Pow(m, K.EXP_BASAL) / basal / MathK.Cbrt(m) * (1f - w.PInsul[i]);
@@ -148,8 +218,8 @@ public static class Respiration
         if (swim >= K.DEEP_SWIM)
         {
             // a swimmer: its preferred depth, pulled up as it runs out of breath
-            float need = K.FIELD_METAB * basal;
-            float zt = w.PDive[i] * col * (1f - MathF.Min(1f, debt / DebtMax(w, i)));
+            float need = K.FIELD_METAB * OrganBase(w, i) * Pace(w, i, cell, airborne);   // what it burns (its capacity is basal x scope)
+            float zt = ForageDepth(w, i, cell, col) * (1f - MathF.Min(1f, debt / DebtMax(w, i)));
             float us = basal * (aAir * K.LUNG_SCOPE * L + aW0 * (K.GILL_SCOPE * Gi + skin));
             if (zt <= 0f) { b.Air = basal * aAir * K.LUNG_SCOPE * L; b.Water = basal * aW0 * K.GILL_SCOPE * Gi; b.Skin = basal * aW0 * skin; b.AWater = aW0; return b; }
             float aZ = WaterO2(w, cell, zt), uz = basal * aZ * (K.GILL_SCOPE * Gi + skin);
@@ -204,28 +274,43 @@ public static class Respiration
     /// </summary>
     public static float Breathe(World w, int i, in Breath b, float demand)
     {
-        float u = b.Uptake;
-        float vent = u > 1e-12f ? (b.Air * K.AIR_VENT / MathF.Max(b.AAir, 0.05f) + b.Water * K.GILL_VENT / MathF.Max(b.AWater, 0.05f)) / u : 0f;
-        float cost = demand * MathF.Min(0.5f, vent);
-        float net = u - demand - cost;
+        float cost = Cost(b, demand);
+        float net = b.Uptake - demand - cost;
         w.O2Debt[i] = net < 0f ? w.O2Debt[i] - net : MathF.Max(0f, w.O2Debt[i] - net);
         return cost;
     }
+
+    /// <summary>What breathing costs at this demand: ventilating its media (AIR_VENT, GILL_VENT, more as they hold less
+    /// oxygen), and its organs' osmoregulation and buoyancy here (Breath.Extra). Aerobic: it needs oxygen too.</summary>
+    public static float Cost(in Breath b, float demand)
+    {
+        float u = b.Uptake;
+        float vent = u > 1e-12f ? (b.Air * K.AIR_VENT / MathF.Max(b.AAir, 0.05f) + b.Water * K.GILL_VENT / MathF.Max(b.AWater, 0.05f)) / u : 0f;
+        return demand * MathF.Min(0.5f, vent) + b.Extra;
+    }
+
+    /// <summary>
+    /// The share of its top speed body i can still put out (2026-11-01): muscle power falls as its oxygen debt builds
+    /// (lactate and acidosis: the fatigue of exercise beyond aerobic capacity; Hochachka &amp; Somero 2002), to 10% when it is
+    /// about to suffocate. So an animal out of breath slows down and its debt stops growing, unless it cannot draw even
+    /// its resting need. Before, it ran on at full speed until it died.
+    /// </summary>
+    public static float Stamina(World w, int i) => 1f - 0.9f * Breathless(w, i);
 
     /// <summary>How much faster than its skin alone body i dries out of water: its gills' wet surface evaporates (GILL_EVAP).</summary>
     public static float Drying(World w, int i) => 1f + K.GILL_EVAP * (1f - w.PLungs[i]);
 
     /// <summary>Can body i live here at rest: does it draw what a day of living needs (FIELD_METAB x basal), with
     /// breathing's cost, at the depth it would hold? (Founding: Life.RangeCapacity, Simulation.ProbeCapacity.)</summary>
-    public static bool Breathable(World w, int i, int cell) => Breathable(w, i, cell, out _, out _);
+    public static bool Breathable(World w, int i, int cell) => Breathable(w, i, cell, out _, out _, out _);
 
-    public static bool Breathable(World w, int i, int cell, out float z, out float share)
+    /// <param name="cost">what breathing there costs a day of living (ventilation, osmoregulation, buoyancy), energy per step</param>
+    public static bool Breathable(World w, int i, int cell, out float z, out float share, out float cost)
     {
         var b = Uptake(w, i, cell, false, 0f, out z, out share);
-        float need = K.FIELD_METAB * OrganBase(w, i);
-        float u = b.Uptake;
-        float vent = u > 1e-12f ? (b.Air * K.AIR_VENT / MathF.Max(b.AAir, 0.05f) + b.Water * K.GILL_VENT / MathF.Max(b.AWater, 0.05f)) / u : 0f;
-        return u >= need * (1f + MathF.Min(0.5f, vent));
+        float need = K.FIELD_METAB * OrganBase(w, i) * Pace(w, i, cell, false);
+        cost = Cost(b, need);
+        return b.Uptake >= need + cost;
     }
 
     /// <summary>

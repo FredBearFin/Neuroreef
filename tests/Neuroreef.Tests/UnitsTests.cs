@@ -63,7 +63,7 @@ public class UnitsTests
         // a map side is a multiple of each hash cell, or a hash cell is the whole map (2026-11-01, the 1 km world)
         foreach (int side in Map.Sizes) foreach (int cell in new[] { K.HCELL, K.HCELL_CALL }) Assert.True(side % cell == 0 || cell % side == 0, $"side {side}, cell {cell}");
         // the fastest walker (the largest, fastest-legged body) perceiving along its way stays inside the neighbourhood
-        float vMax = K.C_SPEED * MathK.Pow(K.MASS_HI, K.EXP_SPEED) * K.BODY_RANGE_TRAIT * 1.3f * (1f + K.GLIDE);
+        float vMax = K.C_SPEED * MathK.Pow(K.MASS_HI, K.EXP_SPEED) * K.BODY_RANGE_TRAIT * 1.3f * Body.WingGroundGainMax;
         Assert.True(MathF.Sqrt(K.MAX_SIGHT * K.MAX_SIGHT + 2f * K.MAX_SIGHT * vMax / MathF.PI) < K.MAX_PERCEIVE, $"walker {vMax:F1} units a step");
         // perception grows with the way travelled as the band an eye sweeps: area pi R^2 + 2 R d
         float r = 1.2f, d = 10f, p = Decide.Perceive(r, false, d);

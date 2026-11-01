@@ -13,9 +13,20 @@ The world you watch is births and deaths only: no animal is ever spawned into it
 species stays extinct. Its first animals need brains that can keep them alive. Those come from a
 PREHISTORY, a separate run that stands for the long evolution before the world begins.
 
+THE DEFAULTS (and what they need)
+  The map is the supercontinent: 8 km across (2048 x 2048 cells of 16 m), with one prehistory branch.
+  That takes about 4 GB of memory on a 16 GB PC. The animal slots a run starts with follow your memory
+  (a quarter of it; about 19,000 slots on a 16 GB PC) and grow as births need more, as long as memory
+  allows; the console window prints them at start, e.g.
+    memory: the world starts with 19,456 slots x 213 KB = 4.0 GB; 15.9 GB available, 2.0 GB kept free; ...
+  A status line every 10 seconds shows the step, steps/s (0 when nothing moved), PAUSED when paused, and
+  the slots. If it says WORLD FULL, memory (or --max-capacity) and not food decided who was born.
+  On a smaller PC choose "Light (4 km)" or a smaller map on the setup page.
+
 The prehistory (the first start):
-  With no evolved brains yet, the console opens on the Prehistory tab. Three branches evolve at full
-  speed: 500,000 steps, shown as 500 million symbolic years. Tap a branch to watch it in 3D; the
+  With no evolved brains yet, the console opens on the Prehistory tab. One branch (by default; the setup
+  page can add more) evolves at full speed: 500,000 steps, shown as 500 million symbolic years. Tap a
+  branch to watch it in 3D; the
   coloured squares are the species (green = lives on its own, yellow = breeding, orange = dying, no births,
   red = gone). The sliders change mutation while it runs. "Begin the world now" ends it
   early. At the end the best brains of every species are saved as evolved.nrbank and the world begins:
@@ -23,7 +34,8 @@ The prehistory (the first start):
   Closing the window during the prehistory saves prehistory-partial.nrbank.
 
   Evolve.bat runs the same prehistory without graphics and also writes evolve-report.txt (what
-  happened to each species in each branch, and why).
+  happened to each species in each branch, and why). For a run of days or weeks use LongRun.bat
+  (below): it saves itself, resumes after a restart and restarts itself after a crash.
 
 YOUR WORLD IS SAVED
   The world saves itself every 30 minutes and when you close the window (Ctrl+C), to world.nrck.
@@ -37,11 +49,27 @@ YOUR WORLD IS SAVED
 SETUP BEFORE A NEW PREHISTORY
   When a new prehistory is about to start, the browser first shows a setup page: how many branches,
   animal slots per branch, founders per ancestor, its length, the big-brained ancestors, and the world's
-  slots; the map (valley, region or continent; the world you watch can be a smaller valley than the
-  prehistory's map); and how hard nature is (plants, seasons, droughts, fire, disease, thirst, water and
-  seasonal ponds; 1x is the documented law). It shows how much memory that takes against what your computer
-  has. Presets: Pet valley, Light (laptop), Normal, Big. Nothing is created until you press Start. (Skip it with --no-setup; any of --branches,
-  --branch-slots, --founders, --big-brains on the command line also skip it.)
+  slots; the map (valley 1 km, region 2 km, continent 4 km or supercontinent 8 km; the world you watch can
+  be smaller than the prehistory's map); the body sizes; and how hard nature is (plants, seasons, droughts,
+  fire, disease, thirst, water and seasonal ponds; 1x is the documented law). It shows how much memory that
+  takes against what your computer has. Nothing is created until you press Start. (Skip it with
+  --no-setup; any of --branches, --branch-slots, --founders, --big-brains on the command line also skip it.)
+  Presets:
+    Pet valley        1 km valley, two branches, small and fast: to watch a few animals up close.
+    Light (4 km)      a continent, 4 km across, one branch, about 3-3.6 GB: for a laptop or an 8 GB PC.
+                      It kept 7-12 species in the size tests, but crowds them (2-11x the density of real
+                      animals of their size).
+    Normal (8 km)     the default: the supercontinent, one branch, about 4 GB. The smallest map that kept
+                      7-13 species at about the density of real animals.
+    Region, Continent, Supercontinent   bigger runs (more branches or slots; up to ~7 GB).
+  Body sizes (the Bodies group; or --bodies normal|giants|tiny on the command line):
+    Normal   0.1-40 kg (the default).
+    Giants   100 kg-20 t. Real animals that big live at low density, so a giant world holds few of them;
+             the page warns when the map is too small for them. Use a big map.
+    Tiny     1 g-1 kg. Many small animals; the smallest (under ~2 g) are rare at the start because even
+             the smallest brain costs them a large share of their energy.
+  The four size classes' floors are in the same proportions of the range by default and can be set one by
+  one (--body-floors A,B,C,D in kg).
 
 SPEED
   The speed buttons are steps per second: 1/s, 3/s, 10/s, 30/s and max. They work in the prehistory and in
@@ -55,9 +83,9 @@ DATA EXPORT
 
 BIG-BRAINED ANCESTORS AND THE MATING INSTINCT
   Every sexual animal is born with a mating instinct (strongest in males). In each prehistory branch,
-  2 of the 10 ancestors (one on land, one in water) start with 36 brain units, three times the others.
+  1 of the 16 ancestors (10 on land, 6 in water) starts with 256 brain units; the others start with up to 24.
   A bigger brain costs more energy; whether it pays is up to evolution. To change the experiment:
-  Neuroreef.exe --prehistory --big-brains 4 --big-brain-units 24     (or LongRun.bat: edit its line)
+  Neuroreef.exe --prehistory --big-brains 2 --big-brain-units 128     (or LongRun.bat: edit its line)
   --big-brains 0 gives every ancestor an ordinary brain.
 
 BRANCHES
@@ -67,7 +95,8 @@ BRANCHES
 
 RUNNING THE PREHISTORY FOR WEEKS (LongRun.bat)
   Double-click LongRun.bat. It evolves with no graphics, so the whole CPU goes to evolution, and runs
-  until you stop it. Every 30 minutes it saves its whole state to prehistory.nrck (about 2-3 GB).
+  until you stop it. This is the way to do any long run. It uses the defaults (8 km, one branch, about
+  4 GB of memory). Every 30 minutes it saves its whole state to prehistory.nrck (a few GB).
   - If the PC restarts, the power goes or the window is closed: double-click LongRun.bat again. It
     resumes from the last save; at most 30 minutes are lost. It also restarts itself after a crash.
   - To see how it is doing: the window prints a line every 10,000 steps (alive organisms and
@@ -94,3 +123,17 @@ Options (run from a command prompt in this folder):
   Neuroreef.exe --load-bank my.nrbank   continue from saved genomes
   Neuroreef.exe --headless --steps 200000 --csv run.csv   long run without the console
   Neuroreef.exe --help               all options
+
+ECOLOGY REPORT (NR_ECO=1)
+  A headless run with the environment variable NR_ECO=1 also prints an ecology census every 300 steps
+  (animals and biomass by trophic level, plant production and how much of it is eaten, deaths by cause,
+  disease) and at the end, for each species, its density against real animals of its size (Damuth's
+  rule), its life table and causes of death. It only reads the world; the run is the same without it.
+  In PowerShell, in this folder:
+    $env:NR_ECO="1"; .\Neuroreef.exe --headless --random-brains --map valley --seed 7 --steps 2000 --report 300 --threads 4
+  (--map valley: the 1 km valley, quick; --random-brains: no prehistory needed; --report 300: a report line
+  every 300 steps, with the census.) The totals over the run ("ECO POOLED") start after the first year,
+  3,000 steps; for a shorter run like this one also set $env:NR_ECO_FROM="300". The variables stay set in
+  that PowerShell window; Remove-Item Env:NR_ECO closes the census. In a command prompt (cmd):
+    set NR_ECO=1
+    Neuroreef.exe --headless --random-brains --map valley --seed 7 --steps 2000 --report 300 --threads 4

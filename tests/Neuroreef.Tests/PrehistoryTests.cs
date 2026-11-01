@@ -13,7 +13,7 @@ public class PrehistoryTests
     [Fact] // NR-313: a prehistory branch is births and deaths only: a species wiped out never returns
     public void PrehistoryNeverSpawns()
     {
-        using var sim = new Simulation(16384, 52, 1, prehistory: true);
+        using var sim = new Simulation(16384, 52, 1, prehistory: true, maxCapacity: 16384);   // CI memory: held at its start (a full world refuses births, which spawns nothing either)
         var w = sim.W;
         Assert.True(w.Prehistory);
         long founders = 0; foreach (var c in w.T.Created) founders += c;
@@ -93,14 +93,16 @@ public class PrehistoryTests
     [Fact] // a live world saved and continued is exactly the world that never stopped
     public void SavedWorldContinuesExactly()
     {
-        using var a = new Simulation(8192, 91, 1);
+        // CI memory: two worlds of 600 founders an ancestor grew to ~27,000 slots each (~6 GB) in 900 steps; continuing exactly
+        // does not depend on how many animals there are, so 60 founders an ancestor, and a fixed limit (which resumes exactly)
+        using var a = new Simulation(2048, 91, 1, evo: new EvoSettings { Founders = 60 }, maxCapacity: 8192);
         for (int k = 0; k < 300; k++) a.Step();
         string path = System.IO.Path.GetTempFileName();
         try
         {
             Checkpoint.SaveWorld(a.W, path);
             var (cap, seed, ts) = Checkpoint.WorldHeader(path);
-            using var b = new Simulation(cap, seed, 1, null, prehistory: false, restore: true, terrainSeed: ts);
+            using var b = new Simulation(cap, seed, 1, null, prehistory: false, restore: true, terrainSeed: ts, maxCapacity: 8192);
             Assert.False(Checkpoint.LoadWorld(b, path).Migrated);
             for (int k = 0; k < 600; k++) { a.Step(); b.Step(); }   // long enough for dead slots (not saved) to be born into again
             Assert.True(WorldState(a.W).AsSpan().SequenceEqual(WorldState(b.W)), "continued world differs");
@@ -111,7 +113,7 @@ public class PrehistoryTests
     [Fact] // the data export writes every file, with one population column per clade
     public void ExportWritesTheData()
     {
-        using var sim = new Simulation(8192, 92, 1);
+        using var sim = new Simulation(2048, 92, 1, evo: new EvoSettings { Founders = 60 }, maxCapacity: 8192);   // CI memory: the files, not the numbers, are checked
         for (int k = 0; k < 400; k++) sim.Step();
         string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nr-export-" + Guid.NewGuid().ToString("N"));
         try
@@ -131,8 +133,10 @@ public class PrehistoryTests
     [Fact] // NR-323, NR-325: branches step in lockstep; a settings change reaches every branch at a barrier
     public void BranchesRunInLockstepAndTakeSettings()
     {
-        var e = new EvoSettings { TotalSteps = 1000 };
-        using var pre = new Prehistory(2, 8192, 72, 2, e);
+        // CI memory: two branches of 600 founders an ancestor for 1,000 steps, then a live world; lockstep, settings and the
+        // bank do not depend on how many animals there are
+        var e = new EvoSettings { TotalSteps = 1000, Founders = 60 };
+        using var pre = new Prehistory(2, 2048, 72, 2, e, maxCapacity: 8192);
         pre.Configure(s => { s.MutRate = 0.003f; s.MutBig = 20; });
         pre.Start();
         var until = DateTime.UtcNow.AddMinutes(5);
@@ -153,7 +157,7 @@ public class PrehistoryTests
         Assert.Equal(K.CLADES, bank.Genomes.Length);
         Assert.NotEmpty(bank.Clades);
         foreach (var c in bank.Clades) Assert.NotEmpty(bank.Genomes[c.Slot]);
-        using var live = new Simulation(8192, 72, 1, bank, prehistory: false, terrainSeed: 72);
+        using var live = new Simulation(2048, 72, 1, bank, prehistory: false, terrainSeed: 72, maxCapacity: 8192);
         Assert.False(live.W.Prehistory);
         for (int k = 0; k < 300; k++) live.Step();
         foreach (var m in live.W.T.Immigrants) Assert.Equal(0, m);

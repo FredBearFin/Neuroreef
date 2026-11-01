@@ -35,6 +35,8 @@ public static class Host
         Console.WriteLine("NEUROREEF 2");
         Console.WriteLine("The world is births and deaths only: no animal is ever spawned.");
         using var host = new SimHost(o, bank);
+        Console.WriteLine(host.Pre != null ? Options.MemoryLine(host.Pre.B.Length == 1 ? "the prehistory branch" : "the prehistory branches", host.Pre.B[0].W.Cap, o.MaxCapacity, host.Pre.B.Length)
+            : Options.MemoryLine("the world", host.W.Cap, o.MaxCapacity));
         if (host.Pre != null)
             Console.WriteLine($"No evolved brains yet, so the PREHISTORY runs first: {host.Pre.B.Length} branches evolve at full speed " +
                 (host.Pre.Pending.TotalSteps == int.MaxValue ? "(until you begin the world). "
@@ -119,9 +121,16 @@ public static class Host
 
     static void StatusLoop(SimHost h, ManualResetEventSlim done)
     {
+        // the rate is the steps made since the last line over its time: a paused or stalled run reads 0, not the last rate it had
+        ulong lastStep = 0; bool lastPre = false; var clock = Stopwatch.StartNew(); double lastT = 0; bool first = true;
         while (!done.Wait(10000))
         {
             var pre = h.Pre;
+            ulong step = pre != null ? pre.Step : h.W.Step;
+            double t = clock.Elapsed.TotalSeconds;
+            double rate = StatusRate(first || lastPre != (pre != null), h.Paused, step, lastStep, t - lastT, pre != null ? pre.Rate : h.MeasuredRate);
+            first = false; lastPre = pre != null; lastStep = step; lastT = t;
+            string paused = h.Paused ? "  PAUSED" : "";
             if (pre != null)
             {
                 var parts = new List<string>();
@@ -131,12 +140,21 @@ public static class Host
                     for (int sp = 0; sp < K.CLADES; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
                     parts.Add($"branch {b}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
                 }
-                Console.WriteLine($"prehistory {pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {pre.Step:N0})  {pre.Rate,4:F0} steps/s  " + string.Join("  |  ", parts));
+                Console.WriteLine($"prehistory {step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {step:N0})  {rate,4:F0} steps/s{paused}  " + string.Join("  |  ", parts));
                 continue;
             }
             var w = h.W;
-            Console.WriteLine($"step {w.Step,9:N0}  {h.MeasuredRate,5:F0} steps/s  alive {w.AliveCount,6:N0}  slots {w.Cap,7:N0}{(w.FullNow ? $"  WORLD FULL: births refused at {w.GrowLimit}" : "")}");
+            Console.WriteLine($"step {step,9:N0}  {rate,5:F0} steps/s{paused}  alive {w.AliveCount,6:N0}  slots {w.Cap,7:N0}{(w.FullNow ? $"  WORLD FULL: births refused at {w.GrowLimit}" : "")}");
         }
+    }
+
+    /// <summary>The status line's steps per second: the steps since the last line over the seconds between them (0 if the
+    /// step has not moved, or paused), or the sim's own measure on the first line of a phase, when there is no last line to compare.</summary>
+    public static double StatusRate(bool fresh, bool paused, ulong step, ulong lastStep, double seconds, double measured)
+    {
+        if (fresh) return paused ? 0 : measured;
+        if (step <= lastStep || seconds <= 0) return 0;
+        return (step - lastStep) / seconds;
     }
 
     internal static IEnumerable<string> LanAddresses()

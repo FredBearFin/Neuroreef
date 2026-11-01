@@ -124,6 +124,43 @@ public class BodySizeTests
         });
     }
 
+    [Fact] // a random ancestor's brain is drawn within what its body can pay for (Body.UnitsAffordable), so in a world of tiny
+    // bodies the founding test's brain share does not reject the small ones (2026-11-01: 2-24 units drawn whatever the body
+    // thinned the founders under ~10 g); at the default range the draw is the old one, bit for bit
+    public void AnAncestorsBrainFitsItsBody()
+    {
+        var body = new sbyte[G.NBODY];
+        int B = G.BODY;
+        // the default range: the brain gene is the old draw, BRAIN_MIN + U x (BRAIN_START - BRAIN_MIN), for every class
+        for (int a = 0; a < 400; a++)
+        {
+            Clades.AncestorBody(body, 7, a, true, floorClass: a % K.FLOOR_CLASSES);
+            float u = Rng.U(7, (uint)a, 19u, Rs.Founder + 7000u);
+            Assert.Equal(Body.UnitsGene(K.BRAIN_MIN + u * (K.BRAIN_START - K.BRAIN_MIN)), body[G.B_BRAIN - B]);
+        }
+        Assert.True(Body.UnitsAffordable(K.MASS_LO) >= K.BRAIN_START);
+        With(0.001f, 1f, () =>
+        {
+            var w = new World(1024, 7);
+            var g = new sbyte[G.LEN];
+            int small = 0;
+            for (int a = 0; a < 400; a++)
+            {
+                Brain.RandomGenome(g, 7, 0, 0x700000u + (uint)a);
+                Clades.AncestorBody(new Span<sbyte>(g, G.BODY, G.NBODY), 7, a, true, floorClass: a % K.FLOOR_CLASSES);
+                g.CopyTo(w.GenomeOf(0));
+                Body.Express(w, 0);
+                float m = w.PM[0];
+                if (Body.UnitsAffordable(m) < K.BRAIN_MIN + 0.5f) continue;   // ~1-1.5 g: even the smallest brain is dear (real physics)
+                if (m < 0.01f) small++;
+                float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[0] / K.BRAIN_REF;
+                Assert.True(brainCost <= K.BRAIN_SHARE_MAX * w.PBasal[0], $"ancestor {a}: {m * 1000:F1} g with {w.PBrain[0]} units");
+            }
+            Assert.True(small > 8, $"{small} draws under 10 g");
+            return 0;
+        });
+    }
+
     [Fact] // a world of giants (100 kg - 20 t) founds bodies inside its range and runs without NaN or a crash
     public void AGiantsWorldFoundsAndRuns() => RunWorld("giants", 100f, 20000f, 300, 200);
 

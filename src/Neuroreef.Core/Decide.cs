@@ -830,4 +830,8 @@ public static class Decide
 public static class Flag
 {
     public const byte Carrying = 1, Newborn = 2, Immigrant = 8;
+    /// <summary>A flier's state after its last step (2026-11-01, Resolve; World.Airborne reads it): Aloft in the air, Landed
+    /// on the ground or in the water (a newborn, or one too cold or too heavy to fly, over water it cannot stand in).
+    /// Neither before its first step.</summary>
+    public const byte Landed = 16, Aloft = 32;
 }

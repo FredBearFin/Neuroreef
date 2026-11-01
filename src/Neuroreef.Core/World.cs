@@ -385,6 +385,20 @@ public sealed class World
     /// <summary>Memory kept free of slots: an eighth of what the machine (or container) gives the process, at least 1 GB.</summary>
     public static long MemoryReserve(long available) => Math.Max(available / 8, 1L << 30);
 
+    /// <summary>
+    /// The slots a world (or each of share prehistory branches) starts with by default: a quarter of the memory the machine
+    /// (or container) gives the process, over BytesPerSlot, in whole GROW_BLOCKs, clamped to DEFAULT_SLOTS_LO..HI. 2026-11-01:
+    /// a fixed 16,384 (3.4 GB) was most of an 8 GB PC before the 8 km land; a quarter of 16 GB is about 19,000 slots, 4 GB.
+    /// Only where a run starts: a world grows as births need (Grow), and a seed gives the same run from any start size.
+    /// </summary>
+    public static int DefaultSlots(int share = 1) => DefaultSlots(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, share);
+    public static int DefaultSlots(long available, int share)
+    {
+        long slots = available / 4 / Math.Max(1, share) / BytesPerSlot / GROW_BLOCK * GROW_BLOCK;
+        return (int)Math.Clamp(slots, DEFAULT_SLOTS_LO, DEFAULT_SLOTS_HI);
+    }
+    public const int DEFAULT_SLOTS_LO = 4096, DEFAULT_SLOTS_HI = 32768;
+
     static long _slotBytes;
     /// <summary>Memory one slot takes: every per-slot array of the world and of its derived cache (bytes).</summary>
     public long SlotBytes => _slotBytes != 0 ? _slotBytes : _slotBytes = PerSlot.BytesPerSlot(this, Cap) + PerSlot.BytesPerSlot(D, Cap);
@@ -530,7 +544,22 @@ public sealed class World
             }
             return v;
         }
-        return PVLand[i] * Footing(i, cell);
+        float vl = PVLand[i] * Footing(i, cell);
+        // flapping helps on a slope (wing-assisted incline running, Body.WingInclineGain, 2026-11-01); nothing on the flat
+        return PWings[i] > 0f ? vl * Body.WingInclineGain(PWings[i], SlopeSin(cell)) : vl;
+    }
+
+    /// <summary>Sine of the steepest slope from this cell to a neighbour (2026-11-01): the largest rise in metres
+    /// (elevation above the lakes over 1 - SeaLevel is ReliefM, as Climate.Build reads it) over a cell's side, GEO_CELL_M.</summary>
+    public float SlopeSin(int cell)
+    {
+        int fw = Map.FW, cx = cell % fw, cy = cell / fw;
+        float e = Elev[cell];
+        float d = MathF.Max(MathF.Max(MathF.Abs(Elev[cy * fw + (cx + 1) % fw] - e), MathF.Abs(Elev[cy * fw + (cx + fw - 1) % fw] - e)),
+                            MathF.Max(MathF.Abs(Elev[(cy + 1) % fw * fw + cx] - e), MathF.Abs(Elev[(cy + fw - 1) % fw * fw + cx] - e)));
+        if (d <= 0f) return 0f;
+        float s = d / MathF.Max(1f - SeaLevel, 1e-3f) * Map.ReliefM / K.GEO_CELL_M;   // rise over run
+        return s / MathF.Sqrt(1f + s * s);
     }
 
     /// <summary>
@@ -570,14 +599,16 @@ public sealed class World
         return (kind & (byte)Body.GroundRealm(PLegs[i], PFins[i])) != 0 && Depth[cell] <= MaxWaterDepth(i);
     }
 
-    /// <summary>Is flier i in the air (2026-10-31)? A flier lands whenever it can and is going no faster than it can walk
-    /// (Resolve: resting, eating and drinking land it), so one in the air is over ground it cannot stand on or moved
-    /// faster than its legs carry it.</summary>
+    /// <summary>Is flier i in the air? Since 2026-11-01 its last step says (Flag.Aloft, Flag.Landed: Resolve decides, and a
+    /// flier that cannot fly over water it cannot stand in is in the water). Before its first step it is in the air if it
+    /// goes faster than it walks.</summary>
     public bool Airborne(int i)
     {
         if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return false;
-        int cell = FIdx(X[i], Y[i]);
-        return !GroundAllows(i, cell) || Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;
+        if ((Flags[i] & Flag.Aloft) != 0) return true;     // what its last step was (Resolve, 2026-11-01)
+        if ((Flags[i] & Flag.Landed) != 0) return false;
+        int cell = FIdx(X[i], Y[i]);   // before its first step: in the air if it goes faster than it walks (being over water
+        return Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;   // it cannot stand in is not flying: a newborn there is in it)
     }
 
     public bool CellAllows(int i, int cell, Realm realm)

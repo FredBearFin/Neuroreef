@@ -14,6 +14,7 @@ public static class Headless
     public static int Run(Options o, GeneBank.Data? bank)
     {
         var clock = Stopwatch.StartNew();
+        Console.WriteLine(Options.MemoryLine("the world", o.Capacity, o.MaxCapacity));
         using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, empty: o.Empty, terrainSeed: o.Seed, evo: o.WorldSettings(), maxCapacity: o.MaxCapacity);
         Console.WriteLine($"world built in {clock.Elapsed.TotalSeconds:F1} s");
         var w = sim.W;
@@ -83,6 +84,7 @@ public static class Headless
             catch (Exception ex) { Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}"); return 2; }
         var clock = Stopwatch.StartNew();
         bool resume = o.CheckpointPath != null && File.Exists(o.CheckpointPath);
+        Console.WriteLine(Options.MemoryLine(o.Branches == 1 ? "the prehistory branch" : "the prehistory branches", o.BranchSlots, o.MaxCapacity, o.Branches));
         using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e, restore: resume, maxCapacity: o.MaxCapacity);   // resuming: no land built only to be overwritten
         if (!resume) Console.WriteLine($"{pre.B.Length} branches built in {clock.Elapsed.TotalSeconds:F1} s");
         var s0 = pre.Pending;
@@ -476,10 +478,14 @@ public sealed class WaterWatch
     byte[] _wet = Array.Empty<byte>();
     long _samples;
 
+    readonly StringBuilder _traj = new();
+    long _tLand, _tWater;   // water-founded animal-steps on land and in water since the last trajectory line
+
     public void Sample(World w)
     {
         if (_serial.Length < w.Cap) { Array.Resize(ref _serial, w.Cap); Array.Resize(ref _wet, w.Cap); }
         _samples++;
+        TrackLungs(w);
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] < St.Juvenile) continue;
@@ -513,9 +519,44 @@ public sealed class WaterWatch
         }
     }
 
+    /// <summary>Every TRAJ steps: the lung gene of water- and land-founded lineages (mean over living animals, and the
+    /// share that are gill-breathers, lungs below LungsMin), the water-founded lineages alive, and their share of
+    /// animal-steps on land since the last line.</summary>
+    const int TRAJ = 500;
+    void TrackLungs(World w)
+    {
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile || w.Sp[w.Spc[i]].Ancestor < w.Evo.AncestorsLand) continue;
+            byte kind = w.Cell[World.FIdx(w.X[i], w.Y[i])];
+            if (kind == (byte)Realm.Land) _tLand++; else _tWater++;
+        }
+        if (w.Step % TRAJ != 0) return;
+        if (_traj.Length == 0) _traj.AppendLine("     STEP   WATER-FOUNDED: ALIVE LINEAGES  LUNGS (mean, gills <0.15)   ON LAND since last   LAND-FOUNDED: LUNGS   ALL: ENDOTHERMY (mean, share > 0.5, lineages mostly warm)");
+        int nw = 0, nl = 0, gw = 0, warm = 0; double lw = 0, ll = 0, en = 0;
+        var lineages = new bool[K.CLADES];
+        var cn = new int[K.CLADES]; var cw = new int[K.CLADES];
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            bool water = w.Sp[w.Spc[i]].Ancestor >= w.Evo.AncestorsLand;
+            if (water) { nw++; lw += w.PLungs[i]; if (w.PLungs[i] < LungsMin) gw++; lineages[w.Spc[i]] = true; }
+            else { nl++; ll += w.PLungs[i]; }
+            en += w.PEndo[i]; cn[w.Spc[i]]++;
+            if (w.PEndo[i] > 0.5f) { warm++; cw[w.Spc[i]]++; }
+        }
+        int warmLin = 0, lin = 0;
+        for (int s = 0; s < K.CLADES; s++) if (cn[s] > 0) { lin++; if (2 * cw[s] > cn[s]) warmLin++; }
+        _traj.AppendLine($"{w.Step,9}   {nw,6} in {lineages.Count(b => b),2}             {(nw > 0 ? lw / nw : 0),5:F3}  {Pct(gw, nw),5:F1}%" +
+                         $"         {Pct(_tLand, _tLand + _tWater),6:F1}%         {(nl > 0 ? ll / nl : 0),5:F3}" +
+                         $"         {(nw + nl > 0 ? en / (nw + nl) : 0),5:F3}  {Pct(warm, nw + nl),5:F1}%  {warmLin,2} of {lin,2}");
+        _tLand = _tWater = 0;
+    }
+
     public string Report(World w)
     {
         var o = new StringBuilder();
+        if (_traj.Length > 0) { o.AppendLine("LUNG GENE in water- and land-founded lineages (living animals):"); o.Append(_traj); }
         o.AppendLine($"WATER CENSUS over {_samples:N0} steps: per clade, where its animal-steps were (land / shallow / deep water), steps from water onto land, and its living now");
         o.AppendLine("CLADE        FOUNDED   ALIVE   LAND%  SHALLOW%  DEEP%   ONTO LAND  (per 1000 water steps)   LUNGS  DEPTH IN WATER (m)  DIED: SUFFOC DROWNED");
         long wl = 0, ww = 0, we = 0;

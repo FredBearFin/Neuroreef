@@ -111,7 +111,7 @@ public static class BodySize
     public static float WalkerPerceive(float m)
     {
         float s = K.MAX_SIGHT * MathK.Pow(m / K.MASS_HI, K.EXP_SIGHT);
-        float v = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * K.BODY_RANGE_TRAIT * 1.3f * (1f + K.GLIDE);
+        float v = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * K.BODY_RANGE_TRAIT * 1.3f * Body.WingGroundGainMax;
         return MathF.Sqrt(s * s + 2f * s * v / MathF.PI);
     }
 

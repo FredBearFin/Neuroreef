@@ -56,24 +56,54 @@ public static class Resolve
         var metrics = Decide.Metrics;
 
         // ---- 1. move (realm rule, DESIGN §9.2)
-        float h = w.IHeading[i], spd = w.ISpeed[i];
+        float h = w.IHeading[i], spd = w.ISpeed[i] * Respiration.Stamina(w, i);   // out of breath, it slows (2026-11-01)
         float nx = w.X[i], ny = w.Y[i];
         float x0 = nx, y0 = ny;   // where its way this step began: a strike or a mating reaches along the way (2026-11-01)
         // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
         // drinking water within reach, it lands and walks (or stands) on its legs; it stays in the air only over ground it
         // cannot stand on (2026-10-31). An urge to eat with nothing here to eat does not ground it: it flies on to look
-        bool flier = loco == Loco.Fly, airborne = false, canLand = true;
+        bool flier = loco == Loco.Fly, airborne = false, canLand = true, downed = false;
         if (flier)
         {
             int c0 = World.FIdx(nx, ny);
-            float vGround = w.GroundVmax(i, c0);
+            float vGround = w.GroundVmax(i, c0), spd0 = w.Speed[i];
             bool feed = (acts & BIT_EAT) != 0 && w.IFoodHere[i] > 0f, sip = (acts & BIT_DRINK) != 0 && w.DistDrink[c0] <= 1.5f && w.Thirst[i] > 0f;
             bool settle = rest || feed || sip || spd <= vGround;
             canLand = w.GroundAllows(i, c0);
             airborne = !(settle && canLand);
+            // flying when this step began: its last step's state; before its first, faster than it walks (not merely over
+            // water it cannot stand in: a newborn placed there has not flown)
+            bool aloft = (w.Flags[i] & Flag.Aloft) != 0 || ((w.Flags[i] & Flag.Landed) == 0 && spd0 > vGround * 1.0001f + 1e-6f);
+            float load = Body.FlightLoad(w, i);
+            // one on the ground (or in the water) takes off only if its flight muscle is warm enough, grown enough and its
+            // load light enough (Body.CanTakeOff, 2026-11-01: a cold ectotherm cannot fly until it is warm, a newborn until it
+            // fledges, a full gut raises its wing loading); in the air its muscle's own heat keeps it warm
+            if (airborne && !aloft)
+            {
+                float muscleT = 1f;
+                if (Climate.On)
+                {
+                    bool wet = (w.Cell[c0] & (byte)Realm.Water) != 0;
+                    muscleT = Heat.Rate(Heat.Core(Heat.Operative(w, c0, w.PInsul[i], wet), w.PEndo[i]));
+                }
+                if (!Body.CanTakeOff(w.PWings[i], w.PM[i], mass, load, muscleT)) airborne = false;
+            }
+            // one in the air stays up only while its power holds level flight with its load (Body.LoadedMargin)
+            else if (airborne && Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f) < 1f) airborne = false;
+            // over water it cannot stand in, one that cannot fly is in the water (2026-11-01: a newborn placed there counted
+            // as airborne and escaped the fledging rule): it swims or paddles at its speed there, breathes as its organs let
+            // it (Respiration) and is immersed, until it reaches ground it can stand on or can take off
+            if (!airborne && !canLand) downed = true;
+            // in the air its load (and a juvenile's smaller flight muscle) sets how fast it can fly (Body.LoadedTopAirSpeed)
+            if (airborne)
+            {
+                float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
+                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f)));
+            }
             if (!airborne) spd = MathF.Min(spd, vGround);
+            w.Flags[i] = (byte)((w.Flags[i] & ~(Flag.Aloft | Flag.Landed)) | (airborne ? Flag.Aloft : Flag.Landed));
         }
-        if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne, out nx, out ny, out float fraction))
+        if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne && !downed, out nx, out ny, out float fraction))   // in the water it may paddle across it
         {
             spd *= fraction;
             h += Rng.U(seed, step, (uint)i, Rs.Turn) < 0.5f ? MathF.PI * 0.5f : -MathF.PI * 0.5f;
@@ -220,7 +250,17 @@ public static class Resolve
                     if (dg != null) { dg.StrReach[dgG]++; if (preyEat) dg.PreyEat[dgG]++; if (w.Spc[v] == s) dg.StrKin[dgG]++; }
                     if (strikeAttempt) metrics?.Apply(P.STRIKE);
                     if (preyEat) metrics?.Apply(P.EAT);
+                    float vx = w.X[v], vy = w.Y[v];
+                    bool victimAloft = w.Airborne(v);
                     r += Strike(w, i, v, gutCap, emax);
+                    // a flier that kills ground prey from the air comes down on it to eat it (2026-11-01): raptors stoop,
+                    // kill and feed on the ground; only prey taken in the air, or over water it cannot stand in, is eaten
+                    // on the wing. It is landed there, so it pays a take-off (warm muscle, the meal as load) to fly on
+                    if (airborne && !victimAloft && w.StageOf[v] == St.Dead)   // killed (its slot freed)
+                    {
+                        int vc = World.FIdx(vx, vy);
+                        if (w.GroundAllows(i, vc)) { PathMemory.Integrate(w, i, World.Delta1(vx - w.X[i]), World.Delta1(vy - w.Y[i])); w.X[i] = vx; w.Y[i] = vy; w.Speed[i] = 0f; w.Flags[i] = (byte)((w.Flags[i] & ~Flag.Aloft) | Flag.Landed); }
+                    }
                 }
             }
             else if (v == Player.Slot && w.Player is { Present: true } pl)
@@ -288,14 +328,15 @@ public static class Resolve
         // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
         // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
         bool immersed = waterCell && !airborne;
-        float top = K.T_REF, core = K.T_BODY, rateT = 1f;
+        float top = K.T_REF, core = K.T_BODY, rateT = 1f, gutT = 1f;
         if (Climate.On)
         {
             top = Heat.Operative(w, cell, w.PInsul[i], immersed);
             // below the mixed layer the water is colder (Respiration.WaterT), for the share of the step it is down there
             if (immersed && w.ZShare[i] > 0f) top += w.ZShare[i] * (Respiration.WaterT(w, cell, w.Z[i]) - top);
             core = Heat.Core(top, w.PEndo[i]);
-            rateT = Heat.Rate(core);
+            rateT = Heat.Activity(core, w.PEndo[i]);   // its core's temperature and its tissues' metabolic level (2026-11-01)
+            gutT = Heat.Rate(core);                    // its gut's enzymes follow the core's temperature alone
         }
         float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (1f + Pathogens.Sickness(w, i));   // the pathogen's take and the immune response (Revision R)
         // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
@@ -318,6 +359,8 @@ public static class Resolve
             Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core);
             // a body kept below T_BODY that makes more heat than it loses just runs a little warmer: it need not shed it
             if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
+            // a core below freezing is a cold shortfall it cannot make up (2026-11-01: before, a cold-blooded body took any frost)
+            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core);
             w.TOp[i] = top;
             w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
             // what it cannot cover strains it; a body recovers from a little strain each step
@@ -347,9 +390,9 @@ public static class Resolve
         float dgDe = 0f;   // census: energy absorbed this step
         if (w.Gut[i] > 1e-7f)
         {
-            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
+            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT);   // a cold gut digests slowly (Revision P)
             // the gut's absorptive capacity (C_ABSORB, 2026-11-01): rich digesta pass only as fast as their energy is taken up
-            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT;
             if (dg != null) { if (d >= w.Gut[i]) { } else if (w.GutEnergy[i] * d / w.Gut[i] > absorbE) dg.AbsorbCapped[dgG]++; else dg.DigCapped[dgG]++; }
             if (w.GutEnergy[i] > absorbE) d = MathF.Min(d, w.Gut[i] * absorbE / w.GutEnergy[i]);
             float frac = d / w.Gut[i];
@@ -383,7 +426,7 @@ public static class Resolve
         if (w.Energy[i] <= 0)
         {
             if (dg != null && hurt4 > 1e-6f) dg.StarveHurt[dgG]++;
-            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
+            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
             Die(w, i, Cause.Starve, -1); return;
         }
         if (w.Thirst[i] >= 1f) { Die(w, i, Cause.Thirst, -1); return; }
@@ -414,10 +457,18 @@ public static class Resolve
         {
             // the speed of least power in this world: its top air speed over how far above it power lets it fly (when
             // FLY_V_CAP holds the top speed down, the whole curve is compressed with it)
-            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
-            float p = Body.FlightPowerMin(mass) * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
-            float duty = canLand ? MathF.Min(1f, spd / Body.FlightFullStep(mass)) : 1f;
-            return MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty * coat;
+            // a load (a full gut, young carried inside, Body.FlightLoad) at fixed wings raises the least power as
+            // (total / body)^(3/2) and the speed of least power as its square root, so the cost per distance rises in
+            // proportion to the weight (induced power ~W^2 / V, V_mp ~W^(1/2): Pennycuick 1975, 2008) (2026-11-01)
+            float wl = (mass + Body.FlightLoad(w, i)) / mass, wlRoot = MathK.Pow(wl, 0.5f), pLoad = wl * wlRoot;
+            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i])) * wlRoot;
+            float pMin = Body.FlightPowerMin(mass) * pLoad;
+            float p = pMin * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
+            float duty = canLand ? MathF.Min(1f, spd / (Body.FlightFullStep(mass) * wlRoot)) : 1f;
+            // a step in the air that starts or ends on the ground has a take-off and climb-out, dearer than cruising
+            // (TAKEOFF_S of least power: Pennycuick 2008; Askew, Marsh & Ellington 2001; Nudds & Bryant 2000)
+            float takeoff = canLand ? pMin * K.TAKEOFF_S / K.STEP_S : 0f;
+            return (MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty + takeoff) * coat;
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)
