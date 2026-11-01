@@ -141,7 +141,7 @@ public static class Respiration
         var b = UptakeAt(w, i, cell, airborne, debt, out z, out share);
         if (!airborne && (w.Cell[cell] & (byte)Realm.Water) != 0)
         {
-            float basal = OrganBase(w, i) * Aerobic(w, i, cell, airborne), L = w.PLungs[i];
+            float basal = OrganBase(w, i) * Pace(w, i, cell, airborne), L = w.PLungs[i];   // the pumps work at its metabolic pace
             // the gills' surface leaks salts (or water) and ion pumps make up for it; air in the lungs pulls up, less
             // as it compresses with depth (Boyle: 1 atmosphere per 10 m), for the share of the step it is down
             b.Extra = basal * (K.GILL_OSMO * (1f - L) + K.BUOY_COST * L * share / (1f + z / 10f));
@@ -150,12 +150,21 @@ public static class Respiration
     }
 
     /// <summary>
-    /// How fast body i's tissues run here against a warm-blooded body's at T_BODY (Heat.Activity at the core its
-    /// endothermy keeps in this cell's operative temperature). Its organs' capacity, its resting need and the running
-    /// costs of breathing scale with it: a cold-blooded body has 1/5 of the aerobic machinery, and less in the cold, so
-    /// it cannot keep up sustained activity (Bennett &amp; Ruben 1979: the aerobic capacity model of endothermy). 1 with no climate.
+    /// The capacity of body i's respiratory organs here against their full capacity: its metabolic pace (Pace) to the
+    /// power AEROBIC_T. At 1, a cold or cold-blooded body has less aerobic machinery and cannot keep up sustained activity
+    /// (Bennett &amp; Ruben 1979: the aerobic capacity model of endothermy). AEROBIC_T is 0 (not active) since 2026-11-01,
+    /// so this is 1; its need and running costs follow Pace either way. 1 with no climate.
     /// </summary>
     public static float Aerobic(World w, int i, int cell, bool airborne)
+    {
+        if (!Climate.On || K.AEROBIC_T <= 0f) return 1f;   // not active (AEROBIC_T 0): organs at their full capacity
+        return MathK.Pow(Pace(w, i, cell, airborne), K.AEROBIC_T);
+    }
+
+    /// <summary>How fast body i burns here against a warm-blooded body at T_BODY (Heat.Activity at the core its endothermy
+    /// keeps in this cell): its resting oxygen need and the running costs of its organs follow it, whatever its organs'
+    /// capacity does (Aerobic). 1 with no climate.</summary>
+    public static float Pace(World w, int i, int cell, bool airborne)
     {
         if (!Climate.On) return 1f;
         bool immersed = !airborne && (w.Cell[cell] & (byte)Realm.Water) != 0;
@@ -209,7 +218,7 @@ public static class Respiration
         if (swim >= K.DEEP_SWIM)
         {
             // a swimmer: its preferred depth, pulled up as it runs out of breath
-            float need = K.FIELD_METAB * basal;
+            float need = K.FIELD_METAB * OrganBase(w, i) * Pace(w, i, cell, airborne);   // what it burns (its capacity is basal x scope)
             float zt = ForageDepth(w, i, cell, col) * (1f - MathF.Min(1f, debt / DebtMax(w, i)));
             float us = basal * (aAir * K.LUNG_SCOPE * L + aW0 * (K.GILL_SCOPE * Gi + skin));
             if (zt <= 0f) { b.Air = basal * aAir * K.LUNG_SCOPE * L; b.Water = basal * aW0 * K.GILL_SCOPE * Gi; b.Skin = basal * aW0 * skin; b.AWater = aW0; return b; }
@@ -299,7 +308,7 @@ public static class Respiration
     public static bool Breathable(World w, int i, int cell, out float z, out float share, out float cost)
     {
         var b = Uptake(w, i, cell, false, 0f, out z, out share);
-        float need = K.FIELD_METAB * OrganBase(w, i) * Aerobic(w, i, cell, false);
+        float need = K.FIELD_METAB * OrganBase(w, i) * Pace(w, i, cell, false);
         cost = Cost(b, need);
         return b.Uptake >= need + cost;
     }
