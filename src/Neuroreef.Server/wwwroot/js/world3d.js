@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from '../lib/OrbitControls.js';
 import { agentState, agentGenes, REC } from './net.js';
-import { merge } from './creatures/kit.js';
+import { Look } from './look/look.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBodies, bodySize, appearanceColor } from './creatures/body.js';
 
 // Vertical scale (2026-10-31). Elevation is 0..1 with the lakes at w.sea; Climate reads (e - sea) / (1 - sea) x H_RELIEF
@@ -30,11 +30,6 @@ const NEAR_DIST = 90;        // organisms closer than this to the camera are dra
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
-// vegetation LOD (2026-10-31): detailed trees within TREE_NEAR of the camera, single cones beyond; a budget of expected
-// instances per re-plant, met by thinning with distance (it was a fixed 260-unit disc round the view centre, so trees
-// stood only in the middle of a zoomed-out view although they cover most of the land)
-const TREE_NEAR = 150, TREE_NEAR_CAP = 9000, TREE_FAR_CAP = 40000, SHRUB_CAP = 14000;
-const TREE_BUDGET = 40000, SHRUB_BUDGET = 12000;
 const DIRX = [1, 1, 0, -1, -1, -1, 0, 1], DIRY = [0, 1, 1, 1, 0, -1, -1, -1];   // the WORLD frame's river directions
 const NCLADES = 32;
 
@@ -61,11 +56,10 @@ export class World3D {
     this.controls.maxPolarAngle = Math.PI * 0.47;
     this.controls.minDistance = 8; this.controls.maxDistance = Math.max(400, this.W * 1.5);
 
-    const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a2f22, 1.1);
-    const sun = new THREE.DirectionalLight(0xfff1dd, 1.6);
-    sun.position.set(0.5, 0.75, 0.3);   // a lower sun, so gentle relief still reads
-    this.scene.add(hemi, sun);
-    this.sun = sun;
+    // [look] sky, aerial perspective, sun and sky light, shadows, plants and the finish: js/look/
+    this.look = new Look(this, (m) => wrapPatch(m, this.wrapU));
+    this.sun = this.look.light.sun;
+    this.flames = this.look.veg.flames;
 
     this.mode = 'overview';
     this.agents = new Map();          // serial -> state for interpolation
@@ -78,6 +72,7 @@ export class World3D {
     this._buildMarkers();
     this.resize();
     addEventListener('resize', () => this.resize());
+    if (/[?&]lookdebug\b/.test(location.search)) window.__nrWorld = this;   // [look] scripted cameras for the art screenshots
   }
 
   resize() {
@@ -189,6 +184,7 @@ export class World3D {
       this.scene.add(t, wt, rt);
       this.tiles.push([t, wt, rt]);
     }
+    this.look.onTerrain(this.tiles);   // [look] shadows on the ground and water
     this.N = N;
     this._paint(this.fields || null);
     if (this.fields) this._plants(true);
@@ -337,94 +333,9 @@ export class World3D {
 
   // ------------------------------------------------------------------ vegetation instances (LOD within a budget)
   //
-  // The trees and shrubs of every field cell in view, from the FIELDS cover: within TREE_NEAR of the camera a detailed
-  // tree, beyond it a single cone. When the expected count exceeds the budget, cells are kept with a probability
-  // that falls with the square of their distance to the camera (about constant density on screen), and the plants kept
-  // are drawn bigger (canopy area x 1 / keep), so a forest seen from afar still covers what it covers.
+  // The trees, shrubs, grass tufts, rocks and fires in view, from the FIELDS cover: js/look/vegetation.js.
 
-  _plants(force) {
-    const f = this.fields; if (!f || !this.world || !this.tiles) return;
-    const c = this.controls.target, cam = this.camera.position, W = this.W;
-    const camD = cam.distanceTo(c);
-    if (!force && this._plantC && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < Math.max(10, camD * 0.12) &&
-        cam.distanceTo(this._plantCam) < Math.max(10, camD * 0.15)) return;
-    this._plantC = c.clone(); this._plantCam = cam.clone();
-    if (!this.trees) {
-      const lam = () => new THREE.MeshLambertMaterial({ vertexColors: true });
-      this.trees = new THREE.InstancedMesh(treeGeometry(), lam(), TREE_NEAR_CAP);
-      this.treesFar = new THREE.InstancedMesh(farTreeGeometry(), lam(), TREE_FAR_CAP);
-      this.shrubs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0x5a6e2a, flatShading: true }), SHRUB_CAP);
-      this.flames = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 3, 5), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85 }), 1500);
-      for (const m of [this.trees, this.treesFar, this.shrubs, this.flames]) { m.frustumCulled = false; wrapPatch(m.material, this.wrapU); m.count = 0; }
-      this.scene.add(this.trees, this.treesFar, this.shrubs, this.flames);
-    }
-    const d = f.d, cs = W / d;
-    const T = f.data.subarray(this._layer('tree') * d * d), S = f.data.subarray(this._layer('shrub') * d * d), F = f.data.subarray(this._layer('fire') * d * d);
-    // the area planted: one copy of the map around the view centre while the wrap is shown, else as far as the fog lets one see
-    const fogFar = this.scene.fog.far;
-    const E = this._wrapS > 0.5 ? W / 2 : Math.min(fogFar, 0.8 * W);
-    const r0 = Math.floor(E / cs), side = 2 * r0 + 1;
-    const ccx = Math.floor(c.x / cs), ccy = Math.floor(c.z / cs);
-    if (!this._pd || this._pd.length < side * side) { this._pd = new Float32Array(side * side); this._pt = new Float32Array(side * side); this._ps = new Float32Array(side * side); this._pi = new Int32Array(side * side * 2); }
-    const PD = this._pd, PT = this._pt, PS = this._ps, PI = this._pi;
-    // pass 1: the cells in reach, their distance to the camera and their expected trees and shrubs
-    let m = 0;
-    for (let dy = -r0; dy <= r0; dy++) for (let dx = -r0; dx <= r0; dx++) {
-      const gx = ccx + dx, gy = ccy + dy, px = (gx + 0.5) * cs, pz = (gy + 0.5) * cs;
-      if (Math.abs(px - c.x) > E || Math.abs(pz - c.z) > E) continue;
-      const dist = Math.hypot(px - cam.x, this.heightAt(px, pz) - cam.y, pz - cam.z);
-      if (dist > fogFar) continue;
-      const fx = ((gx % d) + d) % d, fy = ((gy % d) + d) % d, fi = fy * d + fx;
-      PD[m] = Math.max(1, dist); PT[m] = T[fi] / 255 * 3.2; PS[m] = S[fi] / 255 * 4; PI[2 * m] = gx; PI[2 * m + 1] = gy; m++;
-    }
-    const D0t = fitBudget(PD, PT, m, TREE_BUDGET), D0s = fitBudget(PD, PS, m, SHRUB_BUDGET);
-    // pass 3: place them
-    const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    let nt = 0, nft = 0, ns = 0, nf = 0;
-    for (let k = 0; k < m; k++) {
-      const gx = PI[2 * k], gy = PI[2 * k + 1], fx = ((gx % d) + d) % d, fy = ((gy % d) + d) % d, fi = fy * d + fx, dist = PD[k];
-      let hsh = hash2(fx, fy);
-      const keepT = Math.min(1, (D0t / dist) ** 2);
-      if (((hsh >>> 4) & 1023) / 1024 < keepT) {
-        const grow = Math.min(3, 1 / Math.sqrt(keepT));
-        const ntree = Math.floor(PT[k] + (hsh & 255) / 256);
-        for (let j = 0; j < ntree; j++) {
-          hsh = hash1(hsh);
-          const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
-          if (this.world.cell[this._cellOf(x, y)] !== 1) continue;
-          const sc = (1.6 + ((hsh >> 20) & 15) / 8) * grow;
-          p.set(x, this.heightAt(x, y), y); q.setFromAxisAngle(up, (hsh & 63) / 10); s.set(sc, sc * (0.9 + ((hsh >> 24) & 7) / 14), sc);
-          mat.compose(p, q, s);
-          if (dist < TREE_NEAR && nt < TREE_NEAR_CAP) this.trees.setMatrixAt(nt++, mat);
-          else if (nft < TREE_FAR_CAP) this.treesFar.setMatrixAt(nft++, mat);
-        }
-      }
-      const keepS = Math.min(1, (D0s / dist) ** 2);
-      hsh = hash1(hsh + 17);
-      if (((hsh >>> 4) & 1023) / 1024 < keepS) {
-        const grow = Math.min(3, 1 / Math.sqrt(keepS));
-        const nsh = Math.floor(PS[k] + ((hsh >> 8) & 255) / 256);
-        for (let j = 0; j < nsh && ns < SHRUB_CAP; j++) {
-          hsh = hash1(hsh + 17);
-          const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
-          if (this.world.cell[this._cellOf(x, y)] !== 1) continue;
-          const sc = (0.7 + ((hsh >> 20) & 15) / 20) * grow;
-          p.set(x, this.heightAt(x, y) + sc * 0.4, y); q.identity(); s.set(sc * 1.3, sc, sc * 1.3);
-          this.shrubs.setMatrixAt(ns++, mat.compose(p, q, s));
-        }
-      }
-      if (F[fi] && nf < 1500) {
-        for (let j = 0; j < 3 && nf < 1500; j++) {
-          hsh = hash1(hsh + 99);
-          const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
-          p.set(x, this.heightAt(x, y) + 1.2, y); q.identity(); s.set(1, 1, 1);
-          this.flames.setMatrixAt(nf++, mat.compose(p, q, s));
-        }
-      }
-    }
-    this.trees.count = nt; this.treesFar.count = nft; this.shrubs.count = ns; this.flames.count = nf;
-    for (const o of [this.trees, this.treesFar, this.shrubs, this.flames]) o.instanceMatrix.needsUpdate = true;
-  }
+  _plants(force) { this.look.plants(force); }   // [look] js/look/vegetation.js
 
   /** The cell whose vertex is nearest to a world position. */
   _cellOf(x, y) {
@@ -452,6 +363,7 @@ export class World3D {
   _allocBodies(old, geo, cap) {
     if (old) { this.scene.remove(old.mesh); old.mesh.geometry.dispose(); old.mesh.dispose(); }
     const B = bodyMesh(geo, this.bodyMat, cap);
+    this.look.onBodies(B.mesh, this.bodyMat, geo === this.nearGeo);   // [look] shadows of the near animals
     this.scene.add(B.mesh);
     return B;
   }
@@ -767,7 +679,7 @@ export class World3D {
   }
 
   render(probe) {
-    if (!this.tiles) { this.renderer.render(this.scene, this.camera); return; }
+    if (!this.tiles) { this.look.update(); this.look.render(); return; }   // [look]
     const now = performance.now();
     const alpha = Math.min(1, (now - this.frameT) / this.frameDt);
     const W = this.W;
@@ -949,7 +861,7 @@ export class World3D {
     // a kill close by shakes the view
     let sx = 0, sy = 0;
     if (this.shake > 0.01) { sx = (Math.random() - 0.5) * this.shake; sy = (Math.random() - 0.5) * this.shake; this.camera.position.x += sx; this.camera.position.y += sy; this.shake *= 0.86; }
-    this.renderer.render(this.scene, this.camera);
+    this.look.update(); this.look.render();   // [look] light, sky and fog for this view, then the finish (js/look/post.js)
     this.camera.position.x -= sx; this.camera.position.y -= sy;
   }
 
@@ -994,37 +906,8 @@ export class World3D {
 // ------------------------------------------------------------------ procedural geometry
 
 function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * t; }
-function hash1(x) { x = Math.imul(x ^ (x >>> 16), 0x45d9f3b); x = Math.imul(x ^ (x >>> 16), 0x45d9f3b); return (x ^ (x >>> 16)) >>> 0; }
-function hash2(x, y) { return hash1(Math.imul(x, 73856093) ^ Math.imul(y, 19349663)); }
-
-function treeGeometry() {
-  const trunk = new THREE.CylinderGeometry(0.12, 0.18, 1.4, 5); trunk.translate(0, 0.7, 0);
-  const crown = new THREE.ConeGeometry(0.9, 2.4, 7); crown.translate(0, 2.4, 0);
-  const crown2 = new THREE.ConeGeometry(0.7, 1.6, 7); crown2.translate(0, 3.3, 0);
-  return merge([[trunk, 0x5a3d26], [crown, 0x1f5a2a], [crown2, 0x2a6e32]]);
-}
-
-function farTreeGeometry() {
-  // the far LOD of treeGeometry: one cone of the same height and spread
-  const crown = new THREE.ConeGeometry(0.85, 3.6, 6); crown.translate(0, 2.3, 0);
-  return merge([[crown, 0x245f2c]]);
-}
 
 function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
-
-/** The distance scale D0 for which the sum of v[k] x min(1, (D0 / dist[k])²) over the first m cells is about budget
- *  (Infinity when everything fits). */
-function fitBudget(dist, v, m, budget) {
-  let all = 0; for (let k = 0; k < m; k++) all += v[k];
-  if (all <= budget) return Infinity;
-  let lo = 0, hi = 0; for (let k = 0; k < m; k++) hi = Math.max(hi, dist[k]);
-  for (let it = 0; it < 24; it++) {
-    const D = (lo + hi) / 2, D2 = D * D;
-    let sum = 0; for (let k = 0; k < m; k++) sum += v[k] * Math.min(1, D2 / (dist[k] * dist[k]));
-    if (sum > budget) hi = D; else lo = D;
-  }
-  return lo;
-}
 
 /** Separate quads (4 corners each, in the order (x,y) (x+1,y) (x,y+1) (x+1,y+1)) facing up, with an RGBA or RGB colour. */
 function quadGeometry(pos, colorSize) {
