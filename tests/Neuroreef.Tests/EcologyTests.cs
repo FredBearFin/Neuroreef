@@ -622,16 +622,16 @@ public class EcologyTests
         Assert.Equal(0, w.Flags[b] & Flag.Carrying);
     }
 
-    [Fact] // DESIGN §6.3: wings too small to fly change a runner's speed only a little: flapping while running gives back most
-           // of what their muscle's dead load costs (wing-assisted running, Body.WingGroundFactor, 2026-11-01)
-    public void PartialWingsCostARunnerLittle()
+    [Fact] // DESIGN §6.3: on flat ground wings too small to fly are only their muscle's dead load (Body.WingGroundFactor);
+           // flapping helps on slopes (wing-assisted incline running, LocomotionTests.WingsHelpOnSlopesNotOnTheFlat)
+    public void PartialWingsAreDeadLoadOnTheFlat()
     {
         var w = new World(16, 1);
         w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_MASS] = 60;
         w.Genome[G.B_WINGS] = -127; Body.Express(w, 0); float none = w.PVLand[0];
         w.Genome[G.B_WINGS] = -20; Body.Express(w, 0);
         Assert.NotEqual(Loco.Fly, w.LocoOf(0));
-        Assert.InRange(w.PVLand[0] / none, 0.93f, 1f);
+        Assert.Equal(Body.WingGroundFactor(w.PWings[0]), w.PVLand[0] / none, 4);
     }
 
     [Fact] // DESIGN §7.7 (Revision J): every founder carries the mating instinct; it is stronger in males

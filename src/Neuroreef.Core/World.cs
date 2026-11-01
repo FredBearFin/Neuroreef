@@ -529,7 +529,22 @@ public sealed class World
             }
             return v;
         }
-        return PVLand[i] * Footing(i, cell);
+        float vl = PVLand[i] * Footing(i, cell);
+        // flapping helps on a slope (wing-assisted incline running, Body.WingInclineGain, 2026-11-01); nothing on the flat
+        return PWings[i] > 0f ? vl * Body.WingInclineGain(PWings[i], SlopeSin(cell)) : vl;
+    }
+
+    /// <summary>Sine of the steepest slope from this cell to a neighbour (2026-11-01): the largest rise in metres
+    /// (elevation above the lakes over 1 - SeaLevel is ReliefM, as Climate.Build reads it) over a cell's side, GEO_CELL_M.</summary>
+    public float SlopeSin(int cell)
+    {
+        int fw = Map.FW, cx = cell % fw, cy = cell / fw;
+        float e = Elev[cell];
+        float d = MathF.Max(MathF.Max(MathF.Abs(Elev[cy * fw + (cx + 1) % fw] - e), MathF.Abs(Elev[cy * fw + (cx + fw - 1) % fw] - e)),
+                            MathF.Max(MathF.Abs(Elev[(cy + 1) % fw * fw + cx] - e), MathF.Abs(Elev[(cy + fw - 1) % fw * fw + cx] - e)));
+        if (d <= 0f) return 0f;
+        float s = d / MathF.Max(1f - SeaLevel, 1e-3f) * Map.ReliefM / K.GEO_CELL_M;   // rise over run
+        return s / MathF.Sqrt(1f + s * s);
     }
 
     /// <summary>
@@ -569,14 +584,16 @@ public sealed class World
         return (kind & (byte)Body.GroundRealm(PLegs[i], PFins[i])) != 0 && Depth[cell] <= MaxWaterDepth(i);
     }
 
-    /// <summary>Is flier i in the air (2026-10-31)? A flier lands whenever it can and is going no faster than it can walk
-    /// (Resolve: resting, eating and drinking land it), so one in the air is over ground it cannot stand on or moved
-    /// faster than its legs carry it.</summary>
+    /// <summary>Is flier i in the air? Since 2026-11-01 its last step says (Flag.Aloft, Flag.Landed: Resolve decides, and a
+    /// flier that cannot fly over water it cannot stand in is in the water). Before its first step it is in the air if it
+    /// goes faster than it walks.</summary>
     public bool Airborne(int i)
     {
         if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return false;
-        int cell = FIdx(X[i], Y[i]);
-        return !GroundAllows(i, cell) || Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;
+        if ((Flags[i] & Flag.Aloft) != 0) return true;     // what its last step was (Resolve, 2026-11-01)
+        if ((Flags[i] & Flag.Landed) != 0) return false;
+        int cell = FIdx(X[i], Y[i]);   // before its first step: in the air if it goes faster than it walks (being over water
+        return Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;   // it cannot stand in is not flying: a newborn there is in it)
     }
 
     public bool CellAllows(int i, int cell, Realm realm)

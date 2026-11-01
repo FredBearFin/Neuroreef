@@ -70,7 +70,7 @@ public class LocomotionTests
         {
             Array.Fill(w.Temp, airT);
             Flier(w, endo);
-            w.X[0] = x; w.Y[0] = y; w.Speed[0] = 0f; w.Energy[0] = w.EmaxOf(0) * 0.9f; w.Thirst[0] = 0f;
+            w.X[0] = x; w.Y[0] = y; w.Speed[0] = 0f; w.Flags[0] = Flag.Landed; w.Energy[0] = w.EmaxOf(0) * 0.9f; w.Thirst[0] = 0f;
             w.Gut[0] = 0f; w.GutEnergy[0] = 0f; w.ThermStrain[0] = 0f;
             w.IActs[0] = 0u; w.ISpeed[0] = w.PVAir[0]; w.IHeading[0] = 0f; w.ITarget[0] = -1; w.IMate[0] = -1; w.IScanning[0] = 0;
             w.IFoodHere[0] = 0f;
@@ -262,6 +262,63 @@ public class LocomotionTests
             }
             Assert.True(kills > 0, "no kill in 30 tries");
             Assert.Equal(kills, landed);
+        }
+        finally { Nature.Climate = climate; }
+    }
+
+    [Fact] // wing-assisted incline running (Dial 2003; Tobalske & Dial 2007): flapping helps on slopes, the more the steeper,
+           // and not at all on flat ground, where wings are only the flight muscle's dead load
+    public void WingsHelpOnSlopesNotOnTheFlat()
+    {
+        Assert.Equal(1f, Body.WingInclineGain(0.4f, 0f));
+        Assert.True(Body.WingInclineGain(0.4f, 0.7f) > Body.WingInclineGain(0.4f, 0.3f));
+        // small wings: a net loss on the flat, a net gain on a steep slope (the physical way up to flight)
+        Assert.True(Body.WingGroundFactor(0.4f) * Body.WingInclineGain(0.4f, 0f) < 1f);
+        Assert.True(Body.WingGroundFactor(0.4f) * Body.WingInclineGain(0.4f, 0.8f) > 1f);
+        Assert.InRange(Body.WingGroundGainMax, 1.1f, 1.3f);
+        // in a world: on the steepest land cell a winged body keeps (1 - FLY_MUSCLE_MAX w)(1 + WAIR_GAIN w sin slope) of a
+        // wingless one's speed; a wingless body is as before
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        int steep = -1; float most = 0f;
+        for (int c = 0; c < Map.FW * Map.FW; c++)
+            if (w.Cell[c] == (byte)Realm.Land && w.SlopeSin(c) > most) { most = w.SlopeSin(c); steep = c; }
+        Assert.True(steep >= 0 && most > 0f);
+        Console.WriteLine($"steepest land slope on the test map: sin {most:F3} ({MathF.Asin(most) * 180f / MathF.PI:F0} degrees)");
+        w.StageOf[0] = St.Adult; w.Genome[G.B_LEGS] = 127; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127; Body.Express(w, 0);
+        float bare = w.GroundVmax(0, steep);
+        Assert.Equal(w.PVLand[0] * w.Footing(0, steep), bare, 5);   // wingless: unchanged
+        w.Genome[G.B_WINGS] = (sbyte)MathF.Round(0.4f * 254f - 127f); Body.Express(w, 0);
+        float wo = w.PWings[0];
+        Assert.Equal(Body.WingGroundFactor(wo) * Body.WingInclineGain(wo, most), w.GroundVmax(0, steep) / bare, 3);
+    }
+
+    [Fact] // a newborn flier over water it cannot stand in is in the water, not in the air: it cannot fly before it fledges
+    public void ANewbornOverDeepWaterIsInTheWater()
+    {
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try
+        {
+            var w = new World(16, 3);
+            Terrain.Build(w);
+            int a = Life.NewSlot(w);
+            Flier(w, 127);
+            w.Genome.Slot(0).CopyTo(w.Genome.Slot(a));
+            Body.Express(w, a);
+            int cell = -1;
+            for (int c = 0; c < Map.FW * Map.FW; c++) if (cell < 0 && (w.Cell[c] & (byte)Realm.Water) != 0 && !w.GroundAllows(a, c)) cell = c;
+            Assert.True(cell >= 0, "no deep water on the test map");
+            w.Spc[a] = 0; w.StageOf[a] = St.Juvenile; w.Grown[a] = 0f; w.Flags[a] = 0;   // past its first step as a newborn
+            w.X[a] = (cell % Map.FW + 0.5f) * K.FCELL; w.Y[a] = (cell / Map.FW + 0.5f) * K.FCELL;
+            w.Speed[a] = 0f; w.Energy[a] = 0.9f * w.EmaxOf(a); w.Thirst[a] = 0f; w.Gut[a] = 0f;
+            Assert.Equal(Loco.Fly, w.LocoOf(a));
+            Assert.False(w.Airborne(a));   // being over water it cannot stand in is not flying (it was, until 2026-11-01)
+            w.IActs[a] = 0u; w.ISpeed[a] = w.PVAir[a]; w.IHeading[a] = 0f; w.ITarget[a] = -1; w.IMate[a] = -1;
+            Resolve.Run(w, 1, 0);
+            if (w.StageOf[a] == St.Dead) return;   // drowned: what the physics says for a body that cannot swim
+            Assert.False(w.Airborne(a));
+            Assert.NotEqual(0, w.Flags[a] & Flag.Landed);
+            Assert.True(w.Speed[a] <= w.GroundVmax(a, cell) * 1.001f + 1e-5f, "it paddles, it does not fly");
         }
         finally { Nature.Climate = climate; }
     }
