@@ -20,13 +20,12 @@ public sealed class Options
     public string? LoadBank, SaveBank, Csv, CheckpointPath;
     public double CheckpointMinutes = 30;
     public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots = K.BRANCH_CAPACITY;
-    // the map of a prehistory and of the world (a prehistory evolves in a region; the world you watch is a valley)
-    // a region by default (2026-11-01, the owner: "the worlds are too damn big ... the world should be easy to see the
-    // whole thing"): 512 units is 28 km, the whole of it in one view, with room for a range of mountains, a river system,
-    // lakes and karst. The continent (1024; 2026-10-30: against 512 the same worlds kept 4-13 lineages instead of 3) and
-    // the supercontinent stay choices on the setup screen and --map / --world-map. 2026-11-01 (the owner: "a default world
-    // of ~1 km across, one valley with a stream, hills and a pond"): a valley, 256 units = 1 km at 16 m a
-    // field cell; the region (512, 2 km), continent (1024, 4 km) and supercontinent (2048, 8 km) stay choices
+    // the map of a prehistory and of the world: a valley by default (2026-11-01, the owner: "the worlds are too damn big ...
+    // the world should be easy to see the whole thing"; first a region of 512 units, 28 km, then the valley; then "a
+    // default world of ~1 km across, one valley with a stream, hills and a pond"): 256 units is 1 km at 16 m a field cell,
+    // the whole of it in one view. The region (512, 2 km), the continent (1024, 4 km; 2026-10-30: against 512 the same
+    // worlds kept 4-13 lineages instead of 3) and the supercontinent (2048, 8 km) stay choices on the setup screen and
+    // --map / --world-map
     public int PreMap = 256, WorldMap = 256;
     public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;
     public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;

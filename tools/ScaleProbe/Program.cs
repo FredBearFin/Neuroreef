@@ -55,7 +55,7 @@ for (int a = 2; a < args.Length; a++)
     var riv = Enumerable.Range(0, n).Where(i => w.RivW[i] > 0f && w.LakeOf[i] < 0).ToArray();
     var wm = riv.Select(i => Hydrology.WidthM(w.Flow[i])).ToArray();
     var area = riv.Select(i => net.Flow[i] * Map.CellKm2).ToArray();
-    var qm = riv.Select(i => w.Flow[i] * Hydrology.QM3S).ToArray();
+    var qm = riv.Select(i => Hydrology.M3s(w.Flow[i])).ToArray();
     int lakeCells = Enumerable.Range(0, n).Count(i => w.LakeOf[i] >= 0);
     int lakes = Enumerable.Range(0, n).Where(i => w.LakeOf[i] >= 0).Select(i => w.LakeOf[i]).Distinct().Count();
     var rain = Terrain.RunoffRain(w); var rl = land.Select(i => rain[i]).ToArray();

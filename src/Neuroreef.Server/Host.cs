@@ -328,7 +328,7 @@ public static class Host
             finally
             {
                 cts.Cancel();
-                if (_exploring && !_s.H.IsPrehistory) _s.H.Post(s => { if (s.W.Player != null) s.W.Player.Present = false; });   // EXPLORE: the person left with the console
+                if (_exploring) _s.H.PostView(s => { if (s.W.Player != null) s.W.Player.Present = false; });   // EXPLORE: the person left with the console
             }
         }
 
@@ -339,6 +339,7 @@ public static class Host
             double nextPre = 0, nextFights = 0, nextLex = 0; int cladesSent = int.MinValue; long fightSeen = -1;
             var sw = Stopwatch.StartNew();
             double nextAgents = 0, nextFields = 0, nextTele = 0, nextAnalysis = 0, nextStatus = 0, nextProbe = 0;
+            int statusN = 0;
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
             {
                 double t = sw.Elapsed.TotalMilliseconds;
@@ -421,6 +422,7 @@ public static class Host
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                         player = PlayerState(h),
                         units = Wire.Units(), bodyLenM = Wire.BodyLengths(w),   // 2026-11-01: metres per unit, step length; each organism's body length (m)
+                        bodyLook = (statusN++ & 3) == 0 ? Wire.BodyLooks(w) : null,   // 2026-11-01: endothermy and fibrous diet for drawing (every 2 s)
                     }), ct);
                 }
                 if (t >= nextAnalysis)
@@ -436,8 +438,7 @@ public static class Host
         /// <summary>EXPLORE: the person's health and tallies for the console's HUD (read racily: display only), or null.</summary>
         static object? PlayerState(SimHost h)
         {
-            if (h.IsPrehistory) return null;
-            var p = h.W.Player;
+            var p = h.W.Player;   // the live world's, or the watched branch's
             if (p == null) return null;
             return new { present = p.Present, hp = MathF.Round(p.Hp, 1), maxHp = Player.MAX_HP, deaths = p.Deaths, kills = p.Kills, hits = p.Hits, x = p.X, y = p.Y,
                 vehicle = p.Vehicle, alt = MathF.Round(p.AltM), blasts = p.Blasts, blastKills = p.BlastKills, fires = p.FiresStarted };
@@ -520,11 +521,10 @@ public static class Host
                             }
                         case "player":
                         {
-                            // EXPLORE: the person's place and heading (a few times a second), or leaving (on: false). The live world only:
-                            // a prehistory branch steps on its own thread
-                            if (h.IsPrehistory) break;
+                            // EXPLORE: the person's place and heading (a few times a second), or leaving (on: false). In the live world,
+                            // or during the prehistory in the branch on view, on that branch's own thread (SimHost.PostView)
                             bool on = !e.TryGetProperty("on", out var po) || po.GetBoolean();
-                            if (!on) { h.Post(s => { if (s.W.Player != null) s.W.Player.Present = false; }); break; }
+                            if (!on) { h.PostView(s => { if (s.W.Player != null) s.W.Player.Present = false; }); break; }
                             float px = (float)e.GetProperty("x").GetDouble(), py = (float)e.GetProperty("y").GetDouble(), ph = (float)e.GetProperty("h").GetDouble();
                             bool run = e.TryGetProperty("run", out var pr) && pr.GetBoolean();
                             // VEHICLES: the vehicle it is in (a spawned kind, or none) and its height above the ground (m)
@@ -533,19 +533,19 @@ public static class Host
                             if (!float.IsFinite(px) || !float.IsFinite(py) || !float.IsFinite(ph)) break;
                             h.PlayerSeen = DateTime.UtcNow; _exploring = true;
                             double now = Wall.Elapsed.TotalSeconds;
-                            h.Post(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Board(veh, alt); p.Place(px, py, ph, run); });
+                            h.PostView(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Board(veh, alt); p.Place(px, py, ph, run); });
                             break;
                         }
                         case "vehicle":
                         {
                             // VEHICLES: the console placed a vehicle of a kind at (x, y): checked (land, water, flat ground) and its
                             // weapon loaded (Player.Spawn); answered with a 'vehicle' frame
-                            if (h.IsPrehistory) break;
+                            
                             string kind = e.GetProperty("kind").GetString() ?? "";
                             float vx = (float)e.GetProperty("x").GetDouble(), vy = (float)e.GetProperty("y").GetDouble();
                             if (!float.IsFinite(vx) || !float.IsFinite(vy)) break;
                             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-                            h.Post(s =>
+                            h.PostView(s =>
                             {
                                 var p = s.W.Player ??= new Player();
                                 string? why = p.Spawn(s.W, kind, vx, vy);
@@ -560,14 +560,14 @@ public static class Host
                         {
                             // VEHICLES: an area weapon (bomb, torpedo) exploded at (x, y), depth d (m below the surface), launched from
                             // (lx, ly) t seconds ago: checked and applied by Player.Blast; answered with a 'blast' frame
-                            if (h.IsPrehistory) break;
+                            
                             string mode = e.GetProperty("weapon").GetString() ?? "";
                             float F(string k, float dflt) => e.TryGetProperty(k, out var q) && q.ValueKind == JsonValueKind.Number ? (float)q.GetDouble() : dflt;
                             float bx = F("x", float.NaN), by = F("y", float.NaN), bd = F("depth", 0f), lx = F("lx", float.NaN), ly = F("ly", float.NaN), bt = F("t", 0f);
                             int id = e.TryGetProperty("id", out var bi) && bi.ValueKind == JsonValueKind.Number ? bi.GetInt32() : 0;
                             double now = Wall.Elapsed.TotalSeconds;
                             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-                            h.Post(s =>
+                            h.PostView(s =>
                             {
                                 var p = s.W.Player;
                                 if (p == null) { tcs.SetResult(JsonSerializer.Serialize(new { type = "blast", id, weapon = mode, ok = false, result = "NotPresent" })); return; }
@@ -585,7 +585,7 @@ public static class Host
                         {
                             // EXPLORE: the console's aim says weapon mode M hit serial S (draw power, its damage D, where P); the server checks
                             // and applies it (Player.Hit) and answers this console
-                            if (h.IsPrehistory) break;
+                            
                             string mode = e.GetProperty("weapon").GetString() ?? "";
                             uint ser = e.GetProperty("serial").GetUInt32();
                             float pow = e.TryGetProperty("power", out var pw) ? (float)pw.GetDouble() : 1f;
@@ -594,7 +594,7 @@ public static class Host
                             if (!float.IsFinite(dmg)) dmg = 0f;
                             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
                             double now = Wall.Elapsed.TotalSeconds;
-                            h.Post(s =>
+                            h.PostView(s =>
                             {
                                 var p = s.W.Player;
                                 if (p == null) { tcs.SetResult(JsonSerializer.Serialize(new { type = "hit", serial = ser, ok = false, result = "NotPresent" })); return; }

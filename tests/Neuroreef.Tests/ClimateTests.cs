@@ -119,9 +119,11 @@ public class ClimateTests
         // and FLOOD_HAND are in metres (they were in elevation, 2.7 x deeper at the 8,000-m relief), and a terminal lake no
         // longer stands over a saddle above the dry hollow beyond it, so lakes, soils, ponds and banks moved. It was
         // 0xC7DCAB9771F0850D on the merged mountains, rivers and caves before.
-        // 2026-11-01 (the 1 km world: GEO_CELL_M 16 m, the relief, rain, channels and latitude at the map's scale) re-pinned it;
-        // 0xA072ED289084F27E before.
-        Assert.Equal(0xDCA63DA2A0E5F435UL, h);
+        // 2026-11-01: water depths in metres (rivers 0.3 m by discharge, standing water on a shoreface profile with its bed
+        // raised to it), SHALLOW 2 m, wetlands and peat, and a 21st plant trait (flood tolerance) re-pinned it from 0xA072ED289084F27E,
+        // and after the wetlands and creature-variety merges it was 0xCDEE23A10F68B3AA. The 1 km world (GEO_CELL_M 16 m, the
+        // relief, rain, channels and latitude at the map's scale) re-pinned it at the merge.
+        Assert.Equal(0x39C9346B584497BCUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
@@ -377,10 +379,11 @@ public class ClimateTests
         Assert.True(on.moist > off.moist, $"moisture {on.moist:F3} with the climate, {off.moist:F3} without");
         // a treeline: on land made alike everywhere (the same wet soil and sparse young woodland, no fire and no drought
         // years), at fixed latitude, trees spread less on high ground with a climate, and alike without one. 2026-11-01 (the
-        // 3.5 km world): the map sits at one latitude, set here to a cool temperate 48° (the 1024 map's hills reach 1.3 km)
+        // 1 km world): the map sits at one latitude, set here to a cool 52° (the 1024 map's hills reach 433 m; at 48°, after the
+        // wetlands merge, there was no line: 1.072 against 1.047)
         double Treeline(float climate) => With(climate, () =>
         {
-            float fire = Nature.Fire, drought = Nature.Drought, lat0 = Nature.Latitude; Nature.Fire = 0f; Nature.Drought = 0f; Nature.Latitude = 48f;
+            float fire = Nature.Fire, drought = Nature.Drought, lat0 = Nature.Latitude; Nature.Fire = 0f; Nature.Drought = 0f; Nature.Latitude = 52f;
             try
             {
                 using var sim = new Simulation(64, 9, 2, empty: true);

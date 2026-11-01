@@ -120,30 +120,41 @@ export function bodyMesh(base, material, cap) {
   mesh.count = 0; mesh.frustumCulled = false;
   // stable instance slots (placeBody): key -> slot, the key in each slot, the frame each slot was last placed in,
   // free slots below the high-water mark, and the slots whose genes or colour changed this frame
-  const slots = { of: new Map(), key: new Array(cap), seen: new Uint32Array(cap), free: [], hw: 0, frame: 0, dirty: [], repack: false };
+  const slots = { of: new Map(), key: new Array(cap), seen: new Uint32Array(cap), gv: new Int32Array(cap), free: [], hw: 0, frame: 0, dirty: [], repack: false };
   return { mesh, cap, anim, geneA, geneB, clade, morph, slots };
 }
 
-function writeMatrix(M, o, x, y, z, h, sx, sy) {
+// sf, ss: the ground's slope (rise per run) along the body's forward (+x) and left (+z) axes. A body on a slope is
+// sheared to it, not tilted: it stays upright while every foot stands on the slope (the shader reads its size from
+// the horizontal part of the x column)
+function writeMatrix(M, o, x, y, z, h, sx, sy, sf = 0, ss = 0) {
   const ca = Math.cos(h), sa = Math.sin(h);
-  M[o] = ca * sx; M[o + 1] = 0; M[o + 2] = sa * sx; M[o + 3] = 0;
+  M[o] = ca * sx; M[o + 1] = sf * sx; M[o + 2] = sa * sx; M[o + 3] = 0;
   M[o + 4] = 0; M[o + 5] = sy; M[o + 6] = 0; M[o + 7] = 0;
-  M[o + 8] = -sa * sx; M[o + 9] = 0; M[o + 10] = ca * sx; M[o + 11] = 0;
+  M[o + 8] = -sa * sx; M[o + 9] = ss * sx; M[o + 10] = ca * sx; M[o + 11] = 0;
   M[o + 12] = x; M[o + 13] = y; M[o + 14] = z; M[o + 15] = 1;
 }
 
+/** Endothermy, lungs and the fibrous share of the diet when the sim has not said (previews, an older server): middling. */
+export const LOOK_DEFAULT = { endo: 0.4, lungs: 1, fibre: 0.3 };
+// (vertex attributes are few, so some genes share a float: sight and the fibrous diet as 8 bits each; fur, appendages
+// and lungs as 4 bits each, as the wire sends them; anim.js unpacks them)
+const q = (v, n) => Math.round(Math.min(1, Math.max(0, v || 0)) * n);
 function writeGenes(B, k4, b) {
   const GA = B.geneA.array, GB = B.geneB.array;
-  GA[k4] = b.legs; GA[k4 + 1] = b.fins; GA[k4 + 2] = b.wings; GA[k4 + 3] = b.sight;
-  GB[k4] = b.armour; GB[k4 + 1] = b.strike; GB[k4 + 2] = b.fur || 0; GB[k4 + 3] = b.append || 0;
+  GA[k4] = b.legs; GA[k4 + 1] = b.fins; GA[k4 + 2] = b.wings; GA[k4 + 3] = q(b.sight, 255) * 256 + q(b.fibre ?? LOOK_DEFAULT.fibre, 255);
+  GB[k4] = b.armour; GB[k4 + 1] = b.strike;
+  GB[k4 + 2] = q(b.fur, 15) * 256 + q(b.append, 15) * 16 + q(b.lungs ?? LOOK_DEFAULT.lungs, 15);
+  GB[k4 + 3] = b.endo ?? LOOK_DEFAULT.endo;
   const appearance = b.appearance || DEFAULT_APPEARANCE;
   for (let j = 0; j < 4; j++) for (let c = 0; c < 4; c++) B.morph[j].array[k4 + c] = appearance[j * 4 + c];
 }
 
 // the packed counts (aClade.w): how far under water (0..15) * 8192 + meat-eating (0..15) * 512 + loco * 64 +
-// (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1)
+// (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1). The pose follows b.pose when set (what the body is
+// doing now: a flier landed walks, a body under water swims), else its locomotion
 const cladeCode = (b) => (b.under | 0) * 8192 + Math.round(Math.min(1, Math.max(0, b.meat || 0)) * 15) * 512 +
-  (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
+  (LOCO_CODE[b.pose || b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
 
 // ------------------------------------------------------------------ stable instance slots (the live view)
 // Each organism keeps its instance slot while it stays drawn in a mesh, so its genes, appearance and colour are
@@ -160,10 +171,10 @@ export function beginBodies(B) {
 
 /**
  * Draw the organism with this key (its serial; any stable key) in this frame: as setBody, in the slot it had last
- * frame, or a new one (its genes written then). The genes are taken to be the same for its life. Returns false when
+ * frame, or a new one (its genes written then); sf, ss the ground's slope under it (writeMatrix). The genes are taken to be the same for its life. Returns false when
  * the mesh is full and the organism has no slot in it.
  */
-export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl) {
+export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl, sf = 0, ss = 0) {
   const S = B.slots;
   let k = S.of.get(key), fresh = false;
   if (k === undefined) {
@@ -171,10 +182,11 @@ export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest
     S.of.set(key, k); S.key[k] = key; fresh = true;
   }
   S.seen[k] = S.frame;
-  writeMatrix(B.mesh.instanceMatrix.array, k * 16, x, y, z, h, sx, sy);
+  writeMatrix(B.mesh.instanceMatrix.array, k * 16, x, y, z, h, sx, sy, sf, ss);
   const k4 = k * 4, A = B.anim.array, CL = B.clade.array;
   A[k4] = gait; A[k4 + 1] = phase; A[k4 + 2] = acts; A[k4 + 3] = rest;
-  if (fresh) writeGenes(B, k4, b);
+  // genes are written when the slot is taken, and again when b.gv changes (endothermy and diet arrive in status)
+  if (fresh || S.gv[k] !== (b.gv | 0)) { writeGenes(B, k4, b); S.gv[k] = b.gv | 0; fresh = true; }
   // the overlay colour changes (a hit flushes it, the clade table may change), so it is compared and sent when it does
   const code = cladeCode(b);
   if (fresh || CL[k4] !== r || CL[k4 + 1] !== g || CL[k4 + 2] !== bl || CL[k4 + 3] !== code) {
@@ -219,7 +231,7 @@ export function finishBodies(B) {
 /**
  * Write organism k of a body mesh: position (x, height, z), heading h (radians, world convention: +x
  * forward, turning toward +z), scale sx/sy, the body b = { legs, fins, wings, sight, armour, strike,
- * fur, append, meat, appearance, legPairs, finPairs, eyePairs, loco }, animation (gait, phase, acts, rest) and
+ * fur, append, meat, appearance, legPairs, finPairs, eyePairs, loco, endo, lungs, fibre }, animation (gait, phase, acts, rest) and
  * the identification-overlay colour (linear r, g, b). Missing appearance uses stable neutral defaults.
  */
 export function setBody(B, k, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl) {

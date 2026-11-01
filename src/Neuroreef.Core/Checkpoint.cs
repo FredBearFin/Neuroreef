@@ -78,6 +78,8 @@ public static class Checkpoint
         "WcRow", "WaterOn", "WbRain", "WbET", "WbPondEvap", "WbToLakes", "WbLakeRain", "WbLakeEvap", "WbLakeSpill", "RainAnom", "RainYear",
         // caves and karst (Caves.cs)
         "Carb", "CaveVoid", "CaveDepth", "CaveFlow", "CaveSink", "CaveNext", "CaveSpring", "CaveKind",
+        // wetlands and peat (Wetlands.cs)
+        "Twi", "TwiMean", "Hand", "WetDur", "WetMin", "Peat", "WetNow", "Wetland",
         // the pathogen reservoir in the ground and water
         "ResLoad", "ResGene", "ResKey", "ResRecv", "ResOrder", "ResRivers", "ResNet",
     };

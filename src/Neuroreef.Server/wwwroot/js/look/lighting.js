@@ -37,8 +37,11 @@ export class Lighting {
     this._r = this._r === undefined ? this.rain : this._r + (this.rain - this._r) * k;
     const el = (34 - 6 * this._s) * Math.PI / 180, az = 2.35;
     atm.sun.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).normalize();
-    // clouds: some in the dry season, more in the wet, more again in a wet year
-    atm.cloud = Math.min(0.75, Math.max(0.05, 0.16 + 0.16 * this._s + 0.5 * Math.max(0, this._r)));
+    // clouds: few in the dry season, overcast in the wet, more in a wet year and fewer in a drought (2026-11-01 QA: the
+    // wet season's sky was as clear as the dry one's, 0.16-0.33). The wetter part rains (weather.js).
+    this.wet = Math.min(1, Math.max(0, (this._s + 0.6 * this._r + 0.35) / 1.25));
+    this.rainI = Math.min(1, Math.max(0, (this.wet - 0.62) / 0.3));
+    atm.cloud = Math.min(0.85, Math.max(0.05, 0.08 + 0.72 * this.wet * this.wet));
     atm.update();
     const clear = 1 - 0.7 * atm.cloud;
     this.sun.color.copy(atm.sunColor);

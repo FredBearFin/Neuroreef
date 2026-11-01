@@ -2,12 +2,45 @@
 
 import { Link } from './net.js';
 import { World3D, setRelief } from './world3d.js';
-import { Panels, bar } from './panels.js';
+import { Panels, bar, setUnits, when, span } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
 import { Explore } from './explore/explore.js';   // EXPLORE: walk and hunt (js/explore/)
 import { MAGS } from './scale.js';
 
 const $ = (id) => document.getElementById(id);
+
+// graphics quality (js/look/look.js reads ?look=low|medium|high when the view is built): the menu in the bar keeps the
+// choice in localStorage; a page opened without ?look= gets the saved one put into its address before the view exists
+const LOOKS = ['low', 'medium', 'high'];
+{
+  const inUrl = (location.search.match(/[?&]look=(low|medium|high)\b/) || [])[1];
+  let saved = null; try { saved = localStorage.getItem('nr-look'); } catch { /* private mode */ }
+  if (!inUrl && LOOKS.includes(saved)) {
+    const q = new URLSearchParams(location.search); q.set('look', saved);
+    history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`);
+  }
+  const sel = $('quality');
+  if (sel) {
+    sel.value = inUrl || (LOOKS.includes(saved) ? saved : 'medium');
+    sel.onchange = () => {
+      try { localStorage.setItem('nr-look', sel.value); } catch { /* private mode */ }
+      const q = new URLSearchParams(location.search); q.set('look', sel.value);
+      location.search = q.toString();
+    };
+  }
+}
+
+// the side panel can be hidden (the button on its tab bar, the P key) to give the world the whole width
+function setPanel(on) {
+  document.body.classList.toggle('nopanel', !on);
+  $('panel-show').classList.toggle('hidden', on);
+  try { localStorage.setItem('nr-panel', on ? '1' : '0'); } catch { /* private mode */ }
+  dispatchEvent(new Event('resize'));   // the 3D view and the charts take the new width
+}
+$('panel-hide').onclick = () => setPanel(false);
+$('panel-show').onclick = () => setPanel(true);
+try { if (localStorage.getItem('nr-panel') === '0') setPanel(false); } catch { /* private mode */ }
+
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
 let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9;
@@ -17,6 +50,7 @@ let explore = null;                      // EXPLORE: the person on foot (js/expl
 link.listen('meta', (m) => {
   meta = m;
   setRelief(m);   // the relief's true scale follows the map on view (2026-11-01: a prehistory and its world may differ)
+  setUnits(m.units);   // real units for every panel (ICD §2.1)
   $('s-seed').textContent = m.seed;
   if (!world) {
     world = new World3D($('gl'), meta);
@@ -108,19 +142,31 @@ function buildLegend() {
   }
 }
 
-// the Experience select lists the living clades
+// the Experience select lists the living clades, the most numerous first (the first is the default: a clade of two or
+// three, or of eggs only, often has no one to follow), with their numbers
 function fillExperience() {
   const sel = $('exp-species'); if (!sel) return;
-  const alive = clades.filter((c) => c.used && extinctAt(c) < 0);
-  const sig = alive.map((c) => c.serial + c.name).join();
-  if (sel.dataset.sig === sig) return;
+  const alive = clades.filter((c) => c.used && extinctAt(c) < 0).sort((a, b) => b.count - a.count || a.id - b.id);
+  const sig = alive.map((c) => `${c.serial}${c.name}:${Math.round(Math.log2(1 + c.count) * 4)}`).join();
+  if (sel.dataset.sig === sig || document.activeElement === sel) return;
   sel.dataset.sig = sig;
   const prev = sel.value;
   sel.innerHTML = '';
-  for (const s of alive) sel.append(new Option(s.name, s.id));
+  for (const s of alive) sel.append(new Option(`${s.name} · ${s.count.toLocaleString()}`, s.id));
   if (alive.some((c) => String(c.id) === prev)) sel.value = prev;
   $('exp-go').disabled = !alive.length;
 }
+
+// a short message over the view (a camera with no one to follow, and the like)
+let toastT = 0;
+function toast(text, ms = 3500) {
+  let t = $('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'floating'; $('view').append(t); }
+  t.innerHTML = text; t.classList.remove('hidden');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hidden'), ms);
+}
+// Follow or Ride-along asked for with no animal yet: the server picks one (a 'pick'); if none comes, back to the overview
+let camWaitT = 0;
 
 function select(serial, follow) {
   if (!world) return;
@@ -131,20 +177,25 @@ function select(serial, follow) {
 }
 
 function setCam(m) {
-  // EXPLORE hook: the live world only (a prehistory branch runs on its own thread); leaving it takes the person out
-  if (m === 'explore' && phase !== 'live') return;
+  // EXPLORE hook: the live world, or during the prehistory the branch on view (the server runs the person on that
+  // branch's own thread; 2026-11-01: before, the button did nothing in the prehistory, which is what a first start shows).
+  // Leaving it takes the person out.
   if (world.mode === 'explore' && m !== 'explore') explore.exit();
   if (m === 'explore') {
     if (world.mode === 'explore') return;
+    const near = world.selected;   // the person starts beside the animal that was selected or followed
     if (world.selected) { world.selected = 0; probe = null; link.send({ cmd: 'select', serial: 0, follow: false }); panels.renderProbe(null); }
-    world.setMode('explore'); explore.enter();
+    world.setMode('explore'); explore.enter(near);
+    if (phase === 'prehistory') explore.hud.message(`EXPLORE · prehistory branch ${lastStatus ? lastStatus.view : 0}<br><span style="font-size:12px">it runs at full speed, so the animals move fast · click the view to look with the mouse</span>`, false, 5000);
     for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
     hud(); showMag();
     return;
   }
-  if (m !== 'overview' && !world.selected && $('exp-species').value !== '') {
-    // no animal selected: experience the chosen species
-    link.send({ cmd: 'pick', species: +$('exp-species').value });
+  camWaitT = 0;
+  if (m !== 'overview' && !world.selected) {
+    // no animal selected: experience the chosen species (the camera waits for the server's pick)
+    if ($('exp-species').value !== '') link.send({ cmd: 'pick', species: +$('exp-species').value });
+    camWaitT = performance.now();
   }
   world.setMode(m);
   for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
@@ -172,6 +223,7 @@ function wireScale() {
     if (!world || world.mode === 'explore' || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Home') { e.preventDefault(); if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); }
     else if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.mag); }
+    else if (e.key === 'p' || e.key === 'P') setPanel(document.body.classList.contains('nopanel'));
   });
   showMag();
 }
@@ -184,7 +236,7 @@ function buildControls() {
   $('exp-go').onclick = () => {
     if (sel.value === '') return;
     link.send({ cmd: 'pick', species: +sel.value });
-    world.selected = 0;
+    world.selected = 0; camWaitT = performance.now();
     if (world.mode === 'overview') { world.setMode('follow'); for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === 'follow'); }
   };
   // the speed buttons show the speed that is set (the server's), so the right one is lit in the prehistory too
@@ -242,7 +294,9 @@ function count(k) { return world.perceived.filter((p) => p.kind === k).length; }
 
 // ------------------------------------------------------------------ top bar and feed
 
+let lastStatus = null;
 function status(s) {
+  lastStatus = s;
   // the world after a prehistory can be on another map (a valley): start the console afresh on it
   if (s.mapSide && meta && s.mapSide !== meta.world) { location.reload(); return; }
   if (s.phase !== phase) enterPhase(s.phase);
@@ -262,7 +316,12 @@ function status(s) {
     const tot = lastPre.settings.totalSteps, my = Math.round(lastPre.step * lastPre.yearsPerStep / 1e6);
     $('s-pre').textContent = tot >= 2147483647 ? `PREHISTORY · ${my} Myr · branch ${s.view}` : `PREHISTORY · ${my} of ${Math.round(tot * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
   }
+  setUnits(s.units);
   $('s-step').textContent = s.step.toLocaleString();
+  // the world's own clock (a step is 2.92 h); the prehistory's steps are symbolic years (its badge shows them)
+  $('s-time-box').classList.toggle('hidden', s.phase === 'prehistory');
+  $('s-time').textContent = when(s.step);
+  $('s-time-box').title = `${span(s.step)} since the world began. A step is ${(s.units ? s.units.stepHours : 2.922).toFixed(2)} hours; ${(s.units ? s.units.stepsPerYear : 3000).toLocaleString()} steps are a year.`;
   if (panels) panels.setStep(s.step);
   $('s-alive').textContent = s.alive.toLocaleString();
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
@@ -270,16 +329,26 @@ function status(s) {
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
   if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.mag);   // the sim's own metres (ICD §2.1)
   if (world && s.bodyLenM) world.setBodyLengths(s.bodyLenM);   // each animal's true length (a juvenile's grows)
+  if (world && s.bodyLook) world.setBodyLooks(s.bodyLook);     // endothermy and diet, for how each body is drawn
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +
     (s.rain < -0.15 ? ' · drought year' : s.rain > 0.15 ? ' · wet year' : '');
   $('s-random').classList.toggle('hidden', s.bankSource !== 'random' || s.phase !== 'live');
   extinct = s.extinct || [];
   markExtinct();
-  $('s-full').classList.toggle('hidden', s.free > 0);
+  // the slots grow with the births; WORLD FULL only when the last step refused one (they could grow no more: ICD §2 status)
+  const full = s.full !== undefined ? !!s.full : s.free <= 0;
+  $('s-full').classList.toggle('hidden', !full);
+  if (full) $('s-full').title = `The last step refused a birth: the world could not grow its slots (${s.growLimit || 'its memory limit'}). This is a limit of the program and the computer, not an ecological result.`;
   if (explore) explore.status(s.player);   // EXPLORE: health, deaths and kills from the server
   if (world && world.mode === 'explore') return;
   if (world && s.follow && s.probe && world.selected !== s.probe && world.mode !== 'overview') world.selected = s.probe;
   if (world && world.mode !== 'overview' && !world.selected && s.probe) world.selected = s.probe;
+  if (world && world.mode !== 'overview' && world.selected) camWaitT = 0;
+  else if (world && camWaitT && world.mode !== 'overview' && performance.now() - camWaitT > 4000) {
+    const c = cladeOf(+$('exp-species').value);
+    toast(`No ${c ? `<b style="color:${c.color}">${c.name}</b>` : 'animal'} to follow right now. Tap an animal, or pick another clade beside <b>Experience</b>.`);
+    setCam('overview');
+  }
 }
 
 function enterPhase(p) {
@@ -301,7 +370,7 @@ function markExtinct() {
 
 function feed(e) {
   const box = $('feed');
-  if (!e.items.length) { box.innerHTML = '<span class="item">no large changes in the last ~1,000 steps</span>'; return; }
+  if (!e.items.length) { box.innerHTML = '<span class="item">no large changes in the last ~1,000 steps (about 4 months)</span>'; return; }
   box.innerHTML = e.items.slice(0, 6).map((it) => {
     const c = it.species >= 0 && cladeOf(it.species) ? cladeOf(it.species).color : '#8aa0b5';
     return `<span class="item"><i style="background:${c}"></i>${it.text}</span>`;

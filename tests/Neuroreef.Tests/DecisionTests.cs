@@ -55,7 +55,7 @@ public class DecisionTests
     {
         var (w, i) = Walker();
         int barrier = 2 * Map.FW + 4;
-        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + K.SHALLOW;
+        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + w.ShallowE;
 
         Move(w, i, 10f, 10f, 0f, 12f);
 
@@ -79,7 +79,7 @@ public class DecisionTests
     {
         var (w, i) = Walker();
         int barrier = 2 * Map.FW;
-        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + K.SHALLOW;
+        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + w.ShallowE;
 
         Move(w, i, Map.W - 2f, 10f, 0f, 8f);
 
@@ -92,7 +92,7 @@ public class DecisionTests
     {
         var (w, i) = Walker();
         int barrier = 2 * Map.FW + 4;
-        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + K.SHALLOW;
+        w.Cell[barrier] = (byte)Realm.Deep; w.Depth[barrier] = w.MaxWaterDepth(i) + w.ShallowE;
 
         Move(w, i, 15f, 10f, 0f, 4f);
 
@@ -120,8 +120,8 @@ public class DecisionTests
         var (w, i) = Walker();
         int shallow = 3 * Map.FW + 3, deep = shallow + 1;
         w.Cell[shallow] = w.Cell[deep] = (byte)Realm.Deep;
-        w.Depth[shallow] = K.SHALLOW * 0.5f;
-        w.Depth[deep] = K.SHALLOW * 5f;
+        w.Depth[shallow] = w.ShallowE * 0.5f;
+        w.Depth[deep] = w.ShallowE * 5f;
 
         w.Genome[i * G.LEN + G.B_FINS] = -127;
         Body.Express(w, i);
@@ -142,11 +142,11 @@ public class DecisionTests
         var (w, i) = Walker();
         int cell = World.FIdx(w.X[i], w.Y[i]);
         w.Cell[cell] = (byte)Realm.Deep;
-        w.Depth[cell] = K.SHALLOW * 3f;
+        w.Depth[cell] = w.ShallowE * 3f;
 
         Decide.Run(w, i, new Decide.ProbeBuf());
 
-        Assert.Equal(0.2f, w.Feat[i * F.N + F.DEPTH], 4);
+        Assert.Equal(3f / (1f + K.SWIM_DEPTH_RANGE), w.Feat[i * F.N + F.DEPTH], 4);   // 3 x SHALLOW of 0-500 m (SHALLOW 2 m, 2026-11-01; was 0.2 of 15 x SHALLOW)
     }
 
     [Fact]
@@ -154,8 +154,8 @@ public class DecisionTests
     {
         var w = new World(1, 23);
         int shallow = 0, deep = 1;
-        w.Cell[shallow] = (byte)Realm.Shallow; w.Depth[shallow] = K.SHALLOW * 0.5f;
-        w.Cell[deep] = (byte)Realm.Deep; w.Depth[deep] = K.SHALLOW * 5f;
+        w.Cell[shallow] = (byte)Realm.Shallow; w.Depth[shallow] = w.ShallowE * 0.5f;
+        w.Cell[deep] = (byte)Realm.Deep; w.Depth[deep] = w.ShallowE * 5f;
         w.Nutrient[shallow] = w.Nutrient[deep] = 1f;
         w.Pool[(int)Pool.Algae][shallow] = w.Pool[(int)Pool.Algae][deep] = 0.1f;
         var diet = new float[Pools.N]; diet[(int)Pool.Algae] = 1f;

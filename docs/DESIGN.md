@@ -39,7 +39,8 @@ world ~1 km across, one valley with a stream, hills and a pond, several hundred 
 - *Rain at this scale.* The background rain falls off over hundreds of km, so not across a map; orographic condensation
   (RAIN_OROG 0.15 per km of lift) falls out over RAIN_FALL = 10 km downwind (Smith & Barstad 2004); rain grows 5% per
   100 m (RAIN_ZGRAD).
-- *Rivers at true width.* Hydrology.WidthM(Q) = RIVER_WK 12 x sqrt(mean m3/s), the bankfull channel (Hey & Thorne 1986).
+- *Rivers at true width.* Hydrology.WidthM(Q) = RIVER_W 5 x sqrt(mean m3/s), at least 1.2 m (the hydrology agent's; it
+  replaced this note's RIVER_WK 12, a bankfull width, at the merge).
   The RIVERS lines carry that width in field cells (under 1); World.RivW is the cells it covers (1 for any stream
   narrower than a cell).
 - *Console.* RELIEF = reliefM x fcell / fieldCellM from meta (world3d.js setRelief, on every meta; 38 units on 256);
@@ -63,6 +64,170 @@ Measured (256 map, seeds 3 / 5 / 7; tools/ScaleProbe):
 Not done: a stream's inflow from beyond the map; a regional-uplift generator for small maps (the plates' pattern drawn
 small makes Y-shaped ridges); contour-parallel steps of a cell on some hillsides (from the failure passes: visible in
 docs/art/scale2/relief_256_*.png); the console's river ribbons should be drawn at the RIVERS width x FCELL.
+
+**Water depths in metres, and wetlands from the water table** (2026-11-01; Hydrology.Waters and Bathymetry, Wetlands.cs,
+WaterCycle.cs, Fields.Row, Plants.cs, Wire.cs; tools/WetProbe; images docs/art/wetlands/: depth_before_*, depth_after_*
+(water by depth, log scale; the shallow realm outlined) and wetlands_* (kinds and peat, the share of the year
+waterlogged, the plants' flood tolerance)). Measured before (512 map, seeds 3, 5, 7, a new world's land and one more year):
+- SHALLOW was 0.035 in elevation, ~320 m at H_RELIEF 8,000 m. Rivers were 87-324 m deep (p50 165-171 m: 0.5 x SHALLOW x
+  (Q / RIVER_Q1)^0.4, at most SHALLOW); the sea p50 130-270 m, max 1.0-1.3 km; lakes p50 10-105 m, max 90-311 m: the
+  relief's basins, filled to their spill points. 52-60% of all water cells were 100-400 m deep, and 64-78% of the sea and
+  lakes counted as the "shallow" realm.
+- No wetlands: the water table reached the surface (deep store full, a pond, spring or flood) on 0.3-1.7% of the land for
+  half the year or more, and nothing came of it; moisture was 0.95 or more on 0-1% of the land.
+Depths now (SHALLOW and every water depth in metres through World.ElevPerM; World.ShallowE is SHALLOW in elevation):
+- *Rivers* by Leopold & Maddock's (1953) hydraulic geometry at their mean discharge in m3/s (Flow x P_MEAN over a 218-m
+  cell): d = RIVER_D 0.3 m x Q^0.4, from RIVER_D_MIN 0.3 m to RIVER_D_MAX 10 m (1.2 m at 30 m3/s, 4.8 m at 1,000).
+  The region's rivers are brooks: its largest carries 0.6-1.4 m3/s (a 28-km map gathers ~8 m3/s in all), so its
+  channels are 0.3 m deep (0.24-0.35 m before the floor) and their banks 0.03-0.3 m; bigger maps' trunks are deeper.
+  Width is unchanged (cells, ~sqrt(Q / RIVER_Q1)). Every river is in the shallow realm, as before.
+- *The sea and the lakes* (Bathymetry): their basins fill with sediment to a shoreface, Dean's (1977, 1991) equilibrium
+  profile h = SHORE_A x^(2/3) (A 0.08 m^(1/3), fine sand) at x m from the shore, down to the closure depth SHORE_HC 4 m
+  (354 m out), then the sublittoral or shelf slope SHORE_S 3%; ground higher than that profile stays as it is. The bed
+  (Elev) is raised to it, so Elev + Depth, the level, is unchanged; LakeDepth (the wetted area as a lake falls) is the
+  new deepest point. The first ring of cells is 1.8 m deep (the shallow realm), the second 3.8 m, the third 9.7 m.
+- After (same seeds): rivers 0.03-0.3 m (100% under 0.5 m); the sea p50 9-18 m, p90 42-65 m, max 65-95 m (16-22% of it
+  under 2 m, 29-34% 2-10 m); lakes p50 1.8-2.7 m, p90 3.8-9.7 m, max 9-19 m (the region's lakes are small: 137-417
+  cells in all). All water cells: 36-48% under 0.5 m (rivers), 11-17% 0.5-2 m, 13-24% 2-10 m, 25-31% 10-100 m, none
+  deeper. The shallow realm is 9-14% of the map (15-20% before): every river, and 21-28% of the sea and lakes (64-78%).
+- What reads SHALLOW, now in metres: the shallow realm (Hydrology, Terrain.RunoffRain), wading speed (World.GroundSpeed:
+  wading to swimming over 0-2 m), swimming (Resolve: deeper than 2 m), the algae's light (Fields: e^(-depth / 2 m), so
+  benthic algae grow in the littoral and fade by 10 m), the deepest water a body reaches (World.MaxWaterDepth: SHALLOW x
+  (1 + SWIM_DEPTH_RANGE x fins), SWIM_DEPTH_RANGE 14 -> 249: 500 m with full fins, 52 m at fins 0.1; before, fins 0.1
+  reached ~800 m, below every water) and the DEPTH sense (Decide: 0-500 m). Respiration already read metres (ColumnM,
+  SurfaceM) and the vehicles too (Player.WaterDepthM: the boat needs 0.4 m, so it runs on the rivers; the jeep wades
+  0.9 m). The WORLD frame's depth plane is now round(16 sqrt(m)) (ICD; world3d.js decodes it for river cuts, river
+  colour and its fallback river plane; the lakes' colour darkens over 0-30 m, 0.55 units, not 2 units = 110 m).
+  Wire's alluvium layer divided elevation by ALLUV_D in metres; it converts now.
+- Floods: the stage over bankfull is the river's own depth x (wet^0.4 - BANKFULL^0.4), so 0.3-m brooks rise centimetres
+  and reach only the cells level with their bed: flooded land fell from 0-1.1% to 0-0.05% of the year on average. That
+  is what such small streams do; the floodplain's wetness now comes from its water table (below).
+Wetlands (Wetlands.cs; nothing places one):
+- *The water table.* Deep groundwater fills an aquifer of drainable porosity WT_SY 0.1, so the water table stands
+  (GW_CAP - Deep) / WT_SY below the ground (GW_CAP: 15 m of aquifer), less (TWI - mean TWI) / WT_F where the ground
+  converges and is flat (TOPMODEL: Beven & Kirkby 1979; WT_F 2 /m; TWI = ln(a / tan b), the cell's drained area per unit
+  contour over its slope), and never deeper than the ground's height above the water it drains to (HAND: Renno et al.
+  2008; Nobre et al. 2011): a stream or lake holds the water table up on its banks and shores. (Lowering the aquifer's
+  capacity near water instead, so riparian groundwater seeps out sooner, cut the dry-season baseflow of WaterCycleTests from 5.9% to ~4%.)
+- *Waterlogging.* In an update, land whose water table is within WET_ZWT 0.3 m of the surface (the wetland hydrology
+  criterion), or where groundwater emerges, a pond stands or a river floods, is waterlogged: its soil fills from the deep
+  store, then from the water running through it (store to store: the budget closes). WetDur is the share of the last
+  year it was waterlogged (an exponential mean over a year; at creation the spin-up's last year), WetMin the share it
+  was fed by minerotrophic water (emerging groundwater, a flood, a water table held up by the water nearby).
+- *Kinds.* Land waterlogged WET_DUR (a quarter) of the year or more is a wetland: a fen (WetMin 0.1 or more) or a bog
+  (rain-fed) where peat is PEAT_MIN 0.4 m deep or more, else a swamp where shrubs and trees cover WET_WOODY 30%, else a
+  marsh (Cowardin et al. 1979; Rydin & Jeglum 2013). A waterlogged wetland's water is drinkable (Wet = 2): shallow water
+  among plants, for waders and amphibians, as a pond's.
+- *Peat* (Fields.Row, Wetlands.Peat). Litter and wood rot at ANOX_ROT 0.2 of the drained rate for the waterlogged share
+  of the year and humify into peat at PEAT_FORM 5e-5 a step there (PEAT_M 2.5 mm of peat per unit of litter); peat
+  decays at PEAT_ROT_AN 3e-4 a year under water and PEAT_ROT_OX 1.5% a year drained (Q10 as all decay); what decays
+  returns its nutrient. A new world's peat is Clymo's (1984) P = p / alpha (1 - e^(-alpha T)) over PEAT_AGE 10,000 years
+  (Simulation.BuildLand, after the plants' spin-up, from their litter).
+- *Plants.* A 21st trait, flood tolerance (PT.FLOOD): the high key widened from 16 to 32 bits (room for 8 traits; the
+  plant table's KeyHi and PendHi are uint, so an older save's land is rebuilt). Waterlogging takes WLOG_HARM 2 x WetDur x
+  (1 - tolerance) of a plant's production (root anoxia: Kozlowski 1997; Colmer & Voesenek 2009), so in permanently
+  waterlogged ground a plant under tolerance 0.5 cannot grow; tolerance costs FLOOD_COST 8% of production at its most
+  (Costs: a mid genome is unchanged). Founders are random in it; the wetlands' plants are what recruitment, the lottery
+  and mutation leave there.
+Measured (512 map, seeds 3, 5, 7; a new world and one more year, no animals; WetProbe):
+- Wetlands 0.55 / 0.41 / 1.06% of the land (69 / 54 / 144 cells): marsh 8 / 6 / 8, swamp 16 / 5 / 30, fen 38 / 38 / 95,
+  bog 7 / 5 / 11. Settings: lake and sea shores 13 / 13 / 23 cells, river banks 42 / 26 / 59, spring lines away from
+  water 5 / 8 / 38, rain-fed flats and hollows 9 / 7 / 24. Waterlogging is nearly all or nothing: 0.3-0.8% of the land is
+  waterlogged 90% of the year or more, 0.5-1.3% a tenth of it. This is a mountain region (HAND median 310-363 m, under
+  5 m on 0.6-1.7% of the land): its wetlands are valley floors, shores and spring lines, often single cells, not plains.
+- Peat: mean 1.2 / 1.3 / 1.7 m in the wetlands (p90 2.6-3.5 m, max 4.0-8.2 m), on 0.6-1.4% of the land; 3-12 million m3
+  per map. Litter and wood 1.4 x dry land's; nutrient 0.19-0.42 against 0.46-0.63 on dry land (held in the peat).
+  Wetland soil moisture 0.92-0.98.
+- Plants: cover-weighted flood tolerance in wetlands 0.78-0.98 (herbs), 0.74-0.87 (shrubs), 0.58-0.82 (trees), against
+  0.14-0.60 on dry land; 47-78% of wetland plant cover is of tolerance 12-15 (of 15; 57-85% where waterlogged 90% of the
+  year), against 6-22% on dry land; 51-91 genotypes in the wetlands. Wetland cover: herbs 0.07-0.13, shrubs 0.07-0.22,
+  trees 0.18-0.32 (dry land: trees 0.16-0.65).
+- The budget: ET share 0.42 / 0.53 / 0.43 of the rain, as before. Drinkable water: wetlands join ponds and springs.
+Wire: FIELDS layers `wetland` (the kind most of each 2x2 block's wetland cells have, x 64: marsh 64, swamp 128, fen 192,
+bog 255; not averaged) and `peat` (1 - e^(-m / 2 m)); WORLD's depth plane in metres (ICD). New World fields (land,
+Checkpoint.LandFields): Twi, TwiMean, Hand, WetDur, WetMin, WetNow, Peat, Wetland.
+The climate's latitude span (Climate.RowParams: theta = 2 pi y / FW; also Climate.Rainfall's belts and winds, the
+seasons' phase in Fields, WaterCycle and Plants, Hydrology.AnnualWater, Caves' dissolution, Geology.Snowline): every map
+spans equator, pole, equator, pole whatever its size. On the 512 map (128 rows, 28 km) the pole is 32 rows (7 km) from
+the equator: the sea-level annual mean falls 40 K over 7 km (5.7 K per km, ~800 times the Earth's 0.007 K per km), the
+snowline from 4.5 km to the lakes, and bands 14 km apart have opposite seasons. A region should sit at one latitude.
+Proposed, not done (it changes every world, Geology's glaciers and Climate's owners' code): one Climate.Lat(y) used by
+all of these, lat(y) = LAT0 + (span / 2) cos(2 pi y / FW) with span = the map's true extent (Map.WidthM / 111 km per
+degree: 0.25 degrees at 512, 1 at 2048), continuous on the torus; LAT0 a world setting (Nature, default 45 degrees) or
+drawn from the terrain seed. The prevailing wind and the rain belt then come from LAT0, and the seasons are in phase.
+Scale: every depth, width and area here is in metres through World.ElevPerM and GEO_CELL_M (river discharge in m3/s
+from the cell's area, Hydrology.M3s; the shoreface's distance from the shore in metres; TWI's drained area per unit
+contour in m2/m; HAND in m), so it holds when the cell size or vertical scale changes (the coordinator's 3-4 km worlds,
+GEO_CELL_M ~55 m). Hydrology.WidthM gives a river's real width, RIVER_W 5 m x Q^0.5 (Leopold & Maddock; 5 m at 1 m3/s),
+narrower than a cell; World.RivW stays the drawn width in cells. world3d.js converts metres with RELIEF / 8000 (its
+units per metre at H_RELIEF 8,000 m): if the vertical scale changes, that and RELIEF change together.
+Not done: floodplain inundation as a wetland source at the region's scale (its brooks barely rise); RivW and the RIVERS
+section in metres (WidthM is there for it); RIVER_BANK (150 m) still lets a wide river's bank cells stand far above its
+0.3-m water; wetland animals beyond drinking.
+Tests: WetlandTests (standing water deepens from its shore along the profile, flat-surfaced; a 512 region's wetlands
+lie low and convergent, wet-soiled and peaty, of consistent kinds, with flood-tolerant plants; peat forms only in
+waterlogged ground and mass is kept; tolerance lets plants grow where intolerant ones cannot, at a cost on drained
+ground). HydrologyTests' hydraulic geometry in metres; WetYearsFloodTheFloodplain: more than 2 flooded cells, not 50
+(4-5 now); WaterCycleTests' dry-spell baseflow over 4% of the wet discharge, not 5% (4.8% with the wetlands' ET, 5.9%
+without); DecisionTests and AppearanceTests set depths through World.ShallowE; PlantTests' Key and Cross take a 32-bit
+high key and flood tolerance costs growth; ClimateTests' hash re-pinned.
+**Why the grazers boomed: free energy and a life-history clock without days** (2026-11-01; Plants.cs, Resolve.cs, Body.cs,
+Life.cs, Constants.cs; reporting: Server/EcoWatch.cs, NR_ECO=1). The owner: "why are grazers booming?" Measured with
+the new ecology census (512 map; seeds 5 and 7 to 3,000-3,600 steps, where the world reached 16,384 slots or ran out of
+memory; seed 5 had 17,306 animals at step 3,000 and was killed by the OOM killer at ~7 GB when run uncapped):
+- *Herbivores ate more than the plants made.* Offtake of live plant food was 108-231% of net primary production (NPP)
+  per 300-step sample on seed 5 and 126% pooled on seed 7, where herbivores assimilated 55% of NPP's energy and their own
+  production (growth and young) was 13-40% of it (Lindeman 1942; Pauly & Christensen 1995: 5-20% between levels;
+  Cebrian 1999: terrestrial herbivores take 5-20%, grazed grasslands up to ~60%). Three leaks: (1) reproduction turned a
+  unit of production (cover, 3.2 E/M as herb) into a unit of nectar (8), seed (7) or fruit (6), so on seed 7 the seed
+  eaten held 1,158 E/km2/yr against 554 for all reproduction; (2) a bite of browse cost the woody plants half its mass
+  (BROWSE_LOSS 0.5) and (3) a bite of roots 0.3 of its mass from the herbs, while both pools regrew toward their own
+  capacity. The booming 0.14 kg "grazer" of seed 5 (Narelax) was a nectar-feeder; seed 7's (Vitepe 0.12 kg, 11,078 at
+  step 3,600) a seed-eater.
+- *No energy ceiling on digestion.* Digestion was bounded only by mass, so rich foods gave 30-47x basal metabolism at
+  0.1 kg (grass 6.7x), against sustained budgets of ~7x (Hammond & Diamond 1997).
+- *The life-history clock was V1's steps.* C_MATURE 250, C_GEST and C_COOL 150 steps were 30 and 18 days once a step
+  became 2.92 h: a 0.14 kg body could mature in 19 days and breed every 11. Narelax grew at r = 0.034/day in its first
+  300 steps and 0.011/day over its first half year, against Fenchel's (1974) r_max = 0.025 M(g)^-0.26 = 0.0069/day.
+Now (no caps, no population terms):
+- RHO_PLANT (= RHO_GRASS): nectar, seed and fruit flesh are made at production x RHO_PLANT / their own density (fewer
+  seeds, as seed size and number trade off); Plants.Yield counts them at RHO_PLANT. BROWSE_LOSS 1 (leaves are the woody
+  plant's own mass); a bite of roots takes its energy's worth of herb, then shrub, cover (Plants.RootEaten).
+- C_ABSORB = 7 x C_BASAL (x M^0.75, PAbsorb): digestion passes rich digesta only as fast as their energy is absorbed
+  (Karasov & Diamond 1983; Diamond 1991), and the forager values a food at most at that rate (denser kept on a tie).
+  Life.RangeCapacity uses the same bound.
+- The clock in days (x M^0.25): maturity 120 days, gestation 50 days at a newborn of a tenth of adult mass (x sqrt of
+  the share, as before), cooldown 50 days, lifespan 730 days at 1 kg (sources in CONSTANTS.md). A 0.14 kg body's
+  time-limited r with a litter of 6 is 2.7x Fenchel's line (EcologyTests.LifeHistoryIsInDays); energy limits it below.
+After (seeds 5, 7, 3; 9,000 steps; pooled after the first year, before -> after where measured):
+- offtake of NPP 108-231% / 126% -> 27.6 / 54.8 / 42.8%; herbivores' assimilation 55% (seed 7) -> 12-26% of NPP;
+  herbivore production / NPP 13-40% -> 3.7 / 7.3 / 5.0%; NPP 1.3-1.5 -> 3.0-3.9 kJ/m2/yr (the plants are no longer
+  grazed below their own regrowth: herb cover 0.03 -> 0.36-0.50).
+- Seed 5: Narelax crashed (733 -> 241) once nectar carried only the energy the plants fixed; Yosupul (0.11 kg,
+  fruit and roots) then grew from 99 to 3,839 at r = 0.0043/day (Fenchel 0.0074 at 110 g), still growing at 9,000 steps.
+  Seed 7: Osnar (0.15-0.19 kg seed-eater) cycled with the seasons, 315 -> 612 -> 331 -> 880 -> 119; 763 Nipeka (21 kg).
+  Seed 3: 360-833 animals, 20-30 kg root and grass eaters most numerous.
+Still unrealistic, and why (not changed here):
+- NPP is 3-4 kJ/m2/yr, ~1,000-5,000x below real land (300-1,000 g/m2/yr, ~5-20 MJ/m2/yr): R_G and the cover units make
+  a field cell (4.75 ha) grow a few kg of food a year. Densities therefore lie 2-3 orders below Damuth's rule
+  (D = 4e4 M(g)^-0.75 /km2): Yosupul 6.1 /km2 against 1,148; 20-30 kg herbivores 0.1-1.2 /km2 against 18-23. Seed 5's
+  baseline 22/km2 for 0.14 kg was already 45x below Damuth: the boom was against the world's own food, not Damuth.
+  At these densities the density-size slope is not Damuth's (on seeds 3 and 7 the big herbivores now outnumber the small).
+- No predator level emerges in 3 years: carnivore biomass 0-1.3 kg/km2, 1 : 12-842 of herbivores (Carbone & Gittleman
+  2002: ~1 : 100), carnivores' production 0.1-1.5% of the herbivores' (5-20%). Most "killed" deaths are herbivores and
+  omnivores striking others (strike target in reach on 3-8% of decisions); regulation is by food (starvation, embryos
+  lost) and by that interference, not predation.
+- Pathogens die out on every seed, before and after: infected 18-37% at the start, 0% by step ~4,000. Contact
+  transmission caught 9 of 10,937 infections on seed 5 (nearest neighbours lie ~200 m apart at 6/km2, beyond a step's
+  reach); strains selected for persistence in the ground, replication fell to the bottom of its range (0.033/step) and
+  the immune response cleared them. That is below the threshold host density of directly transmitted disease (Anderson &
+  May 1979), so disease is not density-dependent at these densities.
+- 65-88% of the living are juveniles: the young grow to full size, which on a full reserve takes the whole maturity time;
+  mean age at death 66-300 days against lifespans of 500-2,400.
+Reporting: NR_ECO=1 prints an ECO line every 300 steps (animals and biomass by trophic group from what each clade ate,
+herb cover, NPP, offtake, production ratios, infected share, deaths by cause, the largest clade) and pooled tables at the
+end; PlantTable.Production and Telemetry.EatenMass are counters nothing reads back (no hash moved: the plants' and
+fields' state is unchanged by them). Tests: EcologyTests.AbsorptionBoundsRichFood, LifeHistoryIsInDays.
 
 **A world you see whole, and bodies at their true size** (2026-11-01; Options.cs, setup.html, js/scale.js,
 js/world3d.js, js/look/vegetation.js; images docs/art/scale/). The owner: "the worlds are too damn big now ... the world

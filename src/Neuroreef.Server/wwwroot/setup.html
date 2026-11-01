@@ -29,6 +29,8 @@
   .presets { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .presets a { color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; text-decoration: none; cursor: pointer; }
   .presets a:hover, .presets a.on { background: #16212c; border-color: #4aa3ff; }
+  .presets a small { display: block; color: var(--dim); font-size: 11px; }
+  .presets a.toobig small { color: var(--bad); }
   #msg { width: 100%; color: var(--dim); font-size: 13px; }
 </style>
 </head>
@@ -39,13 +41,13 @@
     world that grows from it. Choose the land, how harsh nature is, and how life starts. Nothing is created until you press
     Start. 1× on a nature setting is the documented law; the rest is your choice.</p>
   <div class="presets"><span class="k" style="color:var(--dim)">Presets:</span>
-    <a data-p="pet">Pet valley</a><a data-p="light">Light (laptop)</a><a data-p="normal">Normal (region)</a><a data-p="big">Continent (32 GB+)</a><a data-p="huge">Supercontinent (16 GB+)</a></div>
+    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (laptop)">Light (laptop)</a><a data-p="normal" data-name="Normal valley (default)">Normal valley (default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a></div>
   <div id="groups"></div>
 </main>
 <div class="est"><div class="in">
-  <div><div class="v" id="mem">–</div><div class="k">memory needed (about)</div></div>
+  <div><div class="v" id="mem">–</div><div class="k">memory needed at most (about)</div></div>
   <div><div class="v" id="ram">–</div><div class="k">this computer can give it</div></div>
-  <div><div class="v" id="pop">–</div><div class="k">animals your world may hold (rough)</div></div>
+  <div><div class="v" id="pop">–</div><div class="k" title="From past runs: a 1024 continent fed 20,000-120,000 animals; scaled by land area, water and plant growth.">animals your world may hold (rough)</div></div>
   <button id="go">Start the prehistory</button>
   <div id="msg"></div>
 </div></div>
@@ -55,25 +57,27 @@ const gb = (b) => (b / 1e9).toFixed(1) + ' GB';
 const x = (v) => '×' + (+v).toFixed(2).replace(/0$/, '').replace(/\.0$/, '');
 let info, rows = [];
 const MAPS = [256, 512, 1024, 2048], MAPN = { 256: 'Valley', 512: 'Region', 1024: 'Continent', 2048: 'Supercontinent' };
-// km across from the server's metres per unit (2026-11-01, the 1 km world: 4 m, so 256 units = 1 km)
-let MPU = 4;
-const mapFmt = (v) => `${MAPN[v]} (${(v * MPU / 1000).toFixed(1)} km across)`;
+const mapFmt = (v) => { const km = v * M_PER_UNIT / 1000; return `${MAPN[v]} (${km < 10 ? km.toFixed(1) : Math.round(km)} km across)`; };
 const STEPS = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 0];
 const SLOTS = () => [2048, 4096, 8192, 12288, 16384, 20480, 24576, 32768].filter((v) => v <= (info.maxSlots || 1e9));
 const WSLOTS = () => [1024, 2048, 4096, 8192, 12288, 16384, 24576, 32768].filter((v) => v <= (info.maxSlots || 1e9));
 const RATES = [1, 3, 10, 30, 0];
+// real units (ICD §2.1): a world unit is 4 m (a field cell of 4 units is 16 m; 2026-11-01, the 1 km world: the server's
+// setup-info metresPerUnit overrides it), a step 2.92 h (3,000 steps a year)
+let M_PER_UNIT = 16 / 4; const STEP_H = 8766 / 3000;
+const years = (steps) => { const y = steps * STEP_H / 8766; return y >= 1.5 ? `${y.toFixed(1).replace(/\.0$/, '')} years` : y >= 0.95 ? '1 year' : `${Math.round(y * 12)} months`; };
 
 function nearestIndex(list, v) { let b = 0; for (let i = 0; i < list.length; i++) if (Math.abs(list[i] - v) < Math.abs(list[b] - v)) b = i; return b; }
 
 function defs() {
   const V = info.v, ev = info.evolve;
-  if (+info.metresPerUnit > 0) MPU = +info.metresPerUnit;
+  if (+info.metresPerUnit > 0) M_PER_UNIT = +info.metresPerUnit;
   return [
     { g: 'Land', note: 'the prehistory evolves on a bigger map; the world you watch can be smaller', rows: [
       { key: 'preMap', label: 'Map of the prehistory', list: MAPS, val: V.preMap, fmt: mapFmt,
-        help: 'Where life evolves. A region (the default) is seen whole on one screen; a continent holds more animals and lineages, at four times the memory and CPU.' },
+        help: 'Where life evolves. A valley (the default, 1 km) is seen whole on one screen; a region is four times it and a continent sixteen times: more animals and lineages, at that much more memory and CPU.' },
       ...(ev ? [] : [{ key: 'worldMap', label: 'Map of your world', list: MAPS, val: V.worldMap, fmt: mapFmt,
-        help: 'Where you watch. A region (the default) fits on one screen with mountains, rivers and caves; a valley is a quarter of it, a continent four times it (much more to scroll over).' }]),
+        help: 'Where you watch. A valley (the default, 1 km) fits on one screen: a valley with its stream, hills and a lake; a region is four times it, a continent sixteen times (much more to scroll over).' }]),
       { key: 'water', label: 'Water', min: 0.03, max: 0.4, step: 0.01, val: V.water, fmt: (v) => Math.round(v * 100) + '% of the land',
         help: 'How much of the map is lakes and sea.' },
       { key: 'ponds', label: 'Ponds', min: 0, max: 1, step: 0.05, val: V.ponds, fmt: (v) => Math.round(v * 100) + '% of basins',
@@ -82,8 +86,8 @@ function defs() {
     { g: 'Nature', note: 'how hard the world is on life', rows: [
       { key: 'plants', label: 'Plant growth', min: 0.3, max: 3, step: 0.05, val: V.plants, fmt: x, help: 'How fast every plant and alga grows. Lush ×2–3, harsh ×0.3–0.5.' },
       { key: 'seasons', label: 'Seasons', min: 0, max: 2, step: 0.05, val: V.seasons, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How much wetter the wet season and drier the dry season are.' },
-      { key: 'seasonLength', label: 'Length of a year', min: 1000, max: 20000, step: 500, val: V.seasonLength, fmt: (v) => v.toLocaleString() + ' steps',
-        help: 'About one lifespan (3,000) lets breeding seasons and migration evolve; much longer and seasons feel like climate eras.' },
+      { key: 'seasonLength', label: 'Length of the seasons\' year', min: 1000, max: 20000, step: 500, val: V.seasonLength, fmt: (v) => v.toLocaleString() + ' steps · ' + years(v),
+        help: 'One wet and one dry season. A step is 2.92 hours, so 3,000 steps (the default) are a calendar year; about one lifespan, which lets breeding seasons and migration evolve. Much longer and seasons feel like climate eras.' },
       { key: 'drought', label: 'Droughts and wet years', min: 0, max: 3, step: 0.05, val: V.drought, fmt: (v) => v == 0 ? 'every year the same' : x(v),
         help: 'How far a year\'s rain can swing. The biggest lever on how much nature matters.' },
       { key: 'fire', label: 'Wildfire', min: 0, max: 5, step: 0.1, val: V.fire, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How often fires start in dry vegetation.' },
@@ -110,15 +114,15 @@ function defs() {
       { key: 'mutBody', label: 'Body mutation', min: 0, max: 3, step: 0.05, val: V.mutBody, fmt: x, help: '×1 is about 0.4 body changes per newborn.' },
       { key: 'branches', label: 'Branches', min: 1, max: 6, step: 1, val: V.branches, fmt: (v) => v,
         help: 'Separate worlds evolving side by side. You pick which one your world starts from. Each costs memory and CPU.' },
-      { key: 'branchSlots', label: 'Animal slots per branch', list: SLOTS(), val: V.branchSlots, fmt: (v) => v.toLocaleString(),
-        help: 'The most organisms a branch can hold. If it fills, the slots, not nature, choose who is born, and the run is marked invalid.' },
+      { key: 'branchSlots', label: 'Animal slots per branch, to start', list: SLOTS(), val: V.branchSlots, fmt: (v) => v.toLocaleString(),
+        help: 'Room for organisms (eggs included) a branch starts with. It grows as births need more, as long as memory allows (an eighth of it is kept free); only if it cannot grow do the slots, not nature, choose who is born, and the run is marked invalid.' },
       { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: V.steps,
         fmt: (v) => v === 0 ? (ev ? 'until you stop it' : 'until you begin the world') : v.toLocaleString() + ' steps', help: '' },
     ] },
     ...(ev ? [] : [{ g: 'Your world', note: '', rows: [
-      { key: 'worldSlots', label: 'Animal slots in the world', list: WSLOTS(), val: V.worldSlots, fmt: (v) => v.toLocaleString(),
-        help: 'The most organisms your world can hold. Food and land should stop it long before; if it fills, the slots are choosing who is born.' },
-      { key: 'rate', label: 'Speed it starts at', list: RATES, val: V.rate, fmt: (v) => v === 0 ? 'as fast as possible' : v + ' steps per second',
+      { key: 'worldSlots', label: 'Animal slots in the world, to start', list: WSLOTS(), val: V.worldSlots, fmt: (v) => v.toLocaleString(),
+        help: 'Room for organisms your world starts with. It grows as births need more while memory allows; food and land should stop the animals long before. The top bar says WORLD FULL if it ever cannot grow.' },
+      { key: 'rate', label: 'Speed it starts at', list: RATES, val: V.rate, fmt: (v) => v === 0 ? 'as fast as possible' : `${v} steps a second · ${(v * STEP_H).toFixed(v * STEP_H < 10 ? 1 : 0)} h of world time`,
         help: 'The speed buttons change it any time.' },
       { key: 'worldMut', label: 'Evolution speed in your world', min: 0, max: 6, step: 0.25, val: V.worldMut, fmt: x,
         help: 'Mutation in the world you watch, × the prehistory\'s. A small valley has few animals, so change is slow at ×1; ×3 compresses time.' },
@@ -151,31 +155,59 @@ const has = (k) => rows.some((r) => r.key === k);
 function val(k) { const r = rows.find((q) => q.key === k); return r ? r.get() : undefined; }
 function setv(k, v) { const r = rows.find((q) => q.key === k); if (r) r.set(v); }
 
+/** Memory and animals for a set of values (get(k): a value, or undefined for a row this page has not). */
+function calc(get) {
+  // rough: a continent fed about 20,000-120,000 animals in past runs (a region a quarter of it, a valley a sixteenth: a
+  // 2026-11-01 valley run held 1,300 after a year and 4,400 after 2.8 years, still rising); food scales with land area and plant growth
+  const feeds = (map) => { const area = (map / 1024) ** 2, land = (1 - get('water')) / 0.9, k = area * land * get('plants');
+    return [Math.round(20000 * k / 100) * 100, Math.round(120000 * k / 100) * 100]; };
+  const ws = get('worldSlots'), wm = get('worldMap') ?? get('preMap'), [lo, hi] = feeds(wm), preHi = feeds(get('preMap'))[1];
+  // memory: the prehistory and the world are never both in memory, so the larger of the two counts. Each starts with
+  // its slots and grows them with its animals: at most the larger of its slots and the animals its map may feed (x1.3
+  // for eggs and embryos)
+  const B = info.bytesPerSlot, nb = get('branches'), bs = get('branchSlots');
+  const start = Math.max(nb * bs * B, ws !== undefined ? ws * B : 0) + 0.4e9;
+  const most = Math.max(nb * Math.max(bs, 1.3 * preHi) * B, ws !== undefined ? Math.max(ws, 1.3 * hi) * B : 0) + 0.4e9;
+  return { lo, hi, start, most };
+}
+
 function estimate() {
-  // the prehistory and the world are never both in memory: the larger of the two counts
-  const pre = val('branches') * val('branchSlots') * info.bytesPerSlot, world = has('worldSlots') ? val('worldSlots') * info.bytesPerSlot : 0;
-  const need = Math.max(pre, world) + 0.4e9;
-  $('mem').textContent = gb(need); $('ram').textContent = gb(info.ramBytes);
-  // rough: a continent fed about 20,000-120,000 animals in past runs (a region a quarter of it); food scales with land area and plant growth
-  const wm = has('worldMap') ? val('worldMap') : val('preMap'), area = (wm / 1024) ** 2, land = (1 - val('water')) / 0.9;
-  const lo = Math.round(20000 * area * land * val('plants') / 100) * 100, hi = Math.round(120000 * area * land * val('plants') / 100) * 100;
-  $('pop').textContent = `${lo.toLocaleString()}–${hi.toLocaleString()}`;
-  const r = need / info.ramBytes;
-  $('mem').className = 'v ' + (r < 0.6 ? 'ok' : r < 0.85 ? 'warn' : 'bad');
-  let m = r < 0.6 ? '' : r < 0.85 ? 'This will use most of the memory; the computer may slow down. ' : 'This needs more memory than the computer has: lower the branches or the slots. ';
+  const e = calc((k) => has(k) ? val(k) : undefined);
+  $('mem').textContent = e.most > e.start * 1.05 ? `${gb(e.start)} – ${gb(e.most)}` : gb(e.start);
+  $('ram').textContent = gb(info.ramBytes);
+  $('pop').textContent = `${e.lo.toLocaleString()}–${e.hi.toLocaleString()}`;
+  const r = e.start / info.ramBytes, rm = e.most / info.ramBytes;
+  $('mem').className = 'v ' + (rm < 0.6 ? 'ok' : r < 0.85 ? 'warn' : 'bad');
+  let m = r >= 0.85 ? 'This needs more memory than the computer has: lower the branches or the slots. '
+    : rm >= 0.85 ? 'If the animals grow to the top of the estimate, their slots will need most of the memory; the computer may slow down, and if the slots cannot grow, they, not nature, decide who is born. '
+    : r >= 0.6 ? 'This will use most of the memory; the computer may slow down. ' : '';
   if (val('ancestorsLand') + val('ancestorsWater') === 0) m += 'There must be at least one ancestor. ';
   if (val('ancestorsLand') + val('ancestorsWater') > 16) m += 'At most 16 ancestors in all. ';
-  if (has('worldSlots') && val('worldSlots') < hi) m += 'Your world may fill its slots; then the slots, not nature, decide who is born. ';
   $('msg').textContent = m;
   $('go').disabled = r >= 1.0 || val('ancestorsLand') + val('ancestorsWater') === 0 || val('ancestorsLand') + val('ancestorsWater') > 16;
 }
 
+/** Each preset's button says its map and what it needs here. */
+function labelPresets() {
+  for (const a of document.querySelectorAll('[data-p]')) {
+    const p = PRESETS[a.dataset.p], e = calc((k) => p[k] !== undefined ? p[k] : has(k) ? val(k) : undefined);
+    const map = p.worldMap && !info.evolve ? p.worldMap : p.preMap, km = +(map * M_PER_UNIT / 1000).toFixed(1);
+    const mem = gb(e.start) + (e.most > e.start * 1.05 ? '–' + gb(e.most) : '');
+    a.innerHTML = `${a.dataset.name}<small>${km} km · ${mem}</small>`;
+    a.title = `${a.dataset.name}: a ${MAPN[map].toLowerCase()} ${km} km across, about ${e.lo.toLocaleString()}–${e.hi.toLocaleString()} animals, ${gb(e.start)} of memory to start` +
+      (e.most > e.start * 1.05 ? ` and up to ${gb(e.most)} if the animals reach the top of the estimate` : '') + (e.start >= info.ramBytes ? ' (more than this computer has)' : '');
+    a.classList.toggle('toobig', e.start >= info.ramBytes * 0.85);
+  }
+}
+
 const PRESETS = {
-  pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 12288, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.3 },
+  pet: { preMap: 256, worldMap: 256, branches: 2, branchSlots: 8192, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.3 },
   light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.3 },
   // the default (2026-11-01, the owner: a world ~1 km across, one valley with a stream, hills and a pond, several hundred
   // animals at true size): a valley, 1 km
-  normal: { preMap: 256, worldMap: 256, branches: 2, branchSlots: 12288, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
+  normal: { preMap: 256, worldMap: 256, branches: 3, branchSlots: 8192, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
+  // a region (2 km): four times the land
+  region: { preMap: 512, worldMap: 512, branches: 2, branchSlots: 12288, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
   big: { preMap: 1024, worldMap: 1024, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.5 },
   // one supercontinent (2048 x 2048, 4 continents of land): one branch, so its slots fit in ~7 GB
   huge: { preMap: 2048, worldMap: 2048, branches: 1, branchSlots: 32768, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 32768, rate: 3, climate: 0.3 },
@@ -206,7 +238,9 @@ $('go').onclick = async () => {
 };
 
 fetch('api/setup-info').then((r) => r.json()).then((j) => {
-  info = j; build();
+  info = j; build(); labelPresets();
+  // the defaults are the normal preset's: light it when nothing differs
+  const n = PRESETS.normal; if (Object.keys(n).every((k) => !has(k) || Math.abs(val(k) - n[k]) < 1e-6)) document.querySelector('[data-p=normal]').classList.add('on');
   if (info.evolve) { $('title').textContent = 'NEUROREEF · NEW PREHISTORY (NO GRAPHICS)'; $('go').textContent = 'Start'; }
 });
 </script>

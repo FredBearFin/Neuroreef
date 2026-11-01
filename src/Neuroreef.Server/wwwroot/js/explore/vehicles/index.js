@@ -170,7 +170,11 @@ export class Vehicles {
   _onVehicle(r) {
     const v = this.list[r.kind];
     if (!v) return;
-    if (r.ok) { v.confirmed = true; v.rounds = r.rounds; return; }
+    if (r.ok) {
+      v.confirmed = true; v.rounds = r.rounds;
+      if (this.pendingBoard === v) { this.pendingBoard = null; if (!this.cur && this._distM(this.ex.pos.x, this.ex.pos.z, v.x, v.z) < ENTER_M) this.toggleSeat(); }
+      return;
+    }
     if (v.spots && v.spots.length) { this._placeAt(v, v.spots.shift()); return; }   // the server saw it otherwise: the next spot
     this.ex.hud.message(`cannot place the ${r.kind}: ${r.why}`, true, 2500);
     this._remove(r.kind);
@@ -211,9 +215,11 @@ export class Vehicles {
       return sl < 0.35;
     };
     const ax = x + Math.cos(yaw) * 8 * uh, az = z + Math.sin(yaw) * 8 * uh;
-    if (ok(ax, az)) return [{ x: ax, z: az, yaw }];
-    for (const [px, pz] of this._rings(x, z, 10, 3000, 6)) if (ok(px, pz)) return [{ x: px, z: pz, yaw }];
-    return [];
+    const out = [];
+    if (ok(ax, az)) out.push({ x: ax, z: az, yaw });
+    // a few more, should the server refuse the first (it checks the sim's own land cell)
+    for (const [px, pz] of this._rings(x, z, 10, 3000, 6)) { if (out.length >= 5) break; if (ok(px, pz)) out.push({ x: px, z: pz, yaw }); }
+    return out;
   }
 
   /** A boat: the nearest water at least 1.5 m deep (else at least its least depth), clear of the shore around it. */
@@ -235,10 +241,27 @@ export class Vehicles {
       }
       return best;
     };
-    for (const need of [1.5, minD + 0.2]) {
-      for (const [px, pz] of this._rings(x, z, 25, 12000, 3)) if (ok(px, pz, need)) return [{ x: px, z: pz, yaw: heading(px, pz) }];
+    // several candidates in different field cells, the server's deep water (realm bit 4: a lake's, not a stream's) first:
+    // the server measures depth its own way (Player.WaterDepthM) and may refuse a spot the drawn water calls deep enough
+    // (a carved river channel, or depths in other units); each refusal tries the next (_onVehicle). Before 2026-11-01 one
+    // candidate was offered, so one refusal meant no boat.
+    const out = [], cells = new Set(), S = this.world.W / this.world.world.fw;
+    const cellKey = (px, pz) => Math.floor(T.wrap(px) / S) + ',' + Math.floor(T.wrap(pz) / S);
+    for (const deepOnly of [true, false]) {
+      for (const need of [1.5, minD + 0.2]) {
+        let firstM = -1;
+        for (const [px, pz] of this._rings(x, z, 25, deepOnly ? 4000 : 12000, 3)) {
+          if (out.length >= 8) break;
+          if (firstM >= 0 && this._distM(x, z, px, pz) > firstM + 1500) break;   // the rest no farther than 1.5 km past the first
+          if (deepOnly && (this._simCell(px, pz) & 4) === 0) continue;
+          const key = cellKey(px, pz);
+          if (cells.has(key) || !ok(px, pz, need)) continue;
+          cells.add(key); out.push({ x: px, z: pz, yaw: heading(px, pz) });
+          if (firstM < 0) firstM = this._distM(x, z, px, pz);
+        }
+      }
     }
-    return [];
+    return out;
   }
 
   /** A plane: a 350 m strip of dry ground, no step steeper than 3.5 degrees and less than 12 m of rise along it, and the
@@ -293,7 +316,9 @@ export class Vehicles {
       if (d < bd) { bd = d; best = v; }
     }
     if (!best) { ex.hud.message('no vehicle near · <b>V</b> to place one', false, 1500); return; }
-    if (!best.confirmed) { ex.hud.message('the server has not placed it yet', true, 1200); return; }
+    // not yet confirmed by the server (its answer can take a moment, longer during the prehistory, whose branch answers
+    // between its steps): get in as soon as it is, instead of refusing the key (2026-11-01: E pressed at once did nothing)
+    if (!best.confirmed) { this.pendingBoard = best; ex.hud.message(`getting in the ${best.spec.name} as soon as the server has placed it…`, false, 2500); return; }
     this.cur = best;
     ex.yaw = best.yaw; ex.pitch = -0.08; this.camYaw = best.yaw; this.firing = false;
     this.yaw0 = ex.yaw; this.pitch0 = ex.pitch;   // the plane's chase camera: the mouse's swing from here

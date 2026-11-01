@@ -16,6 +16,9 @@ const TROPHIC = ['decomposers & scavengers', 'plant-eaters', 'omnivores', 'meat-
 const TROPHIC_C = ['#a08a6a', '#7bd46b', '#e6c35a', '#ff5d8f', '#a77bff'];
 const TRAIT_C = ['#7bd46b', '#c9a86a', '#5ab0ff', '#b48cff', '#4fd1c5', '#e6c35a', '#8aa0b5', '#ff5d73', '#ff8fd0', '#ffb547', '#c02040', '#a77bff', '#5fd7a5', '#d7e3ee', '#3fb3a0', '#ff9a3d'];
 const GREY = '#56697c';
+// causes of death (meta.causes): starvation, thirst, killed, parasitism, old age, fire, lost before birth, disease, cold,
+// heat, hunted (by the person in Explore), suffocated (no air: a lung under water, gills in air), drowned
+const CAUSE_C = ['#e6c35a', '#5ab0ff', '#ff5d73', '#c02040', '#8aa0b5', '#ff8a2a', '#6a5a8a', '#7bd46b', '#a8d8ff', '#ffb0d0', '#ffffff', '#3fb3a0', '#1f5fd0'];
 // charts with one series per clade: rebuilt when the set of clades changes (uPlot series counts are fixed)
 const PER_CLADE = ['pop', 'gen', 'rew', 'learn', 'evoAcross', 'evoKit', 'evoGen'];
 
@@ -191,7 +194,7 @@ export class Panels {
       axes: [{ stroke: '#6f8599', grid: { stroke: '#16212c' }, size: 30 }, { stroke: '#6f8599', grid: { stroke: '#16212c' }, size: 58 }],
       legend: { show: opts.legend !== false, live: true },
       cursor: { drag: { x: false, y: false } },
-      series: [{ label: 'step' }, ...series.map((s) => ({ label: s.label, stroke: s.color, width: 1.4, fill: s.fill, show: s.show !== false, points: { show: false } }))],
+      series: [{ label: 'step', value: (u, v) => v == null ? '–' : `${Math.round(v).toLocaleString()} · ${when(v)}` }, ...series.map((s) => ({ label: s.label, stroke: s.color, width: 1.4, fill: s.fill, show: s.show !== false, points: { show: false } }))],
     };
     if (this.charts[key]) this.charts[key].destroy();
     const data = [[], ...series.map(() => [])];
@@ -244,14 +247,17 @@ export class Panels {
     }
     this._probe = pr;
     $('ins-title').innerHTML = `<span style="color:${sp.color}">●</span> ${esc(sp.name)} #${pr.serial}`;
-    const kv = [['stage', `${stage} ${sc('sex') ? '♂' : '♀'}`], ['generation', fmt(sc('generation'))], ['age', `${fmt(sc('age'))} / ${fmt(sc('life'))} (mature ${fmt(sc('mature'))})`],
+    const kv = [['stage', `${stage} ${sc('sex') ? '♂' : '♀'}`], ['generation', fmt(sc('generation'))], ['age', `<span title="${fmt(sc('age'))} of ${fmt(sc('life'))} steps; mature at ${fmt(sc('mature'))}">${span(sc('age'))} of ${span(sc('life'))} (mature at ${span(sc('mature'))})</span>`],
       ['energy', `${fmt(sc('energy'), 2)} / ${fmt(sc('emax'), 2)}`], ['gut', fmt(sc('full') * 100) + '%'], ['thirst', fmt(sc('thirst') * 100) + '%'],
       ['fatigue', fmt(sc('fatigue') * 100) + '%'], ['pain', fmt(sc('pain') * 100) + '%'], ['children', fmt(sc('children'))], ['clade niche', esc(sp.niche)],
       ['clade reproduction', `${fmt((sp.sexual || 0) * 100)}% sexual · ${fmt((sp.live || 0) * 100)}% live birth`]];
     $('ins-kv').innerHTML = kv.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
     const ph = (n) => { const k = P.phenotype.indexOf(n); return k >= 0 ? f[P.phen + k] : NaN; };
-    const body = [['mass', ph('mass'), sp.mass], ['top speed', ph('vmax'), null], ['sight', ph('sight'), sp.sight], ['armour', ph('armour'), null], ['strike', ph('strike'), null], ['litter', ph('litter'), null]];
-    $('ins-body').innerHTML = body.map(([k, v, b]) => `<span>${k}</span><span>${fmt(v, 2)}${b != null && isFinite(b) ? ` <span style="color:${GREY}">(${fmt(b, 2)})</span>` : ''}</span>`).join('');
+    // in real units (ICD §2.1): mass kg, travel and sight in metres (the sim's are world units; top speed is a step's most)
+    const kg = (v) => `${fmt(v, v < 10 ? 2 : 1)} kg`, num = (v) => fmt(v, 2);
+    const body = [['mass', ph('mass'), sp.mass, kg], ['top travel in a step', ph('vmax'), null, (v) => `${metres(v)} <span style="color:${GREY}">(${span(1)})</span>`],
+      ['sight', ph('sight'), sp.sight, metres], ['armour', ph('armour'), null, num], ['strike', ph('strike'), null, num], ['litter', ph('litter'), null, num]];
+    $('ins-body').innerHTML = body.map(([k, v, b, u]) => `<span>${k}</span><span>${u(v)}${b != null && isFinite(b) ? ` <span style="color:${GREY}">(${u(b)})</span>` : ''}</span>`).join('');
     $('ins-diet').innerHTML = M.pools.map((p, i) => f[P.diet + i] > 0.005 ? bar(p, f[P.diet + i], 1, '#c9a86a') : '').join('');
     $('ins-feat').innerHTML = M.features.map((n, i) => bar(n.toLowerCase(), f[P.feat + i], 1, '#5ab0ff', true)).join('');
     $('ins-hid').innerHTML = Array.from({ length: P.nh }, (_, i) => bar('m' + i, f[P.hid + i], 1, '#b48cff', true)).join('');
@@ -345,7 +351,7 @@ export class Panels {
   // ------------------------------------------------------------------ energy cycle (Sankey)
 
   _buildEnergy() {
-    $('tab-energy').innerHTML = `<h3>where the energy goes — last ~1,000 steps</h3>
+    $('tab-energy').innerHTML = `<h3>where the energy goes — last ~1,000 steps <span class="dim">(about 4 months)</span></h3>
       <p class="note">Left: energy pools of the cycle (plants, dead matter, animal bodies). Right: the clades that ate from them. Width = energy taken in.</p>
       <svg id="sankey" width="100%" height="620"></svg>
       <h3>energy budget per clade (same window)</h3><table class="t" id="budget"></table>`;
@@ -379,7 +385,7 @@ export class Panels {
     }
     for (const p of pools) out += `<rect x="${x0}" y="${L[p].y}" width="${nodeW}" height="${Math.max(1, L[p].h)}" fill="${pc(p)}"/><text x="${x0 - 4}" y="${L[p].y + L[p].h / 2 + 3}" text-anchor="end" fill="#a9bccd" font-size="10">${M.pools[p]}</text>`;
     for (const s of spOrder) out += `<rect x="${x1}" y="${Rr[s].y}" width="${nodeW}" height="${Math.max(1, Rr[s].h)}" fill="${this.color(s)}"/><text x="${x1 + nodeW + 4}" y="${Rr[s].y + Rr[s].h / 2 + 3}" fill="#a9bccd" font-size="10">${esc(this.name(s))}</text>`;
-    svg.innerHTML = out || `<text x="10" y="20" fill="${GREY}" font-size="11">nothing eaten in the last ~1,000 steps</text>`;
+    svg.innerHTML = out || `<text x="10" y="20" fill="${GREY}" font-size="11">nothing eaten in the last ~1,000 steps (about 4 months)</text>`;
     // budget table: living clades, and any that ate in the window
     let rows = '<tr><th>clade</th><th>intake</th><th>basal</th><th>movement</th><th>body heat</th><th>alive</th></tr>';
     for (const s of used) {
@@ -393,10 +399,10 @@ export class Panels {
   // ------------------------------------------------------------------ food web
 
   _buildWeb() {
-    $('tab-web').innerHTML = `<h3>who killed whom — last ~1,000 steps</h3>
+    $('tab-web').innerHTML = `<h3>who killed whom — last ~1,000 steps <span class="dim">(about 4 months)</span></h3>
       <p class="note">Rows: the attacker. Columns: the victim. Nothing in the program says who may eat whom; this is what happened, from size, armour, diet and behaviour. Living clades, and extinct ones that appear in the window.</p>
       <canvas id="kill" class="plot" height="430"></canvas>
-      <h3>how animals died (same window)</h3><canvas id="causes" class="plot" height="420"></canvas>
+      <h3>how animals died (same window)</h3><p class="note"><b>killed</b>: by another animal; <b>hunted</b>: by you, in Explore; <b>suffocated</b>: an oxygen debt it could not bear out of water (gills ashore, or thin air); <b>drowned</b>: the same in water (an air-breather under too long). Bars are per clade, longest = most deaths.</p><canvas id="causes" class="plot" height="420"></canvas>
       <h3>all-time killer × victim totals</h3><p class="note">Since this console connected.</p><canvas id="killAll" class="plot" height="430"></canvas>`;
   }
 
@@ -440,7 +446,9 @@ export class Panels {
     const n = Math.max(1, list.length), h = Math.max(160, Math.min(420, 40 + n * 22));
     const w = cv.clientWidth || 420; cv.style.height = h + 'px'; cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
     const g = cv.getContext('2d'); g.scale(devicePixelRatio, devicePixelRatio);
-    const cols = ['#e6c35a', '#5ab0ff', '#ff5d73', '#c02040', '#8aa0b5', '#ff8a2a', '#6a5a8a', '#7bd46b', '#a8d8ff', '#ffb0d0'];   // ... disease, cold, heat (Revision O)
+    // one colour per cause (13 since 2026-11-01: hunted by the person, suffocated, drowned); a cause the palette ran out
+    // for would share a colour with another and read as it
+    const cols = CAUSE_C;
     const lw = 74, bh = (h - 44) / n;
     g.font = '9px sans-serif';
     list.forEach((s, k) => {
@@ -684,8 +692,8 @@ export class Panels {
 
   _treeTip(o) {
     const p = o.parentSerial ? [...this.archive.values()].find((a) => a.serial === o.parentSerial) : null;
-    return `<b style="color:${o.color}">${esc(o.name)}</b> · ${o.extinct >= 0 ? `extinct at step ${fmt(o.extinct)}` : `${esc(o.niche || '')} · ${fmt(o.count)} alive`}` +
-      ` · ${p ? `split from <b style="color:${p.color}">${esc(p.name)}</b> at step ${fmt(o.born)} (${o.generation} split${o.generation === 1 ? '' : 's'} from its ancestor)` : `ancestor ${o.ancestor + 1}`}` +
+    return `<b style="color:${o.color}">${esc(o.name)}</b> · ${o.extinct >= 0 ? `extinct at step ${fmt(o.extinct)}, ${when(o.extinct)}` : `${esc(o.niche || '')} · ${fmt(o.count)} alive`}` +
+      ` · ${p ? `split from <b style="color:${p.color}">${esc(p.name)}</b> at step ${fmt(o.born)}, ${when(o.born)} (${o.generation} split${o.generation === 1 ? '' : 's'} from its ancestor)` : `ancestor ${o.ancestor + 1}`}` +
       (o.current ? '' : ' · <i>slot since reused</i>');
   }
 
@@ -712,9 +720,9 @@ export class Panels {
     const ext = this.isExtinct(s), at = this.extinctAt(s);
     box.innerHTML = `
       <h3><span style="color:${s.color}">●</span> ${esc(s.name)} — ${esc(s.niche)}</h3>
-      ${ext ? `<p class="note" style="color:#ff5d73">Extinct since step ${fmt(at)}. Nothing in this world is spawned, so it will not return.</p>` : ''}
+      ${ext ? `<p class="note" style="color:#ff5d73">Extinct since step ${fmt(at)} (${when(at)}). Nothing in this world is spawned, so it will not return.</p>` : ''}
       <div class="kv">
-        <span>origin</span><span>${par ? `split from <b style="color:${par.color}">${esc(par.name)}</b>` : s.parent >= 0 ? 'split from a clade no longer on record' : `ancestor ${s.ancestor + 1}`} at step ${fmt(s.born)}</span>
+        <span>origin</span><span>${par ? `split from <b style="color:${par.color}">${esc(par.name)}</b>` : s.parent >= 0 ? 'split from a clade no longer on record' : `ancestor ${s.ancestor + 1}`} at step ${fmt(s.born)} <span style="color:${GREY}">(${when(s.born)})</span></span>
         <span>splits since the ancestor</span><span>${fmt(s.generation)}</span>
         <span>daughter clades</span><span>${daughters.length ? daughters.map((d) => `<b style="color:${d.extinct >= 0 ? GREY : d.color}">${esc(d.name)}</b>`).join(', ') : 'none yet'}</span>
         <span>alive now</span><span>${fmt(L(T.fields.count) ?? s.count)}</span>
@@ -727,9 +735,9 @@ export class Panels {
       <h3>what its members are now <span class="dim">· means over the living animals' genes</span></h3>
       ${ext ? '<p class="note">No living members to describe.</p>' : `<div class="kv">
         <span>niche</span><span>${esc(s.niche)}</span>
-        <span>mass</span><span>${fmt(s.mass, 2)}</span>
+        <span>mass</span><span>${fmt(s.mass, s.mass < 10 ? 2 : 1)} kg</span>
         <span>locomotion (most members)</span><span>${esc(String(s.loco).toLowerCase())}</span>
-        <span>sight / field of view</span><span>${fmt(s.sight, 1)} / ${fmt(s.fov)}°</span>
+        <span>sight / field of view</span><span>${metres(s.sight)} / ${fmt(s.fov)}°</span>
         <span>newborn size</span><span>${fmt(s.birth * 100)}% of adult mass</span>
         <span>sexual reproduction</span><span>${fmt(s.sexual * 100)}% of members (others clone)</span>
         <span>live birth</span><span>${fmt(s.live * 100)}% of members (others lay eggs)</span>
@@ -737,7 +745,7 @@ export class Panels {
       ${ext ? '' : `<h3>can digest (mean efficiency)</h3>${diet.length ? diet.map(([p, v]) => bar(p, v, 1, '#c9a86a')).join('') : '<p class="note">nothing</p>'}`}
       <h3>actually ate (recent energy share)</h3>${intake.length ? intake.map(([p, v]) => bar(p, v / itot, 1, '#7bd46b')).join('') : '<p class="note">nothing recently</p>'}
       <h3>where the life cycle breaks (deaths by age, recent)</h3>
-      <p class="note">If most deaths are before birth or as juveniles, the clade is not raising its young; mean age at death ${fmt(L(T.fields.meanAge))} steps.</p>
+      <p class="note">If most deaths are before birth or as juveniles, the clade is not raising its young; mean age at death ${L(T.fields.meanAge) == null ? '–' : `${span(L(T.fields.meanAge))} (${fmt(L(T.fields.meanAge))} steps)`}.</p>
       ${(() => { const names = ['before birth', 'juvenile', 'young adult', 'older adult']; const v = names.map((_, k) => Rc(T.fields.dage + k)); const mx = Math.max(1, ...v);
          return names.map((n, k) => bar(n, v[k], mx, ['#6a5a8a', '#e6c35a', '#4fd1c5', '#8aa0b5'][k], false, fmt(v[k]))).join(''); })()}
       <h3>died of (recent)</h3>${deaths.length ? deaths.map(([c, v]) => bar(c, v, Math.max(...deaths.map((d) => d[1])), '#ff5d73', false, fmt(v))).join('') : '<p class="note">no deaths recently</p>'}
@@ -756,6 +764,30 @@ function niceTicks(max, n) {
   return out;
 }
 function shortStep(v) { return v >= 1e6 ? (v / 1e6).toFixed(v % 1e6 ? 1 : 0) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(v % 1e3 ? 1 : 0) + 'k' : String(v); }
+
+// ---- real units (ICD §2.1: meta.units / status.units). A step is stepHours (2.92 h; 3,000 steps a year), a world unit
+// metresPerUnit (54.5 m). The sim counts in steps and units; the console shows hours, days, years and metres beside them.
+export const UNITS = { metresPerUnit: 54.5, stepHours: 8766 / 3000, stepsPerDay: 24 / (8766 / 3000), stepsPerYear: 3000 };
+export function setUnits(u) { if (u && u.metresPerUnit > 0 && u.stepHours > 0) Object.assign(UNITS, u); }
+/** A duration of n steps in words: "5.8 h", "3.2 days", "4 months", "2.3 years". */
+export function span(n) {
+  const h = n * UNITS.stepHours, d = h / 24, y = h / 8766;
+  if (!isFinite(h)) return '–';
+  if (h < 36) return `${h < 10 ? h.toFixed(1) : Math.round(h)} h`;
+  if (d < 45) return `${d < 10 ? d.toFixed(1) : Math.round(d)} days`;
+  if (y < 1.5) return `${Math.round(d / 30.44)} months`;
+  return `${y < 10 ? y.toFixed(1) : Math.round(y).toLocaleString()} years`;
+}
+/** The time in the world at a step: "year 2 · day 41". */
+export function when(step) {
+  const h = Math.max(0, step) * UNITS.stepHours, y = Math.floor(h / 8766), d = Math.floor((h - y * 8766) / 24);
+  return `year ${y + 1} · day ${d + 1}`;
+}
+/** A distance in world units as metres or km. */
+export function metres(u) {
+  const m = u * UNITS.metresPerUnit;
+  return !isFinite(m) ? '–' : m >= 10000 ? `${(m / 1000).toFixed(0)} km` : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m >= 10 ? Math.round(m) : m.toFixed(1)} m`;
+}
 
 /** A labelled horizontal bar. signed: value in -1..1 drawn from the centre. */
 export function bar(label, v, max = 1, color = '#4fd1c5', signed = false, text) {

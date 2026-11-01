@@ -32,7 +32,7 @@ public sealed class World
     [PerSlot] public int[] MotherSlot, Children, LastChildSlot, Matured;
     [PerSlot] public uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
-    [PerSlot] public float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
+    [PerSlot] public float[] PM, PBasal, PGut, PDig, PAbsorb, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
     [PerSlot] public float[] PLen;          // adult body length in metres (Body.LengthM, 2026-11-01); PSight, PReach, PVmax are in units of K.M_PER_UNIT m
     [PerSlot] public byte[] PLitter;
     [PerSlot] public float[] PDiet;            // Cap * Pools.N digestive efficiencies
@@ -188,6 +188,10 @@ public sealed class World
     /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
     public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / Map.ReliefM;
 
+    /// <summary>The shallow realm's depth (SHALLOW m) in elevation, as Depth is: water at most this deep is Realm.Shallow
+    /// (wadeable; algae grow), deeper is Realm.Deep (2026-11-01: SHALLOW is in metres).</summary>
+    public float ShallowE => K.SHALLOW * ElevPerM;
+
     /// <summary>The latitude this world sits at (degrees, &lt; 0 south; 2026-11-01, the 1 km world): Nature.Latitude if
     /// set, else drawn from the terrain seed between LAT_LO and LAT_HI in either hemisphere, so a seed makes one land and
     /// one climate. The map spans Map.LatSpanDeg about it (Climate.SinLat).</summary>
@@ -235,6 +239,13 @@ public sealed class World
     public readonly float[] Carb, CaveVoid, CaveDepth, CaveFlow, CaveSink;
     public readonly int[] CaveNext, CaveSpring;
     public readonly byte[] CaveKind;
+    // ---- wetlands (Wetlands.cs, 2026-11-01): fixed at WaterCycle.Init: the topographic wetness index ln(a / tan b) and its
+    // land mean, the height above the nearest drainage's water (m). Changing: the water table at or near the surface this
+    // update (bit 1) and fed by minerotrophic water (bit 2: groundwater emerging, a flood, a water table the water nearby
+    // holds up); the share of the last year it was so (each), the peat (m) and the wetland kind (Wetlands.Marsh..Bog)
+    public readonly float[] Twi, Hand, WetDur, WetMin, Peat;
+    public float TwiMean;
+    public readonly byte[] WetNow, Wetland;
     // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
     public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
     public long RainYear = -1;             // year RainAnom belongs to
@@ -288,7 +299,7 @@ public sealed class World
         Spc = new byte[c]; StageOf = new byte[c]; Sex = new byte[c]; Flags = new byte[c];
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
         MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
-        PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PBite = new float[c]; PLife = new float[c];
+        PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PAbsorb = new float[c]; PBite = new float[c]; PLife = new float[c];
         PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PLen = new float[c]; PTurn = new float[c]; PVmax = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PLitter = new byte[c];
         PDiet = new float[c * Pools.N]; PCare = new float[c];
@@ -346,6 +357,8 @@ public sealed class World
         WcRow = new double[Map.FW * WaterCycle.NSUM];
         Carb = new float[n]; CaveVoid = new float[n]; CaveDepth = new float[n]; CaveFlow = new float[n]; CaveSink = new float[n];
         CaveNext = new int[n]; Array.Fill(CaveNext, -1); CaveSpring = new int[n]; Array.Fill(CaveSpring, -1); CaveKind = new byte[n];
+        Twi = new float[n]; Hand = new float[n]; WetDur = new float[n]; WetMin = new float[n]; Peat = new float[n];
+        WetNow = new byte[n]; Wetland = new byte[n];
 
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];
@@ -506,12 +519,12 @@ public sealed class World
         {
             float depth = MathF.Max(0f, Depth[cell]);
             float wade = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
-            float mix = Math.Clamp(depth / K.SHALLOW, 0f, 1f);
+            float sh = ShallowE, mix = Math.Clamp(depth / sh, 0f, 1f);
             float v = wade + (PVWater[i] - wade) * mix;
             float maxDepth = MaxWaterDepth(i);
-            if (maxDepth > K.SHALLOW)
+            if (maxDepth > sh)
             {
-                float load = Math.Clamp((depth - K.SHALLOW) / (maxDepth - K.SHALLOW), 0f, 1f);
+                float load = Math.Clamp((depth - sh) / (maxDepth - sh), 0f, 1f);
                 v *= 1f - 0.5f * load;
             }
             return v;
@@ -541,7 +554,8 @@ public sealed class World
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 
-    public float MaxWaterDepth(int i) => K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
+    /// <summary>The deepest water body i can go in, in elevation as Depth is: SHALLOW x (1 + SWIM_DEPTH_RANGE x fins) m.</summary>
+    public float MaxWaterDepth(int i) => ShallowE * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
 
     public bool CellAllows(int i, int cell) => CellAllows(i, cell, RealmOf(i));
 

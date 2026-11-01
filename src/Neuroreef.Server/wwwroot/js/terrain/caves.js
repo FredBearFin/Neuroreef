@@ -17,7 +17,7 @@
 //   hillside or cliff (a heightfield cannot overhang; the rocks give it the overhang);
 // - sinkhole: a bowl carved below its lowest rim (carve), darkening to a black throat at the bottom (tFeat.g);
 // - spring: a small basin with a pool of water at the lowest point of its rim, mossy wet ground round it (tFeat.b),
-//   a few boulders, and a little stream running downhill from it until it meets a river or standing water (a river path).
+//   a few boulders, and the head of its outflow running downhill from it (a river path, a few hundred metres).
 
 import * as THREE from 'three';
 
@@ -42,7 +42,9 @@ export function decodeFeatures(w, S, groundRaw) {
       const e = 1.5, gx = groundRaw(x + e, z) - groundRaw(x - e, z), gz = groundRaw(x, z + e) - groundRaw(x, z - e);
       const slope = Math.hypot(gx, gz) / (2 * e), dir = Math.atan2(-gz, -gx);
       if (v & 8) {
-        if ((v & 4) || slope < 0.12) out.push({ kind: 2, x, z, dir, r: (v & 4 ? 2.2 : 1.3) * big, open: true });   // collapse doline, skylight
+        // a mouth in a wall needs a slope that can hold one (~19 degrees: the notch's back wall rises 1.35 r over a few
+        // units); on gentler ground the opening is a pit (2026-11-01 QA: at 7 degrees the arch stood free, a dolmen)
+        if ((v & 4) || slope < 0.35) out.push({ kind: 2, x, z, dir, r: (v & 4 ? 2.2 : 1.3) * big, open: true });   // collapse doline, skylight, pit
         else out.push({ kind: 1, x, z, dir, r: 1.5 * big });
       } else if (v & 4) out.push({ kind: 2, x, z, dir, r: v & 64 ? 1.4 : 1.9, open: !!(v & 64) });
       if (v & 16) out.push({ kind: 3, x: x + Math.cos(dir) * 1.2, z: z + Math.sin(dir) * 1.2, dir, r: 1.4 * big });
@@ -111,12 +113,14 @@ export function stampFeatures(feats, ctx) {
         const v = Math.round(Math.max(0, Math.min(1, (1.8 * r - d) / r)) * 255); if (v > feat[t * 4 + 2]) feat[t * 4 + 2] = v;
       });
       placed.push({ ...f, level });
-      // its stream: downhill from the pool, a step at a time, until a river or standing water (at most 40 units)
-      const p = { x: [x], z: [z], w: [0.5], lvl: [level], depth: [0.12], flow: [0], cell: [ctx.cellOf(x, z)] };
+      // its outflow: downhill from the pool, a step at a time, until a river or standing water, at most 8 units (~400 m)
+      // and ~15 m wide, narrowing away (2026-11-01 QA: it ran up to 40 units at 27 m wide, a river the sim does not
+      // have; the sim's river plane does not carry a spring's discharge, so only its head is drawn)
+      const p = { x: [x], z: [z], w: [0.3], lvl: [level], depth: [0.1], flow: [0], cell: [ctx.cellOf(x, z)] };
       let cx = x + Math.cos(f.dir) * pr, cz = z + Math.sin(f.dir) * pr, lv = level;
-      for (let k = 0; k < 40; k++) {
+      for (let k = 0; k < 8; k++) {
         const g = Math.min(lv, groundRaw(cx, cz)); lv = g;
-        p.x.push(cx); p.z.push(cz); p.w.push(0.5 + 0.01 * k); p.lvl.push(g + 0.02); p.depth.push(0.12); p.flow.push(0); p.cell.push(ctx.cellOf(cx, cz));
+        p.x.push(cx); p.z.push(cz); p.w.push(0.28 * (1 - k / 10)); p.lvl.push(g + 0.02); p.depth.push(0.08); p.flow.push(0); p.cell.push(ctx.cellOf(cx, cz));
         if (water(cx, cz) || isRiver(cx, cz)) break;
         const e = 1.2, gx = groundRaw(cx + e, cz) - groundRaw(cx - e, cz), gz = groundRaw(cx, cz + e) - groundRaw(cx, cz - e), gl = Math.hypot(gx, gz);
         if (gl < 1e-4) break;

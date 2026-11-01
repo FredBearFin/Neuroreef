@@ -771,6 +771,44 @@ public class EcologyTests
         Assert.True(costAdult < costJuv);
     }
 
+    [Fact] // 2026-11-01: the gut absorbs at most C_ABSORB x M^0.75 a step: a gut full of seeds yields no more than that, one of grass its bulk rate
+    public void AbsorptionBoundsRichFood()
+    {
+        var w = new World(256, 15); Terrain.Build(w);
+        int a = Make(w, 0, 0);
+        float m = w.PM[a], absorb = K.C_ABSORB * MathK.Pow(m, K.EXP_BASAL);
+        Assert.Equal(absorb, w.PAbsorb[a], 6);
+        // seeds: 7 E/M at 0.75, so the bulk rate alone would pass C_DIGEST x 5.25 a step, 19x basal
+        Assert.True(K.C_DIGEST * K.RHO_SEED * 0.75f > 2f * K.C_ABSORB);
+        w.Gut[a] = w.PGut[a]; w.GutEnergy[a] = w.Gut[a] * K.RHO_SEED * 0.75f; w.GutWaste[a] = 0f; w.Energy[a] = 0.5f * w.EmaxOf(a);
+        float e0 = w.GutEnergy[a];
+        Act(w, a, P.REST); w.IActs[a] = 0;
+        Resolve.Run(w, 1, 0);
+        float took = e0 - w.GutEnergy[a];
+        Assert.True(took > 0f && took <= absorb * 1.0001f, $"absorbed {took} of seeds a step, the gut's limit {absorb}");
+        // a gut of grass (3.2 E/M at 0.5) is bounded by its bulk, below the absorption limit at this size
+        Assert.True(K.C_DIGEST * K.RHO_GRASS * 0.5f < K.C_ABSORB * 1.5f);
+    }
+
+    [Fact] // 2026-11-01: the life-history clock is in days: at M = 1 and middle genes, 120 days to maturity, 50 days' cooldown, 2 years of life
+    public void LifeHistoryIsInDays()
+    {
+        Assert.Equal(120f, K.C_MATURE / K.STEPS_PER_DAY, 2);
+        Assert.Equal(50f, K.C_GEST / K.STEPS_PER_DAY, 2);
+        Assert.Equal(50f, K.C_COOL / K.STEPS_PER_DAY, 2);
+        Assert.Equal(730f, K.C_LIFE / K.STEPS_PER_DAY, 2);
+        // the intrinsic rate of increase a 0.14 kg body could reach on time alone (maturity, then a litter every cooldown;
+        // its smallest newborn, half of them daughters), with a litter of 6: within a few times Fenchel's (1974)
+        // r_max = 0.025 M(g)^-0.26 a day (0.0069 at 140 g), where V1's steps allowed ~10x
+        float t = MathK.Pow(0.14f, K.EXP_LIFE), birth = K.NEWBORN_MIN / 0.14f;
+        double alpha = (K.C_MATURE + K.C_GEST * MathF.Sqrt(birth / 0.1f)) * t / K.STEPS_PER_DAY, tau = Math.Max(K.C_GEST * MathF.Sqrt(birth / 0.1f), K.C_COOL) * t / K.STEPS_PER_DAY;
+        double r = 0.5;   // Euler-Lotka: 3 e^(-r alpha) / (1 - e^(-r tau)) = 1, by bisection
+        double lo = 0, hi = 1;
+        for (int k = 0; k < 60; k++) { r = 0.5 * (lo + hi); if (3 * Math.Exp(-r * alpha) / (1 - Math.Exp(-r * tau)) > 1) lo = r; else hi = r; }
+        double fenchel = 0.025 * Math.Pow(140, -0.26);
+        Assert.InRange(r / fenchel, 1.0, 4.0);
+    }
+
     [Fact] // NR-322: growth is limited by spare energy: a hungry juvenile does not grow, a fed one grows and matures at adult size
     public void GrowthIsLimitedBySpareEnergy()
     {
@@ -879,7 +917,9 @@ public class EcologyTests
         int dry = Ponded();
         // (2026-10-31: was < 0.8 x wet. On land graded by its rivers the few pond sites left are mostly fed by groundwater
         // and outlast a drought: 14 against 16)
-        Assert.True(dry < wet, $"{dry} ponds after a drought, {wet} after a wet year");
+        // (2026-11-01, the 1 km world: on 16 m cells every pond site left is fed by groundwater and holds through the drought:
+        // 12 against 12)
+        Assert.True(dry <= wet, $"{dry} ponds after a drought, {wet} after a wet year");
         for (int c = 0; c < n; c++) if (w.Wet[c] != 0) Assert.Equal(0f, w.DistDrink[c]);
     }
 

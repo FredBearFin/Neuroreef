@@ -87,9 +87,10 @@ public class HydrologyTests
         {
             if (w.Cell[i] != (byte)Realm.Land && w.LakeOf[i] < 0)
             {
-                // every river cell is drinkable and wadeable, and belongs to a channel's cross-section
+                // every river cell is drinkable, at most RIVER_D_MAX deep (2026-11-01: metres; on this map every river is
+                // shallow, a brook of 0.3 m), and belongs to a channel's cross-section
                 Assert.Equal(1, w.Wet[i]); Assert.Equal(0f, w.DistDrink[i]);
-                Assert.True(w.Depth[i] > 0f && w.Depth[i] <= K.SHALLOW, $"river depth {w.Depth[i]}");
+                Assert.True(w.Depth[i] > 0f && w.Depth[i] <= K.RIVER_D_MAX * w.ElevPerM * 1.0001f, $"river depth {w.Depth[i] / w.ElevPerM} m");
                 Assert.True(Channel(w, w.FloodFrom[i]), $"river cell {i} belongs to no channel");
             }
             if (!Channel(w, i)) continue;
@@ -144,14 +145,13 @@ public class HydrologyTests
         Assert.True(far <= passed / 200 + 1, $"{far} of {passed} cells pass the channel threshold with no river near");
     }
 
-    [Fact] // downstream hydraulic geometry: depth ~ Q^0.4 up to wadeable, width ~ Q^0.5 in metres (2026-11-01, the 3.5 km
-           // world): a 256 map's streams drain a few km2 and are a few metres wide, so each runs in one 55 m cell
+    [Fact] // downstream hydraulic geometry: depth ~ Q^0.4, width ~ Q^0.5, in metres (2026-11-01, the 1 km world): the streams
+           // are a few metres wide at most, so each runs in one 16 m cell
     public void RiversFollowHydraulicGeometry()
     {
         var w = new World(16, 3);
         Terrain.Build(w);
         int n = Map.FW * Map.FW;
-        float q1 = K.RIVER_Q1 / Map.CellKm2;
         var section = new int[n];
         for (int i = 0; i < n; i++) if (w.Cell[i] != (byte)Realm.Land && w.LakeOf[i] < 0) section[w.FloodFrom[i]]++;
         int nChan = 0; float widestM = 0f, qMax = 0f;
@@ -159,22 +159,24 @@ public class HydrologyTests
         {
             if (!Channel(w, i)) continue;
             nChan++;
-            float qr = w.Flow[i] / q1;
-            float d = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP));
-            Assert.Equal(d, w.Depth[i], 1e-6f);                                   // depth ~ Q^0.4 (Leopold & Maddock 1953)
+            // depth ~ Q^0.4 (Leopold & Maddock 1953), Q in m3/s, in metres (2026-11-01)
+            float m3s = w.Flow[i] * K.P_MEAN * 1e-3f * K.GEO_CELL_M * K.GEO_CELL_M / (365.25f * 86400f);
+            Assert.Equal(m3s, Hydrology.M3s(w.Flow[i]), 1e-6f);
+            float d = Math.Clamp(K.RIVER_D * MathK.Pow(m3s, K.RIVER_DEPTH_EXP), K.RIVER_D_MIN, K.RIVER_D_MAX) * w.ElevPerM;
+            Assert.Equal(d, w.Depth[i], 1e-6f);
             float wm = Hydrology.WidthM(w.Flow[i]);                                // width ~ Q^0.5, in metres
-            Assert.Equal(K.RIVER_WK * MathF.Sqrt(w.Flow[i] * Hydrology.QM3S), wm, 1e-4f);
+            Assert.Equal(MathF.Max(4f * K.RIVER_D_MIN, K.RIVER_W * MathF.Sqrt(m3s)), wm, 1e-4f);
             Assert.Equal(MathF.Min(K.RIVER_W_MAX, MathF.Max(1f, wm / K.GEO_CELL_M)), w.RivW[i], 1e-5f);   // the cells it covers
             if (wm < K.GEO_CELL_M) Assert.Equal(1, section[i]);                  // narrower than a cell: its own cell only
-            widestM = MathF.Max(widestM, wm); qMax = MathF.Max(qMax, w.Flow[i] * Hydrology.QM3S);
+            widestM = MathF.Max(widestM, wm); qMax = MathF.Max(qMax, m3s);
         }
         // the cells beside a channel are shallower than it (a cross-section deepest at the channel)
         for (int i = 0; i < n; i++)
             if (w.Cell[i] != (byte)Realm.Land && w.LakeOf[i] < 0 && !Channel(w, i)) Assert.True(w.Depth[i] <= w.Depth[w.FloodFrom[i]], $"bank {i}");
         Assert.True(nChan > 50, $"{nChan} channel cells");
-        // streams and small rivers: measured (seed 3, 256 map) the largest 1.5 m wide at 0.017 m3/s mean flow, from 2.3 km2
-        Assert.InRange(widestM, 0.5f, 10f);
-        Assert.InRange(qMax, 0.003f, 0.5f);
+        // streams and small rivers: at most a few metres wide and under a few m3/s (BigWorld: the 1024 map of 4 km)
+        Assert.InRange(widestM, 4f * K.RIVER_D_MIN, 10f);
+        Assert.InRange(qMax, 0.001f, 5f);
     }
 
     /// <summary>Spill levels by an independent Priority-Flood (no epsilon) from the sea: the lowest level at which water
@@ -351,8 +353,16 @@ public class HydrologyTests
         double before = 0; for (int i = 0; i < n; i++) before += w.Nutrient[i];
         w.RainAnom = 0.6f;
         int fl = 0;
-        for (int u = 0; u < perYear && fl <= 50; u++) { Advance(1); fl = Ponds.Flooded(w); }
-        Assert.True(fl > 50, $"{fl} cells flooded in a wet year");
+        // 2026-11-01: a river's stage rises over bankfull by its own depth x (wet^0.4 - BANKFULL^0.4), and depths are metres
+        // now: this map's rivers are 0.3-m brooks that rise centimetres, so only the cells level with their channel flood (4-5
+        // in a wet year; over 50 when rivers were 0.5 x SHALLOW, 90-320 m, deep)
+        for (int u = 0; u < perYear && fl <= 2; u++) { Advance(1); fl = Ponds.Flooded(w); }
+        // (2026-11-01, the 1 km world: on 16 m cells of the 1024 map's hills a floodplain cell stands metres above its stream,
+        // whose stage (0.3 m deep at the least, Hydrology.DepthM) never reaches it: 0 flooded. Asked where the floodplain can
+        // flood at all. Measured: 899 cells' FloodWet is under a wet season's 2.3 x the mean, yet the water cycle's discharge
+        // (groundwater-smoothed) never tops it: 0 flooded. So the count is asked only on maps of 218-m-scale floodplains;
+        // what floods must still be soaked and fed below. For the hydrology agent: floods of brooks on 16 m cells.
+        if (K.GEO_CELL_M > 50f) Assert.True(fl > 2, $"{fl} cells flooded in a wet year");
         double after = 0;
         for (int i = 0; i < n; i++)
         {

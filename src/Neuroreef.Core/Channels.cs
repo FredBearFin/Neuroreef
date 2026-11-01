@@ -76,7 +76,7 @@ public static partial class Hydrology
         float[] h = w.Elev;
         Array.Clear(w.RivX); Array.Clear(w.RivY);
         float mPerElev = Map.ReliefM / MathF.Max(1e-6f, 1f - w.SeaLevel);
-        float hand = K.MEANDER_HAND / mPerElev, q1 = K.RIVER_Q1 * scale;
+        float hand = K.MEANDER_HAND / mPerElev;
         float qPhys = K.P_MEAN * 1e-3f * K.GEO_CELL_M * K.GEO_CELL_M / (365.25f * 86400f) * K.BANKFULL;   // a cell of Q at bankfull, m3/s
 
         // the lake every cell drains to in the end
@@ -152,7 +152,7 @@ public static partial class Hydrology
             }
             // widths, the smoothed axis (ends fixed), held within a cell of the path
             var wd = new float[M];
-            for (int k = 0; k < M; k++) wd[k] = MathF.Min(K.RIVER_W_MAX, MathF.Sqrt(MathF.Max(1f, Q[R.Cells[Math.Min(k, m - 1)]] / q1)));
+            for (int k = 0; k < M; k++) wd[k] = MathF.Min(K.RIVER_W_MAX, MathF.Max(1f, Hydrology.WidthM(Q[R.Cells[Math.Min(k, m - 1)]]) / K.GEO_CELL_M));   // the cells it covers (World.RivW; 2026-11-01)
             var sx = new float[M]; var sy = new float[M];
             for (int k = 0; k < M; k++)
             {

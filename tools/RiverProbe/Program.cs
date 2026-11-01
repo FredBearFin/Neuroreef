@@ -61,7 +61,7 @@ static void Valley(World w, float lowSlope)
 {
     int FW = Map.FW, n = FW * FW;
     w.SeaLevel = 0.05f;
-    float mPer = K.H_RELIEF / (1f - w.SeaLevel), cell = K.GEO_CELL_M;
+    float mPer = Map.ReliefM / (1f - w.SeaLevel), cell = K.GEO_CELL_M;   // the map's vertical scale (2026-11-01)
     float low = lowSlope * cell / mPer, side = 0.1f * cell / mPer, floor = 2f * cell / mPer * 0.0002f;
     for (int y = 0; y < FW; y++)
         for (int x = 0; x < FW; x++)

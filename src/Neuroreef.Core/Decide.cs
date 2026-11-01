@@ -270,7 +270,7 @@ public static class Decide
         f[F.FOOD_GRAD] = MathK.Tanh(MathF.Sqrt(fgx * fgx + fgy * fgy) * 3f);
         bool inWater = (w.Cell[cell] & (byte)Realm.Water) != 0;
         f[F.IN_WATER] = inWater ? 1f : 0f;
-        f[F.DEPTH] = Math.Clamp(w.Depth[cell] / (K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE)), 0f, 1f);
+        f[F.DEPTH] = Math.Clamp(w.Depth[cell] / (w.ShallowE * (1f + K.SWIM_DEPTH_RANGE)), 0f, 1f);   // 0-500 m (SHALLOW in m since 2026-11-01)
         f[F.BREATH] = Respiration.Breathless(w, i);   // air hunger: its oxygen debt (2026-11-01, Respiration.cs)
         f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / K.SENSE_WATER);   // drinkable water: lakes and full ponds
         f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / K.SENSE_WATER);
