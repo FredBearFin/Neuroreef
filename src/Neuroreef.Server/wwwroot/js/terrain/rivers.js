@@ -47,6 +47,12 @@ export function fromWire(w, ctx) {
       r.depth.push(p.depth ? Math.min(1.5, Math.max(0.15, p.depth[k] * U)) : ctx.depthOf(i));
       r.flow.push(Math.min(1, Math.max((wc - 1) / 3, (p.order || 1) / 8)));
     }
+    // a river ends where it reaches standing water (its line goes on to the lake cell's centre: not drawn over the lake)
+    if (ctx.isLake) {
+      const k = r.cell.findIndex((c) => ctx.isLake[c]);
+      if (k >= 1) for (const key of ['x', 'z', 'w', 'lvl', 'depth', 'flow', 'cell']) r[key].length = k + 1;
+      if (r.x.length < 2) continue;
+    }
     r.w[0] *= 0.6;   // every river starts at its head (it ends on another, or in a lake or the sea): narrower there
     out.push(finish(resample(r)));
   }

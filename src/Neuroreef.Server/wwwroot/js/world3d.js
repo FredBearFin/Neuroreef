@@ -186,7 +186,7 @@ export class World3D {
     const carve = new Float32Array(K * K).fill(CARVE_NONE), chan = new Uint8Array(K * K * 4), feat = new Uint8Array(K * K * 4);
     const groundRaw = (x, z) => this._ground(x, z);
     const ctx = {
-      S, fw, U, sea, SF, H, broad, lift: LAND_LIFT, ground: groundRaw, cellOf: (x, z) => this._cellOf(x, z),
+      S, fw, U, sea, SF, H, broad, isLake: lake, lift: LAND_LIFT, ground: groundRaw, cellOf: (x, z) => this._cellOf(x, z),
       widthOfClass: (c) => riverWidth(c, RIVER_W0, RIVER_WMAX), widthOf: (i) => riverWidth(riv[i] >> 3, RIVER_W0, RIVER_WMAX),
       depthOf: (i) => Math.min(1.2, Math.max(0.15, (w.depth[i] / 2000) * U)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
     };
@@ -225,7 +225,9 @@ export class World3D {
     const lm = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, shininess: 90, specular: 0x6688aa, depthWrite: false,
                                              polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
     patchLakeMaterial(lm, WU); wrapPatch(lm, this.wrapU, 'nr-lake-1');
-    const rm = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, depthWrite: false, shininess: 70, specular: 0x557799,
+    // (it writes depth: where a wide ribbon folds over itself at a tight bend, the second layer fails the depth test
+    // instead of blending twice)
+    const rm = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, depthWrite: true, shininess: 70, specular: 0x557799,
                                              polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
     patchRiverMaterial(rm, WU); wrapPatch(rm, this.wrapU, 'nr-river-1');
     // the karst's rocks and spring pools, in chunks drawn within KARST_FAR

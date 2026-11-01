@@ -114,7 +114,7 @@ vec3 riverWater(float flow) { return mix(vec3(0.07, 0.24, 0.30), vec3(0.03, 0.10
 const FRAG_MAIN = /* glsl */`
   vec2 uvC = (vWP.xz / uS + 0.5) / uFw;
   vec2 uvK = (vWP.xz / uS * uCR + 0.5) / (uFw * uCR);
-  vec4 cov = texture(tCover, uvC), mat = texture(tMat, uvC), mat2 = texture(tMat2, uvC), nr = texture(tNrm, uvC), ch = texture(tChan, uvK), ft = texture(tFeat, uvK);
+  vec4 cov = texture(tCover, uvC), mat = texture(tMat, uvC), matB = texture(tMat2, uvC), nr = texture(tNrm, uvC), ch = texture(tChan, uvK), ft = texture(tFeat, uvK);
   vec2 nxz = nr.rg * 2.0 - 1.0;
   vec3 nS = normalize(vec3(nxz.x, sqrt(max(0.02, 1.0 - dot(nxz, nxz))), nxz.y));
   vec3 dpx = dFdx(vWP), dpy = dFdy(vWP);
@@ -133,7 +133,7 @@ const FRAG_MAIN = /* glsl */`
     float rockF = max(smoothstep(0.19, 0.30, sl + (nMid - 0.5) * 0.10), nr.b * smoothstep(0.02, 0.10, sl + 0.06 * (nBig - 0.5)));
     rockF = clamp(rockF * (1.0 - 0.8 * smoothstep(0.35, 0.9, plants)), 0.0, 1.0);
     float scree = nr.a * smoothstep(0.10, 0.15, sl) * (1.0 - rockF) * (1.0 - 0.85 * plants);   // talus: 30-37 degrees below the crags
-    float vol = mat.g, sed = mat.b, lim = mat2.r, cry = max(0.0, 1.0 - vol - sed - lim);
+    float vol = mat.g, sed = mat.b, lim = matB.r, cry = max(0.0, 1.0 - vol - sed - lim);
     float band = mix(0.5, sin(vWP.y * 2.4 + (nMid - 0.5) * 6.0) * 0.5 + 0.5, 1.0 - smoothstep(0.4, 1.2, fwidth(vWP.y * 2.4)));
     vec3 cC = mix(vec3(0.1643, 0.1562, 0.1483), vec3(0.3619, 0.3371, 0.3017), nMid) * (0.80 + 0.40 * nFine);
     vec3 cV = mix(vec3(0.035, 0.032, 0.032), vec3(0.11, 0.075, 0.06), nMid) * (0.80 + 0.40 * nFine);
@@ -144,9 +144,9 @@ const FRAG_MAIN = /* glsl */`
     // ledges: rock weathers into steps along its beds and joints (dark lines where a warped height crosses a step)
     float ledgeArg = vWP.y * 0.9 + (nMid - 0.5) * 2.5 + (nBig - 0.5) * 4.0;
     float ledge = fract(ledgeArg);
-    float ledgeAA = (1.0 - smoothstep(0.12, 0.35, fwidth(ledgeArg))) * smoothstep(0.5, 0.9, rockF);   // on bare rock; gone before finer than a pixel
+    float ledgeAA = (1.0 - smoothstep(0.08, 0.2, fwidth(ledgeArg))) * smoothstep(0.5, 0.9, rockF);   // on bare rock; gone before finer than a pixel
     float ledgeLine = smoothstep(0.82, 0.97, ledge) * ledgeAA;
-    rockC *= 1.0 - 0.45 * ledgeLine;
+    rockC *= 1.0 - 0.25 * ledgeLine;
     // alluvium: silt and sand on the flats beside rivers, under what grows there
     float allu = max(ch.a, mat.a) * (1.0 - smoothstep(0.03, 0.10, sl));
     col = mix(col, vec3(0.2793, 0.2176, 0.1332) * (0.9 + 0.2 * nFine), allu * (1.0 - plants) * 0.65);
@@ -170,7 +170,7 @@ const FRAG_MAIN = /* glsl */`
     // far away the river's own ribbon is under a pixel: its water is painted here
     col = mix(col, riverWater(ch.g), smoothstep(110.0, 320.0, vDist) * smoothstep(0.0, 0.25, ch.r));
     // close up: the grain of rock and rubble as a bump (Mikkelsen's surface gradient, as three's bump maps)
-    float hb = nFine * 0.7 + nMid * 0.3 + band * sed * 0.25 + ledge * 0.35 * ledgeAA;
+    float hb = nFine * 0.7 + nMid * 0.3 + band * sed * 0.25 + ledge * 0.2 * ledgeAA;
     float bump = (smoothstep(0.4, 0.9, rockF) + 0.6 * scree) * (1.0 - plants) * fine * (1.0 - snowF) * 1.4;
     vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
     float det = dot(dpx, r1);

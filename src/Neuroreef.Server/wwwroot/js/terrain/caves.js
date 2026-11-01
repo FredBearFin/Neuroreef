@@ -130,6 +130,7 @@ export function stampFeatures(feats, ctx) {
 
 /** Merge (geometry, colour) pairs into one non-indexed geometry with vertex colours. */
 function mergeColored(parts) {
+  parts = parts.map(([g, c]) => { if (!g.index) return [g, c]; const u = g.toNonIndexed(); g.dispose(); return [u, c]; });
   let n = 0; for (const [g] of parts) n += g.attributes.position.count;
   const P = new Float32Array(n * 3), Nn = new Float32Array(n * 3), C = new Float32Array(n * 3);
   let o = 0;
