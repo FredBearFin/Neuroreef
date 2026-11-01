@@ -144,11 +144,7 @@ public static class Body
         // sets how far above the speed of least power it can fly
         float margin = FlightMargin(wings, m);
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
-        if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
-        // a flier on the ground carries its flight muscle (FLY_MUSCLE_MAX x wings of its mass) as dead load its legs must
-        // move: flight muscle and leg muscle trade off in the avian body plan (Heers & Dial 2015), and the leg power per
-        // unit weight falls with the share of mass that is not leg (2026-11-01; strong fliers walk badly: swifts, bats)
-        else vLand *= GroundClumsiness(wings);
+        vLand *= WingGroundFactor(wings);   // wing-assisted running against the flight muscle's dead load: one smooth function (2026-11-01)
         float vAir = flies ? MathF.Min(K.FLY_V_CAP, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
@@ -293,9 +289,22 @@ public static class Body
         return MathK.Cbrt(m) * MathK.Pow(1f + MathK.Pow(K.POSTURE_M / m, K.EXP_EMA * k), 1f / k);
     }
 
-    /// <summary>Walking speed a flier keeps on the ground: its legs move FLY_MUSCLE_MAX x wings of its mass that does not
-    /// help them (Heers &amp; Dial 2015), so leg power per unit weight, and the speed, fall by that share.</summary>
-    public static float GroundClumsiness(float wings) => 1f - K.FLY_MUSCLE_MAX * wings;
+    /// <summary>
+    /// Land speed kept by a body with wing gene w, flier or not (2026-11-01, one continuous function; until then wing-assisted
+    /// running applied below the flight threshold and clumsiness above it, a jump from x1.13 to x0.84 at FLY_WING_MIN).
+    /// Its flight muscle is FLY_MUSCLE_MAX x w of its mass: tissue that is not leg, so leg power per unit weight, and the
+    /// speed, fall by that share (flight and leg muscle trade off in the avian body plan, Heers &amp; Dial 2015; strong
+    /// fliers walk badly: swifts, bats). Flapping while running gives part of it back as thrust, GLIDE x w (wing-assisted
+    /// running, Dial 2003): (1 + GLIDE w)(1 - FLY_MUSCLE_MAX w). Net, wings cost a runner a little on flat ground.
+    /// </summary>
+    public static float WingGroundFactor(float wings) => (1f + K.GLIDE * wings) * (1f - K.FLY_MUSCLE_MAX * wings);
+
+    /// <summary>
+    /// A juvenile's flight muscle as a share of its body, against an adult's of the same wing gene (2026-11-01): flight
+    /// muscle grows with positive allometry and matures last, so young birds fledge only near adult size (Ricklefs 1979;
+    /// Choi, Ricklefs &amp; Shea 1993): share ~ (mass / adult mass)^FLY_MUSCLE_ALLO. An adult's is 1.
+    /// </summary>
+    public static float FlightMuscleGrown(float mass, float pm) => MathK.Pow(MathF.Min(1f, mass / pm), K.FLY_MUSCLE_ALLO);
 
     /// <summary>
     /// Mass a flier must lift besides its body (2026-11-01): the food in its gut and the young it carries inside it (a
@@ -316,13 +325,31 @@ public static class Body
     /// until it is warm (Heinrich 1974, 1993). A load lowers the share of its mass that is flight muscle, which must be
     /// FLY_WING_MIN of the body's (Marden 1987: lift per unit flight muscle is nearly constant), and raises the least power
     /// of level flight as (total / body)^(3/2) at fixed wings (induced power ~W^2 / V, V_mp ~W^(1/2); Pennycuick 1975, 2008).
-    /// Once in the air its own muscle's heat keeps it warm (Heinrich 1993), so the test is for taking off.
+    /// Once in the air its own muscle's heat keeps it warm (Heinrich 1993), so the test is for taking off. A juvenile's
+    /// flight muscle is a smaller share of its body (FlightMuscleGrown): it fledges when its own margin is met. A margin of
+    /// at least 1 at the speed of least power is a positive rate of climb, (P_available - P_min) / (m g) (Pennycuick 2008).
     /// </summary>
     public static bool CanTakeOff(float wings, float pm, float mass, float load, float rateT)
     {
         float body = mass / (mass + load);
-        return wings * rateT * body >= K.FLY_WING_MIN && FlightMargin(wings, pm) * rateT * MathK.Pow(body, 1.5f) >= 1f;
+        return wings * FlightMuscleGrown(mass, pm) * rateT * body >= K.FLY_WING_MIN && LoadedMargin(wings, pm, mass, load, rateT) >= 1f;
     }
+
+    /// <summary>Power margin of flight now (2026-11-01): its grown flight muscle's power at its muscle temperature over the
+    /// least power of level flight with its load, FlightMargin(wings x grown, M) x rate x (body / (body + load))^(3/2)
+    /// (Pennycuick 1975, 2008). For an adult with an empty gut and a warm core it is FlightMargin(wings, M).</summary>
+    public static float LoadedMargin(float wings, float pm, float mass, float load, float rateT)
+        => FlightMargin(wings * FlightMuscleGrown(mass, pm), mass) * rateT * MathK.Pow(mass / (mass + load), 1.5f);
+
+    /// <summary>
+    /// Top air speed with a load (2026-11-01): the speed of least power rises as the square root of the weight (vmp, the
+    /// unloaded body's, given), and the fastest level flight is where the power curve meets the loaded margin
+    /// (TopFlightSpeed): a load lowers the top speed wherever power, not FLY_X_MAX, binds, and a margin at or below 1
+    /// leaves it only the speed of least power, sinking (Pennycuick 1975, 2008). The maximum-range speed, 3^(1/4) = 1.32 x
+    /// vmp for this power curve (minimum of power / speed), needs a loaded margin of 1.14. At most FLY_V_CAP.
+    /// </summary>
+    public static float LoadedTopAirSpeed(float vmp, float mass, float load, float loadedMargin)
+        => MathF.Min(K.FLY_V_CAP, vmp * MathK.Pow((mass + load) / mass, 0.5f) * TopFlightSpeed(loadedMargin));
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)
     {

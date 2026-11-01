@@ -84,6 +84,13 @@ public static class Resolve
                 }
                 if (!Body.CanTakeOff(w.PWings[i], w.PM[i], mass, Body.FlightLoad(w, i), muscleT)) airborne = false;
             }
+            // in the air its load (and a juvenile's smaller flight muscle) sets how fast it can fly (Body.LoadedTopAirSpeed)
+            if (airborne)
+            {
+                float load = Body.FlightLoad(w, i);
+                float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
+                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f)));
+            }
             if (!airborne) spd = MathF.Min(spd, vGround);
         }
         if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne, out nx, out ny, out float fraction))
@@ -233,7 +240,17 @@ public static class Resolve
                     if (dg != null) { dg.StrReach[dgG]++; if (preyEat) dg.PreyEat[dgG]++; if (w.Spc[v] == s) dg.StrKin[dgG]++; }
                     if (strikeAttempt) metrics?.Apply(P.STRIKE);
                     if (preyEat) metrics?.Apply(P.EAT);
+                    float vx = w.X[v], vy = w.Y[v];
+                    bool victimAloft = w.Airborne(v);
                     r += Strike(w, i, v, gutCap, emax);
+                    // a flier that kills ground prey from the air comes down on it to eat it (2026-11-01): raptors stoop,
+                    // kill and feed on the ground; only prey taken in the air, or over water it cannot stand in, is eaten
+                    // on the wing. It is landed there, so it pays a take-off (warm muscle, the meal as load) to fly on
+                    if (airborne && !victimAloft && w.StageOf[v] == St.Dead)   // killed (its slot freed)
+                    {
+                        int vc = World.FIdx(vx, vy);
+                        if (w.GroundAllows(i, vc)) { PathMemory.Integrate(w, i, World.Delta1(vx - w.X[i]), World.Delta1(vy - w.Y[i])); w.X[i] = vx; w.Y[i] = vy; w.Speed[i] = 0f; }
+                    }
                 }
             }
             else if (v == Player.Slot && w.Player is { Present: true } pl)
