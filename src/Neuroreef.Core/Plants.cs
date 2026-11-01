@@ -519,8 +519,9 @@ public static class Plants
                     else { if (dad != g) t.RowStat[y * PlantTable.NSTAT + ST_FAIL]++; dad = g; set = Pe[o + Ph.S0]; }
                     float nect = Pe[o + Ph.NECT] * R;
                     // (2026-11-01) what reproduction makes keeps the energy of the production it is made from (K.RHO_PLANT per
-                    // unit): richer stuff is less of it. Before, a unit of production became a unit of nectar (8 E/M), seed
-                    // (7) or fruit (6) against tissue's 3.2, so nectar-feeders ate 2.5x the energy the plants had fixed
+                    // kg dry): richer stuff is less of it. Before, a unit of production became a unit of nectar (8 E/M), seed
+                    // (7) or fruit (6) against tissue's 3.2, so nectar-feeders ate 2.5x the energy the plants had fixed. On dry
+                    // matter (2026-11-01) the ratios are the real ones, ~1 (seed 0.82, fruit 0.95, nectar 1.1 kg per kg)
                     Nc[i] += nect * (K.RHO_PLANT / K.RHO_NECTAR);
                     float seedInv = (R - nect) * set;
                     dB += (R - nect) * (1f - set) * room;   // what was not set goes back into growth
@@ -966,7 +967,7 @@ public static class Plants
     }
 
     /// <summary>A bite of roots (2026-11-01): the herbs' and then the shrubs' cover in the cell loses `cover` (the bite's
-    /// energy at RHO_PLANT per unit), so digging feeds on the plants' own production, as grazing does.</summary>
+    /// dry matter in cover units), so digging feeds on the plants' own production, as grazing does.</summary>
     public static void RootEaten(World w, int cell, float cover)
     {
         float[] G = w.Pool[(int)Pool.Grass];

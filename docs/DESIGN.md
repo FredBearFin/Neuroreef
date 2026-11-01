@@ -1453,8 +1453,8 @@ The expanded layout uses gene-bank/checkpoint version 9 and AGENTS format 6.
 
 Thirst rises only on land cells, by C_THIRST·M^EXP_THIRST·(1 − WATER_ECON·g)·(1 − SOIL_WATER·moisture),
 where g is the water-economy gene: any organism in water draws water from it, and damp ground dries an
-organism out more slowly (Revision G). Eating relieves thirst by K_FOODWATER·(bite·water content + MET_WATER·
-energy digested/RHO_MEAT)/M (Revision K): green plants, fruit and prey are wet, seed and wood dry, and live
+organism out more slowly (Revision G). Eating relieves thirst by K_FOODWATER·(bite·w/(1 − w) + MET_WATER·
+energy digested)/M (Revision K; since 2026-11-01 the bite is dry matter and w the fresh food's water share): green plants, fruit and prey are wet, seed and wood dry, and live
 plants dry out with their ground. An animal drinks within 1.5 cells of a lake, river or full seasonal pond. Gestation and breeding cooldown scale as C_GEST·M^0.25 and C_COOL·M^0.25.
 
 ### 6.4 Energy-cycle closure
@@ -1727,7 +1727,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | movement cost | on the ground C_MOVE·C_SPEED·M^EXP_MOVE·speed·(1 − LEG_SWING + LEG_SWING·legs·pairs/LEG_PAIRS_REF·speed/vmax) (cost of transport ~M^0.7 × speed, Taylor et al. 1982; leg swing, Marsh et al. 2004; no swing swimming); airborne FlightPowerMin(M)·(3/u + u³)/4 − basal, u = speed/v_mp ≥ FLY_U_MIN (§9.2b); all × (1 + INS_MOVE·fur) |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
-| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
+| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, TISSUE_E·M·(1 − Birth)/A_m/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
 | reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
 
 ### 9.2 Movement and realm
@@ -1843,8 +1843,8 @@ Telemetry records the number infected, new infections, deaths and the mean virul
 | fire | standing in a burning cell, probability 0.3 per step |
 | drowning / stranding | none; realm rules forbid it |
 
-On death, the body becomes CARRION in land cells or DETRITUS in water cells: mass c_carc·M plus
-Energy/ρ_meat. Eggs and embryos of a dead mother die.
+On death, the body becomes CARRION in land cells or DETRITUS in water cells: (TISSUE_E·M + Energy)/ρ_meat kg of dry
+meat (2026-11-01; c_carc·M + Energy/ρ_meat before). Eggs and embryos of a dead mother die.
 
 ## 10. Vegetation, soil and water fields
 
@@ -2100,7 +2100,7 @@ The one-time review made these changes, each for a stated physical reason:
 
 | Change | Reason |
 |---|---|
-| Growth and offspring tissue cost energy (GROWTH_EFF, C_CARC, RHO_MEAT) | a body was free to build, but yielded energy when eaten: energy from nothing |
+| Growth and offspring tissue cost energy (GROWTH_EFF, TISSUE_E; C_CARC and RHO_MEAT before 2026-11-01) | a body was free to build, but yielded energy when eaten: energy from nothing |
 | Newborn mass per species (`Birth`) | a fixed 30% newborn made a fish egg cost a third of a fish; real clutch size and egg size trade off |
 | Reserve C_EMAX = 2 | stored reserve of the same order as tissue energy |
 | Canopy shading of grass and shrubs reduced | grass vanished with no animals present |

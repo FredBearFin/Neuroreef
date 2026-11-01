@@ -48,6 +48,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | GARLAND_B | 0.25892 | - | linear term of Garland's top speed in log10 M | ECO: Garland 1983 |
 | GARLAND_C | -0.06237 | - | quadratic term of Garland's top speed in log10 M | ECO: Garland 1983 (speed peaks near 120 kg) |
 | BMR_W | 3.39 | W | resting metabolic rate of a 1 kg body (Kleiber's line): what C_BASAL stands for, so one energy unit is BMR_W x STEP_S / C_BASAL = 8.9 MJ | ECO: 70 kcal/day x M^0.75 = 3.4 W at 1 kg (Kleiber 1961) |
+| E_MJ | 8.91502 | MJ | one energy unit in MJ: Kleiber's metabolism of a 1 kg body over a step, BMR_W x STEP_S / C_BASAL (Pools.EnergyJ) | derived (2026-11-01): 8.9 MJ. The food densities (RHO_*) are energies of a kg of dry matter over it |
 | COT_J | 10.7 | J/m | net cost of transport of running at 1 kg (x M^EXP_MOVE per metre) | ECO: 10.7 M^-0.316 J/(kg m) (Taylor, Heglund & Maloiy 1982); with BMR_W it gives C_MOVE |
 | HR_KM2 | 0.03 | km2 | home range of a 1 kg body (x M): the area founders of one group share (Life.Found) | ECO: home range area ~M^1.0 across mammals (Kelt & Van Vuren 2001; Jetz et al. 2004); herbivores ~3 ha at 1 kg (rabbits 1-5 ha, roe deer 50-100 ha at 25 kg); carnivores ~10x more, from scarcer food (Jetz et al. 2004). Replaces GROUP_SPREAD = 10 units (545 m) for any body |
 
@@ -62,10 +63,11 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | EXP_TURN | -0.2 | - | turn rate exponent | HT |
 | C_BASAL | 0.004 | E/step | basal cost at M=1 | ECO: Revision M, ecology review: x4, so an animal burns many times its tissue energy over a life (Rubner 1908; Speakman 2005) and fasts ~1/16 of a life, not a third (Lindstedt & Boyce 1985) |
 | C_EMAX | 2 | E/M | energy reserve per unit mass | ECO: stored reserve of the same order as tissue energy |
-| C_GUT | 0.3 | M/M | gut capacity per unit mass | HT |
-| C_DIGEST | 0.025 | M/step | digestion rate at M=1 | ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997) |
-| C_ABSORB | 0.028 | E/step | energy the gut can absorb per step at M=1 (x M^0.75): digestion passes rich digesta only as fast as their energy is taken up (Resolve), and the food a forager picks is worth at most this a step | ECO (2026-11-01): intestinal nutrient transport has a set capacity with modest spare (Karasov & Diamond 1983; Diamond 1991), and maximal sustained energy budgets reach ~7x basal (Hammond & Diamond 1997: lactating mice ~7, cold-exposed rodents 5-7, birds feeding young ~4). Before, mass alone bounded digestion, so seeds (7 E/M, 0.75 digestible), fruit and nectar gave 30-47x basal at 0.1 kg against 6.7x for grass |
-| C_BITE | 0.06 | M/step | bite size at M=1 | Revision M: x5 with digestion (a bite fills the gut faster than it empties) |
+| C_GUT | 0.025 | kg dry/kg | gut capacity per unit mass: the dry matter the full gut holds | ECO (2026-11-01): herbivores' gut contents are 10-20% of body mass wet and near-isometric (~M^1.0; Parra 1978; Demment & Van Soest 1985; Müller et al. 2013), at 15-20% dry matter, so 1.5-4% of body mass dry; a carnivore's full stomach of meat (~30% dry) is ~8% of its mass wet at this. Was 0.30 HT on the old pseudo-kg (0.47 kg dry per kg of body, half the body's mass in dry digesta) |
+| C_DIGEST | 0.012175 | kg dry/step | digestion rate at M=1 (x M^0.75): dry matter the gut passes a step, the most it can eat in a day over the steps of a day (DMI_MAX / STEPS_PER_DAY) | ECO (2026-11-01): from voluntary dry-matter intake (DMI_MAX). Grass at 0.5 digestible then yields ~3x basal, seeds and fruit ~5x, nectar ~5x, meat ~7x (C_ABSORB). Was 0.025 (Revision M: ~5x basal for grass at 0.5) on the old pseudo-kg, 0.040 kg dry a step, 3.3x DMI_MAX |
+| DMI_MAX | 0.1 | kg dry/day | most dry matter an animal of 1 kg eats in a day (x M^0.75) | ECO (2026-11-01): voluntary intake of mammalian herbivores scales as M^0.75-0.76 (Clauss et al. 2007; Müller et al. 2013); on good forage ~0.08-0.12 kg dry per kg^0.75 a day (cattle at 2.5% of body mass, 0.12; sheep 3%, 0.08; rabbits ~0.07). Lactating animals eat about twice this on a gut that grows for it (Hammond & Diamond 1997), which the body here does not |
+| C_ABSORB | 0.028 | E/step | energy the gut can absorb per step at M=1 (x M^0.75): digestion passes rich digesta only as fast as their energy is taken up (Resolve), and the food a forager picks is worth at most this a step | ECO (2026-11-01): intestinal nutrient transport has a set capacity with modest spare (Karasov & Diamond 1983; Diamond 1991), and maximal sustained energy budgets reach ~7x basal (Hammond & Diamond 1997: lactating mice ~7, cold-exposed rodents 5-7, birds feeding young ~4). Before, mass alone bounded digestion, so seeds (7 E/M, 0.75 digestible), fruit and nectar gave 30-47x basal at 0.1 kg against 6.7x for grass. On dry matter (2026-11-01) the bulk rate C_DIGEST gives at most ~7x on meat and ~5x on seeds, so this binds only on meat, blood and nectar near their best |
+| C_BITE | 0.0631152 | kg dry/step | bite size at M=1 (x M^0.75): the most dry matter cropped and chewed in a step of eating, the maximum short-term intake rate over a step | ECO (2026-11-01): maximum short-term intake rate of mammalian herbivores ~M^0.71 (bite size ~M^0.72, chewing ~M^0.70; Shipley, Gross, Spalinger, Hobbs & Wunder 1994; Gross et al. 1993), ~0.36 g dry/min at 1 kg from cattle's ~30 g/min (1.8 kg/h) at 500 kg; x 60 x STEP_H = 0.063 kg. (The body scales it as M^0.75, with digestion.) Was 0.06 HT on the old pseudo-kg (0.095 kg dry) |
 | C_SPEED | 11.5942 | units/step | top speed per step at M=1 (walk): DMD_M / STEPS_PER_DAY / TRAVEL_SHARE / M_PER_UNIT | derived (2026-11-01): 632 m a step (11.6 units); was 1.2 units (65 m) from V1, so animals covered ~1/9 of a real day range |
 | C_TURN | 0.32 | rad/step | turn rate at M=1 | V1 |
 | C_LIFE | 5995.89 | steps | lifespan at M=1 (the age at which senescence sets in): 730 days | ECO (2026-11-01): wild mammals of ~1 kg rarely live past 2-3 years (wild rabbits, Thompson & King 1994; ~0.75 years at 20 g as wild mice, ~5 years at 40 kg); lifespan / maturity ~6, against Charnov's (1993) adult life expectancy of ~1.4 maturity ages and maximum longevities of ~10 (Prothero & Juergens 1987). Was 3200 steps (V1), set when a step had no duration |
@@ -104,22 +106,22 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| RHO_GRASS | 3.2 | E/M | energy density of grass | V1 |
-| RHO_BROWSE | 3.6 | E/M | energy density of browse (leaves) | HT |
-| RHO_PLANT | 3.2 | E/M | energy of a unit of plant production (cover): what reproduction turns into fruit, seed and nectar keeps it, so their mass is the production over their own density (Plants), and a bite of roots takes this much cover per unit of its energy | mass and energy balance (2026-11-01): the energy of herb tissue (RHO_GRASS); before, a unit of production became a unit of nectar, seed or fruit, 2.5, 2.2 and 1.9x its energy |
-| RHO_FRUIT | 6 | E/M | energy density of fruit | HT |
-| RHO_SEED | 7 | E/M | energy density of seeds | HT |
-| RHO_NECTAR | 8 | E/M | energy density of nectar | HT |
-| RHO_ROOT | 4 | E/M | energy density of roots | HT |
-| RHO_ALGAE | 3.2 | E/M | energy density of algae | HT |
-| RHO_PHYTO | 3.6 | E/M | energy density of phytoplankton | HT |
-| RHO_CARRION | 3.5 | E/M | energy density of carrion (partly decayed tissue) | ECO: below fresh meat |
-| RHO_DUNG | 2 | E/M | energy density of dung | HT |
-| RHO_LITTER | 1.8 | E/M | energy density of leaf litter | HT |
-| RHO_WOOD | 1.6 | E/M | energy density of dead wood | HT |
-| RHO_DETRITUS | 2.4 | E/M | energy density of aquatic detritus | HT |
-| RHO_MEAT | 4 | E/M | energy density of body tissue (meat); also the cost of building tissue | ECO: tissue ~2-4x the stored reserve per unit mass |
-| RHO_BLOOD | 3 | E/M | energy density of blood | ECO: below tissue |
+| RHO_GRASS | 2.01906 | E/kg | energy of a kg of grass (herb tissue), dry | ECO (2026-11-01): herb tissue, PLANT_KJ_G (Golley 1961). Was 3.2 E per pseudo-kg (1.58 kg dry at 18 MJ/kg) |
+| RHO_BROWSE | 2.2434 | E/kg | energy of a kg of browse (leaves and shoots of woody plants), dry | ECO (2026-11-01): leaves of woody plants 19-21 MJ/kg dry, above herbs for their lignin, waxes and resins (Golley 1961; Chapin, Matson & Mooney 2011). Was 3.6 (20.3 MJ/kg dry) |
+| RHO_PLANT | 2.01906 | E/kg | energy of a kg of plant production (dry): what reproduction turns into fruit, seed and nectar keeps it, so their mass is the production over their own density (Plants); on dry matter these are near 1 (0.82 for seed, 1.1 for nectar), so mass is nearly kept too | mass and energy balance (2026-11-01): the energy of herb tissue (RHO_GRASS); before, a unit of production became a unit of nectar, seed or fruit, 2.5, 2.2 and 1.9x its energy, and then (on the pseudo-kg) 0.4, 0.46 and 0.53x its mass |
+| RHO_FRUIT | 2.13123 | E/kg | energy of a kg of fruit (pulp), dry | ECO (2026-11-01): fleshy fruit pulp is mostly sugars (16-17 MJ/kg) with fibre and a little fat, 17-21 MJ/kg dry; lipid-rich pulps (Lauraceae, oil palm) reach 25+ (Herrera 1987; Jordano 2000). Was 6.0, 34 MJ per kg dry: its richness is its digestibility (0.8) |
+| RHO_SEED | 2.46774 | E/kg | energy of a kg of seed, dry | ECO (2026-11-01): starchy grains 18-19 MJ/kg dry, legumes 19-20, oily seeds and nuts 25-29 (Kelrick et al. 1986; Grodzinski & Wunder 1975; USDA composition): ~22 over a mix. Was 7.0, 39 MJ per kg dry |
+| RHO_NECTAR | 1.79472 | E/kg | energy of a kg of nectar sugars, dry | ECO (2026-11-01): sucrose 16.5 MJ/kg, glucose and fructose 15.6; nectar is ~95% sugar of its dry matter (Baker & Baker 1983; Nicolson 2007). Was 8.0, 45 MJ per kg dry, more than fat |
+| RHO_ROOT | 1.96298 | E/kg | energy of a kg of roots and storage organs, dry | ECO (2026-11-01): roots 16-18 MJ/kg dry, starchy tubers ~17 (Golley 1961). Was 4.0, 22.5 MJ per kg dry |
+| RHO_ALGAE | 1.79472 | E/kg | energy of a kg of algae (periphyton, macroalgae), dry | ECO (2026-11-01): benthic and filamentous algae 12-20 MJ/kg dry, below land plants for their ash (Cummins & Wuycheck 1971). Was 3.2, 18 MJ per kg dry |
+| RHO_PHYTO | 2.13123 | E/kg | energy of a kg of phytoplankton, dry | ECO (2026-11-01): phytoplankton ~21-23 MJ/kg ash-free, 17-20 with its ash (Platt & Irwin 1973; Cummins & Wuycheck 1971). Was 3.6, 20.3 MJ per kg dry |
+| RHO_CARRION | 2.25743 | E/kg | energy of a kg of carrion (partly decayed tissue), dry | ECO: below fresh meat, as before (2026-11-01: 20 MJ/kg dry; the same share of RHO_MEAT as 3.5 of 4) |
+| RHO_DUNG | 1.79472 | E/kg | energy of a kg of dung, dry | ECO (2026-11-01): herbivore faeces 15-18 MJ/kg dry: what was not digested keeps most of the food's gross energy (Robbins 1993; Van Soest 1994), so dung made from food at 1 - digestibility carries about the energy the gut did not take. Was 2.0, 11 MJ per kg dry |
+| RHO_LITTER | 1.96298 | E/kg | energy of a kg of leaf litter, dry | ECO (2026-11-01): leaf litter 17-19 MJ/kg dry: gross energy falls little as leaves senesce, digestibility a lot (Golley 1961; Swift, Heal & Anderson 1979). Was 1.8, 10 MJ per kg dry: its poverty is its digestibility (0.25) |
+| RHO_WOOD | 2.18732 | E/kg | energy of a kg of dead wood, dry | ECO (2026-11-01): wood 18.5-20.5 MJ/kg dry (Golley 1961; standard fuel values). Was 1.6, 9 MJ per kg dry: its poverty is its digestibility (0.15) |
+| RHO_DETRITUS | 1.45821 | E/kg | energy of a kg of aquatic detritus, dry | ECO (2026-11-01): fine organic detritus and seston 8-16 MJ/kg dry by their mineral share (Cummins & Wuycheck 1971; Wetzel 2001). Was 2.4, 13.5 MJ per kg dry |
+| RHO_MEAT | 2.57992 | E/kg | energy of a kg of meat (animal tissue), dry: what a carcass is eaten as (a body holds TISSUE_E of tissue energy per kg of live mass) | ECO (2026-11-01): vertebrate tissue 22-24 MJ/kg dry (protein 23.6, with some fat; Cummins & Wuycheck 1971; Blaxter 1989). Was 4.0 on the 1.58-kg pseudo-kg (22.5 MJ per kg dry), also the cost of building tissue (now TISSUE_E) |
+| RHO_BLOOD | 2.52383 | E/kg | energy of a kg of blood, dry | ECO (2026-11-01): blood's dry matter is ~90% protein (haemoglobin, plasma proteins) at 23.6 MJ/kg, with its salts (Blaxter 1989). Was 3.0, 17 MJ per kg dry |
 
 ## 8. Hunting
 
@@ -129,7 +131,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_CONF | 0.25 | - | prey-group confusion | V1 |
 | C_STRIKE | 0.004 | E/M | cost of a strike | HT |
 | C_RETAL | 0.06 | E | retaliation per unit of excess defence | HT |
-| C_CARC | 0.5 | M/M | edible tissue (carcass) per unit body mass; also the tissue built in growth | ECO: about half of live mass is edible tissue |
+| TISSUE_E | 2 | E/kg | energy of a body's edible tissue per kg of live mass: what a carcass holds (as RHO_MEAT kg of dry meat), and what growth builds per kg (Resolve.TissueCost) | kept (2026-11-01) from the old C_CARC 0.5 kg of edible tissue per kg x RHO_MEAT 4, 17.8 MJ/kg, so the body's energetics do not change with the food basis (0.78 kg of dry meat per kg, as the 0.5 pseudo-kg were). A real body is ~6-9 MJ/kg wet (Blaxter 1989): like C_EMAX, the model's tissue is richer than life (Revision M) |
 | JUV_DEFENCE | 0.25 | - | defence multiplier for juveniles | HT |
 | DEF_BASE | 0.5 | - | defence of an unarmoured body per unit mass (skin, muscle, bone) | ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999) |
 | C_DAMAGE | 0.4 | E | energy a landed hit removes per unit of strike power (strike x attacker mass) | ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H) |
@@ -267,8 +269,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | SOIL_WATER | 0.5 | - | share of thirst a land organism avoids on wet soil (dew, damp ground); water in food is counted separately (K_FOODWATER) | ECO: 0.8 before Revision K counted moist food too (ecology review: no double counting) |
-| K_FOODWATER | 0.35 | /M | thirst relieved per unit of food eaten, per unit of water in it, per unit body mass | ECO: continuous eating of fully green forage about balances drying on dry ground (C_THIRST / (digestion x 0.75)); preformed water in forage and prey (ecology review) |
-| MET_WATER | 0.5 | - | metabolic water: water made per unit of food energy digested, as mass of tissue burned | ECO: about 0.5 g of water per g of fat oxidised; how desert seed-eaters live without drinking |
+| K_FOODWATER | 0.064157 | /(kg/kg) | thirst relieved per kg of water from food (preformed, per kg of dry food at its water share, and metabolic), per kg of body mass | derived (2026-11-01): food is dry matter, its water f/(1-f) kg per kg at the wet water share f (Resolve.FoodWater), so this keeps the thirst a unit of green grass's energy relieves (0.35 x (0.75 / (3.2 x 0.5) + 0.5 / 4) per E on the old pseudo-kg); 0.064. Was 0.35: ECO, continuous eating of fully green forage about balances drying on dry ground (C_THIRST / (digestion x 0.75), at the digestion before Revision M's x5); preformed water in forage and prey (ecology review) |
+| MET_WATER | 0.267451 | kg/E | metabolic water: water made per unit of food energy digested | ECO (2026-11-01): oxidation yields ~0.56 g of water per g of starch (17.5 kJ/g), 1.07 per g of fat (39.3) and 0.40 per g of protein (17.2), ~0.03 g per kJ (Schmidt-Nielsen 1997); x E_MJ. How desert seed-eaters live without drinking. Was 0.5 per RHO_MEAT (0.5 g per g of fat as mass of tissue burned, 0.125 per E) |
 | WATER_ECON | 0.7 | - | largest cut in water loss from the water-economy gene | ECO: kangaroo rats turn over about a quarter of the water of other rodents (Schmidt-Nielsen) |
 | COST_WATERECON | 0.09 | xbasal | basal cost of full water economy (kidney and nasal water recovery) | ECO: kidneys use a few to 10% of basal metabolism |
 | EXP_THIRST | -0.2 | - | mass exponent of thirst (water turnover per unit mass) | ECO: mass-specific water turnover scales about as M^-0.2 |
@@ -527,7 +529,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | U_WIND | 3 | m/s | mean wind at release height | ECO: the ballistic model D = U H / v_t (Nathan et al. 2002) |
 | CELL_M | 218 | m | a field cell's side in metres, for dispersal distances | derived (2026-11-01): GEO_CELL_M, the land surface's cell; was a literal 25 m (HT) when the cell had become 218 m, so seed that drifted 50 m left a 218 m cell as if it were 25 m across |
 | PLANT_KG_M2 | 0.4 | kg/m2 | dry matter of the leafy, edible tissue per square metre at full cover (a unit of the grass, browse, root, fruit, seed, nectar, litter and wood pools on each m2 of a field cell) | ECO: a closed canopy holds a leaf area index of 3-6 at a leaf mass per area of 50-120 g/m2 (Wright et al. 2004; Asner, Scurlock & Hicke 2003), 0.2-0.6 kg/m2 of leaves in any growth form; grassland peak standing crop 0.2-0.6 kg/m2 above ground (Sala & Austin 2000; Scurlock, Johnson & Olson 2002). Production per unit cover is leafy production, as REPRO_RATE assumes |
-| PLANT_KJ_G | 18 | kJ/g | energy of plant dry matter | ECO: 17-20 kJ/g for leaves, stems and roots, ~18 on average (Golley 1961; Chapin, Matson & Mooney 2011). The food pools keep their energy densities (RHO_*, E per kg): a unit of cover holds PLANT_KG_M2 x PLANT_KJ_G of energy per m2, so it is PLANT_KG_M2 x PLANT_KJ_G / (RHO_PLANT x one energy unit) kg of food (0.63 kg per dry kg: RHO_PLANT is 28.5 MJ/kg, above dry matter's 18) |
+| PLANT_KJ_G | 18 | kJ/g | energy of plant dry matter | ECO: 17-20 kJ/g for leaves, stems and roots, ~18 on average (Golley 1961; Chapin, Matson & Mooney 2011). Every food is dry matter (2026-11-01): a unit of cover is PLANT_KG_M2 kg of food per m2, at RHO_PLANT = PLANT_KJ_G / E_MJ (2.0 E/kg). Before, the pools kept energy densities set as if a kg were richer (RHO_PLANT 28.5 MJ), so a unit was 0.63 of its dry kg and fruit, seed and nectar counted their quality twice |
 | WATER_KG_M2 | 0.05 | kg/m2 | dry matter per square metre at a unit of the water pools (algae, phytoplankton, detritus) | ECO: littoral algae and macrophytes 0.01-0.5 kg/m2, phytoplankton 1-20 g/m2 over the water column (Wetzel 2001); at the pools' growth rates (R_A, R_PH) this gives aquatic production of ~0.05-0.3 kg/m2/yr, as lakes (Wetzel 2001) |
 | NB_MIN | 0.02 | - | least share of dry seed that leaves its cell (secondary dispersal by rain wash, ants, rolling) | ECO: secondary dispersal (Vander Wall & Longland 2004) |
 | WIND_BLOCK | 16 | cells | side of a block of long-distance seed (it lands spread over the 3x3 blocks around) | HT: a simple fat tail, deterministic and mass-conserving |
@@ -539,7 +541,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TOX_FRUIT | 0.2 | - | share of the toxin in fruit pulp | ECO: ripe fruit is mostly undefended (Cipollini & Levey 1997) |
 | TOX_COST | 0.25 | - | share of production full toxins cost | ECO: growth-defence trade-off (Coley, Bryant & Chapin 1985) |
 | THORN_B | 0.6 | - | bite lost to full thorns, for a big bite | ECO: spines restrict bite size (Cooper & Owen-Smith 1986) |
-| B_HALF | 0.05 | bite | bite at which thorns cost half their full effect | HT: C_BITE at M=1 is 0.06 |
+| B_HALF | 0.08 | kg dry | bite at which thorns cost half their full effect | HT: 0.05 when C_BITE at M=1 was 0.06 pseudo-kg; the same bite in dry matter (x 1.58, 2026-11-01) |
 | THORN_COST_W | 0.15 | - | share of production full thorns cost a woody plant | ECO: Hanley et al. 2007 |
 | THORN_COST_H | 0.05 | - | share of production full silica or hairs cost a herb | ECO: Massey et al. 2007 |
 | RESPROUT_MAX | 0.85 | - | share of above-ground fire loss a full resprouter grows back | ECO: resprouting (Bond & Midgley 2001; Pausas & Keeley 2014) |

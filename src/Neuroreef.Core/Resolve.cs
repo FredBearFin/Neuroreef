@@ -171,16 +171,17 @@ public static class Resolve
             {
                 float reach = (waterCell ? w.Pool[best][cell] * Respiration.Access(w, i, cell, best) : w.Pool[best][cell]) * Pools.Kg[best];
                 float bite = MathF.Min(MathF.Min(bite0 * bestBM, reach), gutCap - w.Gut[i]);
+                if (Diag.On) Diag.Bite(w, bite, bite0 * bestBM, reach, gutCap - w.Gut[i], bv >= absorb);
                 if (bite > 0)
                 {
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
                     float units = bite / Pools.Kg[best];   // the bite in the pool's units (cover for plants)
                     w.Pool[best][cell] = MathF.Max(0f, w.Pool[best][cell] - units);
                     T.EatenMass[best] += bite;
-                    // roots are the herbs' and shrubs' own mass (2026-11-01): a bite of them takes its energy's worth of their cover
+                    // roots are the herbs' and shrubs' own mass (2026-11-01): a bite of them takes its dry matter from their cover
                     // (it was 0.3 of the bite from the herbs whatever its energy, so roots, regrowing toward their own capacity, fed
-                    // diggers ~4x what the plants lost)
-                    if (best == (int)Pool.Root) Plants.RootEaten(w, cell, units * K.RHO_ROOT / K.RHO_PLANT);
+                    // diggers ~4x what the plants lost; then its energy's worth, RHO_ROOT / RHO_PLANT, on the old pseudo-kg)
+                    if (best == (int)Pool.Root) Plants.RootEaten(w, cell, units);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * units);
                     if (!waterCell) Plants.Eaten(w, i, cell, best, bite, bestEff);   // what it took from the plants, and the seed and pollen it carries
                     r += Ingest(w, i, best, bite, bestEff, emax, cell);
@@ -279,6 +280,7 @@ public static class Resolve
             rateT = Heat.Rate(core);
         }
         float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (1f + Pathogens.Sickness(w, i));   // the pathogen's take and the immune response (Revision R)
+        if (Diag.On) Diag.Animal(w, basal, MathK.Pow(mass, K.EXP_BASAL));
         // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
         // that would reach adult size at PMature, times how full its reserve is (the reserve density of a dynamic energy
         // budget: growth draws on the reserve continuously, Kooijman 2010), keeping GROW_RESERVE of it against
@@ -287,7 +289,7 @@ public static class Resolve
         float grow = 0;
         if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
         {
-            float tissue = K.C_CARC * w.PM[i] * (1f - w.PBirth[i]) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
+            float tissue = K.TISSUE_E * w.PM[i] * (1f - w.PBirth[i]) / K.GROWTH_EFF;   // energy to build all of it
             grow = Math.Clamp(MathF.Min(tissue / w.PMature[i] * w.Energy[i] / emax, w.Energy[i] - K.GROW_RESERVE * emax), 0f, tissue / w.PMature[i]);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
         }
@@ -321,10 +323,13 @@ public static class Resolve
 
         if (w.Gut[i] > 1e-7f)
         {
-            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
+            float bulk = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            float d = MathF.Min(w.Gut[i], bulk);   // a cold gut digests slowly (Revision P)
             // the gut's absorptive capacity (C_ABSORB, 2026-11-01): rich digesta pass only as fast as their energy is taken up
             float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            float d0 = d;
             if (w.GutEnergy[i] > absorbE) d = MathF.Min(d, w.Gut[i] * absorbE / w.GutEnergy[i]);
+            if (Diag.On) Diag.Digest(w, d, w.GutEnergy[i] * d / w.Gut[i], w.Gut[i], bulk, d < d0);
             float frac = d / w.Gut[i];
             float de = w.GutEnergy[i] * frac, dung = w.GutWaste[i] * frac, seedy = w.GutSeedy[i] * frac;
             w.Energy[i] += de;
@@ -400,8 +405,9 @@ public static class Resolve
         => Decide.PathDist2(World.Delta1(w.X[i] - x0), World.Delta1(w.Y[i] - y0), World.Delta1(tx - x0), World.Delta1(ty - y0));
 
     /// <summary>Put food into the gut. Returns the reward for it (taste of energy).</summary>
-    // water in each food, per unit eaten, when fully moist (DESIGN §9.4, Revision K, ecology review): live plants hold
-    // less as the soil dries (green grass ~75% water, dry-season grass ~10%), prey and fruit are wet, seed and wood dry
+    // water in each food, as its share of the fresh food, when fully moist (DESIGN §9.4, Revision K, ecology review): live
+    // plants hold less as the soil dries (green grass ~75% water, dry-season grass ~10%), prey and fruit are wet, seed and
+    // wood dry. Food is eaten as dry matter (2026-11-01), so a kg of it brings f / (1 - f) kg of water (Ingest)
     static readonly float[] FoodWater = { 0.75f, 0.65f, 0.85f, 0.1f, 0.8f, 0.6f, 0.8f, 0.8f, 0.5f, 0.3f, 0.1f, 0.1f, 0.5f, 0.7f, 0.8f };
     static bool LivePlant(int p) => p <= (int)Pool.Root;
 
@@ -536,7 +542,8 @@ public static class Resolve
         float e = mass * Pools.Rho[pool] * eff;
         // water from food and from digesting it (metabolic water: how seed-eating desert rodents live without drinking)
         float content = FoodWater[pool] * (LivePlant(pool) ? MathF.Min(1f, w.Moisture[cell] * 1.4f) : 1f);
-        float wet = K.K_FOODWATER * (mass * content + K.MET_WATER * e / K.RHO_MEAT) / MathF.Max(w.MassOf(i), 1e-6f);   // (a guard only: a 1 g world's newborns are 0.1 g)
+        // kg of water: preformed, per kg of dry food at its fresh water share (at most 0.85, fruit), and metabolic, per E digested
+        float wet = K.K_FOODWATER * (mass * content / (1f - content) + K.MET_WATER * e) / MathF.Max(w.MassOf(i), 1e-6f);   // (a guard only: a 1 g world's newborns are 0.1 g)
         float rel = MathF.Min(w.Thirst[i], wet);
         w.Thirst[i] -= rel;
         w.Gut[i] += mass; w.GutEnergy[i] += e; w.GutWaste[i] += mass * (1f - eff);
@@ -602,7 +609,7 @@ public static class Resolve
             return rew;
         }
         // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
-        float carcass = K.C_CARC * w.MassOf(v) + ev / K.RHO_MEAT;
+        float carcass = (K.TISSUE_E * w.MassOf(v) + ev) / K.RHO_MEAT;   // kg of dry meat
         float eat = MathF.Min(space, carcass);
         if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; }
         w.T.Kills[w.Spc[a]]++;   // only a death counts as a kill (a blood meal is not one)
@@ -703,14 +710,14 @@ public static class Resolve
         => w.PLitter[m] * (K.F_BIRTH * K.C_EMAX * w.PM[m] * w.PBirth[m] + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
 
     /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
-    public static float TissueCost(float birthShare, float adultMass) => K.C_CARC * adultMass * birthShare * K.RHO_MEAT / K.GROWTH_EFF;
+    public static float TissueCost(float birthShare, float adultMass) => K.TISSUE_E * adultMass * birthShare / K.GROWTH_EFF;
 
     /// <summary>Death with a body left behind (carrion on land, detritus in water).</summary>
     public static void Die(World w, int i, int cause, int killer)
     {
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
-        float body = K.C_CARC * w.MassOf(i) + MathF.Max(0f, w.Energy[i]) / K.RHO_MEAT;
+        float body = (K.TISSUE_E * w.MassOf(i) + MathF.Max(0f, w.Energy[i])) / K.RHO_MEAT;   // kg of dry meat
         { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += body / Pools.Kg[dp]; }   // kg into the pool's units
         DieNoBody(w, i, cause, killer);
     }

@@ -276,7 +276,7 @@ public static class Decide
         if ((o1.J >= 0 || o1.J == Player.Slot) && meatEff > 0)
         {
             // value of eating it: a bite of its edible tissue, on the same scale as the plants
-            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.C_CARC * (o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS)), need);
+            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.TISSUE_E / K.RHO_MEAT * (o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS)), need);
             float close = 1f - o1.D / R;
             fgx += prey * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += prey * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
             if (o1.J == strike.J && prey > fh) { fh = prey; eatPrey = 1; }                         // in reach and worth more than the plants

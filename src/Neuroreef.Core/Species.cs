@@ -42,18 +42,18 @@ public static class Pools
     // ---- what a unit of a pool is in kilograms (2026-11-01)
     /// <summary>Area of a field cell (m2), from the land surface's cell side GEO_CELL_M.</summary>
     public const float CellM2 = K.GEO_CELL_M * K.GEO_CELL_M;
-    /// <summary>One energy unit in joules (Kleiber's metabolism over a step: BMR_W x STEP_S / C_BASAL, ~8.9 MJ).</summary>
-    public const float EnergyJ = K.BMR_W * K.STEP_S / K.C_BASAL;
-    /// <summary>Food (kg at the pool's RHO) that a unit of a producer pool holds per m2: dry matter per m2 x its energy
-    /// (PLANT_KJ_G) over RHO_PLANT, the energy of a unit of production (the same for every producer pool, so what
-    /// reproduction and decay pass between pools keeps its energy).</summary>
-    public const float LandKgM2 = K.PLANT_KG_M2 * K.PLANT_KJ_G * 1e6f / (K.RHO_PLANT * EnergyJ);
-    public const float WaterKgM2 = K.WATER_KG_M2 * K.PLANT_KJ_G * 1e6f / (K.RHO_PLANT * EnergyJ);
+    /// <summary>One energy unit in joules (Kleiber's metabolism over a step: BMR_W x STEP_S / C_BASAL, ~8.9 MJ; K.E_MJ).</summary>
+    public const float EnergyJ = K.E_MJ * 1e6f;
+    /// <summary>Food (kg of dry matter) that a unit of a producer pool holds per m2 (2026-11-01: every food is dry matter,
+    /// each at its own energy per dry kg, RHO_*). Until then a unit held PLANT_KG_M2 x PLANT_KJ_G / RHO_PLANT of
+    /// pseudo-kg, 0.63 of its dry matter, at energy densities set as if a kg were 28.5 MJ.</summary>
+    public const float LandKgM2 = K.PLANT_KG_M2;
+    public const float WaterKgM2 = K.WATER_KG_M2;
     /// <summary>
     /// Kilograms of food per unit of each pool in a field cell. The plants and the water producers keep their state in
     /// cover (a share of the cell, so per m2 and independent of the cell's size); a unit of their pools is
     /// LandKgM2 (WaterKgM2) x CellM2 kg. Carrion and dung (what animals leave) and the bodies are in kg (1). Animals bite,
-    /// sense and count food in kg: w.Pool[p][cell] x Kg[p]. Before 2026-11-01 every unit was read as 1 kg per cell, so a
+    /// sense and count food in kg of dry matter: w.Pool[p][cell] x Kg[p]. Before 2026-11-01 every unit was read as 1 kg per cell, so a
     /// full meadow on a 4.75 ha cell held 1 kg of grass.
     /// </summary>
     public static readonly float[] Kg =

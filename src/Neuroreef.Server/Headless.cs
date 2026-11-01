@@ -48,7 +48,7 @@ public static class Headless
             if (o.SaveBank != null && w.Step % 50000 == 0) GeneBank.Save(w, o.SaveBank);
         }
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
-        string summary = Summary(sim) + Environment.NewLine + water.Report(w) + (eco != null ? Environment.NewLine + eco.Report(sim) : "");
+        string summary = Summary(sim) + Environment.NewLine + water.Report(w) + (eco != null ? Environment.NewLine + eco.Report(sim) : "") + (Diag.On ? Environment.NewLine + Diag.Report() : "");
         Console.Write(summary);
         if (units)
         {

@@ -766,28 +766,42 @@ public class EcologyTests
         Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         float costAdult = 10f - w.Energy[a], costJuv = 10f - w.Energy[b];
-        float growth = K.C_CARC * w.PM[b] * (1f - w.PBirth[b]) / w.PMature[b] * K.RHO_MEAT / K.GROWTH_EFF;
+        float growth = K.TISSUE_E * w.PM[b] * (1f - w.PBirth[b]) / w.PMature[b] / K.GROWTH_EFF;
         Assert.True(costJuv > growth * 0.99f, $"juvenile paid {costJuv}, growth alone costs {growth}");
         Assert.True(costAdult < costJuv);
     }
 
-    [Fact] // 2026-11-01: the gut absorbs at most C_ABSORB x M^0.75 a step: a gut full of seeds yields no more than that, one of grass its bulk rate
+    [Fact] // 2026-11-01: the gut absorbs at most C_ABSORB x M^0.75 a step: digesta richer than that yield no more, grass its bulk rate
     public void AbsorptionBoundsRichFood()
     {
         var w = new World(256, 15); Terrain.Build(w);
         int a = Make(w, 0, 0);
         float m = w.PM[a], absorb = K.C_ABSORB * MathK.Pow(m, K.EXP_BASAL);
         Assert.Equal(absorb, w.PAbsorb[a], 6);
-        // seeds: 7 E/M at 0.75, so the bulk rate alone would pass C_DIGEST x 5.25 a step, 19x basal
-        Assert.True(K.C_DIGEST * K.RHO_SEED * 0.75f > 2f * K.C_ABSORB);
-        w.Gut[a] = w.PGut[a]; w.GutEnergy[a] = w.Gut[a] * K.RHO_SEED * 0.75f; w.GutWaste[a] = 0f; w.Energy[a] = 0.5f * w.EmaxOf(a);
+        // on dry matter (2026-11-01) no real food passes much more than this at the bulk rate: meat ~1x, seeds ~0.8x
+        Assert.True(K.C_DIGEST * K.RHO_SEED * 0.75f < K.C_ABSORB);
+        Assert.True(K.C_DIGEST * K.RHO_MEAT * 0.9f < 1.1f * K.C_ABSORB);
+        // a gut whose digesta would pass 3x the limit at the bulk rate takes up only the limit
+        w.Gut[a] = w.PGut[a]; w.GutEnergy[a] = w.Gut[a] * 3f * K.C_ABSORB / K.C_DIGEST; w.GutWaste[a] = 0f; w.Energy[a] = 0.5f * w.EmaxOf(a);
         float e0 = w.GutEnergy[a];
         Act(w, a, P.REST); w.IActs[a] = 0;
         Resolve.Run(w, 1, 0);
         float took = e0 - w.GutEnergy[a];
-        Assert.True(took > 0f && took <= absorb * 1.0001f, $"absorbed {took} of seeds a step, the gut's limit {absorb}");
-        // a gut of grass (3.2 E/M at 0.5) is bounded by its bulk, below the absorption limit at this size
-        Assert.True(K.C_DIGEST * K.RHO_GRASS * 0.5f < K.C_ABSORB * 1.5f);
+        Assert.True(took > 0f && took <= absorb * 1.0001f, $"absorbed {took} a step, the gut's limit {absorb}");
+        // a gut of grass (2 E/kg dry at 0.5) is bounded by its bulk, well below the absorption limit
+        Assert.True(K.C_DIGEST * K.RHO_GRASS * 0.5f < K.C_ABSORB * 0.6f);
+    }
+
+    [Fact] // 2026-11-01: every food is dry matter: a unit of plant cover is PLANT_KG_M2 kg per m2 at PLANT_KJ_G, and the gut's
+    // daily throughput is the voluntary dry-matter intake DMI_MAX x M^0.75; no plant food is richer than fat (39 MJ/kg dry)
+    public void FoodIsDryMatter()
+    {
+        Assert.Equal(K.PLANT_KG_M2 * Pools.CellM2, Pools.Kg[(int)Pool.Grass], 3);
+        Assert.Equal(K.PLANT_KJ_G, K.RHO_PLANT * K.E_MJ, 3);
+        Assert.Equal(K.DMI_MAX, K.C_DIGEST * K.STEPS_PER_DAY, 5);
+        for (int p = 0; p < Pools.N; p++) Assert.InRange(Pools.Rho[p] * K.E_MJ, 10f, 25f);   // MJ per kg dry
+        // grass digested at the bulk rate yields ~3x basal, the energy budget a grazer can keep (Hammond & Diamond 1997)
+        Assert.InRange(K.C_DIGEST * K.RHO_GRASS * Pools.DigMax[(int)Pool.Grass] / K.C_BASAL, 2.5f, 4f);
     }
 
     [Fact] // 2026-11-01: the life-history clock is in days: at M = 1 and middle genes, 120 days to maturity, 50 days' cooldown, 2 years of life
