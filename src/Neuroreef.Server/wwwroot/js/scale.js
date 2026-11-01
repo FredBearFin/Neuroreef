@@ -9,7 +9,7 @@
 //   the view's magnification;
 // - a plant is as tall as the sim's 'plant height' layer says (5 cm .. 40 m), times the plants' magnification.
 //
-// The overview and the animal cameras magnify (the "creature size x" control, default x20, always labelled as
+// The overview and the animal cameras magnify (the "creature size x" control, default x1 (true size; x20 before 2026-11-01), always labelled as
 // magnified): the sim's animals live hundreds of metres apart, so at x1 a 1 kg animal is 10 cm on a 28 km map.
 // Plants follow at the fourth root of it (x2.1 at x20, x3.2 at x100): a forest still reads as trees from afar, and a
 // magnified animal is not lost under a crown ten times its own height. Explore mode is always x1: true size.
@@ -19,12 +19,12 @@
 // scale is applied as one factor (bodyK, world units per view-size unit) on the instance matrix and divided out in
 // the shader (uBodyK).
 
-export const DEFAULT_MPU = 218 / 4;     // metres per world unit (GEO_CELL_M / FCELL)
+export const DEFAULT_MPU = 16 / 4;      // metres per world unit (GEO_CELL_M / FCELL; the server's meta overrides it)
 export const LENGTH_K = 0.1;            // body length, m per kg^(1/3)  (1 kg: 10 cm; 40 kg: 34 cm; 0.1 kg: 4.6 cm)
 export const MODEL_LEN = 1.25;          // snout-to-rump length of the body model at view size 1 (model units)
 export const VIEW_SIZE_K = 1.5;         // the model's view size per kg^(1/3) (bodySize in creatures/body.js)
 export const MAGS = [1, 2, 5, 10, 20, 50, 100];   // the overview's creature magnification steps
-export const DEFAULT_MAG = 20;
+export const DEFAULT_MAG = 1;   // true size by default (2026-11-01, the owner: no magnification; the control stays)
 
 export class Scale {
   constructor(mpu) {

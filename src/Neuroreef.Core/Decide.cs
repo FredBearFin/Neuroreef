@@ -46,6 +46,16 @@ public static class Decide
         return l.ToArray();
     }
 
+    /// <summary>The hash cells a search of nOff ring offsets visits on a grid of side G: the ring's own, or, when the ring is
+    /// wider than the grid (a small map: 2026-11-01, the 1 km world, a 256 map has 2 bodies' cells and 1 callers' cell
+    /// a side), every cell once, so no cell is searched twice.</summary>
+    static int Visits(int nOff, int G) => (nOff == 9 ? 3 : nOff == 25 ? 5 : 7) > G ? G * G : nOff;
+
+    /// <summary>The o-th hash cell of a search around (cx, cy) on a grid of side G (Visits).</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    static int VisitCell(int o, int visits, int nOff, int cx, int cy, int G) =>
+        visits != nOff ? o : World.WrapI(cy + Ring[o].dy, G) * G + World.WrapI(cx + Ring[o].dx, G);
+
     /// <summary>
     /// What eating here is worth to this animal (0..1): the energy of one bite of the best food in the cell it can
     /// digest, against what it burns per step (FIELD_METAB x basal), as 1 - exp(-bite / need). A bite that pays for a
@@ -288,9 +298,9 @@ public static class Decide
         int prevF = w.IFocal[i]; float lPrev = 0, dxP = 0, dyP = 0, dP = 0; bool prevAlike = false;
         if (prevF >= 0 && w.Serial[prevF] != w.IFocalSerial[i]) prevF = -1;          // the slot holds another animal now
         int ccx = (int)(x / K.HCELL_CALL), ccy = (int)(y / K.HCELL_CALL);           // the callers' hash (HCELL_CALL; MAX_HEAR <= 2 cells)
-        for (int o = 0; o < 25; o++)
+        for (int o = 0, cv = Visits(25, Map.CGW); o < cv; o++)
         {
-            int hc = World.WrapI(ccy + Ring[o].dy, Map.CGW) * Map.CGW + World.WrapI(ccx + Ring[o].dx, Map.CGW);
+            int hc = VisitCell(o, cv, 25, ccx, ccy, Map.CGW);
             for (int q = w.CallStart[hc], qe = w.CallStart[hc + 1]; q < qe; q++)
             {
                 int j = w.CallSorted[q];
@@ -569,9 +579,9 @@ public static class Decide
         candidates = 0;
         var near = w.D.Near;
         uint mySerial = w.Serial[i];
-        for (int o = 0; o < nOff; o++)
+        for (int o = 0, nv = Visits(nOff, Map.GW); o < nv; o++)
         {
-            int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
+            int hc = VisitCell(o, nv, nOff, hcx, hcy, Map.GW);
             for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
             {
                 int j = near[q].Slot;   // = w.Sorted[q]
@@ -645,9 +655,9 @@ public static class Decide
         float o2Mass = -1f, strikeBigMass = -1f;
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
         float vmax = w.Vmax(i);
-        for (int o = 0; o < nOff; o++)
+        for (int o = 0, nv = Visits(nOff, Map.GW); o < nv; o++)
         {
-            int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
+            int hc = VisitCell(o, nv, nOff, hcx, hcy, Map.GW);
             for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
             {
                 int j = w.Sorted[q];

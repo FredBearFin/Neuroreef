@@ -186,7 +186,25 @@ public sealed class World
     public float SeaLevel;
     /// <summary>Elevation (0..1) per metre at the game's vertical scale: 1 - SeaLevel above the lakes is H_RELIEF m. A height
     /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
-    public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / K.H_RELIEF;
+    public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / Map.ReliefM;
+
+    /// <summary>The latitude this world sits at (degrees, &lt; 0 south; 2026-11-01, the 1 km world): Nature.Latitude if
+    /// set, else drawn from the terrain seed between LAT_LO and LAT_HI in either hemisphere, so a seed makes one land and
+    /// one climate. The map spans Map.LatSpanDeg about it (Climate.SinLat).</summary>
+    public float LatDeg
+    {
+        get
+        {
+            if (!float.IsNaN(Nature.Latitude)) return Nature.Latitude;
+            if (!_latSeeded)
+            {
+                _lat = (Rng.U(TerrainSeed, 0, 0, Rs.Latitude) < 0.5f ? -1f : 1f) * (K.LAT_LO + (K.LAT_HI - K.LAT_LO) * Rng.U(TerrainSeed, 0, 1, Rs.Latitude));
+                _latSeeded = true;
+            }
+            return _lat;
+        }
+    }
+    float _lat; bool _latSeeded;
     // ---- water cycle (WaterCycle.cs): stores in mm of water over a cell, fluxes in mm x cells per update (WC_EVERY steps).
     // Fixed at WaterCycle.Init: the rain pattern (relative to the land mean; a lake cell holds its row's land mean), soil
     // capacity, the drainage receivers and their topological order (outlets first), the lake each cell drains to
@@ -555,7 +573,7 @@ public sealed class World
         return PLoco[i] == (byte)Loco.Fly || Depth[cell] <= MaxWaterDepth(i);
     }
 
-    public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * (float)(Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / Map.W);
+    public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * (float)(Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - Climate.Phase(this, y / K.FCELL));
 
     /// <summary>Is the mother of i still the same living animal? Returns her slot or -1.</summary>
     public int MotherOf(int i)

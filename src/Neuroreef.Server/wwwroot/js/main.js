@@ -1,7 +1,7 @@
 // Console entry point: connects to the simulation, builds the 3D view and the panels, wires controls.
 
 import { Link } from './net.js';
-import { World3D } from './world3d.js';
+import { World3D, setRelief } from './world3d.js';
 import { Panels, bar } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
 import { Explore } from './explore/explore.js';   // EXPLORE: walk and hunt (js/explore/)
@@ -16,6 +16,7 @@ let explore = null;                      // EXPLORE: the person on foot (js/expl
 
 link.listen('meta', (m) => {
   meta = m;
+  setRelief(m);   // the relief's true scale follows the map on view (2026-11-01: a prehistory and its world may differ)
   $('s-seed').textContent = m.seed;
   if (!world) {
     world = new World3D($('gl'), meta);

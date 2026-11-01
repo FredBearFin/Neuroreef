@@ -17,6 +17,12 @@ public static class Nature
     public static float Ponds = 1f;           // share of land basins that hold seasonal ponds (0 = water only in lakes and rivers)
     public static float Climate = K.CLIMATE;  // how strongly sun, height and seasons change temperature (Revision O; 0 = everywhere T_REF, no heat budget)
     public static int WorldMap = K.WORLD;     // the map side of the world that follows a prehistory (it may be smaller: a valley)
+    // the latitude a world sits at (2026-11-01, the 1 km world): NaN = drawn from its terrain seed (World.LatDeg), else
+    // this (degrees, < 0 south); and the span of latitude across the map: 0 = its true extent (Map.LatSpanDeg, a fraction
+    // of a degree), 360 or more = the old torus of latitudes (equator, pole, equator, pole: tests of the latitude laws).
+    // Not saved: a world's latitude follows from its seed, and tests set these and put them back
+    public static float Latitude = float.NaN;
+    public static float LatSpan = 0f;
 
     public static void Clamp()
     {

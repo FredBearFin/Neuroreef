@@ -55,7 +55,9 @@ const gb = (b) => (b / 1e9).toFixed(1) + ' GB';
 const x = (v) => '×' + (+v).toFixed(2).replace(/0$/, '').replace(/\.0$/, '');
 let info, rows = [];
 const MAPS = [256, 512, 1024, 2048], MAPN = { 256: 'Valley', 512: 'Region', 1024: 'Continent', 2048: 'Supercontinent' };
-const mapFmt = (v) => `${MAPN[v]} (${Math.round(v * 218 / 4 / 1000)} km across)`;
+// km across from the server's metres per unit (2026-11-01, the 1 km world: 4 m, so 256 units = 1 km)
+let MPU = 4;
+const mapFmt = (v) => `${MAPN[v]} (${(v * MPU / 1000).toFixed(1)} km across)`;
 const STEPS = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 0];
 const SLOTS = () => [2048, 4096, 8192, 12288, 16384, 20480, 24576, 32768].filter((v) => v <= (info.maxSlots || 1e9));
 const WSLOTS = () => [1024, 2048, 4096, 8192, 12288, 16384, 24576, 32768].filter((v) => v <= (info.maxSlots || 1e9));
@@ -65,6 +67,7 @@ function nearestIndex(list, v) { let b = 0; for (let i = 0; i < list.length; i++
 
 function defs() {
   const V = info.v, ev = info.evolve;
+  if (+info.metresPerUnit > 0) MPU = +info.metresPerUnit;
   return [
     { g: 'Land', note: 'the prehistory evolves on a bigger map; the world you watch can be smaller', rows: [
       { key: 'preMap', label: 'Map of the prehistory', list: MAPS, val: V.preMap, fmt: mapFmt,
@@ -170,8 +173,9 @@ function estimate() {
 const PRESETS = {
   pet: { preMap: 512, worldMap: 256, branches: 2, branchSlots: 12288, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.3 },
   light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.3 },
-  // the default: a region (28 km, seen whole on one screen), a few thousand to ~25,000 animals
-  normal: { preMap: 512, worldMap: 512, branches: 2, branchSlots: 12288, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
+  // the default (2026-11-01, the owner: a world ~1 km across, one valley with a stream, hills and a pond, several hundred
+  // animals at true size): a valley, 1 km
+  normal: { preMap: 256, worldMap: 256, branches: 2, branchSlots: 12288, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
   big: { preMap: 1024, worldMap: 1024, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.5 },
   // one supercontinent (2048 x 2048, 4 continents of land): one branch, so its slots fit in ~7 GB
   huge: { preMap: 2048, worldMap: 2048, branches: 1, branchSlots: 32768, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 32768, rate: 3, climate: 0.3 },

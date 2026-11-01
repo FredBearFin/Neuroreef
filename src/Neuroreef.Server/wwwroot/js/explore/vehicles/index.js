@@ -30,7 +30,7 @@ export class Vehicles {
     const m = ex.meta.explore || {};
     this.specs = {};
     for (const v of m.vehicles || []) this.specs[v.id] = v;
-    this.mpu = m.metresPerUnit || 54.5;
+    this.mpu = m.metresPerUnit || 4;
     this.list = {};            // kind -> vehicle (one of each)
     this.wrecks = [];
     this.cur = null;           // the vehicle the person is in

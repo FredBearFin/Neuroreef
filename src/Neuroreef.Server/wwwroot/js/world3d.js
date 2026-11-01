@@ -17,13 +17,21 @@ import { decodeFeatures, stampFeatures, featureMeshes } from './terrain/caves.js
 import { patchLakeMaterial } from './terrain/water.js';
 import { splitChunks, copyColors } from './terrain/chunks.js';
 
-// Vertical scale (2026-11-01). Elevation is 0..1 with the lakes at w.sea; Climate reads (e - sea) / (1 - sea) x H_RELIEF
-// (8000 m since the high, jagged mountains of 2026-11-01; 3000 m before) as the height above the lakes. Geology measures
-// slopes on a field cell of GEO_CELL_M (218 m), so the land is drawn at true scale: a cell (4 units) is 218 m, and the
-// 8000 m are RELIEF = 8000 x 4 / 218 = 146.8 units (no exaggeration). The 1024 map's land reaches 0.4-0.65 of it (3-5 km),
-// the 2048 map's ~7.5 km; crags stand at up to 45-55 degrees by rock kind, as Geology made them. (55 units drew the 3000 m
-// before; elevation comes as 16 bits when the WORLD frame has the plane, as the 8 bits' 31-m steps would terrace them.)
-export const RELIEF = 8000 * 4 / 218;   // 146.8 units (exported for Explore mode, js/explore/: its metres per unit)
+// Vertical scale (2026-11-01). Elevation is 0..1 with the lakes at w.sea; Climate reads (e - sea) / (1 - sea) x the map's
+// vertical scale (Map.ReliefM, sent as meta.units.reliefM and meta.explore.hRelief) as the height above the lakes. Geology
+// measures slopes on a field cell of GEO_CELL_M (meta.units.fieldCellM), so the land is drawn at true scale: a cell
+// (FCELL = 4 units) is fieldCellM m, and the relief is RELIEF = reliefM x FCELL / fieldCellM units (no exaggeration).
+// 2026-11-01, the 1 km world: a cell is 16 m and the 256 map's vertical scale 153 m, so RELIEF = 38 units (it was
+// 8000 x 4 / 218 = 146.8 for 8 km on 218 m cells); 512 / 1024 / 2048 maps: 64 / 108 / 181 units. Derived from the server's
+// meta (setRelief), never hard-coded. Elevation comes as 16 bits when the WORLD frame has the plane.
+export let RELIEF = 153 * 4 / 16;   // until meta arrives (exported, a live binding, for Explore mode, js/explore/)
+/** RELIEF from the server's units: the map's vertical scale over a field cell's metres, x FCELL units. */
+export function setRelief(meta) {
+  const u = (meta && meta.units) || {}, ex = (meta && meta.explore) || {};
+  const h = +u.reliefM || +ex.hRelief, cell = +u.fieldCellM || +ex.geoCellM, fc = +u.fcell || 4;
+  if (h > 0 && cell > 0) RELIEF = h * fc / cell;
+  return RELIEF;
+}
 const SHADE_Z = 1;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
 const LAND_LIFT = 0.06;      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
 const CHUNKS = 8;             // river ribbons and karst rocks are cut into CHUNKS x CHUNKS squares of the map ...
@@ -47,6 +55,7 @@ export class World3D {
   constructor(canvas, meta) {
     this.meta = meta;
     this.W = meta.world;
+    setRelief(meta);                  // the relief at true scale, from the server (2026-11-01)
     // how big bodies and plants are drawn: true size x the view's magnification (js/scale.js)
     this.scale = new Scale(meta.explore && meta.explore.metresPerUnit);
     this.scale.fromServer(meta.units);

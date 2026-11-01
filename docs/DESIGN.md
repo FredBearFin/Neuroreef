@@ -3,6 +3,67 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**The 1 km world: one length scale, a valley at one latitude** (2026-11-01; Constants GEO_CELL_M, Map.ReliefM,
+Geology.Tectonics/Refine, Climate.Lat*/Rainfall, Hydrology.WidthM, Decide hash search, Wire units,
+world3d.js setRelief, js/scale.js, Options, setup.html; tools/ScaleProbe; images docs/art/scale2/). The owner: a default
+world ~1 km across, one valley with a stream, hills and a pond, several hundred animals at true size (first asked for
+~3.5 km; GEO_CELL_M was 55 m for a day). Now:
+- *One length scale.* GEO_CELL_M = 16 m a field cell (was 218): a unit is 4 m (M_PER_UNIT), the default map (now 256,
+  the valley; Options, setup's normal preset) is 1.02 km, 512 is 2.05 km, 1024 4.1 km, 2048 8.2 km; the grids keep their
+  sizes. Derived from it: CELL_M (plants' dispersal, was a separate 25 m; growth per m2 is the plant agent's), Map.CellKm2
+  (the hydrology's areas: RIVER_ACC 0.01 km2, CHANNEL_A_MIN 0.0028 km2, RIVER_Q1 0.028 km2, CAVE_Q_MIN 0.00038 km2, no
+  longer "x map cells / 65,536"), channel heads at (A / b) S^2 >= CHANNEL_C = 50 m (Montgomery & Dietrich 1988), the
+  rain's distances in km (RAIN_L 500 km, RAIN_EVAP, RAIN_RECYCLE per km, RAIN_FALL 10 km), L_MAR 1.3 km, SENSE_WATER
+  1.74 km (109 cells), MEM_NEAR and PI_DIFF from metres, FLY_V_CAP 7 km, CAVE_ENTR_GAP and LAVA_LEN in metres, the
+  valley-floor heights RIVER_BANK, FLOOD_HAND, MEANDER_HAND, LAKE_MIN_DEPTH, BASIN_MIN, ALLUV_D (x GEO_CELL_M), the
+  spatial hashes (HCELL 128 units, HCELL_CALL 512: the same 1.5 km of perception and 3 km of hearing; a hash cell may be
+  the whole map, and a grid narrower than its search ring is searched whole, Decide.Visits). The animals' allometries
+  were already metres and stand: a 1 kg walker's top step (632 m) crosses half the 1 km map and a flier's (up to 7 km)
+  goes round it; positions wrap and distances between animals are the shortest way round the torus.
+- *Relief from the size of the piece.* A 1 km map is a piece of a larger landscape. Its vertical scale is Map.ReliefM =
+  H_RELIEF (8 km, an orogen) x (width / RELIEF_L_KM 200 km)^RELIEF_HURST 0.75 (self-affine relief): 153 m on 256, 257 on
+  512, 433 on 1024, 728 on 2048. Every height in metres reads through it (Climate's lapse rate, Hydrology, Caves,
+  Explore, vehicles, World.ElevPerM, Wire meta `units.reliefM` / `explore.hRelief`). The plates' pattern stands for the
+  pattern of rock uplift and rock the piece is cut from (fault blocks, warps, rift basins): its heights, cover and
+  limestone x VScale = ReliefM / H_RELIEF, its uplift rates x sqrt(VScale) (relief over hillslopes goes as U L^2 / D, so a
+  small piece needs tens of m/Myr to stand its hills; with VScale alone they stood 16-69 m). Stream power (km2), creep
+  (km2/Myr), rock-strength failure and talus run at true scale. Creep dominates below ~1 km: the valley is a smooth
+  hollow between hills of 10-25°. The last steps of deep time run on at most 128 cells a side (DEEP_MAX: 32 and 64 m cells
+  on the 1024 and 2048 maps, upsampled with roughness) and the coarse grid on half that, at least 32: on 16 m cells creep
+  needs ~600 sub-steps a step. Glaciers form only where the world's snowline is below its hills (none on a 1 km map).
+- *One latitude.* A map sits at the world's latitude (World.LatDeg: from the terrain seed, 10-55° in either hemisphere;
+  Nature.Latitude sets it) and spans its true extent (Map.LatSpanDeg, 0.01° on 256), smoothly closed on the torus.
+  Every place that read latitude from the row reads Climate.SinLat / Phase / AbsLatDeg (RowParams, Rainfall, Normalise,
+  AnnualMean, Fields' and WaterCycle's moisture season, Plants' flowering phase, World.SeasonAt, Hydrology.AnnualWater,
+  Caves, Geology.Snowline). Nature.LatSpan >= 360 gives back the old torus of latitudes (tests of the latitude laws).
+- *Rain at this scale.* The background rain falls off over hundreds of km, so not across a map; orographic condensation
+  (RAIN_OROG 0.15 per km of lift) falls out over RAIN_FALL = 10 km downwind (Smith & Barstad 2004); rain grows 5% per
+  100 m (RAIN_ZGRAD).
+- *Rivers at true width.* Hydrology.WidthM(Q) = RIVER_WK 12 x sqrt(mean m3/s), the bankfull channel (Hey & Thorne 1986).
+  The RIVERS lines carry that width in field cells (under 1); World.RivW is the cells it covers (1 for any stream
+  narrower than a cell).
+- *Console.* RELIEF = reliefM x fcell / fieldCellM from meta (world3d.js setRelief, on every meta; 38 units on 256);
+  creature size defaults to x1 (true size; the control stays); metres per unit from the server everywhere.
+Measured (256 map, seeds 3 / 5 / 7; tools/ScaleProbe):
+- width 1.02 km; top 153 / 153 / 97 m above the lakes, land p50 42 / 41 / 31 m; slopes p50 14 / 12 / 9°, p90 23 / 21 / 16°,
+  p99 30 / 28 / 23°; land rock crystalline 25-32%, sedimentary 66-71% (regolith and colluvium mantle the hills), volcanic
+  2-6%, limestone 0 (the 15 m bed stays under its cover); one lake of 10% of the map (two lobes on the torus).
+- streams: 0.1 / 0.2 / 1.8% of the map; the largest catchment off the lake is only 0.12 / 0.10 / 0.09 km2, so they are
+  0.3 m wide at ~1 L/s. A 1-5 m stream needs 1-20 km2 upstream, which a 1 km torus cannot hold: a stream that runs
+  through the valley from a larger landscape needs an inflow at the map's edge (the hydrology agent's; not done).
+  1024 map: 433 m of relief, streams to 2.1 m wide and 5.8 km2; 2048: 728 m, to 4.3 m and 19 km2.
+- Populations (random brains, 6,000 steps, 256 map, food per field cell not rescaled: the plant agent's per-m2 growth is
+  to come): seed 3 916 -> 474 (1 lineage of 16 left), seed 5 884 -> 0 (all extinct by step 3,000), seed 7 884 -> 653 (1
+  lineage). On the old scale (14 km, same map and seeds): 186 (5 lineages), 11,576 at step 5,000 (10), 1,581 (10); at
+  3.5 km: 121 (3), a boom to 8,174 (4), 340 (3). Populations stay in the hundreds, but lineages no longer found viably:
+  on a 1 km torus every animal's step (a 1 kg walker's 632 m, a strike's reach of ~0.1-1 km) spans the homelands
+  (HOME_R x map side = 120 m), so all lineages meet at once and one excludes the rest; killed, starved and lost dominate
+  the deaths. Founding (HOME_R, HOME_R_MAX as shares of the map, FOUND_FILL) and the prehistory's branches need the
+  ecologist's look at this scale (a prehistory branch on the 256 map had 12 of 16 lineages gone by step 500).
+Not done: a stream's inflow from beyond the map; a regional-uplift generator for small maps (the plates' pattern drawn
+small makes Y-shaped ridges); contour-parallel steps of a cell on some hillsides (from the failure passes: visible in
+docs/art/scale2/relief_256_*.png); the console's river ribbons should be drawn at the RIVERS width x FCELL.
+
 **A world you see whole, and bodies at their true size** (2026-11-01; Options.cs, setup.html, js/scale.js,
 js/world3d.js, js/look/vegetation.js; images docs/art/scale/). The owner: "the worlds are too damn big now ... the world
 should be easy to see the whole thing", "we don't need worlds that reach 60k population", and animals and plants drawn

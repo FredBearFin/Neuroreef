@@ -1,7 +1,8 @@
 // Explore mode: walk the world on foot at its own scale, and hunt (the owner's request, 2026-11-01).
 //
-// Scale: the land is drawn at true scale, a field cell (FCELL = 4 units) being GEO_CELL_M = 218 m and the relief's
-// H_RELIEF = 8000 m being RELIEF = 146.8 units (world3d.js), so a metre is 4 / 218 = 0.018 units; the animals and plants
+// Scale: the land is drawn at true scale, a field cell (FCELL = 4 units) being GEO_CELL_M = 16 m and the relief's
+// vertical scale (meta.explore.hRelief, Map.ReliefM: 153 m on the 256 map) being RELIEF = hRelief x 4 / GEO_CELL_M units
+// (world3d.js setRelief, from the server's meta), so a metre is 4 / 16 = 0.25 units (2026-11-01); the animals and plants
 // are drawn at true size too (js/scale.js: Explore is always x1, the overview magnifies). The person's
 // eye is 1.7 m above the ground; it walks at 1.5 m/s and runs at 5 m/s (Ctrl held, or F, multiplies by 10: the map is
 // many km across). It stands on the drawn ground (world3d.groundWater), wades slowly through shallow water and swims at
@@ -31,7 +32,7 @@ export class Explore {
     // units per metre: the view's (world.scale, js/scale.js: the sim's metres per unit, 0.018), which is the relief's own
     // vertical scale (RELIEF / H_RELIEF). The creatures and plants are drawn at true size here (x1), so the eye height,
     // walking speed and every weapon's reach are in the same metres as the bodies they aim at
-    this.upmV = RELIEF / (ex.hRelief || 8000);
+    this.upmV = RELIEF / (ex.hRelief || 153);
     this.weapons = ex.weapons || [];
     this.maxHp = ex.maxHp || 100;
     this.hud = new ExploreHud(view);

@@ -322,7 +322,8 @@ public static partial class Hydrology
     {
         int FW = Map.FW, n = FW * FW;
         float[] h = w.Elev;
-        float sea = w.SeaLevel, scale = n / 65536f;
+        // areas (2026-11-01): the hydrology's thresholds are km2 of mean land rain, this many cells of GEO_CELL_M
+        float sea = w.SeaLevel, scale = 1f / Map.CellKm2;
         int[] lake = w.LakeOf;
         Array.Fill(lake, -1);
 
@@ -394,7 +395,7 @@ public static partial class Hydrology
         var stamp = new int[n]; Array.Fill(stamp, -1);
         var pq = new PriorityQueue<int, float>();
         var pool = new List<int>();
-        float mmPerElev = K.H_RELIEF * 1000f / MathF.Max(1e-6f, 1f - sea);
+        float mmPerElev = Map.ReliefM * 1000f / MathF.Max(1e-6f, 1f - sea);
         float lakeMin = K.LAKE_MIN_DEPTH * w.ElevPerM, bankH = K.RIVER_BANK * w.ElevPerM;   // metres to elevation (2026-11-01)
         for (int q = n - 1; q >= 0; q--)
         {
@@ -531,7 +532,7 @@ public static partial class Hydrology
         var qs = new double[n];
         for (int i = 0; i < n; i++) qs[i] = lake[i] >= 0 ? 0.0 : yld[i];
         for (int l = ns; l < nl; l++) if (w.LakeExit[l] >= 0 && lake[w.LakeExit[l]] < 0) qs[w.LakeExit[l]] += lakeOut[l];
-        double spreadQ = K.SPREAD_A * scale * K.P_MEAN;
+        double spreadQ = K.CHANNEL_A_MIN * scale * K.P_MEAN;   // about where hollows become channels (SPREAD_A x map cells / 65,536 before 2026-11-01: the same on the 256 map)
         for (int q = n - 1; q >= 0; q--)
         {
             int c = ord[q], r = rv[c];
@@ -556,8 +557,8 @@ public static partial class Hydrology
             {
                 float down = lake[r] >= 0 ? level[lake[r]] : h[r];
                 // m/m (2026-11-01: the vertical scale H_RELIEF is no longer 3,000 m, so the slope is metric, not elev per cell)
-                float s = MathF.Max(0f, h[c] - down) / Dist(c, r, FW) * (K.H_RELIEF / MathF.Max(1e-6f, 1f - w.SeaLevel) / K.GEO_CELL_M);
-                if (qin >= aBig || qin * s * s >= K.CHANNEL_C) chan[c] = true;
+                float s = MathF.Max(0f, h[c] - down) / Dist(c, r, FW) * (Map.ReliefM / MathF.Max(1e-6f, 1f - w.SeaLevel) / K.GEO_CELL_M);
+                if (qin >= aBig || qin * K.GEO_CELL_M * s * s >= K.CHANNEL_C) chan[c] = true;
             }
             if (chan[c] && lake[r] < 0) chan[r] = true;
         }
@@ -584,7 +585,10 @@ public static partial class Hydrology
             dep[c] = MathF.Max(d, 1e-5f); of[c] = c;
             // the river's half-width beyond its channel cell: every eligible cell within the whole cells of it, and the
             // lowest one of the next ring for a half cell more (a river 2 cells wide spreads to its lower side)
-            float wd = MathF.Min(K.RIVER_W_MAX, MathF.Sqrt(MathF.Max(1f, qr)));
+            // 2026-11-01 (the 1 km world): the width in metres from downstream hydraulic geometry, RIVER_WK sqrt(Q m3/s)
+            // (World.RivWM, for the renderer to draw true width), and on the field grid the cells it covers, at least its own
+            // (a stream a few metres wide runs in a 16 m cell; before, a river was sqrt(Q / RIVER_Q1) cells of 218 m wide)
+            float wd = MathF.Min(K.RIVER_W_MAX, MathF.Max(1f, WidthM(Q[c]) / K.GEO_CELL_M));
             w.RivW[c] = wd;
             float rad = 0.5f * (wd - 1f);
             int full = (int)rad, ring = full + 1;
@@ -614,6 +618,14 @@ public static partial class Hydrology
             w.Cell[i] = (byte)(dep[i] <= 0f ? Realm.Land : dep[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
         return net;
     }
+
+    /// <summary>A cell of Q (mean land rain over a field cell, World.Flow) as mean discharge in m3/s.</summary>
+    public const float QM3S = K.P_MEAN * 1e-3f * K.GEO_CELL_M * K.GEO_CELL_M / (365.25f * 86400f);
+
+    /// <summary>The true width (m) of a river of mean discharge q (cells of mean land rain, World.Flow): RIVER_WK x
+    /// sqrt(Q in m3/s), downstream hydraulic geometry (Leopold &amp; Maddock 1953). 2026-11-01: rivers narrower than a
+    /// field cell (all of a 1 km map's) are drawn at this width (Wire RIVERS, ICD); World.RivW is the cells it covers.</summary>
+    public static float WidthM(float q) => K.RIVER_WK * MathF.Sqrt(MathF.Max(0f, q) * QM3S);
 
     // the sea: connected regions below SeaLevel of SEA_MIN of the map or more, and the largest; returns their count
     static int Seas(World w, int[] lake)
@@ -727,11 +739,11 @@ public static partial class Hydrology
             double sr = 0; int nr = 0;
             for (int i = y * FW; i < (y + 1) * FW; i++) if (rain[i] > 0f) { sr += rain[i]; nr++; }
             float rowMean = nr > 0 ? (float)(sr / nr) : 1f;
-            float s = MathK.Sin(2f * MathF.PI * y / FW);
+            float s = Climate.SinLat(w, y);
             float t0 = K.T_REF + K.CLIMATE * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
             for (int i = y * FW; i < (y + 1) * FW; i++)
             {
-                float hm = MathF.Max(0f, w.Elev[i] - sea) / MathF.Max(1e-6f, 1f - sea) * K.H_RELIEF;
+                float hm = MathF.Max(0f, w.Elev[i] - sea) / MathF.Max(1e-6f, 1f - sea) * Map.ReliefM;
                 float t = t0 - K.CLIMATE * K.LAPSE * hm * 0.001f;
                 float pet = t <= 0f ? 0f : K.PET_REF * Climate.Es(t) / es0;
                 float p = K.P_MEAN * (rain[i] > 0f || w.Elev[i] >= sea ? rain[i] : rowMean);

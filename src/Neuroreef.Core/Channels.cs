@@ -75,7 +75,7 @@ public static partial class Hydrology
         int FW = Map.FW, n = FW * FW;
         float[] h = w.Elev;
         Array.Clear(w.RivX); Array.Clear(w.RivY);
-        float mPerElev = K.H_RELIEF / MathF.Max(1e-6f, 1f - w.SeaLevel);
+        float mPerElev = Map.ReliefM / MathF.Max(1e-6f, 1f - w.SeaLevel);
         float hand = K.MEANDER_HAND / mPerElev, q1 = K.RIVER_Q1 * scale;
         float qPhys = K.P_MEAN * 1e-3f * K.GEO_CELL_M * K.GEO_CELL_M / (365.25f * 86400f) * K.BANKFULL;   // a cell of Q at bankfull, m3/s
 
@@ -458,7 +458,8 @@ public static partial class Hydrology
                 float x = c % FW + 0.5f + (line ? w.RivX[c] : 0f), y = c / FW + 0.5f + (line ? w.RivY[c] : 0f);
                 if (L.Points.Count > 0) { x += FW * MathF.Round((px - x) / FW); y += FW * MathF.Round((py - y) / FW); }
                 px = x; py = y;
-                L.Points.Add((x, y, w.RivW[of], w.Depth[of]));
+                // the true width in field cells (2026-11-01): a stream a few metres wide is a small share of a 16 m cell
+                L.Points.Add((x, y, Hydrology.WidthM(w.Flow[of]) / K.GEO_CELL_M, w.Depth[of]));
             }
         }
         return lines;

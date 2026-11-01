@@ -15,7 +15,7 @@ public static class Fields
         var Pl = w.Pool;
         float[] Al = Pl[(int)Pool.Algae], Ph = Pl[(int)Pool.Phyto];
         float[] Ca = Pl[(int)Pool.Carrion], Du = Pl[(int)Pool.Dung], Li = Pl[(int)Pool.Litter], Wo = Pl[(int)Pool.Wood], De = Pl[(int)Pool.Detritus];
-        float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / FW);
+        float season = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - Climate.Phase(w, y));
         int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW, row = y * FW;
         // climate (Revision O): this row's temperature for this step; with Climate = 0 every factor below is skipped
         bool clim = Climate.On;

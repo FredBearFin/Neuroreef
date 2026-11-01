@@ -70,8 +70,8 @@ public static class Caves
         int FW = Map.FW, n = FW * FW;
         Array.Clear(w.Carb); Array.Clear(w.CaveVoid); Array.Clear(w.CaveDepth); Array.Clear(w.CaveFlow); Array.Clear(w.CaveSink);
         Array.Fill(w.CaveNext, -1); Array.Fill(w.CaveSpring, -1); Array.Clear(w.CaveKind);
-        float sea = w.SeaLevel, mPer = K.H_RELIEF / MathF.Max(1e-6f, 1f - sea);   // metres per unit of elevation
-        float scale = n / 65536f, qMin = K.CAVE_Q_MIN * scale;
+        float sea = w.SeaLevel, mPer = Map.ReliefM / MathF.Max(1e-6f, 1f - sea);   // metres per unit of elevation
+        float qMin = K.CAVE_Q_MIN / Map.CellKm2;   // km2 of mean rain to cells (2026-11-01)
         Carbonate(w);
 
         // the mean year's water and the rock it can dissolve
@@ -80,7 +80,7 @@ public static class Caves
         var ca = new float[n]; var den = new float[n];
         for (int y = 0; y < FW; y++)
         {
-            float s = MathK.Sin(2f * MathF.PI * y / FW);
+            float s = Climate.SinLat(w, y);
             float t0 = K.T_REF + K.CLIMATE * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
             for (int i = y * FW; i < (y + 1) * FW; i++)
             {
@@ -99,7 +99,7 @@ public static class Caves
         var head = new float[n]; Array.Fill(head, float.MaxValue);
         var done = new bool[n]; var order = new int[n]; int no = 0;
         var pq = new PriorityQueue<int, (float, int)>();
-        float mouthQ = K.CHANNEL_A_MIN * scale;   // a valley with a stream (Hydrology's least channel head)
+        float mouthQ = K.CHANNEL_A_MIN / Map.CellKm2;   // a valley with a stream (Hydrology's least channel head)
         for (int i = 0; i < n; i++)
         {
             if (!IsKarst(i) || !Land(i)) continue;

@@ -139,7 +139,7 @@ public sealed partial class Player
     {
         int c = World.FIdx(x, y);
         float e = MathF.Max(w.Elev[c], w.SeaLevel);
-        return (e - w.SeaLevel) / MathF.Max(1e-3f, 1f - w.SeaLevel) * K.H_RELIEF;
+        return (e - w.SeaLevel) / MathF.Max(1e-3f, 1f - w.SeaLevel) * Map.ReliefM;
     }
 
     /// <summary>

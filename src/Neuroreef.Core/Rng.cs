@@ -47,5 +47,6 @@ public static class Rs
         Archive = 16, Bank = 17, Disease = 18, Weather = 19, Wind = 20, Compat = 21, Pond = 22,
         PathX = 23, PathY = 24,   // path-integration error (Revision P)
         PlantMut = 25, PlantCross = 26, PlantFound = 27, PlantPick = 40,   // plants (Revision S); PlantPick + 0..15 are its draws
-        Meet = 28;                // whether two animals' depths in the water meet this step (Respiration.Overlap)
+        Meet = 28,                // whether two animals' depths in the water meet this step (Respiration.Overlap)
+        Latitude = 29;            // the latitude a world sits at (World.LatDeg, 2026-11-01)
 }

@@ -71,7 +71,7 @@ public class ExploreTests
     public void OutOfRangeAndUnknownHitsAreRejected()
     {
         var (w, i) = One();
-        var p = PlaceAt(w, 40f, 20f);   // 20 units (over a km) away
+        var p = PlaceAt(w, 20f + 400f / Player.M_PER_UNIT, 20f);   // 400 m away, past a bow's 160 m (2026-11-01: in metres, not units)
         float e0 = w.Energy[i];
         Assert.Equal(Player.HitResult.OutOfRange, p.Hit(w, "spear-thrust", w.Serial[i], 1f, 0f, out _, out _));
         Assert.Equal(Player.HitResult.OutOfRange, p.Hit(w, "bow-shot", w.Serial[i], 1f, 0f, out _, out _));
@@ -130,7 +130,11 @@ public class ExploreTests
         Assert.True(f[F.O1_ARMED] > 0f, "and armed");
         Assert.Equal(Player.MEAT, f[F.O1_MEAT]);
         Assert.True(f[F.O2_CLOSE] > 0f, "the biggest in view too");
-        // it turns away and runs: a few steps later it is further off
+        // it turns away and runs: a few steps later it is further off. (2026-11-01, the 1 km world: a step's run is hundreds
+        // of metres, over half the 256 map, so after a few steps the torus brings it round again: it is checked on the way
+        // it heads, away from the person, every step, and its distance after the first)
+        float awayX = World.Delta1(w.X[i] - p.X), awayY = World.Delta1(w.Y[i] - p.Y);
+        int away = 0;
         for (int t = 0; t < 12; t++)
         {
             w.Step++;
@@ -139,8 +143,11 @@ public class ExploreTests
             Simulation.BuildFor(w);
             Decide.Run(w, i, new Decide.ProbeBuf());
             Resolve.Run(w, 1, 0);
+            if (MathF.Cos(w.Heading[i]) * awayX + MathF.Sin(w.Heading[i]) * awayY > 0f) away++;
+            if (t == 0) Assert.True(Dist() > d0 + 1f, $"fled from {d0:F2} to {Dist():F2} units");
+            awayX = World.Delta1(w.X[i] - p.X); awayY = World.Delta1(w.Y[i] - p.Y);
         }
-        Assert.True(Dist() > d0 + 1f, $"fled from {d0:F2} to {Dist():F2} units");
+        Assert.True(away >= 6, $"headed away from the person on {away} of 12 steps");   // (7 measured: the torus turns "away" round)
     }
 
     [Fact]

@@ -70,7 +70,7 @@ Point:
 |---|---|---|
 | 0 | f32 | x in field cells: cell (i, j) spans [i, i+1) × [j, j+1), so its centre is (i + 0.5, j + 0.5) |
 | 4 | f32 | y in field cells (y is the row) |
-| 8 | f32 | the river's width there, in cells (1..RIVER_W_MAX; it never narrows downstream) |
+| 8 | f32 | the river's true width there, in field cells (2026-11-01: Hydrology.WidthM / GEO_CELL_M, RIVER_WK √Q m with Q the mean discharge in m³/s; under 1 for a stream narrower than a cell, which every river of a 1 km map is: ~0.2–0.4 m (its catchments are ~0.1 km²). Draw it at this width × FCELL units. It never narrows downstream) |
 | 12 | f32 | its depth there, in normalised elevation (as World.Depth; the depth plane is this × 2000) |
 
 A river's points are the centreline points of its channel cells, one per cell, and a last point where it ends: on the river
@@ -196,7 +196,7 @@ Every text frame has a `type`:
 
 | type | When | Content |
 |---|---|---|
-| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`), `units` (real units, §2.1) |
+| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`), `units` (real units, §2.1), `latitude` (2026-11-01: the latitude the world sits at, degrees, < 0 south: a map a few km across is at one latitude, World.LatDeg) |
 | `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`; null when no one has explored), `units` (real units, §2.1), `bodyLenM` (every organism's body length in metres, §2.1) |
 | `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`; 2026-11-01 vehicles: each mode also `vehicle` (null on foot), `radiusM`, `rounds`, `heatPerShot`, `maxTimeS`, `depthMinM`, `depthMaxM`, `area`, `underwater`, `ignites`; `vehicles`: id, name, `realm` (land / water), `maxSpeedMps`, `maxSlopeDeg`, `wadeDepthM`, `minDepthM`, `stallMps`, `ceilingM`, `weapon` (a mode as above: jeep `jeep-gun` kind auto, plane `bomb` kind bomb, boat `torpedo` kind torpedo); `launchSlackM`) |
 | `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`, and for vehicles `vehicle` (or null), `alt`, `blasts`, `blastKills`, `fires`; null when no one has explored) |
@@ -211,17 +211,19 @@ Every text frame has a `type`:
 
 ### 2.1 Real units (2026-11-01)
 
-The world is in metres and hours: a world unit is `metresPerUnit` m (a field cell, FCELL = 4 units, is GEO_CELL_M = 218 m,
-so 54.5 m), a step is `stepHours` h (T_SEASON = 3000 steps are a year of 365.25 days, so 2.922 h), masses are kg. Every
+The world is in metres and hours: a world unit is `metresPerUnit` m (a field cell, FCELL = 4 units, is GEO_CELL_M = 16 m,
+so 4 m; 2026-11-01, the 1 km world: the default 256 map is 1.02 km across, 512 is 2.05 km, 1024 4.1 km, 2048 8.2 km), a step is `stepHours` h (T_SEASON = 3000 steps are a year of 365.25 days, so 2.922 h), masses are kg. Every
 distance an animal senses, moves or reaches is set in metres from allometries (docs/CONSTANTS.md, group Units) and
 divided by `metresPerUnit`. `meta.units` and every `status.units` carry:
 
 | Field | Value | Meaning |
 |---|---|---|
-| `metresPerUnit` | 54.5 | metres per world unit (positions in AGENTS are units: x · 65536 / WORLD) |
+| `metresPerUnit` | 4 | metres per world unit (positions in AGENTS are units: x · 65536 / WORLD) |
 | `stepHours`, `stepSeconds`, `stepsPerDay`, `stepsPerYear` | 2.922, 10519, 8.21, 3000 | the step's real duration |
-| `mapWidthM` | WORLD × 54.5 | the map's side in metres (28 km for a 512 map) |
-| `fieldCellM` | 218 | a field cell's side |
+| `mapWidthM` | WORLD × 4 | the map's side in metres (1.02 km for the default 256 map) |
+| `fieldCellM` | 16 | a field cell's side |
+| `reliefM` | 153 on 256 | the map's vertical scale (Map.ReliefM): a cell stands (e − sea) / (1 − sea) × reliefM m above the lakes; 257 m on 512, 431 on 1024, 725 on 2048. Draw the relief at true scale: RELIEF = reliefM × `fcell` / `fieldCellM` units (38 on 256). `meta.explore.hRelief` is the same |
+| `fcell` | 4 | world units per field cell |
 | `bodyLenM1kg` | 0.1 | body length of a 1 kg body before its shape genes (a cube of water of its mass) |
 | `sightM1kg`, `maxSightM` | 60, 332 | how far a 1 kg eye sees a 1 kg body; the farthest any eye sees |
 | `hearM1kg` | 870 | how far a full voice of a 1 kg body carries (× voice × M^(1/3)) |

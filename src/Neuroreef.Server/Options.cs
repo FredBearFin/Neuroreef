@@ -24,8 +24,10 @@ public sealed class Options
     // a region by default (2026-11-01, the owner: "the worlds are too damn big ... the world should be easy to see the
     // whole thing"): 512 units is 28 km, the whole of it in one view, with room for a range of mountains, a river system,
     // lakes and karst. The continent (1024; 2026-10-30: against 512 the same worlds kept 4-13 lineages instead of 3) and
-    // the supercontinent stay choices on the setup screen and --map / --world-map
-    public int PreMap = 512, WorldMap = 512;
+    // the supercontinent stay choices on the setup screen and --map / --world-map. 2026-11-01 (the owner: "a default world
+    // of ~1 km across, one valley with a stream, hills and a pond"): a valley, 256 units = 1 km at 16 m a
+    // field cell; the region (512, 2 km), continent (1024, 4 km) and supercontinent (2048, 8 km) stay choices
+    public int PreMap = 256, WorldMap = 256;
     public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;
     public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
@@ -115,9 +117,9 @@ public sealed class Options
   --founders N          prehistory: founders per ancestor (default 600)
   --branch-slots N      prehistory: animal slots each branch starts with (default 16384; it grows as needed)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
-  --map valley|region|continent|supercontinent        map of the prehistory (default region; 256/512/1024/2048 units,
-                        14/28/56/112 km across)
-  --world-map valley|region|continent|supercontinent  map of the world you watch (default region, as big as the prehistory)
+  --map valley|region|continent|supercontinent        map of the prehistory (default valley; 256/512/1024/2048 units,
+                        1/2/4/8 km across)
+  --world-map valley|region|continent|supercontinent  map of the world you watch (default valley, as big as the prehistory)
   --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
   --mating-drive X      strength of the breeding instinct (default 1)
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X

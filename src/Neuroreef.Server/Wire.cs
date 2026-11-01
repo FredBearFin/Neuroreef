@@ -72,7 +72,7 @@ public static class Wire
     /// as its cells): u32 river count R, u32 point count V; R records of u32 first point, u32 point count, i32 the river it
     /// joins (-1: none), u8 Strahler order, u8 end (0 joins a river, 1 a lake, 2 the sea), u16 0; then V points of f32 x,
     /// f32 y (field cells: cell (i, j) spans [i, i+1) x [j, j+1); unwrapped along a river, so take them modulo FW), f32
-    /// width (cells), f32 depth (normalised elevation, as the depth plane before x 2000). Largest river first
+    /// width (field cells, the true width: Hydrology.WidthM / GEO_CELL_M, under 1 for a stream narrower than a cell; 2026-11-01), f32 depth (normalised elevation, as the depth plane before x 2000). Largest river first
     /// (Hydrology.Lines).
     /// </summary>
     static void Rivers(Span<byte> b, List<Hydrology.RiverLine> lines, int nv)
@@ -112,7 +112,7 @@ public static class Wire
         if (nx >= 0)
             for (int k = 0; k < 8; k++)
                 if (((y + DirY[k] + FW) % FW) * FW + (x + DirX[k] + FW) % FW == nx) { dir = k; break; }
-        float q1 = K.CAVE_Q_MIN * (FW * FW / 65536f);
+        float q1 = K.CAVE_Q_MIN / Map.CellKm2;   // km2 to cells (2026-11-01)
         int size = (w.CaveKind[i] & Caves.Karst) == 0 ? 1 : Math.Clamp(1 + (int)MathF.Round(4f * MathF.Log2(MathF.Max(1f, w.CaveFlow[i] / q1))), 1, 31);
         return (byte)(size << 3 | dir);
     }
@@ -138,13 +138,13 @@ public static class Wire
     /// cell (open water outside the sea and the lakes, as Hydrology.Waters makes it) has bits 0-2 = the neighbour it drains to (WaterCycle's receiver, Recv:
     /// 0 east (+x), 1 +x+y, 2 +y, 3 -x+y, 4 -x, 5 -x-y, 6 -y, 7 +x-y) and bits 3-7 = its size class,
     /// 1 + round(4 · log2(Flow / river threshold)) clamped to 1..31: quarter octaves of the rain it gathers (Flow) over the
-    /// catchment at which a cell becomes river (RIVER_ACC, scaled to the map).
+    /// catchment at which a cell becomes river (RIVER_ACC, km2, in cells of GEO_CELL_M).
     /// </summary>
     static byte River(World w, int i)
     {
         if (w.Cell[i] == (byte)Realm.Land || w.Elev[i] < w.SeaLevel || w.LakeOf[i] >= 0) return 0;
         int FW = Map.FW, x = i % FW, y = i / FW;
-        float acc = K.RIVER_ACC * (FW * FW / 65536f);
+        float acc = K.RIVER_ACC / Map.CellKm2;   // km2 to cells (2026-11-01)
         int size = Math.Clamp(1 + (int)MathF.Round(4f * MathF.Log2(MathF.Max(1f, w.Flow[i] / acc))), 1, 31);
         int dir = -1, r = w.WaterOn ? w.Recv[i] : -1;
         if (r >= 0 && r != i)
@@ -319,6 +319,9 @@ public static class Wire
         metresPerUnit = K.M_PER_UNIT, stepHours = K.STEP_H, stepSeconds = K.STEP_S, stepsPerDay = K.STEPS_PER_DAY, stepsPerYear = K.T_SEASON,
         mapWidthM = Map.WidthM, fieldCellM = K.GEO_CELL_M, bodyLenM1kg = K.BODY_L_M, sightM1kg = K.C_SIGHT_M, hearM1kg = K.HEAR_R_M,
         maxSightM = K.MAX_SIGHT * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
+        // 2026-11-01 (the 1 km world): the map's vertical scale (Elev (1 - sea) above the lakes is this many metres) and
+        // the latitude it sits at, so the console draws the relief at true scale (RELIEF = reliefM x FCELL / fieldCellM)
+        reliefM = Map.ReliefM, fcell = K.FCELL,
     };
 
     /// <summary>
@@ -367,10 +370,11 @@ public static class Wire
                 phenotype = ProbePhenotype, diet = PR_DIET, w1 = PR_W1, w2 = PR_W2, end = PR_END, nh = G.NH, nin = G.NIN },
             landCells = Enumerable.Range(0, Map.FW * Map.FW).Count(i => w.Cell[i] == (byte)Realm.Land),
             units = Units(),   // 2026-11-01: real units (metres, hours)
+            latitude = w.LatDeg,   // 2026-11-01: the latitude the world sits at (degrees, < 0 south; World.LatDeg)
             // EXPLORE: the weapons (the server's table is the authority on range and damage) and the person's body
             explore = new
             {
-                metresPerUnit = Player.M_PER_UNIT, geoCellM = K.GEO_CELL_M, hRelief = K.H_RELIEF, playerMass = Player.MASS, maxHp = Player.MAX_HP,
+                metresPerUnit = Player.M_PER_UNIT, geoCellM = K.GEO_CELL_M, hRelief = Map.ReliefM, playerMass = Player.MASS, maxHp = Player.MAX_HP,
                 weapons = Weapons.All.Select(x => new { id = x.Id, name = x.Name, key = x.Key, primary = ModeJson(x.Primary), secondary = x.Secondary == null ? null : ModeJson(x.Secondary) }),
                 // VEHICLES: what the console drives (js/explore/vehicles) and the weapon each carries
                 vehicles = Vehicles.All.Select(v => new { id = v.Id, name = v.Name, realm = v.Realm, maxSpeedMps = v.MaxSpeedMps, maxSlopeDeg = v.MaxSlopeDeg,

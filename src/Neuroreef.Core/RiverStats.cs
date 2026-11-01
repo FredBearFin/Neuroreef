@@ -70,7 +70,7 @@ public static class RiverStats
         int FW = Map.FW, n = FW * FW;
         var R = new Result();
         float cellKm = K.GEO_CELL_M * 1e-3f;
-        float mPerElev = K.H_RELIEF / MathF.Max(1e-6f, 1f - w.SeaLevel);
+        float mPerElev = Map.ReliefM / MathF.Max(1e-6f, 1f - w.SeaLevel);
         var chan = new bool[n]; var donors = new int[n];
         int land = 0;
         for (int i = 0; i < n; i++)

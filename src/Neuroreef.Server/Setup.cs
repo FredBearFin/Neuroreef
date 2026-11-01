@@ -35,6 +35,7 @@ public static class Setup
         {
             bytesPerSlot = World.BytesPerSlot, ramBytes = ram, cores = Environment.ProcessorCount, evolve = o.Evolve,
             maxUnits = G.NH, maxSlots = World.MaxSlots, refUnits = K.BRAIN_START, mapSizes = Map.Sizes, mapNames = Map.Names,
+            metresPerUnit = K.M_PER_UNIT,   // 2026-11-01: the map sizes in km (256 units = 1 km)
             v = new
             {
                 preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds, climate = o.Climate,

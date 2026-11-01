@@ -57,7 +57,7 @@ public static class Vehicles
             {
                 int nx = World.WrapI(cx + (k == 0 ? 1 : k == 1 ? -1 : 0), FW), ny = World.WrapI(cy + (k == 2 ? 1 : k == 3 ? -1 : 0), FW);
                 int n = ny * FW + nx;
-                float gn = (MathF.Max(w.Elev[n], w.SeaLevel) - w.SeaLevel) / MathF.Max(1e-3f, 1f - w.SeaLevel) * K.H_RELIEF;
+                float gn = (MathF.Max(w.Elev[n], w.SeaLevel) - w.SeaLevel) / MathF.Max(1e-3f, 1f - w.SeaLevel) * Map.ReliefM;
                 if (MathF.Abs(gn - g) > tan * K.GEO_CELL_M) return "not flat enough to take off";
             }
         }
@@ -140,7 +140,7 @@ public sealed partial class Player
 
     /// <summary>Depth of water over cell c (m); 0 on land.</summary>
     public static float WaterDepthM(World w, int c)
-        => w.Cell[c] == (byte)Neuroreef.Realm.Land ? 0f : MathF.Max(0f, w.Depth[c]) / MathF.Max(1e-3f, 1f - w.SeaLevel) * K.H_RELIEF;
+        => w.Cell[c] == (byte)Neuroreef.Realm.Land ? 0f : MathF.Max(0f, w.Depth[c]) / MathF.Max(1e-3f, 1f - w.SeaLevel) * Map.ReliefM;
 
     public enum BlastResult { Exploded, NotPresent, UnknownWeapon, WrongVehicle, NoAmmo, BadTime, LaunchFar, OutOfRange, TooFast, NotInWater, BadDepth }
 
