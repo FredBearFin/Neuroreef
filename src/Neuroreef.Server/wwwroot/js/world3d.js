@@ -445,6 +445,7 @@ export class World3D {
         (e.appearance ||= new Float32Array(16)).set(o.appearance);
       }
       e.call = o.call; e.call2 = o.call2; e.call3 = o.call3; if (o.call) e.callT = now;
+      e.depth = o.depth; e.atDepth = o.atDepth;   // EXPLORE VEHICLES hook: where a swimmer is in the water column (torpedoes)
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;

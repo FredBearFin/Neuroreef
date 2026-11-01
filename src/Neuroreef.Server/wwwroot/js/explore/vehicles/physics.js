@@ -115,7 +115,7 @@ export function stepBoat(s, inp, T, h) {
 }
 
 // --------------------------------------------------------------------------------------------------------------- plane
-/** A light plane. Ground: rolls on its wheels (throttle, brake, steering), rotates and lifts off above stall speed with
+/** A light plane (thrust 0.6 g, drag giving spec.maxSpeedMps flat out). Ground: rolls on its wheels (throttle, brake, steering), rotates and lifts off above stall speed with
  *  the nose up; crashes on rough ground or water at speed. Air: flies where its nose points at the speed thrust and drag
  *  and the climb leave it; banks to turn (g tan(roll) / v); below spec.stallMps it loses lift, sinks and drops its nose.
  *  Touching the ground: lands if slow to sink (< 5 m/s), wings near level, nose not down, on dry and flat ground;
@@ -126,14 +126,16 @@ export function stepPlane(s, inp, T, h) {
   const stall = sp.stallMps || 38;
   s.throttle = clamp(s.throttle + ((inp.up ? 1 : 0) - (inp.down ? 1 : 0)) * 0.6 * h, 0, 1);
   const here = T.at(s.x, s.z), asl = s.y / uv;
-  const ceil = sp.ceilingM || 3000, thrust = 14 * s.throttle * clamp(1 - (asl - ceil) / 400, 0, 1);
+  // thrust 0.6 g at full throttle (a light plane climbs at ~30 degrees, not straight up); drag sets the top speed
+  const vmax = sp.maxSpeedMps || 110, T0 = 6;
+  const ceil = sp.ceilingM || 3000, thrust = T0 * s.throttle * clamp(1 - (asl - ceil) / 400, 0, 1);
   const pitchIn = (inp.back ? 1 : 0) - (inp.fwd ? 1 : 0), rollIn = (inp.right ? 1 : 0) - (inp.left ? 1 : 0), yawIn = (inp.yawR ? 1 : 0) - (inp.yawL ? 1 : 0);
-  const drag = 0.0012 * s.v * s.v;
+  const drag = (T0 / (vmax * vmax)) * s.v * s.v;
   if (s.onGround) {
     const fx = s.fx, fz = s.fz;
     const a = T.at(s.x + fx * 4 * uh, s.z + fz * 4 * uh), b = T.at(s.x - fx * 4 * uh, s.z - fz * 4 * uh);
     const slope = (a.g - b.g) / uv / 8, gp = Math.atan(slope);
-    let acc = thrust - drag - 0.3 - G * Math.sin(gp) - (inp.brake ? 6 : 0);
+    let acc = thrust - drag - 0.2 - G * Math.sin(gp) - (inp.brake ? 6 : 0);
     s.v = Math.max(0, s.v + acc * h);
     if (s.v < 0.2 && !s.throttle) s.v = 0;
     const steer = (yawIn + rollIn) * 0.5 * Math.min(1, s.v / 4 + 0.15);

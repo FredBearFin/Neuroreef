@@ -111,8 +111,8 @@ export class Fx {
   /** A patch of wake foam on the water behind a boat (or a torpedo's bubbles), widening and fading. */
   wake(pos, yaw, widthM, life = 5) {
     const u = this.u, w = widthM * u;
-    const it = this._add(QUAD, { color: 0xffffff, opacity: 0.55, order: 2 }, pos, 1, life, (q, f) => {
-      q.m.scale.set(w * (1 + 2.5 * f), 1, w * (0.7 + 2.5 * f)); q.m.material.opacity = 0.55 * (1 - f);
+    const it = this._add(QUAD, { color: 0xffffff, opacity: 0.3, order: 2 }, pos, 1, life, (q, f) => {
+      q.m.scale.set(w * (0.6 + 0.8 * f), 1, w * (0.5 + 1.6 * f)); q.m.material.opacity = 0.3 * (1 - f) * (1 - f);
     });
     it.m.rotation.y = -yaw; it.m.scale.set(w, 1, w * 0.7);
   }

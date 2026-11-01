@@ -5,14 +5,19 @@
 import * as THREE from 'three';
 
 const G = 9.81;
+/** A falling bomb's drag: dv/dt = -BOMB_DRAG |v| v (1/m). The bomb sight (index.js) falls with the same. */
+export const BOMB_DRAG = 0.0004;
 const tmp = { x: 0, z: 0, gy: 0, cy: 0, r: 0 };
 
-/** An animal's depth under the water (m), when the AGENTS records carry it (the respiration work, docs/ICD.md: a
- *  decoded `depthM` or `depth` on the agent); until then every swimmer is at the surface. */
-export function animalDepth(e) {
-  if (typeof e.depthM === 'number') return e.depthM;
-  if (typeof e.depth === 'number') return e.depth;
-  return 0;
+/** Two animals in water meet within this many metres of depth (K.STRIKE_DZ); a torpedo meets an animal the same way. */
+export const STRIKE_DZ = 5;
+
+/** The share of the time animal e is within STRIKE_DZ of depth z (m below the surface), as the server counts it
+ *  (Player.DepthOverlap): at its depth (AGENTS `depth`) for its share of the step (`atDepth`), at the surface the rest.
+ *  An animal out of water, or from a server without depths, is at the surface. */
+export function depthOverlap(e, z) {
+  const d = typeof e.depth === 'number' ? e.depth : 0, s = typeof e.atDepth === 'number' ? e.atDepth : 0;
+  return (Math.abs(d - z) <= STRIKE_DZ ? s : 0) + (z <= STRIKE_DZ ? 1 - s : 0);
 }
 
 /** Body half-length of an animal in metres, as the server counts it (Player.Blast: 0.25 M^(1/3)). */
@@ -33,7 +38,7 @@ export class Bomb {
     for (let k = 0; k < n; k++) {
       this.t += h;
       this.vel.y -= G * h;
-      this.vel.multiplyScalar(1 - 0.0004 * this.vel.length() * h);   // a little drag
+      this.vel.multiplyScalar(1 - BOMB_DRAG * this.vel.length() * h);   // a little drag
       this.pos.x += this.vel.x * h * T.uh; this.pos.z += this.vel.z * h * T.uh; this.pos.y += this.vel.y * h * T.uv;
       const a = T.at(this.pos.x, this.pos.z), floor = a.water ? a.s : a.g;
       if (this.pos.y <= floor || this.t > this.mode.maxTimeS) {
@@ -118,20 +123,20 @@ export class Torpedo {
       if (got) return;
       const a = this.T.at(e.x, e.y);
       if (!a.water) return;                               // an animal on land: the shore stops the torpedo first
-      const reach = 2 + bodyM(e);
-      if (dm <= reach && Math.abs(animalDepth(e) - this.depth) <= 2 + bodyM(e)) got = serial;
+      const reach = 4 + bodyM(e);   // a proximity fuse: within 4 m of its body
+      if (dm <= reach && depthOverlap(e, this.depth) >= 0.5) got = serial;   // it is mostly where the torpedo runs
     });
     return got;
   }
 
   _seek(world) {
     let best = 0, bd = 1e9;
-    const R = this.mode.radiusM || 14, fx = Math.cos(this.yaw), fz = Math.sin(this.yaw);
+    const fx = Math.cos(this.yaw), fz = Math.sin(this.yaw);
     this._near(world, 300, (serial, e, dx, dz, dm) => {
       if (dm < 1e-3) return;
       if ((dx * fx + dz * fz) / (dm * this.T.uh) < 0.6) return;   // ahead, within ~53 degrees
       if (!this.T.at(e.x, e.y).water) return;
-      if (Math.abs(animalDepth(e) - this.setDepth) > R) return;
+      if (depthOverlap(e, this.setDepth) <= 0) return;   // it never comes within reach of the torpedo's depth
       if (dm < bd) { bd = dm; best = serial; }
     });
     return best;

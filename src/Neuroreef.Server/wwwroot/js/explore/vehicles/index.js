@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { jeepModel, planeModel, boatModel, bombMesh, torpedoMesh, scorch } from './models.js';
 import { VehicleState, stepJeep, stepBoat, stepPlane } from './physics.js';
 import { Fx } from './effects.js';
-import { Bomb, Torpedo } from './arms.js';
+import { Bomb, Torpedo, BOMB_DRAG } from './arms.js';
 import { VehicleHud } from './hud.js';
 import { rayCreatures, rayGround } from '../weapons.js';
 
@@ -157,13 +157,14 @@ export class Vehicles {
     const a = T.at(v.x, v.z);
     v.y = v.kind === 'boat' ? a.s : a.g;
     this.link.send({ cmd: 'vehicle', kind: v.kind, x: v.x, y: v.z });
-    // far off: the person walks over to it (it is placed at the nearest valid spot, which may be a way off)
-    const dm = this._distM(ex.pos.x, ex.pos.z, v.x, v.z);
-    if (dm > 150) {
+    // out of reach: the person is taken over to it (it is placed at the nearest valid spot, which may be a way off)
+    const dm = this._distM(ex.pos.x, ex.pos.z, v.x, v.z), far = dm > ENTER_M * 0.8;
+    if (far) {
       const side = this._besideSpot(v);
       ex.setPose(side.x, side.z, Math.atan2(v.z - side.z, v.x - side.x), -0.15);
     }
-    ex.hud.message(`${v.spec.name} placed ${dm > 150 ? `${(dm / 1000).toFixed(1)} km away: you are beside it` : `${dm.toFixed(0)} m away`} · <b>E</b> to get in`, false, 3000);
+    const where = dm >= 1000 ? `${(dm / 1000).toFixed(1)} km` : `${dm.toFixed(0)} m`;
+    ex.hud.message(`${v.spec.name} placed ${where} away${far ? ': you are beside it' : ''} · <b>E</b> to get in`, false, 3000);
   }
 
   _onVehicle(r) {
@@ -224,8 +225,18 @@ export class Vehicles {
       for (const [ox, oz] of [[6, 0], [-6, 0], [0, 6], [0, -6]]) { const b = T.at(px + ox * uh, pz + oz * uh); if (!b.water || b.depthM < minD) return false; }
       return true;
     };
+    // facing the longest run of open water (up to 400 m), so it does not start with its bow on the shore
+    const heading = (px, pz) => {
+      let best = 0, run = -1;
+      for (let k = 0; k < 16; k++) {
+        const h = (k / 16) * Math.PI * 2; let r = 0;
+        while (r < 400) { const a = T.at(px + Math.cos(h) * (r + 10) * uh, pz + Math.sin(h) * (r + 10) * uh); if (!a.water || a.depthM < 1.5) break; r += 10; }
+        if (r > run) { run = r; best = h; }
+      }
+      return best;
+    };
     for (const need of [1.5, minD + 0.2]) {
-      for (const [px, pz, a] of this._rings(x, z, 25, 12000, 3)) if (ok(px, pz, need)) return [{ x: px, z: pz, yaw: a }];
+      for (const [px, pz] of this._rings(x, z, 25, 12000, 3)) if (ok(px, pz, need)) return [{ x: px, z: pz, yaw: heading(px, pz) }];
     }
     return [];
   }
@@ -285,6 +296,7 @@ export class Vehicles {
     if (!best.confirmed) { ex.hud.message('the server has not placed it yet', true, 1200); return; }
     this.cur = best;
     ex.yaw = best.yaw; ex.pitch = -0.08; this.camYaw = best.yaw; this.firing = false;
+    this.yaw0 = ex.yaw; this.pitch0 = ex.pitch;   // the plane's chase camera: the mouse's swing from here
     if (ex.vm) ex.vm.visible = false;
     this.hud.driving(best.kind);
     this.hud.prompt('');
@@ -399,7 +411,7 @@ export class Vehicles {
     if (v.trailT > 0 || sp < 2) return;
     const back = new THREE.Vector3(v.x - Math.cos(v.yaw) * 2.2 * T.uh, v.y, v.z - Math.sin(v.yaw) * 2.2 * T.uh);
     if (v.kind === 'boat') {
-      v.trailT = 0.07;
+      v.trailT = 0.12;
       back.x = v.x - Math.cos(v.yaw) * 5 * T.uh; back.z = v.z - Math.sin(v.yaw) * 5 * T.uh;
       back.y = T.at(back.x, back.z).s + 0.04 * T.uv;
       if (back.y === back.y) this.fx.wake(back, v.yaw, 2.5 + sp * 0.15, 5);
@@ -422,9 +434,11 @@ export class Vehicles {
         look = pos.clone().addScaledVector(fwd, 50 * u);
         cam.up.set(0, 1, 0).applyQuaternion(m.quaternion);
       } else {
+        // the chase camera trails the heading; the mouse swings it round the plane (ex.yaw/pitch since boarding)
+        const oy = this.camYaw + (ex.yaw - this.yaw0), op = Math.max(-0.5, Math.min(1.2, 0.24 - (ex.pitch - this.pitch0)));
         const c = m.position.clone().add(new THREE.Vector3(0, 2 * u, 0));
-        pos = c.clone().add(new THREE.Vector3(-Math.cos(this.camYaw) * 24 * u, 6 * u, -Math.sin(this.camYaw) * 24 * u));
-        look = c.clone().addScaledVector(fwd, 20 * u);
+        pos = c.clone().add(new THREE.Vector3(-Math.cos(oy) * Math.cos(op) * 25 * u, Math.sin(op) * 25 * u, -Math.sin(oy) * Math.cos(op) * 25 * u));
+        look = Math.abs(ex.yaw - this.yaw0) < 0.05 ? c.clone().addScaledVector(fwd, 20 * u) : c;
       }
     } else {
       const cp = Math.cos(ex.pitch), dir = new THREE.Vector3(cp * Math.cos(ex.yaw), Math.sin(ex.pitch), cp * Math.sin(ex.yaw));
@@ -519,7 +533,9 @@ export class Vehicles {
     let x = v.x, z = v.z, y = v.y, vx = Math.cos(v.pitch) * Math.cos(v.yaw) * v.v, vz = Math.cos(v.pitch) * Math.sin(v.yaw) * v.v, vy = v.vy;
     const h = 0.05;
     for (let t = 0; t < w.maxTimeS; t += h) {
-      vy -= 9.81 * h; x += vx * h * T.uh; z += vz * h * T.uh; y += vy * h * T.uv;
+      vy -= 9.81 * h;
+      const k = 1 - BOMB_DRAG * Math.hypot(vx, vy, vz) * h; vx *= k; vy *= k; vz *= k;   // as the bomb falls (arms.js)
+      x += vx * h * T.uh; z += vz * h * T.uh; y += vy * h * T.uv;
       const a = T.at(x, z), floor = a.water ? a.s : a.g;
       if (y <= floor) {
         this.sightRing.position.set(x, floor + 0.5 * this.u, z);
@@ -544,7 +560,7 @@ export class Vehicles {
     const vel = new THREE.Vector3(Math.cos(v.pitch) * Math.cos(v.yaw) * v.v, v.vy, Math.cos(v.pitch) * Math.sin(v.yaw) * v.v);
     this._send(v, true);   // the launch point is on the path the server records
     const b = new Bomb(this.world.scene, w, bombMesh(), p, vel, this.T, this.u);
-    b.launch = { x: this.T.wrap(v.x), z: this.T.wrap(v.z) };
+    b.launch = { x: this.T.wrap(v.x), z: this.T.wrap(v.z) }; b.wall0 = performance.now();
     this.shots.push(b);
     this.stats.bombs++;
   }
@@ -564,7 +580,7 @@ export class Vehicles {
     v.flashT = performance.now();
     this._send(v, true);
     const t = new Torpedo(this.world.scene, this.fx, w, torpedoMesh(), T.wrap(muz.x), T.wrap(muz.z), yaw, depth, this.homing, T, this.u);
-    t.launch = { x: T.wrap(v.x), z: T.wrap(v.z) };
+    t.launch = { x: T.wrap(v.x), z: T.wrap(v.z) }; t.wall0 = performance.now();
     this.shots.push(t);
     this.fx.splash(new THREE.Vector3(muz.x + Math.cos(yaw) * 2 * T.uh, T.at(muz.x, muz.z).s, muz.z + Math.sin(yaw) * 2 * T.uh), 1.2);
     this.stats.torpedoes++;
@@ -592,8 +608,12 @@ export class Vehicles {
     this.shake = Math.max(this.shake, Math.min(2.5, 2.5 * (1 - dm / 1500)));
     const id = ++this.blastId;
     if (this.cur) this._send(this.cur, true);
-    const msg = { cmd: 'blast', id, weapon: w.id, x: r.x, y: r.z, depth: r.depthM || 0, lx: s.launch.x, ly: s.launch.z, t: s.t };
+    // the flight's time: the server times the person's path by its own clock, so a slow frame rate (whose frames are
+    // capped at 0.1 s) must not make the flight look shorter than the wall time it took
+    const t = Math.min(w.maxTimeS, Math.max(s.t, (performance.now() - s.wall0) / 1000));
+    const msg = { cmd: 'blast', id, weapon: w.id, x: r.x, y: r.z, depth: r.depthM || 0, lx: s.launch.x, ly: s.launch.z, t };
     this.pendingBlasts.set(id, msg);
+    (this.stats.explosions ||= []).push({ id, weapon: w.id, why: r.why || 'impact', depthM: r.depthM || 0, serial: r.serial || 0, t, x: r.x, z: r.z });
     this.link.send(msg);
   }
 

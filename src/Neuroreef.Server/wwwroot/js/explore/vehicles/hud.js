@@ -14,7 +14,7 @@ const CSS = `
 #xv-menu .it em { font-style: normal; color: var(--accent, #4fd1c5); border: 1px solid var(--line2, #2a3a4a); border-radius: 3px; padding: 0 5px; }
 #xv-menu .it span { color: var(--dim, #8aa0b5); font-size: 11px; }
 #xv-menu .foot { margin-top: 8px; font-size: 10px; color: var(--faint, #6c8195); }
-#xv-panel { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: #070b10b8; border-radius: 7px; padding: 7px 14px; display: none; gap: 18px; align-items: center; font-size: 11px; }
+#xv-panel { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); white-space: nowrap; background: #070b10b8; border-radius: 7px; padding: 7px 14px; display: none; gap: 18px; align-items: center; font-size: 11px; }
 #xv-panel .big { font-size: 22px; color: #fff; line-height: 1; }
 #xv-panel .lbl { color: var(--dim, #8aa0b5); font-size: 10px; }
 #xv-panel .col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -23,7 +23,7 @@ const CSS = `
 #xv-weapon { border: 1px solid var(--accent, #4fd1c5); border-radius: 4px; padding: 3px 8px; color: #fff; background: #12353a; }
 #xv-help { position: absolute; left: 10px; bottom: 64px; font-size: 10px; color: var(--faint, #6c8195); line-height: 1.45; background: #070b1080; padding: 5px 7px; border-radius: 5px; display: none; }
 #xv-sightinfo { position: absolute; left: 50%; top: calc(50% + 40px); transform: translateX(-50%); font-size: 11px; color: #ffb3a8; text-shadow: 0 0 3px #000; }
-body.driving #xp-weapons, body.driving #xp-help, body.driving #xp-draw { display: none !important; }
+body.driving #xp-weapons, body.driving #xp-help, body.driving #xp-draw, body.driving #xp-info { display: none !important; }
 body.driving #xv-help { display: block; }
 `;
 

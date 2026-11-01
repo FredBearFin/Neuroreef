@@ -23,7 +23,7 @@ public static class Vehicles
     public static readonly VehicleSpec[] All =
     {
         new("jeep", "jeep", "land", 28f, 35f, 0.9f, 0f, 0f, 0f,
-            new("jeep-gun", "mounted rifle", "auto", 350f, 30f, 0f, 0.12f, true, Vehicle: "jeep", Rounds: 400, HeatPerShot: 0.035f)),
+            new("jeep-gun", "mounted rifle", "auto", 350f, 30f, 0f, 0.12f, true, Vehicle: "jeep", Rounds: 400, HeatPerShot: 0.07f)),
         new("plane", "plane", "land", 110f, 6f, 0f, 0f, 38f, 3000f,
             new("bomb", "bomb", "bomb", 3000f, 600f, 125f, 0.6f, true, Vehicle: "plane", RadiusM: 35f, Rounds: 12, MaxTimeS: 40f, Area: true, Ignites: true)),
         new("boat", "boat", "water", 16f, 0f, 0f, 0.4f, 0f, 0f,
@@ -78,9 +78,19 @@ public sealed partial class Player
     /// <summary>Rounds left per area weapon (bombs, torpedoes), filled when its vehicle is spawned.</summary>
     public readonly Dictionary<string, int> Rounds = new();
     public int BlastKills, Blasts, FiresStarted;
-    /// <summary>The water depth of animal i (m below the surface) for underwater weapons; null: every animal is at the
-    /// surface (until the AGENTS records carry a swimmer's depth, docs/ICD.md).</summary>
-    public Func<World, int, float>? DepthOf;
+
+    /// <summary>The share of a blast at depthM (m below the surface; 0 a bomb) that reaches animal i in the water column,
+    /// as two animals meet there (Respiration.Overlap, with the blast at its depth for the whole step): i is at its depth
+    /// World.Z for its share of the step ZShare and at the surface the rest, and is reached where it is within STRIKE_DZ
+    /// of the blast. 1 for an animal out of water (ZShare 0) and a blast at the surface; a torpedo running deep misses an
+    /// animal at the surface, and a surface shot misses a fish that stays deep.</summary>
+    public static float DepthOverlap(World w, int i, float depthM)
+    {
+        float z = w.Z[i], s = w.ZShare[i], p = 0f;
+        if (MathF.Abs(z - depthM) <= K.STRIKE_DZ) p += s;
+        if (depthM <= K.STRIKE_DZ) p += 1f - s;
+        return p;
+    }
 
     // the person's recent path: where it was placed and when (a ring), so a launch point can be checked against it
     const int PATH_N = 512;
@@ -156,8 +166,8 @@ public sealed partial class Player
     /// the vehicle's top speed of where it was placed between the launch, flightS ago, and now); the explosion is within
     /// the weapon's range of the launch point, and no further than its top speed could carry it in that time; a torpedo
     /// explodes in or at the edge of water, at a depth it can run at. Then every living animal within the blast radius
-    /// (m; the distance in 3D under water, from the torpedo's depth to the animal's, DepthOf) takes the weapon's damage
-    /// scaled by 1 - d / R: falling off to 0 at the edge, nothing beyond it. Each one hurt feels pain and the learner is
+    /// (m, across) takes the weapon's damage scaled by 1 - d / R, falling off to 0 at the edge, nothing beyond it, and by
+    /// how much of the step its depth overlaps the blast's (DepthOverlap: as strikes in water, within STRIKE_DZ). Each one hurt feels pain and the learner is
     /// told, as for a hit (Damage); one killed dies of Cause.Hunted, its body left as carrion. The blast leaves a burst of
     /// scent where it went off, which the animals around read as fear (Decide: FEAR), and a bomb sets the plants of its
     /// field cell alight if they would burn (Fields.IgniteAt). A rejected explosion changes nothing.
@@ -206,11 +216,13 @@ public sealed partial class Player
             float dx = World.Delta1(w.X[i] - x), dy = World.Delta1(w.Y[i] - y);
             if (MathF.Abs(dx) > Ru + 1f || MathF.Abs(dy) > Ru + 1f) continue;
             float dh = MathF.Sqrt(dx * dx + dy * dy) * M_PER_UNIT;
-            float dz = m.Underwater ? (DepthOf != null ? DepthOf(w, i) : 0f) - depthM : 0f;
             // its body's own size counts: the blast reaches its near side (half a body of about 0.5 M^(1/3) m: 1.7 m at M 40)
-            float dist = MathF.Max(0f, MathF.Sqrt(dh * dh + dz * dz) - 0.25f * MathK.Cbrt(w.PM[i]));
+            float dist = MathF.Max(0f, dh - 0.25f * MathK.Cbrt(w.PM[i]));
             if (dist >= R) continue;
-            float f = 1f - dist / R;
+            // in the water column only where the depths overlap (a bomb goes off at the surface)
+            float reach = DepthOverlap(w, i, depthM);
+            if (reach <= 0f) continue;
+            float f = (1f - dist / R) * reach;
             uint ser = w.Serial[i]; int sp = w.Spc[i];
             bool killed = Damage(w, i, m.Damage * f, out float loss);
             rep.Victims.Add((ser, sp, loss, killed));

@@ -96,25 +96,40 @@ public class VehicleTests
     {
         var w = Flat(Realm.Deep);
         const float X = 30f, Y = 30f;
-        int surface = Animal(w, X, Y), deep = Animal(w, X + U(2f), Y);
-        float eSurface = w.Energy[surface];
+        int surface = Animal(w, X, Y), deep = Animal(w, X + U(2f), Y), deep2 = Animal(w, X, Y + U(2f));
+        // the swimmers' places in the water column (Respiration: World.Z for the share ZShare of the step, else at the
+        // surface): one at the surface all the time, two that stay 24 m down
+        w.Z[surface] = 0f; w.ZShare[surface] = 0f;
+        w.Z[deep] = 24f; w.ZShare[deep] = 1f;
+        w.Z[deep2] = 24f; w.ZShare[deep2] = 1f;
+        float eSurface = w.Energy[surface], eDeep2 = w.Energy[deep2];
         var p = InVehicle(w, "boat", X - U(300f), Y);
-        // the swimmers' depths as the AGENTS records will carry them: one at the surface, one 24 m down
-        p.DepthOf = (ww, i) => i == deep ? 24f : 0f;
         p.Clock = 12.0; p.Place(X - U(250f), Y, 0f, false);
+        // a torpedo running 25 m down: the deep fish dies, the one at the surface (21 m above, past STRIKE_DZ) is untouched
         var r = p.Blast(w, "torpedo", X, Y, 25f, X - U(300f), Y, 12f, out var rep);
         Assert.Equal(Player.BlastResult.Exploded, r);
-        Assert.Equal(St.Dead, w.StageOf[deep]);
+        Assert.Equal(St.Dead, w.StageOf[deep]); Assert.Equal(St.Dead, w.StageOf[deep2]);
         Assert.Equal(St.Adult, w.StageOf[surface]);
-        Assert.Equal(eSurface, w.Energy[surface]);
-        Assert.Single(rep.Victims);
+        Assert.Equal(eSurface, w.Energy[surface]); Assert.Equal(0f, w.Pain[surface]);
+        Assert.Equal(2, rep.Victims.Count);
 
-        // without depths on the wire every swimmer is at the surface: a torpedo set to run 2 m down catches it
-        p.DepthOf = null;
+        // and the other way: a shot at the surface (a torpedo set 2 m down) kills the surface swimmer, misses a deep one
+        int deep3 = Animal(w, X + U(1f), Y + U(1f)); w.Z[deep3] = 24f; w.ZShare[deep3] = 1f;
+        float eDeep3 = w.Energy[deep3];
         p.Clock = 30.0; p.Place(X - U(250f), Y, 0f, false);
         r = p.Blast(w, "torpedo", X, Y, 2f, X - U(300f), Y, 15f, out rep);
         Assert.Equal(Player.BlastResult.Exploded, r);
         Assert.Equal(St.Dead, w.StageOf[surface]);
+        Assert.Equal(St.Adult, w.StageOf[deep3]); Assert.Equal(eDeep3, w.Energy[deep3]);
+
+        // a diver deep for half the step and at the surface the rest is reached for half the damage either way
+        int diver = Animal(w, 1f, 1f); w.Z[diver] = 24f; w.ZShare[diver] = 0.5f;
+        Assert.Equal(0.5f, Player.DepthOverlap(w, diver, 2f), 5);
+        Assert.Equal(0.5f, Player.DepthOverlap(w, diver, 25f), 5);
+        // an animal out of water is at the surface: a bomb reaches it, a deep torpedo does not
+        int ashore = Animal(w, 2f, 2f); w.Z[ashore] = 0f; w.ZShare[ashore] = 0f;
+        Assert.Equal(1f, Player.DepthOverlap(w, ashore, 0f)); Assert.Equal(0f, Player.DepthOverlap(w, ashore, 25f));
+        _ = eDeep2;
     }
 
     [Fact]
