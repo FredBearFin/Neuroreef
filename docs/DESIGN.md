@@ -949,7 +949,8 @@ saves load with the default. With the default range a run is bit for bit what it
 of these sizes and warns that giants need a much bigger map; the map is never resized for you. One law had to be mended
 for giants: the leg-load term of walking speed (LOAD_DRAG x M^(1/3) x ...) is negative for bodies whose legs share the
 load better than the reference, and above ~14 t with three or four leg pairs made the speed negative or infinite; the
-gain is now at most twice the plain body's speed (it never binds up to 1.7 t).
+gain was held to at most twice the plain body's speed. (2026-11-01, later: that floor is gone; the load model is now
+the bones' safety factor, §9.2b, positive and finite for any mass and leg count.)
 
 **Big brains fixed** (2026-10-30, found after the user saw the big-brained founders kill each other at once): the
 brain size was stored in a byte, so a 256-unit brain ran with 0 memory units while paying for 256; it is now a ushort.
@@ -1870,8 +1871,8 @@ because its genes differ moves to the nearest allowed cell, or dies.
 
 ### 9.2b Locomotion physics (2026-10-31)
 
-- **Who flies.** Power available from flight muscle ~ wings·M^0.7, least power required ~ M^(7/6)
-  (Pennycuick 1968, 2008; Ellington 1991). A body flies when the margin wings·(FLY_M_MAX/M)^(7/6 − 0.7) ≥ 1:
+- **Who flies.** Power available from flight muscle ~ wings·M^(2/3), least power required ~ M^(7/6)
+  (Pennycuick 1968, 2008; Ellington 1991). A body flies when the margin wings·(FLY_M_MAX/M)^(7/6 − 2/3) ≥ 1:
   nothing above FLY_M_MAX = 16 flies (M = 1 is taken as ~1 kg; the heaviest fliers are 12-18 kg). Takeoff also
   needs wings ≥ FLY_WING_MIN at any size (flight muscle ≥ ~16% of body mass, Marden 1987).
 - **Flight costs by the hour.** The least power of flight is FlightPowerMin(M) = FLIGHT_MULT·C_BASAL·M^(7/6)
@@ -1887,6 +1888,34 @@ because its genes differ moves to the nearest allowed cell, or dies.
   cannot land where it is pays the whole step's power, moving or not. Walking's cost per step at top speed is
   ~1.0-1.3× basal net, below Taylor et al. 1982 for continuous walking (~4.7× BMR at 1.5 m/s for 1 kg), as befits a
   step's average travel: locomotion is ~8% of this world's spending, as in field energy budgets.
+- **Taking off (2026-11-01).** A landed flier takes off only if its flight muscle can lift it now (Body.CanTakeOff):
+  muscle power falls with core temperature as the body's chemistry does (Heat.Rate, Q10 ~2.3; muscle power Q10 2-3,
+  Bennett 1984, 1985), so its effective muscle is wings·Rate(core) and must reach FLY_WING_MIN (Marden 1987) and the
+  power margin times Rate(core) must reach 1. A cold ectotherm cannot fly until it is warm (Heinrich 1974, 1993);
+  sun on open ground warms it, endothermy (B_ENDO) keeps it warm. Once in the air its muscle's heat keeps it warm.
+  A load (gut contents, a live-bearer's young at half birth mass on average; Body.FlightLoad) lowers the muscle share
+  by body/(body + load) and raises the least power as ((body + load)/body)^(3/2), its speed as the square root
+  (Pennycuick 1975, 2008): a full gut makes flight dearer and can ground a weak flier. Each airborne step that starts
+  or ends on the ground pays a take-off and climb-out of TAKEOFF_S = 15 s of least power (Askew et al. 2001; Nudds &
+  Bryant 2000), small against a step of hours.
+- **Wings on the ground (2026-11-01, round 2).** One continuous function of the wing gene w for every body, flier or not:
+  land speed × (1 + GLIDE·w)(1 − FLY_MUSCLE_MAX·w). Flight muscle (FLY_MUSCLE_MAX·w of its mass, 35% at w = 1) is
+  tissue that is not leg (Heers & Dial 2015); flapping while running gives part back (Dial 2003). Net, wings cost a
+  runner a little (×0.96 at w = 0.45, ×0.85 at w = 1). Until then the gain applied below the flight threshold and the
+  clumsiness above it, a jump from ×1.13 to ×0.84.
+- **Fledging.** A juvenile's flight-muscle share is the adult's × (mass/adult mass)^FLY_MUSCLE_ALLO (1.2; Ricklefs
+  1979, Choi et al. 1993), and its take-off test (muscle share, power margin at its own mass) uses it: with full wings
+  it flies from ~52% of adult mass, with w = 0.6 from ~79%, at the smallest flying wing only as an adult.
+- **Load and top speed.** In the air its top speed is the loaded speed of least power (× √(W/W0)) times where the power
+  curve meets the loaded margin (Body.LoadedTopAirSpeed; Pennycuick 1975, 2008): a load lowers it wherever power binds
+  and leaves only v_mp when the loaded margin is below 1. Where FLY_X_MAX binds (a big margin) a load raises it with
+  √W, as in real birds. Climb is not modelled as height; a loaded margin ≥ 1 at take-off is a positive rate of climb.
+- **Flight muscle upkeep.** COST_WING = 0.6 × basal per unit wing: +27-48% over Kleiber's mammal for wings 0.45-0.8,
+  as bird BMR is ~30-50% above mammals' (McKechnie & Wolf 2004; Londoño et al. 2015). It is basal, so a cold core
+  lowers it (Heat.Rate) and an endothermic flier pays it in full.
+- **Raptors land on the kill.** A flier that kills prey on the ground from the air comes down on it (its position is
+  the kill's, speed 0) when it can stand there, and must take off again (warm muscle, the meal as load). Prey taken in
+  the air, or over water it cannot stand in, is eaten on the wing.
 - **Landed.** There is no "take off" output. A flier that rests, eats food that is here, drinks water within
   reach, or goes no faster than it walks,
   lands wherever it can stand (land; shallow water if it has legs or swims; deep water if it swims well enough)
@@ -1897,9 +1926,13 @@ because its genes differ moves to the nearest allowed cell, or dies.
   of transport every walker pays, the swing share grows with leg size × pairs (against LEG_PAIRS_REF = 2) and with
   speed against its top speed. On rough ground (the largest rise to a neighbour cell, ROUGH_REF fully rough) a body
   walks at 1/(1 + ROUGH_SLOW·rough·M^(−1/3)·(1 − stability)), stability = LEG_STAB·legs·(pairs − 1)/3: many legs
-  steady a small body (Ting, Blickhan & Full 1994). The legs carry the body's weight: land speed is divided by
-  1 + LOAD_DRAG·M^(1/3)·((1 + armour)/√pairs − 1/√2) (bone stress ~M^(1/3), Biewener 1989), so more legs help most
-  a heavy or armoured body; in water and air armour adds ARMOUR_DRAG·armour/√2 of drag.
+  steady a small body (Ting, Blickhan & Full 1994). The legs carry the body's weight (2026-11-01, Body.LandLoadFactor):
+  peak bone stress ~ (1 + armour)·M^(1/3)/EMA/(pairs/2), the posture (EMA) straightening as M^0.26 up to POSTURE_M =
+  300 kg and no further (Biewener 1989, 1990), so stress is nearly constant up to ~300 kg and rises as M^(1/3) above.
+  Muscles and bones each limit speed; the two limits add as 1/v = 1/v0 + 1/v_bone, v_bone ~ allowed/static stress
+  (the safety factor kept at 2-4; Alexander 1977, Biewener 1990): v = v0·(1 + BONE_LOAD)/(1 + BONE_LOAD·s), s the
+  stress against an unarmoured two-pair 1 kg body. Positive and finite for any mass and leg count, with no floor;
+  above the limit a body is held to a slow walk. In water and air armour adds ARMOUR_DRAG·armour/√2 of drag.
 
 ### 9.3 Gut, digestion and intake (NR-302)
 

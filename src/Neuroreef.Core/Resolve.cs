@@ -71,6 +71,26 @@ public static class Resolve
             bool settle = rest || feed || sip || spd <= vGround;
             canLand = w.GroundAllows(i, c0);
             airborne = !(settle && canLand);
+            // one on the ground takes off only if its flight muscle is warm enough and its load light enough (Body.CanTakeOff,
+            // 2026-11-01: a cold ectotherm cannot fly until it is warm, a full gut raises its wing loading); in the air its
+            // muscle's own heat keeps it warm. Where it cannot stand it is in the air already
+            if (airborne && canLand && !w.Airborne(i))
+            {
+                float muscleT = 1f;
+                if (Climate.On)
+                {
+                    bool wet = (w.Cell[c0] & (byte)Realm.Water) != 0;
+                    muscleT = Heat.Rate(Heat.Core(Heat.Operative(w, c0, w.PInsul[i], wet), w.PEndo[i]));
+                }
+                if (!Body.CanTakeOff(w.PWings[i], w.PM[i], mass, Body.FlightLoad(w, i), muscleT)) airborne = false;
+            }
+            // in the air its load (and a juvenile's smaller flight muscle) sets how fast it can fly (Body.LoadedTopAirSpeed)
+            if (airborne)
+            {
+                float load = Body.FlightLoad(w, i);
+                float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
+                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f)));
+            }
             if (!airborne) spd = MathF.Min(spd, vGround);
         }
         if (spd > 0 && !Move(w, i, nx, ny, h, spd, !airborne, out nx, out ny, out float fraction))
@@ -220,7 +240,17 @@ public static class Resolve
                     if (dg != null) { dg.StrReach[dgG]++; if (preyEat) dg.PreyEat[dgG]++; if (w.Spc[v] == s) dg.StrKin[dgG]++; }
                     if (strikeAttempt) metrics?.Apply(P.STRIKE);
                     if (preyEat) metrics?.Apply(P.EAT);
+                    float vx = w.X[v], vy = w.Y[v];
+                    bool victimAloft = w.Airborne(v);
                     r += Strike(w, i, v, gutCap, emax);
+                    // a flier that kills ground prey from the air comes down on it to eat it (2026-11-01): raptors stoop,
+                    // kill and feed on the ground; only prey taken in the air, or over water it cannot stand in, is eaten
+                    // on the wing. It is landed there, so it pays a take-off (warm muscle, the meal as load) to fly on
+                    if (airborne && !victimAloft && w.StageOf[v] == St.Dead)   // killed (its slot freed)
+                    {
+                        int vc = World.FIdx(vx, vy);
+                        if (w.GroundAllows(i, vc)) { PathMemory.Integrate(w, i, World.Delta1(vx - w.X[i]), World.Delta1(vy - w.Y[i])); w.X[i] = vx; w.Y[i] = vy; w.Speed[i] = 0f; }
+                    }
                 }
             }
             else if (v == Player.Slot && w.Player is { Present: true } pl)
@@ -417,10 +447,18 @@ public static class Resolve
         {
             // the speed of least power in this world: its top air speed over how far above it power lets it fly (when
             // FLY_V_CAP holds the top speed down, the whole curve is compressed with it)
-            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
-            float p = Body.FlightPowerMin(mass) * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
-            float duty = canLand ? MathF.Min(1f, spd / Body.FlightFullStep(mass)) : 1f;
-            return MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty * coat;
+            // a load (a full gut, young carried inside, Body.FlightLoad) at fixed wings raises the least power as
+            // (total / body)^(3/2) and the speed of least power as its square root, so the cost per distance rises in
+            // proportion to the weight (induced power ~W^2 / V, V_mp ~W^(1/2): Pennycuick 1975, 2008) (2026-11-01)
+            float wl = (mass + Body.FlightLoad(w, i)) / mass, wlRoot = MathK.Pow(wl, 0.5f), pLoad = wl * wlRoot;
+            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i])) * wlRoot;
+            float pMin = Body.FlightPowerMin(mass) * pLoad;
+            float p = pMin * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
+            float duty = canLand ? MathF.Min(1f, spd / (Body.FlightFullStep(mass) * wlRoot)) : 1f;
+            // a step in the air that starts or ends on the ground has a take-off and climb-out, dearer than cruising
+            // (TAKEOFF_S of least power: Pennycuick 2008; Askew, Marsh & Ellington 2001; Nudds & Bryant 2000)
+            float takeoff = canLand ? pMin * K.TAKEOFF_S / K.STEP_S : 0f;
+            return (MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty + takeoff) * coat;
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)

@@ -189,12 +189,12 @@ public class EcologyTests
         Assert.True(checkedMasses >= 8);
     }
 
-    [Fact] // the flight ceiling comes from power: available ~wings x M^0.7, required ~M^(7/6); nothing above FLY_M_MAX flies
+    [Fact] // the flight ceiling comes from power: available ~wings x M^(2/3), required ~M^(7/6); nothing above FLY_M_MAX flies
     public void LargeBodiesCannotFly()
     {
         Assert.True(Body.FlightMargin(1f, 0.99f * K.FLY_M_MAX) >= 1f);
         Assert.True(Body.FlightMargin(1f, 1.01f * K.FLY_M_MAX) < 1f);
-        Assert.True(Body.FlightMargin(0.5f, 4f) < 1f && Body.FlightMargin(0.5f, 3f) >= 1f);   // half wings: ceiling ~3.6
+        Assert.True(Body.FlightMargin(0.5f, 4.5f) < 1f && Body.FlightMargin(0.5f, 3.5f) >= 1f);   // half wings: ceiling 16 x 0.5^2 = 4
         Assert.InRange(K.FLY_M_MAX, 12f, 19f);
         // and at any size, wings too small to lift the body's weight do not fly, however big the margin (Marden 1987)
         { var w = new World(16, 1); w.Genome[G.B_MASS] = -127; w.Genome[G.B_WINGS] = -60; Body.Express(w, 0);
@@ -632,15 +632,16 @@ public class EcologyTests
         Assert.Equal(0, w.Flags[b] & Flag.Carrying);
     }
 
-    [Fact] // DESIGN §6.3: wings too small to fly still speed a runner (wing-assisted running)
-    public void PartialWingsHelpARunner()
+    [Fact] // DESIGN §6.3: wings too small to fly change a runner's speed only a little: flapping while running gives back most
+           // of what their muscle's dead load costs (wing-assisted running, Body.WingGroundFactor, 2026-11-01)
+    public void PartialWingsCostARunnerLittle()
     {
         var w = new World(16, 1);
         w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_MASS] = 60;
         w.Genome[G.B_WINGS] = -127; Body.Express(w, 0); float none = w.PVLand[0];
         w.Genome[G.B_WINGS] = -20; Body.Express(w, 0);
         Assert.NotEqual(Loco.Fly, w.LocoOf(0));
-        Assert.True(w.PVLand[0] > none);
+        Assert.InRange(w.PVLand[0] / none, 0.93f, 1f);
     }
 
     [Fact] // DESIGN §7.7 (Revision J): every founder carries the mating instinct; it is stronger in males
