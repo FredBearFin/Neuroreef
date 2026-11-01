@@ -49,6 +49,8 @@ export class World3D {
     this.W = meta.world;
     // how big bodies and plants are drawn: true size x the view's magnification (js/scale.js)
     this.scale = new Scale(meta.explore && meta.explore.metresPerUnit);
+    this.scale.fromServer(meta.units);
+    this.lenM = new Map();            // serial -> true body length (m), from status.bodyLenM
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(max-width: 900px)').matches ? 1.25 : 2));
@@ -1069,7 +1071,24 @@ export class World3D {
   _eggR(e) { return Math.max(0.12 * (e.size || 1.5) * this.scale.bodyK, 0.04 * this.scale.upm); }
 
   /** Drawn size of an organism (its own mass; juveniles smaller), in world units: the true size x the magnification. */
-  _size(e) { return (e.size || 1.5) * (e.stage === 1 ? 0.55 : 1) * this.scale.bodyK; }
+  _size(e) { return (e.size || 1.5) * this._grown(e) * this.scale.bodyK; }
+
+  /** Its length now against its adult length: from the server's true length (status.bodyLenM) when it has one; else a
+   *  juvenile is 0.55 of it. The adult length is lengthK M^(1/3) times its length gene's share of the volume (ICD §2.1),
+   *  as the body shader draws it. */
+  _grown(e) {
+    const L = e.serial !== undefined ? this.lenM.get(e.serial) : undefined;
+    if (L === undefined || !e.mass) return e.stage === 1 ? 0.55 : 1;
+    const a = e.appearance, ax = (i) => Math.pow(2, 2 * (a ? a[i] : 0.5) - 1);
+    const adult = this.scale.lengthK * Math.cbrt(e.mass) * ax(0) / Math.cbrt(ax(0) * ax(1) * ax(2));
+    return Math.min(1.25, Math.max(0.15, L / adult));
+  }
+
+  /** status.bodyLenM: [serial, metres, ...] for every living organism. */
+  setBodyLengths(list) {
+    const m = this.lenM; m.clear();
+    for (let i = 0; i + 1 < list.length; i += 2) m.set(list[i], list[i + 1]);
+  }
 
   /** Body mass of an organism (juveniles about half). */
   _mass(e) { return (e.mass || 1) * (e.stage === 1 ? 0.5 : 1); }

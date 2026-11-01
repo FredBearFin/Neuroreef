@@ -14,8 +14,9 @@ should be easy to see the whole thing", "we don't need worlds that reach 60k pop
 - The overview opens on the whole map (fitWorld: centred, from above at a gentle tilt); Home or the Whole world button
   returns to it; the wheel zooms toward the cursor (from the whole map to a few metres in ~60 notches) and a double-click
   dives to a quarter of the distance there; the view centre follows the ground and the camera never goes under it.
-- Bodies are drawn at their true length, 0.1 M^(1/3) m (1 kg 10 cm, 40 kg 34 cm; the server's own metres per unit and
-  length coefficient replace these when the status message carries them), times the overview's "creature size" control
+- Bodies are drawn at their true length, 0.1 M^(1/3) m times the length gene's share of the body (ICD §2.1: 1 kg about
+  10 cm, 40 kg about 34 cm; metres per unit and bodyLenM1kg from meta/status.units, and each juvenile's present length
+  from status.bodyLenM), times the overview's "creature size" control
   (x1, 2, 5, 10, 20, 50, 100; default x20, labelled as magnified; keys [ and ]). Plants are drawn at the sim's plant
   height in metres (trees 3-45 m, shrubs up to 4 m, grass tufts 0.5 m, boulders a few metres), times the fourth root of
   the creatures' factor (x2.1 at x20), as many to a field cell as its cover fits crowns of that size. Explore is always

@@ -267,7 +267,8 @@ function status(s) {
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
   if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
-  if (world && world.scale.fromServer(s)) world.setMagnification(world.scale.mag);   // the sim's own metres, when it sends them
+  if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.mag);   // the sim's own metres (ICD §2.1)
+  if (world && s.bodyLenM) world.setBodyLengths(s.bodyLenM);   // each animal's true length (a juvenile's grows)
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +
     (s.rain < -0.15 ? ' · drought year' : s.rain > 0.15 ? ' · wet year' : '');
   $('s-random').classList.toggle('hidden', s.bankSource !== 'random' || s.phase !== 'live');

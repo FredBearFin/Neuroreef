@@ -1,11 +1,12 @@
 // How big things are drawn (2026-11-01, the owner: "animals and plants look gigantic and crowded").
 //
 // The land is drawn at true scale: a field cell (FCELL = 4 units) is GEO_CELL_M = 218 m, so a unit is 54.5 m (the
-// sim's own metres per unit, meta.explore.metresPerUnit / status.metresPerUnit when the server sends it). Bodies
+// sim's own metres per unit, meta.units / status.units, ICD §2.1). Bodies
 // and plants used to be drawn ~100-400x too big (a 1 kg animal 80 m long, shrubs 50 m). Now:
 //
 // - an animal's body length (snout to rump) is lengthK x M^(1/3) m (M in kg; lengthK = 0.1 m kg^-1/3 unless the
-//   server sends its own, status.bodyLengthK), times the view's magnification;
+//   server sends its own: units.bodyLenM1kg; and each animal's own length, status.bodyLenM, sets a juvenile's), times
+//   the view's magnification;
 // - a plant is as tall as the sim's 'plant height' layer says (5 cm .. 40 m), times the plants' magnification.
 //
 // The overview and the animal cameras magnify (the "creature size x" control, default x20, always labelled as
@@ -34,10 +35,10 @@ export class Scale {
     this.trueSize = false;              // Explore: x1 whatever the control says
   }
 
-  /** The server's scale, when it sends one (the biomechanics' metres): metres per unit, body length per kg^(1/3). */
-  fromServer(s) {
-    if (!s) return false;
-    const mpu = +(s.metresPerUnit ?? s.scale?.metresPerUnit), lk = +(s.bodyLengthK ?? s.scale?.bodyLengthK);
+  /** The server's real units (meta.units, status.units; ICD §2.1): metres per unit, body length of 1 kg. */
+  fromServer(u) {
+    if (!u) return false;
+    const mpu = +u.metresPerUnit, lk = +u.bodyLenM1kg;
     let changed = false;
     if (mpu > 0 && Math.abs(mpu - this.mpu) > 1e-6) { this.mpu = mpu; changed = true; }
     if (lk > 0 && Math.abs(lk - this.lengthK) > 1e-6) { this.lengthK = lk; changed = true; }
