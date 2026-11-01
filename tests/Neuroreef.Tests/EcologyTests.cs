@@ -950,7 +950,8 @@ public class EcologyTests
         Assert.True(w.PThirstK[1] < 0.5f * w.PThirstK[0], $"water economy {w.PThirstK[1]:F2} vs {w.PThirstK[0]:F2}");
         Assert.True(w.PThirstK[2] < w.PThirstK[0], "a bigger body dries out no slower");
         w.Moisture[0] = 1f;
-        float Relief(int pool) { w.Thirst[0] = 1f; Resolve.Ingest(w, 0, pool, 0.05f * w.MassOf(0), 1f, w.EmaxOf(0), 0); return 1f - w.Thirst[0]; }
+        // a meal of 0.079 M kg dry: the 0.05 M of the old pseudo-kg (1.58 kg dry each) before food was dry matter (2026-11-01)
+        float Relief(int pool) { w.Thirst[0] = 1f; Resolve.Ingest(w, 0, pool, 0.079f * w.MassOf(0), 1f, w.EmaxOf(0), 0); return 1f - w.Thirst[0]; }
         float grass = Relief((int)Pool.Grass), seed = Relief((int)Pool.Seed), meat = Relief((int)Pool.Meat);
         Assert.True(grass > 0.01f && meat > 0.01f, $"grass {grass:F3}, meat {meat:F3}");
         // dry seed holds little water, but digesting it makes some: how desert seed-eaters live without drinking

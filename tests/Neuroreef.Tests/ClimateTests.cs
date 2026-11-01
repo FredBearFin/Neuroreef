@@ -81,7 +81,10 @@ public class ClimateTests
         // is ~1/4 of production, not ~2/3) and seed drift over the field cell's own side (CELL_M = GEO_CELL_M, 218 m for a
         // literal 25 m) re-pinned it from 0xA6028B8F1955E0F1: the same seed grows other plants. (No animals here: the
         // food pools' kg, Pools.Kg, do not enter this hash.)
-        Assert.Equal(0xF898BD7EC229FF9FUL, h);
+        // 2026-11-01: food on a dry-matter basis (RHO_* the real energy per dry kg) re-pinned it from 0xF898BD7EC229FF9F:
+        // reproduction turns production into fruit, seed and nectar by RHO_PLANT / RHO_*, now 0.95, 0.82 and 1.1 kg per kg
+        // (0.53, 0.46 and 0.40 before), so the seed banks and fruit are other masses and the same seed grows other plants.
+        Assert.Equal(0xA5087DE3EB63C0CFUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
