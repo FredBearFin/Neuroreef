@@ -226,6 +226,7 @@ public static class Heat
     {
         float t = w.Temp[cell];
         if (immersed) return Climate.Water(t);
+        if ((w.CaveKind[cell] & Caves.Entrance) != 0) return Caves.Air(w, cell, t);   // shelter: cave air, out of the sun (Caves.cs)
         float open = w.Cell[cell] == (byte)Realm.Land ? 1f - K.SHADE_TREE * w.Tree[cell] - K.SHADE_SHRUB * w.Shrub[cell] : 1f;
         return t + Nature.Climate * K.SOLAR * open / (1f + 0.5f * K.R_INS * ins);
     }

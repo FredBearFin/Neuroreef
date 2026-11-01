@@ -42,6 +42,9 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Caves and karst (2026-11-01) re-pinned it: sinkholes and losing rivers swallow surface water and karst groundwater
+        // drains through conduits to springs (Caves.Drain), so the same seed has other soil water, ponds and springs. It was
+        // 0xFC6EEB6D3DB2914 before.
         // Geomorphology and then water from its balance (2026-10-31, relief at the land surface's own scale with no cap;
         // lakes at spill levels, rivers from Q S^2) re-pinned it: rivers are channels from Q S^2 (a network of 2-4% of the map,
         // several cells wide where large) instead of the cells over RIVER_ACC, lakes stand at their own spill levels, and
@@ -60,7 +63,7 @@ public class ClimateTests
         // same seed, map and steps.
         // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
         // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
-        Assert.Equal(0xFC6EEB6D3DB2914UL, h);
+        Assert.Equal(0xDF8F10A05E11EEE6UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
