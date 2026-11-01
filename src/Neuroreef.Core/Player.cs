@@ -10,7 +10,13 @@ namespace Neuroreef;
 
 /// <summary>One way of using a weapon (a spear thrust, a thrown spear, an arrow, a rifle shot). Ranges in metres; damage
 /// in units of strike power (the sim's PStrike x mass of an attacker: an animal of mass 30 with full weapons strikes 60).</summary>
-public sealed record WeaponMode(string Id, string Name, string Kind, float RangeM, float Damage, float SpeedMps, float Cooldown, bool Ammo);
+/// <remarks>VEHICLES (PlayerVehicles.cs) add: the vehicle that carries it (null: on foot), the radius of an area weapon's
+/// blast (m; its damage falls off to 0 at the edge), the rounds a vehicle carries, the heat a shot adds (automatic fire:
+/// the gun overheats at 1, on the console), the longest flight it can make (s), the depths it can be set to run at (m
+/// below the surface: a torpedo), and whether it explodes over an area, runs under water, and can set plants alight.</remarks>
+public sealed record WeaponMode(string Id, string Name, string Kind, float RangeM, float Damage, float SpeedMps, float Cooldown, bool Ammo,
+    string? Vehicle = null, float RadiusM = 0f, int Rounds = 0, float HeatPerShot = 0f, float MaxTimeS = 0f,
+    float DepthMinM = 0f, float DepthMaxM = 0f, bool Area = false, bool Underwater = false, bool Ignites = false);
 
 /// <summary>A weapon: its primary use (left button) and an optional secondary one (right button).</summary>
 public sealed record Weapon(string Id, string Name, string Key, WeaponMode Primary, WeaponMode? Secondary);
@@ -30,11 +36,12 @@ public static class Weapons
     public static WeaponMode? Mode(string id)
     {
         foreach (var w in All) { if (w.Primary.Id == id) return w.Primary; if (w.Secondary?.Id == id) return w.Secondary; }
+        foreach (var v in Vehicles.All) if (v.Weapon.Id == id) return v.Weapon;
         return null;
     }
 }
 
-public sealed class Player
+public sealed partial class Player
 {
     /// <summary>The pseudo-slot the person has in DECIDE's targets (o1, o2, strike) and in ITarget: never a real slot.</summary>
     public const int Slot = -2;
@@ -61,14 +68,16 @@ public sealed class Player
 
     public float MassCbrt => MathK.Cbrt(MASS);
 
-    /// <summary>How far it is heard from any direction: running or wading through brush is loud; walking only up close.</summary>
-    public float NoiseR => Running ? K.HEAR_R : 0.25f * K.HEAR_R;
+    /// <summary>How far it is heard from any direction: running or wading through brush is loud; walking only up close; an
+    /// engine (any vehicle) is heard twice as far as running.</summary>
+    public float NoiseR => Vehicle != null ? 2f * K.HEAR_R : Running ? K.HEAR_R : 0.25f * K.HEAR_R;
 
     /// <summary>Set by the console between steps.</summary>
     public void Place(float x, float y, float heading, bool running)
     {
         X = World.Wrap(x); Y = World.Wrap(y); Heading = heading; Running = running;
         if (!Present) { Present = true; _lx = float.NaN; }
+        Record();
     }
 
     /// <summary>Before a step: its speed over the last step (units per step, as an animal's), and the scent it leaves where
@@ -109,7 +118,7 @@ public sealed class Player
         _lx = float.NaN;
     }
 
-    public enum HitResult { Wounded, Killed, NoAnimal, OutOfRange, NoLineOfSight, NotPresent, UnknownWeapon }
+    public enum HitResult { Wounded, Killed, NoAnimal, OutOfRange, NoLineOfSight, NotPresent, UnknownWeapon, WrongVehicle, RateLimited }
 
     /// <summary>The slot of the living organism with this serial, or -1.</summary>
     public static int SlotOf(World w, uint serial)
@@ -150,7 +159,8 @@ public sealed class Player
         slot = -1; loss = 0f; distM = limitM = 0f;
         if (!Present) return HitResult.NotPresent;
         var m = Weapons.Mode(mode);
-        if (m == null) return HitResult.UnknownWeapon;
+        if (m == null || m.Area) return HitResult.UnknownWeapon;   // an area weapon explodes (Blast); it does not hit one animal
+        if (m.Vehicle != Vehicle) return HitResult.WrongVehicle;    // the jeep's gun from the jeep; a bow on foot
         int i = SlotOf(w, serial);
         if (i < 0) return HitResult.NoAnimal;
         slot = i;
@@ -161,8 +171,15 @@ public sealed class Player
         distM = d * M_PER_UNIT; limitM = (range + BodyR(w, i) + slack) * M_PER_UNIT;
         if (!(d <= range + BodyR(w, i) + slack)) return HitResult.OutOfRange;
         if (!LineOfSight(w, X, Y, w.X[i], w.Y[i], m.Kind == "thrown" || m.Kind == "bow" ? 0.25f * m.RangeM : 0f)) return HitResult.NoLineOfSight;
+        if (m.Kind == "auto" && !Fire(m)) return HitResult.RateLimited;   // automatic fire: no more hits than its rate allows
         float dmg = m.Damage * Math.Clamp(power, 0.2f, 1f);
         if (reported > 0f) dmg = MathF.Min(dmg, reported);
+        return Damage(w, i, dmg, out loss) ? HitResult.Killed : HitResult.Wounded;
+    }
+
+    /// <summary>Take dmg (strike power) from organism i as a landed strike does (Hit's summary); true when it dies of it.</summary>
+    bool Damage(World w, int i, float dmg, out float loss)
+    {
         bool juv = w.StageOf[i] == St.Juvenile, egg = w.StageOf[i] == St.Egg;
         float armour = w.PArmour[i] * (juv ? K.JUV_DEFENCE : 1f);
         loss = K.C_DAMAGE * dmg * K.DEF_BASE / (K.DEF_BASE + armour);
@@ -172,13 +189,13 @@ public sealed class Player
             w.Energy[i] -= loss;
             w.Pain[i] = 1f;
             w.PendingR[i] -= K.R_PAIN * loss / MathF.Max(w.EmaxOf(i), 1e-3f);
-            if (w.Energy[i] > 0f) { w.T.Fight(w.X[i], w.Y[i], -1, w.Spc[i], Telemetry.F_WOUND, w.Step, 0, w.Serial[i]); return HitResult.Wounded; }
+            if (w.Energy[i] > 0f) { w.T.Fight(w.X[i], w.Y[i], -1, w.Spc[i], Telemetry.F_WOUND, w.Step, 0, w.Serial[i]); return false; }
         }
         w.T.Fight(w.X[i], w.Y[i], -1, w.Spc[i], egg ? Telemetry.F_EGG : Telemetry.F_KILL, w.Step, 0, w.Serial[i]);
         w.T.KillFlash(cell);
         Kills++;
         Resolve.Die(w, i, Cause.Hunted, -1);
-        return HitResult.Killed;
+        return true;
     }
 
     /// <summary>Whether the ground between two places hides one from the other: the ground (cell elevations, in metres)

@@ -304,6 +304,7 @@ public static class Host
         volatile int _agentHz = 20, _fieldsMs = 1000;
         volatile bool _history = true;
         volatile bool _exploring;   // this console has put the person in the world (Explore mode)
+        static readonly Stopwatch Wall = Stopwatch.StartNew();   // EXPLORE: the person's clock (Player.Clock: rate of fire, its path)
 
         public Client(Shared s, WebSocket ws) { _s = s; _ws = ws; }
 
@@ -437,7 +438,8 @@ public static class Host
             if (h.IsPrehistory) return null;
             var p = h.W.Player;
             if (p == null) return null;
-            return new { present = p.Present, hp = MathF.Round(p.Hp, 1), maxHp = Player.MAX_HP, deaths = p.Deaths, kills = p.Kills, hits = p.Hits, x = p.X, y = p.Y };
+            return new { present = p.Present, hp = MathF.Round(p.Hp, 1), maxHp = Player.MAX_HP, deaths = p.Deaths, kills = p.Kills, hits = p.Hits, x = p.X, y = p.Y,
+                vehicle = p.Vehicle, alt = MathF.Round(p.AltM), blasts = p.Blasts, blastKills = p.BlastKills, fires = p.FiresStarted };
         }
 
         async Task Receive(CancellationToken ct)
@@ -524,9 +526,58 @@ public static class Host
                             if (!on) { h.Post(s => { if (s.W.Player != null) s.W.Player.Present = false; }); break; }
                             float px = (float)e.GetProperty("x").GetDouble(), py = (float)e.GetProperty("y").GetDouble(), ph = (float)e.GetProperty("h").GetDouble();
                             bool run = e.TryGetProperty("run", out var pr) && pr.GetBoolean();
+                            // VEHICLES: the vehicle it is in (a spawned kind, or none) and its height above the ground (m)
+                            string? veh = e.TryGetProperty("veh", out var pv) && pv.ValueKind == JsonValueKind.String ? pv.GetString() : null;
+                            float alt = e.TryGetProperty("alt", out var pa) && pa.ValueKind == JsonValueKind.Number ? (float)pa.GetDouble() : 0f;
                             if (!float.IsFinite(px) || !float.IsFinite(py) || !float.IsFinite(ph)) break;
                             h.PlayerSeen = DateTime.UtcNow; _exploring = true;
-                            h.Post(s => (s.W.Player ??= new Player()).Place(px, py, ph, run));
+                            double now = Wall.Elapsed.TotalSeconds;
+                            h.Post(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Board(veh, alt); p.Place(px, py, ph, run); });
+                            break;
+                        }
+                        case "vehicle":
+                        {
+                            // VEHICLES: the console placed a vehicle of a kind at (x, y): checked (land, water, flat ground) and its
+                            // weapon loaded (Player.Spawn); answered with a 'vehicle' frame
+                            if (h.IsPrehistory) break;
+                            string kind = e.GetProperty("kind").GetString() ?? "";
+                            float vx = (float)e.GetProperty("x").GetDouble(), vy = (float)e.GetProperty("y").GetDouble();
+                            if (!float.IsFinite(vx) || !float.IsFinite(vy)) break;
+                            var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            h.Post(s =>
+                            {
+                                var p = s.W.Player ??= new Player();
+                                string? why = p.Spawn(s.W, kind, vx, vy);
+                                var spec = Vehicles.Spec(kind);
+                                tcs.SetResult(JsonSerializer.Serialize(new { type = "vehicle", kind, ok = why == null, why, x = vx, y = vy,
+                                    weapon = spec?.Weapon.Id, rounds = spec != null && p.Rounds.TryGetValue(spec.Weapon.Id, out int r) ? r : spec?.Weapon.Rounds ?? 0 }));
+                            });
+                            _ = Task.Run(async () => { try { await Txt(await tcs.Task, ct); } catch { } });
+                            break;
+                        }
+                        case "blast":
+                        {
+                            // VEHICLES: an area weapon (bomb, torpedo) exploded at (x, y), depth d (m below the surface), launched from
+                            // (lx, ly) t seconds ago: checked and applied by Player.Blast; answered with a 'blast' frame
+                            if (h.IsPrehistory) break;
+                            string mode = e.GetProperty("weapon").GetString() ?? "";
+                            float F(string k, float dflt) => e.TryGetProperty(k, out var q) && q.ValueKind == JsonValueKind.Number ? (float)q.GetDouble() : dflt;
+                            float bx = F("x", float.NaN), by = F("y", float.NaN), bd = F("depth", 0f), lx = F("lx", float.NaN), ly = F("ly", float.NaN), bt = F("t", 0f);
+                            int id = e.TryGetProperty("id", out var bi) && bi.ValueKind == JsonValueKind.Number ? bi.GetInt32() : 0;
+                            double now = Wall.Elapsed.TotalSeconds;
+                            var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            h.Post(s =>
+                            {
+                                var p = s.W.Player;
+                                if (p == null) { tcs.SetResult(JsonSerializer.Serialize(new { type = "blast", id, weapon = mode, ok = false, result = "NotPresent" })); return; }
+                                p.Clock = now;
+                                var res = p.Blast(s.W, mode, bx, by, bd, lx, ly, bt, out var rep);
+                                tcs.SetResult(JsonSerializer.Serialize(new { type = "blast", id, weapon = mode, ok = res == Player.BlastResult.Exploded, result = res.ToString(),
+                                    hurt = rep.Hurt, killed = rep.Killed, fires = rep.Fires, rounds = rep.RoundsLeft, kills = p.Kills, blastKills = p.BlastKills,
+                                    victims = rep.Victims.Select(v => new { serial = v.Serial, clade = v.Clade, loss = MathF.Round(v.Loss, 2), killed = v.Killed }),
+                                    launchErrM = MathF.Round(rep.LaunchErrM), launchLimitM = MathF.Round(rep.LaunchLimitM), flightM = MathF.Round(rep.FlightM), x = bx, y = by }));
+                            });
+                            _ = Task.Run(async () => { try { await Txt(await tcs.Task, ct); } catch { } });
                             break;
                         }
                         case "hit":
@@ -541,10 +592,12 @@ public static class Host
                             if (!float.IsFinite(pow)) pow = 1f;
                             if (!float.IsFinite(dmg)) dmg = 0f;
                             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            double now = Wall.Elapsed.TotalSeconds;
                             h.Post(s =>
                             {
                                 var p = s.W.Player;
                                 if (p == null) { tcs.SetResult(JsonSerializer.Serialize(new { type = "hit", serial = ser, ok = false, result = "NotPresent" })); return; }
+                                p.Clock = now;   // VEHICLES: times automatic fire's rate
                                 int pre = Player.SlotOf(s.W, ser), sp = pre >= 0 ? s.W.Spc[pre] : -1;
                                 var res = p.Hit(s.W, mode, ser, pow, dmg, out _, out float loss, out float distM, out float limitM);
                                 tcs.SetResult(JsonSerializer.Serialize(new { type = "hit", serial = ser, ok = res is Player.HitResult.Wounded or Player.HitResult.Killed,

@@ -201,7 +201,7 @@ public static class Resolve
                 T.Strikes[s]++;
                 float dx = World.Delta1(pl.X - w.X[i]), dy = World.Delta1(pl.Y - w.Y[i]);
                 float reachAll = w.PReach[i] + 0.5f + 0.4f * pl.MassCbrt;
-                if (dx * dx + dy * dy <= reachAll * reachAll) pl.Struck(w, i);
+                if (dx * dx + dy * dy <= reachAll * reachAll && !pl.Airborne) pl.Struck(w, i);   // not a plane in the air
             }
         }
 
