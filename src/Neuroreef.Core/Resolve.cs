@@ -150,8 +150,11 @@ public static class Resolve
             // step (Revision P): when the gut is the bottleneck, rich food beats a heap of poor food (optimal diet
             // theory, Charnov 1976). Before, a big heap of dung or litter won and filled the gut with food a third as rich
             // Revision S: it tastes the plants it bites: their defences change what a bite is worth (Plants.Taste)
-            int best = -1; float bv = 0, bestEff = 0, bestBM = 1f;
+            // (2026-11-01) what a step's digestion can absorb is bounded in energy too (C_ABSORB): food richer than the gut's
+            // transporters can take up is worth no more a step than food that just saturates them, the denser kept on a tie
+            int best = -1; float bv = 0, bestEff = 0, bestBM = 1f, bestRho = 0f;
             float pass = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL), bite0 = w.PBite[i] * MathK.Pow(mf, K.EXP_BASAL);
+            float absorb = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL);
             for (int p = 0; p < Pools.NFIELD; p++)
             {
                 float e = diet[p];
@@ -160,8 +163,8 @@ public static class Resolve
                 if (p <= (int)Pool.Root && !waterCell) { Plants.Taste(w, p, cell, bite0, out em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
                 // in water, what it reaches at its depth: plankton by the light, algae and detritus on the bottom (Respiration.Access)
                 float here = waterCell ? w.Pool[p][cell] * Respiration.Access(w, i, cell, p) : w.Pool[p][cell];
-                float v = e * Pools.Rho[p] * MathF.Min(pass * bm, here);
-                if (v > bv) { bv = v; best = p; bestEff = e; bestBM = bm; }
+                float v = MathF.Min(absorb, e * Pools.Rho[p] * MathF.Min(pass * bm, here));
+                if (v > bv || (v == bv && v > 0f && e * Pools.Rho[p] > bestRho)) { bv = v; best = p; bestEff = e; bestBM = bm; bestRho = e * Pools.Rho[p]; }
             }
             if (best >= 0)
             {
@@ -171,7 +174,11 @@ public static class Resolve
                 {
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
                     w.Pool[best][cell] -= bite;
-                    if (best == (int)Pool.Root) w.Pool[(int)Pool.Grass][cell] = MathF.Max(0, w.Pool[(int)Pool.Grass][cell] - 0.3f * bite);
+                    T.EatenMass[best] += bite;
+                    // roots are the herbs' and shrubs' own mass (2026-11-01): a bite of them takes its energy's worth of their cover
+                    // (it was 0.3 of the bite from the herbs whatever its energy, so roots, regrowing toward their own capacity, fed
+                    // diggers ~4x what the plants lost)
+                    if (best == (int)Pool.Root) Plants.RootEaten(w, cell, bite * K.RHO_ROOT / K.RHO_PLANT);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
                     if (!waterCell) Plants.Eaten(w, i, cell, best, bite, bestEff);   // what it took from the plants, and the seed and pollen it carries
                     r += Ingest(w, i, best, bite, bestEff, emax, cell);
@@ -315,6 +322,9 @@ public static class Resolve
         if (w.Gut[i] > 1e-7f)
         {
             float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
+            // the gut's absorptive capacity (C_ABSORB, 2026-11-01): rich digesta pass only as fast as their energy is taken up
+            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            if (w.GutEnergy[i] > absorbE) d = MathF.Min(d, w.Gut[i] * absorbE / w.GutEnergy[i]);
             float frac = d / w.Gut[i];
             float de = w.GutEnergy[i] * frac, dung = w.GutWaste[i] * frac, seedy = w.GutSeedy[i] * frac;
             w.Energy[i] += de;
@@ -378,7 +388,7 @@ public static class Resolve
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)
-        bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > K.SHALLOW;
+        bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > w.ShallowE;
         if (swimming) return cot;
         float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
         return cot * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);

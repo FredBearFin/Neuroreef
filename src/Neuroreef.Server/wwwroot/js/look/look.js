@@ -11,6 +11,7 @@ import { Atmosphere, SkyDome, installAerialFog } from './sky.js';
 import { Lighting, bodyDepthMaterial } from './lighting.js';
 import { Vegetation } from './vegetation.js';
 import { Post } from './post.js';
+import { Weather } from './weather.js';
 
 installAerialFog();   // before any material compiles
 
@@ -39,6 +40,7 @@ export class Look {
     this.light = new Lighting(v.scene, v.renderer, this.atm, this.quality);
     this.veg = new Vegetation(v, wrap, this.quality);
     this.post = new Post(v.renderer, this.quality);
+    this.weather = new Weather(v.scene);
     this.fogColor = new THREE.Color();
     this._fwd = new THREE.Vector3();
     this._t = this._born = performance.now(); this._slow = 0; this.frameMs = 16;
@@ -78,9 +80,17 @@ export class Look {
     if (v.wrapU) v.wrapU.uWrapBg.value.copy(this.fogColor);
     v.renderer.setClearColor(this.fogColor);
     const down = Math.max(0, -this._fwd.y);
-    fog.near = 0.75 * fog.far * (1 + 4 * down * down);   // read as the haze's e-folding length (sky.js)
+    fog.near = 0.75 * fog.far * (1 + 4 * down * down) * (1 - 0.55 * (this.light.rainI || 0));   // read as the haze's e-folding length (sky.js); rain thickens it
     this.sky.update(cam, this.fogColor, now / 1000);
     this.veg.setTime(now / 1000);
+    // rain or snow round the camera (weather.js), as the season gives; snow where the air at the view centre freezes
+    {
+      const t = v.controls.target, camD = cam.position.distanceTo(t), alt = cam.position.y - (v.world ? v.heightAt(cam.position.x, cam.position.z) : 0);
+      let tempC = null;
+      const f = v.fields, k = f ? v._layer('temp') : -1;
+      if (k >= 0 && v.W) { const d = f.d, cs = v.W / d, fx = ((Math.floor(t.x / cs) % d) + d) % d, fz = ((Math.floor(t.z / cs) % d) + d) % d; tempC = f.data[k * d * d + fz * d + fx] / 255 * 90 - 40; }
+      this.weather.update(cam, this.light.rainI || 0, tempC, camD, alt, now / 1000);
+    }
   }
 
   render() { this.post.render(this.v.scene, this.v.camera); }
@@ -102,6 +112,6 @@ export class Look {
   stats() {
     return { quality: this.quality.name, frameMs: +this.frameMs.toFixed(1), bloom: this.post.bloom, post: this.post.ok,
              shadowMap: this.quality.shadows ? this.light.sun.shadow.mapSize.x : 0, shadowR: this.light.R, plantMs: +this.veg.lastMs.toFixed(1),
-             grassMs: +this.veg.grassMs.toFixed(1), grass: this.veg.grass.count, counts: this.veg.counts, cloud: +this.atm.cloud.toFixed(2) };
+             grassMs: +this.veg.grassMs.toFixed(1), grass: this.veg.grass.count, counts: this.veg.counts, cloud: +this.atm.cloud.toFixed(2), wet: +(this.light.wet || 0).toFixed(2), rain: +(this.light.rainI || 0).toFixed(2), snow: +this.weather.snow.toFixed(2) };
   }
 }

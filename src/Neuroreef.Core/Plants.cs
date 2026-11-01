@@ -1,6 +1,6 @@
 // PLANTS (DESIGN §10.2, Revision S): land vegetation as evolving genotypes. Every land cell has four slots (herb, shrub,
 // tree, sapling); each holds one genotype (an id into the plant table, 0 = empty) and its cover (Pool.Grass, World.Shrub,
-// World.Tree, World.Sapling). A genotype is 20 traits of 4 bits (PT); its phenotype (Ph) is computed once, when it
+// World.Tree, World.Sapling). A genotype is 21 traits of 4 bits (PT); its phenotype (Ph) is computed once, when it
 // enters the table. Growth, reproduction, seed dispersal, recruitment and inheritance are physics on those traits: no
 // growth form, biome or outcome is designed. The food pools animals eat (grass, browse, fruit, seed, nectar, root) come
 // from the slots and their traits, and animals taste the plants' defences when they eat.
@@ -21,10 +21,11 @@ namespace Neuroreef;
 public static class PT
 {
     public const int HEIGHT = 0, LMA = 1, ROOT = 2, WUE = 3, DROUGHT = 4, TOPT = 5, DECID = 6, FLOWER = 7, REPRO = 8, SEED = 9,
-        FRUIT = 10, WING = 11, HOOK = 12, NECTAR = 13, TOXIN = 14, THORN = 15, RESPROUT = 16, BARK = 17, NFIX = 18, SELF = 19, N = 20;
+        FRUIT = 10, WING = 11, HOOK = 12, NECTAR = 13, TOXIN = 14, THORN = 15, RESPROUT = 16, BARK = 17, NFIX = 18, SELF = 19,
+        FLOOD = 20, N = 21;   // 2026-11-01: flood (waterlogging) tolerance, the first trait of the widened high key
     public static readonly string[] Names =
         { "height", "lma", "root", "wue", "drought", "topt", "decid", "flower", "repro", "seed",
-          "fruit", "wing", "hook", "nectar", "toxin", "thorn", "resprout", "bark", "nfix", "self" };
+          "fruit", "wing", "hook", "nectar", "toxin", "thorn", "resprout", "bark", "nfix", "self", "flood" };
 }
 
 /// <summary>Offsets of the expressed phenotype of one genotype in PlantTable.Ph (NP floats per genotype).</summary>
@@ -34,7 +35,7 @@ public static class Ph
         WMIN = 12, DRM = 13, TOPT = 14, TAMP = 15, TFROST = 16, DECID = 17, PHIF = 18, AR = 19, MS = 20, EST = 21, BANKD = 22,
         FLESH = 23, PULP = 24, CS = 25, PSELF = 26, PFAR = 27, NECT = 28, EMUL = 29, THORN = 30, RESPR = 31, BARK = 32,
         NFIXN = 33, NFIXC = 34, CSTAT = 35, ANORM = 36, S0 = 37, DELTA = 38, LIFE = 39, RHO = 40, HOOK = 41, STRAT = 42,
-        EFRUIT = 43, TOX = 44, XH = 45, CPHI = 46, SPHI = 47, NP = 48;
+        EFRUIT = 43, TOX = 44, XH = 45, CPHI = 46, SPHI = 47, XF = 48, NP = 49;
 }
 
 /// <summary>The plant genotype table (struct of arrays, saved by Checkpoint like the World).</summary>
@@ -44,7 +45,7 @@ public sealed class PlantTable
     // capacity: one genotype per land slot a map can hold at most, between 4,096 and PLANT_GCAP (a small map needs no 6 MB table)
     public readonly int Cap, HCap;
     public readonly ulong[] KeyLo;         // traits 0..15, 4 bits each
-    public readonly ushort[] KeyHi;        // traits 16..19
+    public readonly uint[] KeyHi;          // traits 16..20, 4 bits each (room for 8; 2026-11-01: was ushort, traits 16..19)
     public readonly float[] Phe;           // expressed phenotype
     public readonly ushort[] Lineage, Parent;
     public readonly int[] Born, Count;
@@ -52,10 +53,14 @@ public sealed class PlantTable
     public readonly int[] Hash;            // open addressing (linear probing), id or 0; rebuilt by Census
     public readonly int[] Free; public int FreeTop; public int Live;
     // genotypes found in the parallel phase, PLANT_PEND per row per update, entered by Commit in row order
-    public readonly int[] PendN, PendCell; public readonly byte[] PendSlot; public readonly ulong[] PendLo; public readonly ushort[] PendHi, PendParent;
+    public readonly int[] PendN, PendCell; public readonly byte[] PendSlot; public readonly ulong[] PendLo; public readonly uint[] PendHi; public readonly ushort[] PendParent;
     // per-row counters of the parallel phase (summed by Commit): adoptions, crosses, mutations, failed crosses, queue full,
     // seed mass released by wind, landed in water
     public readonly double[] RowStat;
+    // net primary production (reporting only, 2026-11-01): per row and slot (herb, shrub, tree, sapling) and reproduction,
+    // in cover (food mass) units; Commit adds each row's into Production. Nothing reads it back
+    public readonly double[] RowProd;
+    public readonly double[] Production = new double[5];
     public long Created, Freed, Establish, Crosses, Mutations, FailedCross, TableFull, PendFull;
     public double WindSeed, WaterSeed, GutSeed, CacheSeed, BurrSeed, ReleasedNb, GatheredNb;
     public long CensusSteps;
@@ -65,15 +70,16 @@ public sealed class PlantTable
     public PlantTable(int fw)
     {
         Cap = Math.Clamp((int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)(fw * fw)), 4096, K.PLANT_GCAP); HCap = 2 * Cap;
-        KeyLo = new ulong[Cap]; KeyHi = new ushort[Cap]; Phe = new float[Cap * NP]; Lineage = new ushort[Cap]; Parent = new ushort[Cap];
+        KeyLo = new ulong[Cap]; KeyHi = new uint[Cap]; Phe = new float[Cap * NP]; Lineage = new ushort[Cap]; Parent = new ushort[Cap];
         Born = new int[Cap]; Count = new int[Cap]; Used = new byte[Cap]; Hash = new int[HCap]; Free = new int[Cap];
         PendN = new int[fw]; PendCell = new int[fw * K.PLANT_PEND]; PendSlot = new byte[fw * K.PLANT_PEND];
-        PendLo = new ulong[fw * K.PLANT_PEND]; PendHi = new ushort[fw * K.PLANT_PEND]; PendParent = new ushort[fw * K.PLANT_PEND];
+        PendLo = new ulong[fw * K.PLANT_PEND]; PendHi = new uint[fw * K.PLANT_PEND]; PendParent = new ushort[fw * K.PLANT_PEND];
         RowStat = new double[fw * NSTAT];
+        RowProd = new double[fw * 5];
         for (int i = Cap - 1; i >= 1; i--) Free[FreeTop++] = i;
     }
 
-    public int Level(int id, int t) => t < 16 ? (int)((KeyLo[id] >> (4 * t)) & 15) : (KeyHi[id] >> (4 * (t - 16))) & 15;
+    public int Level(int id, int t) => t < 16 ? (int)((KeyLo[id] >> (4 * t)) & 15) : (int)((KeyHi[id] >> (4 * (t - 16))) & 15);
     public float P(int id, int f) => Phe[id * NP + f];
 }
 
@@ -96,7 +102,7 @@ public static class Plants
     /// <summary>Static costs (share of production) of the defences and fixation at T = NFIX_T, for a genome of traits x.</summary>
     static float Costs(ReadOnlySpan<float> x, float wood)
         => K.TOX_COST * x[PT.TOXIN] + (K.THORN_COST_H + (K.THORN_COST_W - K.THORN_COST_H) * wood) * x[PT.THORN]
-         + K.RESPROUT_COST * x[PT.RESPROUT] + K.BARK_COST * x[PT.BARK] * wood;
+         + K.RESPROUT_COST * x[PT.RESPROUT] + K.BARK_COST * x[PT.BARK] * wood + K.FLOOD_COST * x[PT.FLOOD];
 
     /// <summary>Express the phenotype of traits x (0..1 each) into ph (NP floats).</summary>
     public static void Express(ReadOnlySpan<float> x, Span<float> ph)
@@ -155,7 +161,12 @@ public static class Plants
         ph[Ph.S0] = K.SELF_LO + K.SELF_SPAN * xs; ph[Ph.DELTA] = K.INBR_LO - K.INBR_SPAN * xs;
         ph[Ph.LIFE] = 1f / (K.LIFE_HERB * MathK.Pow(h / K.H_REF, K.LIFE_EXP) * (0.5f + xl));
         ph[Ph.HOOK] = xhk;
+        ph[Ph.XF] = x[PT.FLOOD];
     }
+
+    /// <summary>Production kept in ground waterlogged a share anox of the year (World.WetDur): root anoxia takes
+    /// WLOG_HARM x anox x (1 - flood tolerance) of it, all of it at most (2026-11-01; Kozlowski 1997).</summary>
+    public static float Waterlog(float[] P, int o, float anox) => anox <= 0f ? 1f : MathF.Max(0f, 1f - K.WLOG_HARM * anox * (1f - P[o + Ph.XF]));
 
     static readonly float EmulMid = (K.DIG_LO - K.DIG_SPAN * 0.5f) * (1f - K.TOX_E * 0.5f) * (1f + K.NFIX_DIG * 0.5f);
 
@@ -164,7 +175,7 @@ public static class Plants
     /// <summary>The same from ln W (one logarithm per cell, an exponential per plant).</summary>
     static float WaterOfLn(float[] P, int o, float lnW, float ov) => MathK.Exp(lnW * P[o + Ph.REXP]) * (1f - ov);
 
-    static float Gross(float[] P, int o, float r0, float wk, float N, float T, float L, float A, out float sw, out float ft)
+    static float Gross(float[] P, int o, float r0, float wk, float N, float T, float L, float A, out float sw, out float ft, float anox = 0f)
     {
         float wmin = P[o + Ph.WMIN];
         sw = Math.Clamp((wk - wmin) / (1f - wmin), 0f, 1f);
@@ -175,17 +186,17 @@ public static class Plants
         float les = P[o + Ph.LES];
         float gc = r0 * les * A * ft * P[o + Ph.TAMP] * fl * fn * P[o + Ph.GCF];
         float gw = r0 * les * P[o + Ph.GWF] * sw;
-        return gc + gw > 0f ? Norm * Nature.Plants * gc * gw / (gc + gw) : 0f;
+        return gc + gw > 0f ? Norm * Nature.Plants * gc * gw / (gc + gw) * Waterlog(P, o, anox) : 0f;
     }
 
     /// <summary>Net growth rate per unit cover (per step) of phenotype P[o..] alone in a cell at soil water W, nutrient N,
     /// temperature T and light L, at the yearly mean of its flowering (phenology 1), leafy and with room: what Plants grows by.</summary>
-    public static float Net(float[] P, int o, float W, float N, float T, float L)
+    public static float Net(float[] P, int o, float W, float N, float T, float L, float anox = 0f)
     {
         float r0 = P[o + Ph.R0];
         float nfc = P[o + Ph.NFIXC] * (1f + MathF.Max(0f, (K.NFIX_T - T) / K.NFIX_TW));
         float A = MathF.Max(K.A_MIN, (1f - P[o + Ph.CSTAT] - nfc - P[o + Ph.AR]) * P[o + Ph.ANORM]);
-        return Gross(P, o, r0, WaterOf(P, o, W, 0f), N, T, L, A, out _, out _) - K.RESP * r0 * P[o + Ph.LES];
+        return Gross(P, o, r0, WaterOf(P, o, W, 0f), N, T, L, A, out _, out _, anox) - K.RESP * r0 * P[o + Ph.LES];
     }
 
     /// <summary>NORM: a mid genome at full water, light and nutrient, at T_REF, grows at r0 net of respiration.</summary>
@@ -205,9 +216,9 @@ public static class Plants
 
     // ------------------------------------------------------------------ table
 
-    static ulong Mix(ulong lo, ushort hi) { ulong h = lo ^ ((ulong)hi * 0x9E3779B97F4A7C15UL); h ^= h >> 33; h *= 0xFF51AFD7ED558CCDUL; h ^= h >> 33; return h; }
+    static ulong Mix(ulong lo, uint hi) { ulong h = lo ^ ((ulong)hi * 0x9E3779B97F4A7C15UL); h ^= h >> 33; h *= 0xFF51AFD7ED558CCDUL; h ^= h >> 33; return h; }
 
-    public static int Find(PlantTable t, ulong lo, ushort hi)
+    public static int Find(PlantTable t, ulong lo, uint hi)
     {
         int m = t.HCap - 1, j = (int)(Mix(lo, hi) & (ulong)m);
         while (true)
@@ -227,7 +238,7 @@ public static class Plants
     }
 
     /// <summary>Enter a genotype (serial). Returns its id, or 0 when the table is full.</summary>
-    public static int Insert(World w, ulong lo, ushort hi, int parent, int lineage)
+    public static int Insert(World w, ulong lo, uint hi, int parent, int lineage)
     {
         var t = w.Flora;
         int id = Find(t, lo, hi);
@@ -237,28 +248,31 @@ public static class Plants
         t.KeyLo[id] = lo; t.KeyHi[id] = hi; t.Used[id] = 1; t.Parent[id] = (ushort)parent; t.Lineage[id] = (ushort)lineage;
         t.Born[id] = (int)w.Step; t.Count[id] = 1; t.Live++; t.Created++;
         Span<float> x = stackalloc float[PT.N];
-        for (int k = 0; k < PT.N; k++) x[k] = (k < 16 ? (int)((lo >> (4 * k)) & 15) : (hi >> (4 * (k - 16))) & 15) / 15f;
+        for (int k = 0; k < PT.N; k++) x[k] = (k < 16 ? (int)((lo >> (4 * k)) & 15) : (int)((hi >> (4 * (k - 16))) & 15)) / 15f;
         Express(x, new Span<float>(t.Phe, id * PlantTable.NP, PlantTable.NP));
         HashIn(t, id);
         return id;
     }
 
     /// <summary>A recruit's genotype: each trait from the seed or the pollen parent, then with PLANT_MU one trait one level up or down.</summary>
-    static void Cross(PlantTable t, int mom, int dad, uint h1, uint h2, out ulong lo, out ushort hi, out bool mutated)
+    static void Cross(PlantTable t, int mom, int dad, uint h1, uint h2, out ulong lo, out uint hi, out bool mutated)
     {
-        ulong ml = t.KeyLo[mom], dl = t.KeyLo[dad]; ushort mh = t.KeyHi[mom], dh = t.KeyHi[dad];
+        ulong ml = t.KeyLo[mom], dl = t.KeyLo[dad]; uint mh = t.KeyHi[mom], dh = t.KeyHi[dad];
         ulong mask = 0; uint mhk = 0;
         for (int k = 0; k < 16; k++) if (((h1 >> k) & 1) != 0) mask |= 15UL << (4 * k);
-        for (int k = 0; k < 4; k++) if (((h1 >> (16 + k)) & 1) != 0) mhk |= 15u << (4 * k);
-        lo = (ml & mask) | (dl & ~mask); hi = (ushort)((mh & mhk) | (dh & ~mhk & 0xFFFF));
+        for (int k = 0; k < PT.N - 16; k++) if (((h1 >> (16 + k)) & 1) != 0) mhk |= 15u << (4 * k);
+        lo = (ml & mask) | (dl & ~mask); hi = (mh & mhk) | (dh & ~mhk & HiMask);
         mutated = (h2 >> 8) * (1f / 16777216f) < K.PLANT_MU;
         if (!mutated) return;
         int tr = (int)((h2 & 0xFF) % PT.N), up = (h2 & 0x100) != 0 ? 1 : -1;
-        int lv = tr < 16 ? (int)((lo >> (4 * tr)) & 15) : (hi >> (4 * (tr - 16))) & 15;
+        int lv = tr < 16 ? (int)((lo >> (4 * tr)) & 15) : (int)((hi >> (4 * (tr - 16))) & 15);
         int nl = lv + up; if (nl < 0 || nl > 15) nl = lv - up;
         if (tr < 16) lo = (lo & ~(15UL << (4 * tr))) | ((ulong)nl << (4 * tr));
-        else hi = (ushort)((hi & ~(15 << (4 * (tr - 16)))) | (nl << (4 * (tr - 16))));
+        else hi = (hi & ~(15u << (4 * (tr - 16)))) | ((uint)nl << (4 * (tr - 16)));
     }
+
+    /// <summary>The bits of the high key that hold traits (16..N-1).</summary>
+    public const uint HiMask = (1u << (4 * (PT.N - 16))) - 1u;
 
     static int StratumOfKey(ulong lo) => StratumOfH(HeightOf((int)(lo & 15) / 15f));
 
@@ -268,7 +282,7 @@ public static class Plants
         ulong x = t.KeyLo[a], y = t.KeyLo[b]; uint xh = t.KeyHi[a], yh = t.KeyHi[b];
         int d = 0;
         for (int k = 0; k < 16; k++) { d += Math.Abs((int)(x & 15) - (int)(y & 15)); x >>= 4; y >>= 4; }
-        for (int k = 0; k < 4; k++) { d += Math.Abs((int)(xh & 15) - (int)(yh & 15)); xh >>= 4; yh >>= 4; }
+        for (int k = 0; k < PT.N - 16; k++) { d += Math.Abs((int)(xh & 15) - (int)(yh & 15)); xh >>= 4; yh >>= 4; }
         return d;
     }
 
@@ -296,9 +310,9 @@ public static class Plants
         for (int s = 0; s < 3; s++) byStrat[s] = new();
         for (int f = 0; f < K.PLANT_FOUNDERS; f++)
         {
-            ulong lo = 0; ushort hi = 0;
+            ulong lo = 0; uint hi = 0;
             uint a = Rng.Hash(w.Seed, (uint)f, 1, Rs.PlantFound), b = Rng.Hash(w.Seed, (uint)f, 2, Rs.PlantFound), c = Rng.Hash(w.Seed, (uint)f, 3, Rs.PlantFound);
-            lo = a | ((ulong)b << 32); hi = (ushort)(c & 0xFFFF);
+            lo = a | ((ulong)b << 32); hi = c & HiMask;
             int id = Insert(w, lo, hi, 0, f);
             if (id > 0) byStrat[StratumOfKey(lo)].Add(id);
         }
@@ -306,7 +320,7 @@ public static class Plants
         for (int i = 0; i < n; i++)
         {
             if (w.Cell[i] != (byte)Realm.Land) continue;
-            float W = w.Moisture[i], T = Climate.On ? Climate.AnnualMean(w, i) : K.T_REF, N = w.Nutrient[i];
+            float W = w.Moisture[i], T = Climate.On ? Climate.AnnualMean(w, i) : K.T_REF, N = w.Nutrient[i], ax = w.WetDur[i];
             for (int s = 0; s < 3; s++)
             {
                 var L = byStrat[s];
@@ -317,7 +331,7 @@ public static class Plants
                     int id = L[(int)(Rng.U(w.Seed, (uint)i, (uint)(s * 16 + d), Rs.PlantFound + 1) * L.Count)];
                     int o = id * PlantTable.NP;
                     float r0 = t.Phe[o + Ph.R0];
-                    float g = Gross(t.Phe, o, r0, WaterOf(t.Phe, o, W, 0f), N, T, 1f, 1f, out _, out _) - K.RESP * r0 * t.Phe[o + Ph.LES];
+                    float g = Gross(t.Phe, o, r0, WaterOf(t.Phe, o, W, 0f), N, T, 1f, 1f, out _, out _, ax) - K.RESP * r0 * t.Phe[o + Ph.LES];
                     g /= r0;
                     if (g > bv) { second = best; sv = bv; best = id; bv = g; }
                     else if (g > sv && id != best) { second = id; sv = g; }
@@ -410,7 +424,7 @@ public static class Plants
             int i = row + x;
             for (int s = 0; s < 3; s++) { w.SeedOut[s * n + i] = 0f; w.SeedMom[s * n + i] = 0; w.SeedDad[s * n + i] = 0; }
             if (w.Cell[i] != (byte)Realm.Land) continue;
-            float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f));
+            float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f)), ax = w.WetDur[i];
             B[HERB] = G[i]; B[SHRUB] = S[i]; B[TREE] = Tr[i]; B[SAP] = Sp[i];
             int flags = w.PFlags[i];
             for (int k = 0; k < SLOTS; k++)
@@ -441,8 +455,8 @@ public static class Plants
                 float nfc = Pe[o + Ph.NFIXC] * (1f + MathF.Max(0f, (K.NFIX_T - T) / K.NFIX_TW));
                 float A = MathF.Max(K.A_MIN, (1f - Pe[o + Ph.CSTAT] - nfc - Pe[o + Ph.AR] * phen) * Pe[o + Ph.ANORM]);
                 float wk = WaterOfLn(Pe, o, lnW, ov);
-                float G0 = Gross(Pe, o, r0, wk, N, T, L, 1f, out float sw, out float ft);
-                float gA = A != 1f ? Gross(Pe, o, r0, wk, N, T, L, A, out _, out _) : G0;
+                float G0 = Gross(Pe, o, r0, wk, N, T, L, 1f, out float sw, out float ft, ax);   // ax: waterlogging (Wetlands)
+                float gA = A != 1f ? Gross(Pe, o, r0, wk, N, T, L, A, out _, out _, ax) : G0;
                 // leaf phenology: shed leaves when water x temperature falls below the deciduousness threshold (hysteresis)
                 bool on = (flags & (1 << k)) != 0;
                 float pv = sw * ft, th = Pe[o + Ph.DECID];
@@ -464,6 +478,7 @@ public static class Plants
                 float dead = dt * (mdr + mbg) * b;
                 if (k == HERB) litter += dead; else wood += dead;
                 prod += MathF.Max(0f, dt * grow);
+                t.RowProd[y * 5 + k] += MathF.Max(0f, dt * grow);
                 float fe = G0 / (r0 * (1f + K.RESP));
                 if (k == SHRUB || k == TREE || k == SAP) { fenvB += fe * b; fenvBsum += b; }
                 if (k == HERB || k == SHRUB) { fenvR += fe * b; fenvRsum += b; }
@@ -494,11 +509,15 @@ public static class Plants
                     if (dad != g && Compat(t, g, dad) > u2) set = MathF.Min(1f, Pe[o + Ph.S0] + K.WIND_POLL * bn + K.ANIMAL_POLL * poll);
                     else { if (dad != g) t.RowStat[y * PlantTable.NSTAT + ST_FAIL]++; dad = g; set = Pe[o + Ph.S0]; }
                     float nect = Pe[o + Ph.NECT] * R;
-                    Nc[i] += nect;
+                    // (2026-11-01) what reproduction makes keeps the energy of the production it is made from (K.RHO_PLANT per
+                    // unit): richer stuff is less of it. Before, a unit of production became a unit of nectar (8 E/M), seed
+                    // (7) or fruit (6) against tissue's 3.2, so nectar-feeders ate 2.5x the energy the plants had fixed
+                    Nc[i] += nect * (K.RHO_PLANT / K.RHO_NECTAR);
                     float seedInv = (R - nect) * set;
                     dB += (R - nect) * (1f - set) * room;   // what was not set goes back into growth
                     float sm = seedInv / Pe[o + Ph.CS];
-                    float flesh = Pe[o + Ph.FLESH] * sm, dry = sm - flesh;
+                    float flesh = Pe[o + Ph.FLESH] * sm, dry = (sm - flesh) * (K.RHO_PLANT / K.RHO_SEED);
+                    flesh *= K.RHO_PLANT / K.RHO_FRUIT;
                     if (flesh > 0f)
                     {
                         float fm = flesh * (1f + Pe[o + Ph.PULP]);
@@ -517,6 +536,7 @@ public static class Plants
                         windOut += nb + far;
                     }
                     prod += R;
+                    t.RowProd[y * 5 + 4] += R;
                 }
                 fixedShare += Pe[o + Ph.NFIXN] * b;
                 B[k] = MathF.Max(0f, b + dB);
@@ -658,7 +678,7 @@ public static class Plants
             // recruitment from each bank into its stratum's slot (the canopy bank into saplings)
             B[HERB] = G[i]; B[SHRUB] = w.Shrub[i]; B[TREE] = w.Tree[i]; B[SAP] = w.Sapling[i];
             for (int k = 0; k < SLOTS; k++) id[k] = w.POcc[i * SLOTS + k];
-            float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f));
+            float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f)), ax = w.WetDur[i];
             for (int s = 0; s < 3; s++)
             {
                 int bo = s * n + i, mom = w.BankMom[bo];
@@ -669,7 +689,7 @@ public static class Plants
                 int target = s == TREE ? SAP : s;
                 float r0 = target == SAP ? Pe[o + Ph.R0SAP] : Pe[o + Ph.R0];
                 float L = target == HERB ? MathF.Max(0.02f, 1f - 0.85f * B[TREE] - 0.35f * B[SHRUB]) : target == SHRUB ? MathF.Max(0.02f, 1f - 0.7f * B[TREE]) : MathF.Max(0.02f, (1f - 0.7f * B[TREE]) * (1f - 0.2f * B[SHRUB]));
-                float phi = Gross(Pe, o, r0, WaterOfLn(Pe, o, lnW, 0f), N, T, L, 1f, out _, out _) / (r0 * (1f + K.RESP)) - K.RESP / (1f + K.RESP);
+                float phi = Gross(Pe, o, r0, WaterOfLn(Pe, o, lnW, 0f), N, T, L, 1f, out _, out _, ax) / (r0 * (1f + K.RESP)) - K.RESP / (1f + K.RESP);
                 if (phi <= 0f) continue;
                 float room = MathF.Max(0f, Room(target, B[HERB], B[SHRUB], B[TREE], B[SAP]));
                 int occ = id[target];
@@ -685,7 +705,7 @@ public static class Plants
                 bool adopt = id[target] == 0 || B[target] <= 0f || u * (mrec + B[target]) < mrec;
                 if (!adopt) { B[target] += mrec; continue; }
                 uint h1 = Rng.Hash(seed, step, (uint)bo, Rs.PlantCross), h2 = Rng.Hash(seed, step, (uint)bo, Rs.PlantMut);
-                Cross(t, mom, dad, h1, h2, out ulong lo, out ushort hi, out bool mut);
+                Cross(t, mom, dad, h1, h2, out ulong lo, out uint hi, out bool mut);
                 int ks = StratumOfKey(lo), slot = ks == TREE ? SAP : ks;
                 if (slot != target && id[slot] != 0 && B[slot] > 0f && u * (mrec + B[slot]) >= mrec) { B[target] += mrec; continue; }
                 B[slot] += mrec;
@@ -759,6 +779,7 @@ public static class Plants
             t.ReleasedNb += t.RowStat[st + ST_WIND]; t.GatheredNb += t.RowStat[st + ST_GATH]; t.WaterSeed += t.RowStat[st + ST_WATER];
             t.WindSeed += t.RowStat[st + ST_WIND];
             Array.Clear(t.RowStat, st, PlantTable.NSTAT);
+            for (int k = 0; k < 5; k++) { t.Production[k] += t.RowProd[y * 5 + k]; t.RowProd[y * 5 + k] = 0; }
             // this row's long-distance seed joins its block's accumulator (one parent pair per block: the largest share, by lottery)
             int by = y / K.WIND_BLOCK;
             for (int bx = 0; bx < nbx; bx++)
@@ -934,6 +955,16 @@ public static class Plants
         }
     }
 
+    /// <summary>A bite of roots (2026-11-01): the herbs' and then the shrubs' cover in the cell loses `cover` (the bite's
+    /// energy at RHO_PLANT per unit), so digging feeds on the plants' own production, as grazing does.</summary>
+    public static void RootEaten(World w, int cell, float cover)
+    {
+        float[] G = w.Pool[(int)Pool.Grass];
+        float fromHerb = MathF.Min(G[cell], cover);
+        G[cell] -= fromHerb;
+        w.Shrub[cell] = MathF.Max(0f, w.Shrub[cell] - (cover - fromHerb));
+    }
+
     static void GutAdd(World w, int a, int mom, int dad, float m, float u)
     {
         if (m <= 0f || mom == 0) return;
@@ -1000,7 +1031,7 @@ public static class Plants
     public static float Yield(World w, int i, ReadOnlySpan<float> diet)
     {
         var t = w.Flora; var Pe = t.Phe; int NP = PlantTable.NP;
-        float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i];
+        float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], ax = w.WetDur[i];
         float g = w.Pool[(int)Pool.Grass][i], s = w.Shrub[i], tr = w.Tree[i];
         float y = 0f, dB = 0f, dF = 0f, dSd = 0f, dNc = 0f, dR = 0f, dL = 0f, fB = 0f;
         float lH = MathF.Max(0.02f, 1f - 0.85f * tr - 0.35f * s);
@@ -1011,7 +1042,7 @@ public static class Plants
             int o = id * NP;
             float b = k == HERB ? g : k == SHRUB ? s : tr, r0 = Pe[o + Ph.R0];
             float L = k == HERB ? lH : k == SHRUB ? MathF.Max(0.02f, 1f - 0.7f * tr) : 1f;
-            float G0 = Gross(Pe, o, r0, WaterOf(Pe, o, W, 0f), N, T, L, 1f, out _, out _), fe = G0 / (r0 * (1f + K.RESP));
+            float G0 = Gross(Pe, o, r0, WaterOf(Pe, o, W, 0f), N, T, L, 1f, out _, out _, ax), fe = G0 / (r0 * (1f + K.RESP));
             float em = Pe[o + Ph.EMUL];
             float R = Pe[o + Ph.AR] * K.REPRO_RATE * Nature.Plants * fe * b;
             float nect = Pe[o + Ph.NECT] * R, sm = (R - nect) * Pe[o + Ph.S0] / Pe[o + Ph.CS];
@@ -1026,9 +1057,10 @@ public static class Plants
             else { float c = b * Reach(Pe, o, false); dB += K.R_B * Nature.Plants * fe * 0.5f * c * em; fB += c; if (k == SHRUB) dR += K.R_R * Nature.Plants * fe * b * 0.25f; }
         }
         y += diet[(int)Pool.Browse] * Pools.Rho[(int)Pool.Browse] * dB;
-        y += diet[(int)Pool.Fruit] * Pools.Rho[(int)Pool.Fruit] * dF;
-        y += diet[(int)Pool.Seed] * Pools.Rho[(int)Pool.Seed] * dSd;
-        y += diet[(int)Pool.Nectar] * Pools.Rho[(int)Pool.Nectar] * dNc;
+        // fruit, seed and nectar carry the energy of the production they are made of (RHO_PLANT per unit, 2026-11-01)
+        y += diet[(int)Pool.Fruit] * K.RHO_PLANT * dF;
+        y += diet[(int)Pool.Seed] * K.RHO_PLANT * dSd;
+        y += diet[(int)Pool.Nectar] * K.RHO_PLANT * dNc;
         y += diet[(int)Pool.Root] * Pools.Rho[(int)Pool.Root] * dR;
         y += diet[(int)Pool.Litter] * Pools.Rho[(int)Pool.Litter] * dL;
         return y;

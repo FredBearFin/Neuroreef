@@ -204,10 +204,10 @@ public static class Life
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
-            // its gut passes food at its metabolic pace (2026-11-01: a cold or cold-blooded gut digests slowly, as in RESOLVE)
-            float dig = w.PDig[c] * (Climate.On ? (float)(actSum / n) : 1f);
-            float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
-            rate = MathF.Max(rate, diet[p] * Pools.Rho[p] * pass);
+            // its gut passes and absorbs food at its metabolic pace (2026-11-01: a cold or cold-blooded gut digests slowly, as in RESOLVE)
+            float act = Climate.On ? (float)(actSum / n) : 1f;
+            float pass = MathF.Min(MathF.Min(w.PBite[c], w.PDig[c] * act), 0.5f * (float)(stock[p] / n));
+            rate = MathF.Max(rate, MathF.Min(w.PAbsorb[c] * act, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         if (rate < K.FORAGE_MARGIN * need) return 0f;
         return (float)(y / need);

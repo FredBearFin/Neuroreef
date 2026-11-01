@@ -36,6 +36,8 @@ const STAIN_MAX = 1024;       // blood stains on the ground
 const BLOOD_MAX = 2500;       // blood droplets in the air at once
 const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sinking for the last quarter
 const NEAR_PX = 22;          // organisms drawn longer than this on screen (pixels) get the detailed body
+const SWIM_FINS = (0.3 - 0.1) / 0.9;   // fins at which a body swims in deep water (Body.GroundRealm: 0.1 + 0.9 fins >= DEEP_SWIM 0.3)
+const FLY_VM = 90;           // metres per step x M^0.17 above which a flier is taken to be in the air (a landed one walks: _air)
 const DOT_PX = 1.8;          // in the overview no organism is drawn shorter than this (a dot where it is, never a carpet)
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
@@ -199,7 +201,7 @@ export class World3D {
     const ctx = {
       S, fw, U, sea, SF, H, broad, isLake: lake, lift: LAND_LIFT, ground: groundRaw, cellOf: (x, z) => this._cellOf(x, z),
       widthOfClass: (c) => riverWidth(c, RIVER_W0, RIVER_WMAX), widthOf: (i) => riverWidth(riv[i] >> 3, RIVER_W0, RIVER_WMAX),
-      depthOf: (i) => Math.min(1.2, Math.max(0.15, (w.depth[i] / 2000) * U)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
+      depthOf: (i) => Math.min(1.2, Math.max(0.15, depthM(w, i) * RELIEF / 8000)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
     };
     const paths = fromWire(w, ctx) || fromCells(w, riv, ctx);
     const feats = decodeFeatures(w, S, groundRaw);
@@ -229,6 +231,7 @@ export class World3D {
     // rivers: their ribbons in chunks of the map, drawn within RIBBON_FAR of the camera (beyond it the ground paints them)
     const rg = ribbonGeometry(paths);
     this.rivVC = rg.userData.cells; this.rivColor = rg.attributes.color.array;
+    { const A = rg.attributes.aRiv.array; this.rivSteep = new Float32Array(A.length / 3); for (let v = 0; v < this.rivSteep.length; v++) this.rivSteep[v] = A[v * 3 + 2]; }
     this.rivChunks = splitChunks(rg, this.W, CHUNKS); rg.dispose();
     const WU = this.waterU = { ...this.ground.uniforms, uTime: { value: 0 } };
     // the lake surface loses depth ties to the ground (polygon offset away from the camera): low shores just above the
@@ -362,7 +365,8 @@ export class World3D {
     const grass = L('grass'), shrub = L('shrub'), tree = L('tree'), fire = L('fire'), moist = L('moisture'),
           carrion = L('carrion'), algae = L('algae'), phyto = L('phyto'), nectar = L('nectar'), pond = L('pond'),
           frozen = L('frozen'), temp = L('temp'), flood = L('flood'),
-          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), lime = L('limestone'), allu = L('alluvium');
+          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), lime = L('limestone'), allu = L('alluvium'),
+          wetland = L('wetland');   // marsh and swamp share (hydrology, when sent; none: no wetlands drawn)
     // the sim's snowpack when it sends one (the water cycle on); else snow where the air is below freezing
     let hasSnow = false; if (snow) for (let k = 0; k < snow.length; k++) if (snow[k]) { hasSnow = true; break; }
     const sea = w.sea, b8 = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
@@ -381,7 +385,7 @@ export class World3D {
         const gr = 0.30 + 0.30 * dryG, gg = 0.58 - 0.12 * dryG, gb = 0.18;      // green grass, yellowing when dry
         r += (gr - r) * G; g += (gg - g) * G; b += (gb - b) * G;
         r += (0.30 - r) * S; g += (0.40 - g) * S; b += (0.16 - b) * S;
-        r += (0.10 - r) * T * 0.85; g += (0.26 - g) * T * 0.85; b += (0.12 - b) * T * 0.85;
+        r += (0.17 - r) * T * 0.85; g += (0.26 - g) * T * 0.85; b += (0.13 - b) * T * 0.85;   // forest floor and canopy (sRGB, as all the cover colours)
         const nc = nectar[fi] / 255; r += nc * 0.25; b += nc * 0.18;          // flowers
         const ca = carrion[fi] / 255; r += (0.35 - r) * ca * 0.5; g *= 1 - ca * 0.4; b *= 1 - ca * 0.4;
         // a seasonal pond holding water (Wet = 2; the layer is the share of the field cell's 4 cells): open water
@@ -404,27 +408,65 @@ export class World3D {
         else if (temp) sn = Math.min(1, Math.max(0, (-(temp[fi] / 255 * 90 - 40) - 0.5) / 5));
       }
       M[i * 4] = b8(sn); M[i * 4 + 1] = volc ? volc[fi] : 0; M[i * 4 + 2] = sedi ? sedi[fi] : 0; M[i * 4 + 3] = allu ? allu[fi] : 0;
-      M2[i * 4] = lime ? lime[fi] : 0;
+      M2[i * 4] = lime ? lime[fi] : 0; M2[i * 4 + 1] = wetland && !this.isLake[i] ? wetland[fi] : 0;
+    }
+    // the FIELDS grid is half the cell grid: a [1 2 1] tent across the cells (on the torus) turns its 2x2 blocks into a
+    // smooth cover (2026-11-01 QA: once the colours had their contrast, the overview was a checkerboard of them)
+    {
+      const n4 = fw * fw * 4, tmp = this._coverTmp && this._coverTmp.length === n4 ? this._coverTmp : (this._coverTmp = new Uint8Array(n4));
+      for (let pass = 0; pass < 2; pass++) {
+        const src = pass ? tmp : C, dst = pass ? C : tmp;
+        for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
+          const i = (y * fw + x) * 4;
+          const a = pass ? (((y + fw - 1) % fw) * fw + x) * 4 : (y * fw + (x + fw - 1) % fw) * 4;
+          const b = pass ? (((y + 1) % fw) * fw + x) * 4 : (y * fw + (x + 1) % fw) * 4;
+          for (let c = 0; c < 4; c++) dst[i + c] = (src[a + c] + 2 * src[i + c] + src[b + c] + 2) >> 2;
+        }
+      }
     }
     this.ground.coverUpdated(); this.ground.matUpdated();
     this.ground.uniforms.uPlain.value = this.tempOverlay ? 1 : 0;
     const fieldOf = (i) => f ? Math.min(d - 1, ((i / fw) | 0) >> 1) * d + Math.min(d - 1, (i % fw) >> 1) : 0;
+    // ice (2026-11-01 QA): FIELDS 'frozen' is only the air below 0 °C now; water freezes over after a cold spell, so ice
+    // grows with the frost (the air temperature, 'temp'): a lake from about -1 °C, the sea (salt, mixed by waves) from
+    // about -4 °C, a slow river from about -3 °C, and a fast one (steep, turbulent: frazil and anchor ice, rarely a
+    // cover) not at all. Young ice is dark (black ice: the water shows through); it is white only under snow, which lies
+    // on it where the snowpack lies on the shore beside it.
+    const airC = (fi) => temp ? temp[fi] / 255 * 90 - 40 : frozen && frozen[fi] ? -8 : 5;
+    const shoreSnow = (fi) => {
+      if (!hasSnow) return 0;
+      const fx = fi % d, fy = (fi / d) | 0; let m = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) m = Math.max(m, snow[((fy + dy + d) % d) * d + ((fx + dx + d) % d)]);
+      return m / 255;
+    };
+    const ICE = [0.17, 0.23, 0.27], ICE_SNOW = [0.80, 0.85, 0.90];
+    const iceRGB = (out, o, k, sn) => { for (let c = 0; c < 3; c++) out[o + c] += (ICE[c] + (ICE_SNOW[c] - ICE[c]) * sn - out[o + c]) * k; };
+    const ramp = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
     // lakes: shallow water turquoise, deep water dark blue (depth below the water's level at each corner); algae and plankton tint it green
     const LC = this.lakeColor, LV = this.lakeVC, LL = this.lakeVL;
     for (let v = 0; v < LV.length; v++) {
-      const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, LL[v] - this.cellH[i]) / 2.0);
+      // 2026-11-01: depths are metres now (a littoral of 0-5 m, lakes 10-40 m, the sea to ~200 m): dark from 30 m
+      // (RELIEF units are 8,000 m, whatever the cell size)
+      const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, LL[v] - this.cellH[i]) / (30 * RELIEF / 8000));
       const al = f ? algae[fi] / 255 : 0, ph = f ? phyto[fi] / 255 : 0;
-      LC[v * 4] = 0.10 - 0.07 * dd + 0.06 * al; LC[v * 4 + 1] = 0.40 - 0.24 * dd + 0.18 * al + 0.10 * ph; LC[v * 4 + 2] = 0.48 - 0.18 * dd + 0.02 * ph;
+      // (linear light: water seen from above is dark, its bed showing through where shallow; 2026-11-01 QA, it was a bright cyan)
+      LC[v * 4] = 0.050 - 0.036 * dd + 0.03 * al; LC[v * 4 + 1] = 0.20 - 0.14 * dd + 0.09 * al + 0.05 * ph; LC[v * 4 + 2] = 0.25 - 0.14 * dd + 0.01 * ph;
       LC[v * 4 + 3] = 0.62 + 0.33 * dd;
-      if (frozen && frozen[fi] && this.isLake[i]) { LC[v * 4] = 0.80; LC[v * 4 + 1] = 0.88; LC[v * 4 + 2] = 0.94; LC[v * 4 + 3] = 0.95; }   // pale ice (Revision O)
+      if (f && this.isLake[i] && (temp || frozen)) {
+        const T = airC(fi), isSea = Math.abs(this.surfH[i]) < 0.01, ice = ramp((isSea ? -T - 4 : -T - 1) / 6);
+        if (ice > 0) { iceRGB(LC, v * 4, ice, shoreSnow(fi) * ice); LC[v * 4 + 3] += (0.96 - LC[v * 4 + 3]) * ice; }
+      }
     }
     // rivers: clear and light where small or shallow, deep green-blue where big and deep; algae tint them green
-    const RC = this.rivColor, RV = this.rivVC, U = RELIEF / (1 - sea);
+    const RC = this.rivColor, RV = this.rivVC, RS = this.rivSteep, U = RELIEF / (1 - sea);
     for (let v = 0; v < RV.length; v++) {
       const i = RV[v], fi = fieldOf(i), al = f ? algae[fi] / 255 : 0;
-      const dd = Math.min(1, Math.max((w.depth[i] / 2000) * U / 0.6, (this.riv[i] >> 3) / 24));
-      RC[v * 3] = 0.24 - 0.15 * dd + 0.05 * al; RC[v * 3 + 1] = 0.52 - 0.20 * dd + 0.12 * al; RC[v * 3 + 2] = 0.58 - 0.12 * dd;
-      if (frozen && frozen[fi]) { RC[v * 3] = 0.82; RC[v * 3 + 1] = 0.89; RC[v * 3 + 2] = 0.95; }
+      const dd = Math.min(1, Math.max(depthM(w, i) / 5, (this.riv[i] >> 3) / 24));   // 5 m: a deep river
+      RC[v * 3] = 0.08 - 0.05 * dd + 0.03 * al; RC[v * 3 + 1] = 0.22 - 0.12 * dd + 0.07 * al; RC[v * 3 + 2] = 0.25 - 0.11 * dd;
+      if (f && (temp || frozen)) {
+        const ice = ramp((-airC(fi) - 3) / 7) * (1 - ramp((RS[v] - 0.12) / 0.3));
+        if (ice > 0) iceRGB(RC, v * 3, ice, shoreSnow(fi) * ice);
+      }
     }
     this.lakeGeo.attributes.color.needsUpdate = true;
     copyColors(this.rivChunks, RC, 3);
@@ -483,13 +525,21 @@ export class World3D {
 
   setAgents(a) {
     const now = performance.now();
-    this.frameDt = Math.min(250, Math.max(16, now - this.frameT)); this.frameT = now;
+    // (up to 0.7 s: at a few steps a second the frames are that far apart, and the animals glide between them
+    // instead of moving for a quarter second and standing still for the rest)
+    this.frameDt = Math.min(700, Math.max(16, now - this.frameT)); this.frameT = now;
     const gen = (this._gen = (this._gen || 0) + 1), W = this.W, o = this.tmp;
     for (let k = 0; k < a.n; k++) {
       agentState(a, k, W, o);
       let e = this.agents.get(o.serial);
-      if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h }; this.agents.set(o.serial, e); }
-      else { e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h; }
+      if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h, st: a.step, vm: 0 }; this.agents.set(o.serial, e); }
+      else {
+        // its speed, in metres per step (a frame may carry several steps): a flier faster than it walks is in the air
+        const ds = a.step - e.st;
+        if (ds > 0) { let dx = o.x - e.x, dy = o.y - e.y; dx -= Math.round(dx / W) * W; dy -= Math.round(dy / W) * W; e.vm = Math.hypot(dx, dy) * this.scale.mpu / ds; }
+        e.st = a.step;
+        e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h;
+      }
       e.sp = o.sp; e.stage = o.stage; e.acts = o.acts; e.scan = o.scan; e.rest = o.rest; e.energy = o.energy; e.gen = gen; e.carry = o.carrying;
       // the body its genes built is the same for its life: decoded the first time its serial is seen (and again only if
       // the first gene bytes differ, as when another world, whose serials start again at 1, is shown)
@@ -898,7 +948,7 @@ export class World3D {
     let total = 0;
     for (const e of this.agents.values()) if (e.stage !== 0) total++;
     if (total > this.far.cap) { let cap = this.far.cap; while (cap < total) cap *= 2; this.far = this._allocBodies(this.far, this.farGeo, cap); }
-    const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0];
+    const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0], SL = [0, 0];
     const camX = this.camera.position.x, camY = this.camera.position.y, camZ = this.camera.position.z;
     // sizes: true size x the magnification (bk: world units per view-size unit); on screen, pixels per unit at distance 1
     const bk = this.scale.bodyK, ppu = this.canvas.clientHeight / (2 * Math.tan(this.camera.fov * Math.PI / 360));
@@ -949,7 +999,11 @@ export class World3D {
       }
       let sc = this._size(e);
       let gy = this._height(e, x, y, sc);
-      if (e.fly && !e.rest) gy += this._lift(sc, t, serial);
+      // a flier in the air (eased up and down as it takes off and lands): wings out; landed it walks or perches
+      let rs = e.rest ? 1 : 0;
+      const air = e.fly ? this._air(e, x, y, now) : 0;
+      if (air > 0.01) { gy += this._lift(sc, t, serial) * air; e.pose = 'Fly'; rs = e.rest ? 1 : 1 - air; e.grounded = false; }
+      else if (e.fly) e.pose = e.rest ? 'Fly' : e.pose || 'Walk';
       // gait from the distance moved since the last frame
       let mdx = e.x - e.px, mdy = e.y - e.py;
       if (mdx > Wh) mdx -= W; else if (mdx < -Wh) mdx += W;
@@ -957,13 +1011,18 @@ export class World3D {
       const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * sc + 0.05 * bk));
       e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
       const ddx = x - camX, ddy = gy - camY, ddz = y - camZ, dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-      if (dots && sc < dots * dist) { sc = dots * dist; if (e.fly && !e.rest) gy = Math.max(gy, this.heightAt(x, y) + sc); }   // never smaller than a dot
+      if (dots && sc < dots * dist) { sc = dots * dist; if (air > 0.01) gy = Math.max(gy, this.heightAt(x, y) + sc * air); }   // never smaller than a dot
       if (!inView(x, gy, y, 3 * sc + 0.02)) continue;   // a body (wings and tail spread) lies well within 3 x its size
-      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997, rs = e.rest ? 1 : 0;
+      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997;
+      // out of breath (oxygen debt, 0..15) and calling ride above the action byte (anim.js)
+      acts |= Math.round((e.breath || 0) * 15) * 256 | (e.call && e.callT && now - e.callT < 600 ? 4096 : 0);
       // each organism keeps its instance slot (keyed by serial) while it stays in a mesh: only its matrix and animation
-      // are sent each frame. A near one goes to the far mesh when the near one is full
-      if (dist < nearK * sc && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb)) nn++;
-      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb)) nf++;
+      // are sent each frame. A near one goes to the far mesh when the near one is full; a near one standing on the
+      // ground is sheared to its slope (feet on the slope, not in it or above it)
+      const isNear = dist < nearK * sc;
+      if (isNear && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
+      if (isNear && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nn++;
+      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nf++;
     }
     // the killed: flattened, darkened bodies lying where they fell, sinking into the ground at the end
     this.corpses = this.corpses.filter((d) => { if (now - d.t0 < CORPSE_LIFE) return true; this.dead.delete(d.serial); return false; });
@@ -975,8 +1034,11 @@ export class World3D {
       const ddx = x - camX, ddz = y - camZ, nr = nearK * sc;
       const ci = e.sp * 3, dk = 0.45 - 0.2 * a, r = rgb[ci] * dk + 0.18, g = rgb[ci + 1] * dk * 0.5, b = rgb[ci + 2] * dk * 0.5;
       const key = -d.serial;   // a corpse's slot is apart from the living animal's (serials are > 0)
-      if (ddx * ddx + ddz * ddz < nr * nr && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b)) nn++;
-      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b)) nf++;
+      e.pose = null;           // it lies as its body is built, not as it last moved (a flier shot down lies with wings folded)
+      const isNear = ddx * ddx + ddz * ddz < nr * nr;
+      if (isNear && e.grounded) this._slope(x, y, d.h, sc, SL); else SL[0] = SL[1] = 0;
+      if (isNear && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b, SL[0], SL[1])) nn++;
+      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b, SL[0], SL[1])) nf++;
     }
     finishBodies(near); finishBodies(far);
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
@@ -1024,35 +1086,47 @@ export class World3D {
     if (e.stage === 0) { const r = this._eggR(e); out.x = x; out.z = y; out.gy = this.heightAt(x, y); out.cy = out.gy + 0.8 * r; out.r = r; return out; }
     const sc = this._size(e);
     let gy = this._height(e, x, y, sc);
-    if (e.fly && !e.rest) gy += this._lift(sc, now / 1000, serial);
+    if (e.fly && e.air > 0.01) gy += this._lift(sc, now / 1000, serial) * e.air;
     out.x = x; out.z = y; out.gy = gy; out.cy = gy + 0.45 * sc; out.r = 0.55 * sc;
     return out;
   }
 
   /**
-   * Where an organism of drawn size sc stands at (x, y): on the ground; a walker in water wades with its body half
-   * under; a swimmer at its depth under the surface (AGENTS format 7: depth in m, and the share of the step spent there,
-   * so a fish stays down and an air-breather dives for that share of a cycle and comes up to breathe for the rest), never
-   * below the bed. Sets e.under (0..15: how far the water hides it, with depth and the water's murk) for the body shader.
+   * Where an organism of drawn size sc stands at (x, y): on the ground; in water where the sim holds it
+   * (Respiration.Uptake; AGENTS format 7: depth in m and the share of the step spent there): a swimmer (0.1 + 0.9 fins
+   * >= DEEP_SWIM, whatever its locomotion label) at its depth, so a fish stays down and an air-breather dives for that
+   * share of a cycle and comes up to breathe for the rest, never below the bed; any other body at depth walks on the bed
+   * (its depth is the whole column), else it wades or paddles at the surface. Sets e.under (0..15: how far the water
+   * hides it, with depth and the water's murk) for the body shader, e.grounded (its feet on the ground: it is sheared to
+   * the slope) and e.pose ('Swim' for a wader or landed flier swimming under water; null: as its locomotion).
    */
   _height(e, x, y, sc = this._size(e)) {
-    e.under = 0;
+    e.under = 0; e.grounded = true; e.pose = null;
     if (!this.world) return 0;
     const g = this.ground ? this.ground.heightAt(x, y, this.camera.position) : this._ground(x, y), ci = this._cellOf(x, y), sf = this.surfH[ci];
     if (!(sf === sf) || sf <= g) return g;                       // dry ground (sf NaN: no water here)
-    if (!e.swim) return Math.max(g, sf - 0.4 * sc);              // wading
-    const bed = g + 0.25 * sc;
-    let dm = e.depth > 0 ? e.depth : 0;
-    const at = e.atDepth === undefined ? 1 : e.atDepth;
-    if (dm > 0 && at < 0.98) {
-      // an 8 s cycle (its own phase): down for the share 'at', easing up and down over a tenth of it, at the surface the rest
-      const u = (performance.now() / 8000 + ((e.serial || 0) % 997) / 997) % 1, w = 0.1;
-      dm *= at <= 0.02 ? 0 : smooth(0, w, u) * (1 - smooth(at - w, at, u));
+    const swimmer = e.swim || (e.fins || 0) >= SWIM_FINS;
+    let dm = e.depth > 0 ? e.depth : 0, y0;
+    if (!swimmer) {
+      y0 = dm > 0 ? g : Math.max(g, sf - 0.4 * sc);             // on the bed; or wading, or paddling with its back awash
+      e.grounded = y0 === g;
+    } else {
+      const at = e.atDepth === undefined ? 1 : e.atDepth;
+      if (dm > 0 && at < 0.98) {
+        // an 8 s cycle (its own phase): down for the share 'at', easing up and down over a tenth of it, at the surface the rest
+        const u = (performance.now() / 8000 + ((e.serial || 0) % 997) / 997) % 1, w = 0.1;
+        dm *= at <= 0.02 ? 0 : smooth(0, w, u) * (1 - smooth(at - w, at, u));
+      }
+      if (!e.swim && dm <= 0.05) { y0 = Math.max(g, sf - 0.4 * sc); e.grounded = y0 === g; }   // a swimming wader at the surface wades
+      else {
+        y0 = Math.max(g + 0.25 * sc, Math.min(sf - 0.3 * sc, sf - dm * this.scale.upm));
+        e.grounded = false;
+        if (!e.swim) e.pose = 'Swim';                            // under water a wader (or a landed flier) swims
+      }
     }
-    const y0 = Math.max(bed, Math.min(sf - 0.3 * sc, sf - dm * this.scale.upm));
     // lost from view over a few metres in clear water, sooner where algae and plankton cloud it
     const murk = this._murkAt(ci), vis = 6 / (1 + 3 * murk), dd = (sf - y0) / this.scale.upm;
-    e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));
+    if (y0 < sf - 0.45 * sc) e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));   // (wading: its back is dry)
     return y0;
   }
 
@@ -1062,6 +1136,36 @@ export class World3D {
     const fw = this.world.fw, d = f.d, fi = Math.min(d - 1, ((ci / fw) | 0) >> 1) * d + Math.min(d - 1, (ci % fw) >> 1);
     const ka = this._kAlgae ??= this._layer('algae'), kp = this._kPhyto ??= this._layer('phyto');
     return Math.min(1, ((ka >= 0 ? f.data[ka * d * d + fi] : 0) + (kp >= 0 ? f.data[kp * d * d + fi] : 0)) / 255);
+  }
+
+  /**
+   * How far flier e is in the air now, 0 landed .. 1 flying, eased over about half a second as it takes off and lands.
+   * The sim (Resolve, World.Airborne) lands a flier whenever it can stand where it is and goes no faster than it walks
+   * (resting, eating or drinking land it); the frame does not say so, so it is read from its speed (e.vm, metres per
+   * step: a landed flier walks at most a few tens of metres a step, a flying one covers hundreds) and the ground.
+   */
+  _air(e, x, y, now) {
+    let want = 0;
+    if (!e.rest) {
+      const ci = this._cellOf(x, y), cell = this.world ? this.world.cell[ci] : 1;
+      const canLand = (cell & 1) || ((e.fins || 0) >= SWIM_FINS) || ((cell & 2) && (e.legs || 0) >= 0.3);   // Body.GroundRealm
+      want = !canLand || e.vm > FLY_VM * Math.pow(e.mass || 1, 0.17) ? 1 : 0;
+    }
+    if (e.air === undefined) e.air = want;
+    const dt = Math.min(0.25, Math.max(0, (now - (e.airT || now)) / 1000)); e.airT = now;
+    e.air += Math.sign(want - e.air) * Math.min(Math.abs(want - e.air), dt / 0.6);
+    return smooth(0, 1, e.air);
+  }
+
+  /** The ground's slope under a body of drawn size sc heading h at (x, y): out[0] rise per run forward, out[1] to its
+   *  left, over its own length (clamped to 45 degrees; a body is sheared to it, body.js writeMatrix). */
+  _slope(x, y, h, sc, out) {
+    const G = this.ground, cam = this.camera.position, d = 0.5 * sc, fx = Math.cos(h) * d, fz = Math.sin(h) * d;
+    if (!G) { out[0] = out[1] = 0; return out; }
+    const c = (v) => Math.max(-1, Math.min(1, v / (2 * d)));
+    out[0] = c(G.heightAt(x + fx, y + fz, cam) - G.heightAt(x - fx, y - fz, cam));
+    out[1] = c(G.heightAt(x - fz, y + fx, cam) - G.heightAt(x + fz, y - fx, cam));
+    return out;
   }
 
   /** A flyer's height over the ground (in its own drawn lengths), bobbing. */
@@ -1088,6 +1192,17 @@ export class World3D {
   setBodyLengths(list) {
     const m = this.lenM; m.clear();
     for (let i = 0; i + 1 < list.length; i += 2) m.set(list[i], list[i + 1]);
+  }
+
+  /** status.bodyLook: [serial, endothermy, fibre, ...] (0..1 each) for the body shader; a body whose values change
+   *  has its genes written again (e.gv, body.js placeBody). */
+  setBodyLooks(list) {
+    for (let i = 0; i + 2 < list.length; i += 3) {
+      const e = this.agents.get(list[i]); if (!e) continue;
+      // (fibre: its share of a budget spread over fifteen food pools; a third or more on fibrous food is a grazer)
+      const fib = Math.min(1, Math.max(0, (list[i + 2] - 0.12) / 0.3));
+      if (e.endo !== list[i + 1] || e.fibre !== fib) { e.endo = list[i + 1]; e.fibre = fib; e.gv = (e.gv | 0) + 1; }
+    }
   }
 
   /** Body mass of an organism (juveniles about half). */
@@ -1129,6 +1244,15 @@ function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= 2 * Math.P
 
 /** A cell's elevation, 0..1: from the 16-bit plane when the WORLD frame has it, else the 8-bit one. */
 function elevOf(w, i) { return w.elev16 ? w.elev16[i] / 65535 : w.elev[i] / 255; }
+
+/** A cell's water depth in world units (true scale: 1 unit = 54.5 m both ways). From metres when the WORLD frame gives
+ *  them (w.depthM, a per-cell array in m; or w.depthUnit === 'm' with w.depth in m), else from the ICD depth byte
+ *  (normalised elevation x 2000) through U (units per normalised elevation). */
+function waterDepthU(w, i, U) {
+  if (w.depthM) return w.depthM[i] * RELIEF / 8000;
+  if (w.depthUnit === 'm') return w.depth[i] * RELIEF / 8000;
+  return (w.depth[i] / 2000) * U;
+}
 
 function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 
@@ -1184,8 +1308,11 @@ function wrapPatch(mat, U, key) {
   };
 }
 
+/** Water depth of cell i, m, from the WORLD frame's depth plane (2026-11-01: round(16 sqrt(m)); ICD §WORLD). */
+function depthM(w, i) { const b = w.depth[i] / 16; return b * b; }
+
 /** The river plane for a server that does not send it: open water above lake level drains to its lowest wet
- *  neighbour (else its lowest), sized from its depth (depth = SHALLOW x RIVER_D x (flow / threshold)^0.4). */
+ *  neighbour (else its lowest), sized from its depth (2026-11-01: m = RIVER_D x Q^0.4, Q in m3/s). */
 function deriveRivers(w) {
   const fw = w.fw, n = fw * fw, out = new Uint8Array(n), seaB = Math.ceil(w.sea * 255);
   for (let i = 0; i < n; i++) {
@@ -1197,7 +1324,7 @@ function deriveRivers(w) {
       if (w.cell[j] !== 1 && e <= w.elev[i] && e < be) { be = e; best = k; }
       if (e < ae) { ae = e; any = k; }
     }
-    const ratio = Math.pow(Math.max(1e-3, (w.depth[i] / 2000) / (0.035 * 0.5)), 2.5);
+    const ratio = Math.pow(Math.max(1e-3, depthM(w, i) / 0.3), 2.5);   // RIVER_D 0.3 m at 1 m3/s, depth ~ Q^0.4
     const size = Math.min(31, Math.max(1, 1 + Math.round(4 * Math.log2(Math.max(1, ratio)))));
     out[i] = (size << 3) | (best >= 0 ? best : any);
   }

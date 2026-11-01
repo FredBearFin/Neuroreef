@@ -74,7 +74,10 @@ public class ClimateTests
         // and FLOOD_HAND are in metres (they were in elevation, 2.7 x deeper at the 8,000-m relief), and a terminal lake no
         // longer stands over a saddle above the dry hollow beyond it, so lakes, soils, ponds and banks moved. It was
         // 0xC7DCAB9771F0850D on the merged mountains, rivers and caves before.
-        Assert.Equal(0xA072ED289084F27EUL, h);
+        // 2026-11-01: water depths in metres (rivers 0.3 m by discharge, standing water on a shoreface profile with its bed
+        // raised to it), SHALLOW 2 m, wetlands and peat, and a 21st plant trait (flood tolerance) re-pinned it from 0xA072ED289084F27E.
+        // (2026-11-01: re-pinned after the wetlands merge (peat and waterlogging change the fields) and the creature-variety merge)
+        Assert.Equal(0xCDEE23A10F68B3AAUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

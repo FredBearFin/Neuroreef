@@ -33,7 +33,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | 12 | f32 | lake level (normalised elevation) |
 | 16 | u8[FW²] | elevation, 0..255 = normalised 0..1 |
 | 16 + FW² | u8[FW²] | realm bits per cell: 1 land, 2 shallow water, 4 deep water |
-| 16 + 2·FW² | u8[FW²] | water depth × 2000, clamped to 255 |
+| 16 + 2·FW² | u8[FW²] | water depth (2026-11-01): round(16 √(depth in m)), clamped to 255, so depth m = (b / 16)²: 16 is 1 m, 32 is 4 m, 160 is 100 m, 255 is 254 m or more; 0 on land. Before 2026-11-01 it was depth (normalised elevation) × 2000 |
 | 16 + 3·FW² | u8[FW²] | rivers (2026-10-31, display only): 0 = not a river (land, the sea or a lake); for a river cell (open water outside the sea and the lakes) bits 0-2 = the neighbour it drains to (0 +x, 1 +x+y, 2 +y, 3 −x+y, 4 −x, 5 −x−y, 6 −y, 7 +x−y; y is the row) and bits 3-7 = size class 1 + round(4·log2(Flow / river threshold)), 1..31 (quarter octaves of the rain it gathers over the catchment at which a cell becomes river, RIVER_ACC). A client that predates it ignores the trailing plane |
 | 16 + 4·FW² | u16[FW²] | standing water surface (2026-10-31, display only): for a cell of the sea or a lake, its water level (bed + depth) as normalised elevation × 65535, at least 1; 0 for land and rivers. Lakes in upland basins stand at their own levels, above or below the sea level. A client that predates it ignores the trailing plane and draws all standing water at the sea level |
 | 16 + 6·FW² | u8[FW²] | cave features (2026-11-01, Caves.cs; World.CaveKind), bits: 1 karst passage under the cell, 2 lava tube under the cell, 4 sinkhole (a doline or ponor that swallows surface water), 8 cave entrance (a resurgence, a collapse doline, a valley-wall opening or a lava-tube skylight; an animal there shelters in cave air), 16 karst spring (where a conduit discharges), 32 losing river (a river cell over karst that leaks into the conduits), 64 ponor (the sinkhole takes a stream from other rock). Bits combine (a collapse doline is 1+4+8). A client that predates it ignores the trailing planes |
@@ -71,7 +71,7 @@ Point:
 | 0 | f32 | x in field cells: cell (i, j) spans [i, i+1) × [j, j+1), so its centre is (i + 0.5, j + 0.5) |
 | 4 | f32 | y in field cells (y is the row) |
 | 8 | f32 | the river's width there, in cells (1..RIVER_W_MAX; it never narrows downstream) |
-| 12 | f32 | its depth there, in normalised elevation (as World.Depth; the depth plane is this × 2000) |
+| 12 | f32 | its depth there, in normalised elevation (as World.Depth; × World.ElevPerM⁻¹ = (1 − sea) / 8000 m⁻¹ it is metres: 0.3-10 m, by discharge) |
 
 A river's points are the centreline points of its channel cells, one per cell, and a last point where it ends: on the river
 it joins (that river's point in the cell it flows into, so the two lines meet) or the centre of the lake or sea cell it
@@ -122,8 +122,8 @@ and marking hue. These are organism genes, not values generated from serials or 
 The first 42 record bytes retain their format-6 meaning (the first 26 their format-5 meaning).
 
 Depth (format 7, `src/Neuroreef.Core/Respiration.cs`): metres of water above the animal. The
-column under it is the cell's water depth (the WORLD frame's depth byte gives it coarsely; in metres
-it is `Depth / ElevPerM`). A swimmer holds a depth its depth-preference gene picks, pulled up when out
+column under it is the cell's water depth (the WORLD frame's depth byte gives it: (b / 16)² m; in the
+sim it is `Depth / ElevPerM`). A swimmer holds a depth its depth-preference gene picks, pulled up when out
 of breath; an air-breather dives there on a held breath for the given share of the step and is at the
 surface the rest, so a renderer can show it at the depth (diving) or at the surface by that share.
 A non-swimmer in water is either on the bottom (depth = the column) or at the surface (0).
@@ -134,7 +134,7 @@ A non-swimmer in water is either on the bottom (depth = the column) or at the su
 |---|---|---|
 | 8 | u16 | side D = FW / 2 (2×2 cells averaged) |
 | 10 | u16 | layer count L |
-| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood, snow, volcanic, sedimentary, alluvium, limestone |
+| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood, snow, volcanic, sedimentary, alluvium, limestone, wetland, peat |
 
 Layer values are 0..255 for 0..1. Pools that can exceed 1 are sent as tanh(amount) (carrion,
 dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)). `pond` is 1 where a seasonal
@@ -147,7 +147,13 @@ river has flooded its floodplain (Wet = 3); clients look layers up by name, so o
 The terrain-material layers (2026-11-01, display only): `snow` is the snowpack's cover, 1 − e^(−SWE / 30 mm) (0 on water,
 and everywhere when the water cycle is off: the client then falls back on `temp`); `volcanic`, `sedimentary` and
 `limestone` are the share of the 2×2 cells whose surface rock (World.Rock) is of that kind (the rest is crystalline); `alluvium` is the
-alluvium's depth as 1 − e^(−depth / ALLUV_D).
+alluvium's depth as 1 − e^(−depth / ALLUV_D) (ALLUV_D in metres; World.Alluvium is elevation, so depth = Alluvium / ElevPerM).
+`wetland` (2026-11-01, Wetlands.cs) is not an average: it is the wetland kind that most of the 2×2 cells' wetland cells
+have, when at least two of the four are wetland (land whose water table stands within 30 cm of the surface for a quarter
+of the year or more), × 64: 0 none, 64 marsh (herbaceous, little peat), 128 swamp (shrubs and trees cover 30% or more),
+192 fen (peat 0.4 m or deeper, fed by emerging groundwater or floods), 255 bog (peat 0.4 m or deeper, fed by rain alone).
+A wetland's water stands shallow among its plants and is drinkable while it is waterlogged (the `pond` layer and
+Wet = 2 mark it then). `peat` is the peat's depth as 1 − e^(−depth / 2 m).
 
 ### 0x04 TELEMETRY (when a new sample exists, checked every 0.5 s)
 
@@ -197,7 +203,7 @@ Every text frame has a `type`:
 | type | When | Content |
 |---|---|---|
 | `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`), `units` (real units, §2.1) |
-| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`; null when no one has explored), `units` (real units, §2.1), `bodyLenM` (every organism's body length in metres, §2.1) |
+| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`; null when no one has explored), `units` (real units, §2.1), `bodyLenM` (every organism's body length in metres, §2.1), `bodyLook` (every 4th status, else null: what the body is drawn from beyond the AGENTS record, §2.1) |
 | `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`; 2026-11-01 vehicles: each mode also `vehicle` (null on foot), `radiusM`, `rounds`, `heatPerShot`, `maxTimeS`, `depthMinM`, `depthMaxM`, `area`, `underwater`, `ignites`; `vehicles`: id, name, `realm` (land / water), `maxSpeedMps`, `maxSlopeDeg`, `wadeDepthM`, `minDepthM`, `stallMps`, `ceilingM`, `weapon` (a mode as above: jeep `jeep-gun` kind auto, plane `bomb` kind bomb, boat `torpedo` kind torpedo); `launchSlackM`) |
 | `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`, and for vehicles `vehicle` (or null), `alt`, `blasts`, `blastKills`, `fires`; null when no one has explored) |
 | `vehicle` | answer to `vehicle` | `kind`, `ok`, `why` (null, or why it cannot be placed: not on land, not on water, too shallow, not flat enough to take off), `x`, `y`, `weapon`, `rounds` |
@@ -234,6 +240,13 @@ the AGENTS record: length = 0.1 · M^(1/3) · ℓ / (ℓ·w·h)^(1/3) m, with M 
 for a juvenile this is its adult length) and ℓ, w, h = 2^(2a − 1) for each appearance gene a = (g + 127) / 254 of length,
 width and height (record bytes 26, 27, 28). At true size a 1 kg animal is 0.06–0.25 m long, a 40 kg one 0.2–0.85 m: a
 few thousandths of a unit, far smaller than a field cell. Explore's hit tests (Player.BodyR) use the same true body.
+
+`status.bodyLook` (2026-11-01, display only) is a flat array `[serial, endothermy, fibre, …]`, one triple per living
+organism (not embryos), each 0..1 to the hundredth, in every fourth status (every 2 s; null in the others, which a client
+ignores): endothermy is its B_ENDO organ size (0 cold-blooded, 1 warm-blooded); fibre is the share of its digestive
+budget on fibrous plant food (grass, browse, wood and litter pools). The genes are fixed for life, so a client keeps the
+last values it got. The console draws fur only on a warm body, stands warm bodies upright and gives a fibre-eater a long,
+deep muzzle (js/creatures/anim.js); without it (an older server) it draws middling values.
 
 ## 3. Commands (client → server), JSON text frames
 

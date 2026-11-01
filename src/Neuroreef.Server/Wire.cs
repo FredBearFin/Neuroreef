@@ -18,7 +18,9 @@ public static class Wire
           "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen",
           "plant height", "toxin", "thorns", "drought tolerance", "fleshy fruit", "leaf-on", "flora",   // Revision S: the plants' genes
           "flood",     // 2026-10-31: a flooded floodplain (Wet = 3)
-          "snow", "volcanic", "sedimentary", "alluvium", "limestone" };   // 2026-11-01, terrain materials: snow cover, surface rock, alluvium
+          "snow", "volcanic", "sedimentary", "alluvium", "limestone",   // 2026-11-01, terrain materials: snow cover, surface rock, alluvium
+          "wetland", "peat" };   // 2026-11-01: the wetland kind (Wetlands: marsh, swamp, fen, bog) and the peat's depth
+    const int WETLAND_LAYER = 35;
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -54,7 +56,7 @@ public static class Wire
         {
             b[16 + i] = (byte)Math.Clamp((int)(w.Elev[i] * 255f), 0, 255);
             b[16 + n + i] = w.Cell[i];
-            b[16 + 2 * n + i] = (byte)Math.Clamp((int)(w.Depth[i] * 2000f), 0, 255);
+            b[16 + 2 * n + i] = DepthByte(w, i);
             b[16 + 3 * n + i] = River(w, i);
             BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 4 * n + 2 * i), Surface(w, i));
             b[16 + 6 * n + i] = w.CaveKind[i];
@@ -66,6 +68,16 @@ public static class Wire
     }
 
     static int RiversSize(int rivers, int points) => 8 + 16 * rivers + 16 * points;
+
+    /// <summary>The depth plane (2026-11-01): 16 sqrt(depth in m), rounded and clamped to 255 (0.06 m steps near 0, 1 m
+    /// at 16, 4 m at 32, 100 m at 160, 254 m at 255); a client reads m = (b / 16)^2. It was depth (elevation) x 2000, which
+    /// read ~0.23 per metre once depths became metric: every river 0-2.</summary>
+    public static byte DepthByte(World w, int i)
+    {
+        if ((w.Cell[i] & (byte)Realm.Water) == 0) return 0;
+        float m = MathF.Max(0f, w.Depth[i]) / w.ElevPerM;
+        return (byte)Math.Clamp((int)MathF.Round(16f * MathF.Sqrt(m)), 0, 255);
+    }
 
     /// <summary>
     /// The rivers as lines (2026-11-01; display only, so a river is drawn as the smooth, meandering line it runs along, not
@@ -176,6 +188,7 @@ public static class Wire
                 for (int x = 0; x < FD; x++)
                 {
                     int i0 = (2 * y) * FW + 2 * x;
+                    if (l == WETLAND_LAYER) { b[o++] = WetlandByte(w, i0, FW); continue; }
                     float v = (Get(w, l, i0) + Get(w, l, i0 + 1) + Get(w, l, i0 + FW) + Get(w, l, i0 + FW + 1)) * 0.25f;
                     b[o++] = (byte)Math.Clamp((int)(v * 255f), 0, 255);
                 }
@@ -202,10 +215,24 @@ public static class Wire
             30 => w.WaterOn && w.Cell[i] == (byte)Realm.Land ? 1f - MathF.Exp(-w.Snow[i] / 30f) : 0f,
             31 => w.Rock[i] == Neuroreef.Rock.Volcanic ? 1f : 0f,
             32 => w.Rock[i] == Neuroreef.Rock.Sedimentary ? 1f : 0f,
-            33 => 1f - MathF.Exp(-w.Alluvium[i] / K.ALLUV_D),
+            33 => 1f - MathF.Exp(-w.Alluvium[i] / (K.ALLUV_D * w.ElevPerM)),   // ALLUV_D is in metres, Alluvium in elevation
             34 => w.Rock[i] == Neuroreef.Rock.Limestone ? 1f : 0f,
+            36 => 1f - MathF.Exp(-w.Peat[i] / 2f),   // peat as 1 - e^(-depth / 2 m)
             _ => 0f,
         };
+    }
+
+    /// <summary>The wetland layer (not averaged): the kind (Wetlands.Marsh 1, Swamp 2, Fen 3, Bog 4) most of the 2x2 cells'
+    /// wetland cells have (ties to the higher kind) x 64, capped at 255 (marsh 64, swamp 128, fen 192, bog 255), if at least
+    /// two of the four are wetland; else 0.</summary>
+    static byte WetlandByte(World w, int i0, int FW)
+    {
+        Span<int> c = stackalloc int[5];
+        c[w.Wetland[i0]]++; c[w.Wetland[i0 + 1]]++; c[w.Wetland[i0 + FW]]++; c[w.Wetland[i0 + FW + 1]]++;
+        if (c[0] > 2) return 0;
+        int best = 1;
+        for (int k = 2; k <= 4; k++) if (c[k] >= c[best]) best = k;
+        return (byte)Math.Min(255, best * 64);
     }
 
     /// <summary>The plants' layers (Revision S): tallest plant (log scale, 5 cm..40 m), cover-weighted toxin, thorns and drought
@@ -338,6 +365,31 @@ public static class Wire
             if (s == St.Dead || s == St.Embryo || pm[i] <= 0f) continue;
             float m = s == St.Adult ? 1f : MathF.Max(1e-6f, w.MassOf(i) / pm[i]);
             o.Add(ser[i]); o.Add(Math.Round(len[i] * MathK.Cbrt(m), 3));
+        }
+        return o.ToArray();
+    }
+
+    /// <summary>
+    /// What the console needs to draw each living organism's body that its AGENTS record does not carry (2026-11-01; ICD
+    /// §2 status: bodyLook), as a flat array [serial, endothermy, fibre, ...], each 0..1 to the hundredth: endothermy is
+    /// the B_ENDO organ size (fur shows on a warm body, a warm body stands upright); fibre is the share of its digestive
+    /// budget on fibrous plant food (grass, browse, wood, litter: a grazer's deep, long muzzle). Display only; read on the
+    /// network thread as BodyLengths is.
+    /// </summary>
+    public static double[] BodyLooks(World w)
+    {
+        var st = w.StageOf; var ser = w.Serial; var endo = w.PEndo; var diet = w.PDiet;
+        int n = Math.Min(Math.Min(st.Length, ser.Length), Math.Min(endo.Length, diet.Length / Pools.N));
+        var o = new List<double>(3 * w.AliveCount + 16);
+        for (int i = 0; i < n; i++)
+        {
+            byte s = st[i];
+            if (s == St.Dead || s == St.Embryo) continue;
+            int d = i * Pools.N;
+            float all = 0f;
+            for (int p = 0; p < Pools.N; p++) all += MathF.Max(0f, diet[d + p]);
+            float fib = MathF.Max(0f, diet[d + (int)Pool.Grass]) + MathF.Max(0f, diet[d + (int)Pool.Browse]) + MathF.Max(0f, diet[d + (int)Pool.Wood]) + MathF.Max(0f, diet[d + (int)Pool.Litter]);
+            o.Add(ser[i]); o.Add(Math.Round(Math.Clamp(endo[i], 0f, 1f), 2)); o.Add(Math.Round(all > 0f ? fib / all : 0f, 2));
         }
         return o.ToArray();
     }

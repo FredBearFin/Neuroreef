@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A headless probe of water depths and wetlands (2026-11-01): builds each seed's land with its water cycle and plants
+       spun up, runs another year, prints depths in metres by water type, the wetlands, peat and the wetland plants, and
+       dumps rasters for tools/WetProbe/draw.py. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Neuroreef.Core\Neuroreef.Core.csproj" />
+  </ItemGroup>
+</Project>

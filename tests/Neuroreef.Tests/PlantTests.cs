@@ -11,13 +11,13 @@ namespace Neuroreef.Tests;
 public class PlantTests
 {
     /// <summary>A genotype key with every trait at level mid, then the given (trait, level) pairs.</summary>
-    static (ulong lo, ushort hi) Key(int mid, params (int t, int lv)[] set)
+    static (ulong lo, uint hi) Key(int mid, params (int t, int lv)[] set)
     {
         var lv = Enumerable.Repeat(mid, PT.N).ToArray();
         foreach (var (t, l) in set) lv[t] = l;
-        ulong lo = 0; ushort hi = 0;
+        ulong lo = 0; uint hi = 0;
         for (int k = 0; k < 16; k++) lo |= (ulong)lv[k] << (4 * k);
-        for (int k = 0; k < 4; k++) hi |= (ushort)(lv[16 + k] << (4 * k));
+        for (int k = 0; k < PT.N - 16; k++) hi |= (uint)lv[16 + k] << (4 * k);
         return (lo, hi);
     }
 
@@ -39,7 +39,7 @@ public class PlantTests
         return w;
     }
 
-    static int Insert(World w, (ulong lo, ushort hi) k) => Plants.Insert(w, k.lo, k.hi, 0, 0);
+    static int Insert(World w, (ulong lo, uint hi) k) => Plants.Insert(w, k.lo, k.hi, 0, 0);
 
     [Fact]
     public void KeyRoundTripsThroughTheTable()
@@ -69,11 +69,11 @@ public class PlantTests
         {
             var args = new object?[] { t, a, b, Rng.Hash(1, (uint)k, 0, 1), Rng.Hash(1, (uint)k, 0, 2), null, null, null };
             cross.Invoke(null, args);
-            ulong lo = (ulong)args[5]!; ushort hi = (ushort)args[6]!; bool mut = (bool)args[7]!;
+            ulong lo = (ulong)args[5]!; uint hi = (uint)args[6]!; bool mut = (bool)args[7]!;
             int odd = 0;
             for (int q = 0; q < PT.N; q++)
             {
-                int lv = q < 16 ? (int)((lo >> (4 * q)) & 15) : (hi >> (4 * (q - 16))) & 15;
+                int lv = q < 16 ? (int)((lo >> (4 * q)) & 15) : (int)((hi >> (4 * (q - 16))) & 15);
                 if (lv == 2) sawA = true; else if (lv == 12) sawB = true; else { odd++; Assert.True(lv == 1 || lv == 3 || lv == 11 || lv == 13, $"level {lv}"); }
             }
             Assert.True(odd <= (mut ? 1 : 0));
@@ -112,7 +112,7 @@ public class PlantTests
         Assert.True(Leaf(tough, 0.1f) - Leaf(cheap, 0.1f) > Leaf(tough, 1f) - Leaf(cheap, 1f), "shade does not favour tough leaves");
         Assert.True(Leaf(cheap, 1f) > Leaf(tough, 1f), "cheap leaves do not win in full light");
         // defences cost growth
-        foreach (int tr in new[] { PT.TOXIN, PT.THORN, PT.RESPROUT, PT.NFIX })
+        foreach (int tr in new[] { PT.TOXIN, PT.THORN, PT.RESPROUT, PT.NFIX, PT.FLOOD })
             Assert.True(Plants.Net(Express((PT.HEIGHT, herb), (tr, 1f)), 0, 0.8f, 0.6f, K.T_REF, 1f) < Plants.Net(Express((PT.HEIGHT, herb), (tr, 0f)), 0, 0.8f, 0.6f, K.T_REF, 1f), PT.Names[tr]);
         // a fixer gains where nutrient is short
         var fix = Express((PT.HEIGHT, herb), (PT.NFIX, 1f)); var nof = Express((PT.HEIGHT, herb), (PT.NFIX, 0f));

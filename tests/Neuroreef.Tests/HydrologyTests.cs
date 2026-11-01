@@ -87,9 +87,10 @@ public class HydrologyTests
         {
             if (w.Cell[i] != (byte)Realm.Land && w.LakeOf[i] < 0)
             {
-                // every river cell is drinkable and wadeable, and belongs to a channel's cross-section
+                // every river cell is drinkable, at most RIVER_D_MAX deep (2026-11-01: metres; on this map every river is
+                // shallow, a brook of 0.3 m), and belongs to a channel's cross-section
                 Assert.Equal(1, w.Wet[i]); Assert.Equal(0f, w.DistDrink[i]);
-                Assert.True(w.Depth[i] > 0f && w.Depth[i] <= K.SHALLOW, $"river depth {w.Depth[i]}");
+                Assert.True(w.Depth[i] > 0f && w.Depth[i] <= K.RIVER_D_MAX * w.ElevPerM * 1.0001f, $"river depth {w.Depth[i] / w.ElevPerM} m");
                 Assert.True(Channel(w, w.FloodFrom[i]), $"river cell {i} belongs to no channel");
             }
             if (!Channel(w, i)) continue;
@@ -152,8 +153,11 @@ public class HydrologyTests
         {
             if (!Channel(w, i)) continue;
             float qr = w.Flow[i] / q1;
-            float d = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP));
-            Assert.Equal(d, w.Depth[i], 1e-6f);                                   // depth ~ Q^0.4 (Leopold & Maddock 1953)
+            // depth ~ Q^0.4 (Leopold & Maddock 1953), Q in m3/s, in metres (2026-11-01)
+            float m3s = w.Flow[i] * K.P_MEAN * 1e-3f * K.GEO_CELL_M * K.GEO_CELL_M / (365.25f * 86400f);
+            Assert.Equal(m3s, Hydrology.M3s(w.Flow[i]), 1e-6f);
+            float d = Math.Clamp(K.RIVER_D * MathK.Pow(m3s, K.RIVER_DEPTH_EXP), K.RIVER_D_MIN, K.RIVER_D_MAX) * w.ElevPerM;
+            Assert.Equal(d, w.Depth[i], 1e-6f);
             if (qr < 1f) { smallW += section[i]; nSmall++; Assert.Equal(1, section[i]); }   // under RIVER_Q1: one cell
             else if (qr >= 9f) { bigW += section[i]; nBig++; }                     // 3 cells wide or more by width ~ Q^0.5
             widest = Math.Max(widest, section[i]);
@@ -342,8 +346,11 @@ public class HydrologyTests
         double before = 0; for (int i = 0; i < n; i++) before += w.Nutrient[i];
         w.RainAnom = 0.6f;
         int fl = 0;
-        for (int u = 0; u < perYear && fl <= 50; u++) { Advance(1); fl = Ponds.Flooded(w); }
-        Assert.True(fl > 50, $"{fl} cells flooded in a wet year");
+        // 2026-11-01: a river's stage rises over bankfull by its own depth x (wet^0.4 - BANKFULL^0.4), and depths are metres
+        // now: this map's rivers are 0.3-m brooks that rise centimetres, so only the cells level with their channel flood (4-5
+        // in a wet year; over 50 when rivers were 0.5 x SHALLOW, 90-320 m, deep)
+        for (int u = 0; u < perYear && fl <= 2; u++) { Advance(1); fl = Ponds.Flooded(w); }
+        Assert.True(fl > 2, $"{fl} cells flooded in a wet year");
         double after = 0;
         for (int i = 0; i < n; i++)
         {

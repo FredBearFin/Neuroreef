@@ -49,7 +49,8 @@ public static class Terrain
     public static float[] RunoffRain(World w)
     {
         int n = Map.FW * Map.FW;
-        for (int i = 0; i < n; i++) w.Cell[i] = (byte)(w.Elev[i] < w.SeaLevel ? (w.SeaLevel - w.Elev[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep) : Realm.Land);
+        float sh = w.ShallowE;   // SHALLOW is in metres (2026-11-01)
+        for (int i = 0; i < n; i++) w.Cell[i] = (byte)(w.Elev[i] < w.SeaLevel ? (w.SeaLevel - w.Elev[i] <= sh ? Realm.Shallow : Realm.Deep) : Realm.Land);
         var rain = new float[n];
         Climate.Rainfall(w, rain);
         return rain;
@@ -196,7 +197,7 @@ public static class Terrain
                 if (w.Cell[i] != (byte)Realm.Land)
                 {
                     P[(int)Pool.Phyto][i] = 0.3f;
-                    P[(int)Pool.Algae][i] = 0.4f * MathK.Exp(-w.Depth[i] / K.SHALLOW);
+                    P[(int)Pool.Algae][i] = 0.4f * MathK.Exp(-w.Depth[i] / w.ShallowE);
                     P[(int)Pool.Detritus][i] = 0.1f;
                     continue;
                 }

@@ -110,6 +110,7 @@ public static class Body
         w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;
         w.PGut[i] = K.C_GUT * m;
         w.PDig[i] = K.C_DIGEST * mPow;
+        w.PAbsorb[i] = K.C_ABSORB * mPow;   // energy the gut can take up a step (2026-11-01)
         w.PBite[i] = K.C_BITE * mPow;
         float t = MathK.Pow(m, K.EXP_LIFE);
         w.PMature[i] = K.C_MATURE * t * devel;
