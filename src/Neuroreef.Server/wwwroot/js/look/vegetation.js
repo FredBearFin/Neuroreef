@@ -434,9 +434,9 @@ export class Vegetation {
           const deciduous = form === OAK || form === POPLAR || form === UMBRELLA;
           if (deciduous && u2 > leafOn + 0.08) form = BARE;
           const hj = baseH * (0.72 + 0.5 * ((hsh >>> 24) & 15) / 16) * (form === UMBRELLA ? 0.75 : 1);
-          // thinned far away, each kept tree stands for several: drawn bigger, but in its own proportions (it was
-          // widened twice as much as it was raised: far forests became squat balls)
-          const g2 = Math.sqrt(grow), sh = hj * g2, sw = hj * g2 * (0.9 + 0.2 * u2);
+          // thinned far away, each kept tree stands for several: drawn bigger, so the canopy covers as much ground as
+          // the sim's cover, but in its own proportions (it was widened twice as much as it was raised: squat balls)
+          const sh = hj * grow, sw = hj * grow * (0.9 + 0.2 * u2);
           p.set(x, v.heightAt(x, y) - 0.03 * sh, y); q.setFromAxisAngle(UP, (hsh & 63) / 10); s.set(sw, sh, sw);
           mat.compose(p, q, s);
           // foliage colour: the lineage's own shade, yellowing as the leaves go, snow in frost, charred in fire

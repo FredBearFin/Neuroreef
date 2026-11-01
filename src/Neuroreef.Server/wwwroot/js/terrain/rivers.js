@@ -50,7 +50,12 @@ export function fromWire(w, ctx) {
     // a river ends where it reaches standing water (its line goes on to the lake cell's centre: not drawn over the lake)
     if (ctx.isLake) {
       const k = r.cell.findIndex((c) => ctx.isLake[c]);
-      if (k >= 1) for (const key of ['x', 'z', 'w', 'lvl', 'depth', 'flow', 'cell']) r[key].length = k + 1;
+      if (k >= 1) {
+        for (const key of ['x', 'z', 'w', 'lvl', 'depth', 'flow', 'cell']) r[key].length = k + 1;
+        // ... at the lake cell's edge, not its centre (every river into a lake ran on to that one point: a star of
+        // slivers on the water, 2026-11-01 QA)
+        r.x[k] = (r.x[k - 1] + r.x[k]) / 2; r.z[k] = (r.z[k - 1] + r.z[k]) / 2;
+      }
       if (r.x.length < 2) continue;
     }
     r.w[0] *= 0.6;   // every river starts at its head (it ends on another, or in a lake or the sea): narrower there
