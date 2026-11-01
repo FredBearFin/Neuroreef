@@ -113,21 +113,23 @@ public static class Body
         float t = MathK.Pow(m, K.EXP_LIFE);
         w.PMature[i] = K.C_MATURE * t * devel;
         w.PLife[i] = K.C_LIFE * t * life * MathK.Pow(devel, K.DEVEL_AGING);
-        // a narrow field of view sees further (forward eyes), a wide one sees around but less far
+        // a narrow field of view sees further (forward eyes), a wide one sees around but less far. In metres (2026-11-01):
+        // C_SIGHT_M = 60 m at 1 kg, eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008)
         w.PSight[i] = MathF.Min(K.MAX_SIGHT, K.C_SIGHT * MathK.Pow(m, K.EXP_SIGHT) * fsi * (1.6f - fov / 360f));
         w.PFovCos[i] = MathK.Cos(fov * 0.5f * MathF.PI / 180f);
-        w.PReach[i] = 1f + 0.4f * MathK.Cbrt(m);
         w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * (1f + K.FIN_TURN * (finPairs - 1) * fins);
 
         // locomotion: smooth speeds in each medium from the organ sizes. On land the legs carry the body's weight and its
         // armour: bone stress grows as M^(1/3), and more legs share it (LOAD_DRAG; an unarmoured two-pair body is the
         // allometry's own reference). In water and air armour only adds drag
-        float v0 = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * fs;
+        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED);   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
+        float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
         float loadDrag = K.LOAD_DRAG * MathK.Cbrt(m) * ((1f + armour) / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1) - 0.70710678f);
         float vLand = v0 / (1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
+        float lengthShare = length;   // of the cube of its volume (LengthM)
         const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
         length = MathK.Log(length) * invLn2 * 0.5f; width = MathK.Log(width) * invLn2 * 0.5f; height = MathK.Log(height) * invLn2 * 0.5f;
         float limbShape = Organ(gn[G.B_LIMB_SHAPE]) - 0.5f;
@@ -155,6 +157,9 @@ public static class Body
         Realm reach = flies ? GroundRealm(legs, fins) : realm;
         w.PLoco[i] = (byte)loco; w.PRealm[i] = (byte)realm;
         w.PVmax[i] = MathF.Max(vAir, MathF.Max(vLand, vWater));
+        // reach in a step (2026-11-01): its body and the distance it sprints in a chase (ReachM)
+        w.PLen[i] = LengthM(m, lengthShare);
+        w.PReach[i] = ReachM(m, w.PVmax[i] / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
 
         w.PArmour[i] = armour;
         w.PStrike[i] = strike;
@@ -178,6 +183,32 @@ public static class Body
         w.PDrain[i] = blood + meat > 1e-4f ? blood / (blood + meat) : 0f;
         w.PParasite[i] = (byte)(w.PDrain[i] >= 0.5f ? 1 : 0);   // a label (and whom it targets): mostly a blood-drinker
     }
+
+    /// <summary>Body length in metres (2026-11-01): the side of a cube of its volume at the density of water, BODY_L_M x
+    /// M^(1/3) (M in kg), times its length gene's share of that cube (Dimensions: length x width x height = 1).</summary>
+    public static float LengthM(float m, float lengthShare) => K.BODY_L_M * MathK.Cbrt(m) * lengthShare;
+
+    /// <summary>Body length in metres of organism i at its present mass (a juvenile is smaller), for the console.</summary>
+    public static float LengthM(World w, int i) => w.PLen[i] * MathK.Cbrt(MathF.Max(1e-6f, w.MassOf(i) / w.PM[i]));
+
+    /// <summary>Top running speed in m/s at mass m kg (Garland 1983): log10 V(km/h) = log10 GARLAND_V1 + GARLAND_B log10 M +
+    /// GARLAND_C (log10 M)^2. 4.0 m/s at 0.1 kg, 8.4 at 1 kg, 15 at 40 kg.</summary>
+    public static float SprintMps(float m)
+    {
+        const float ln10 = 2.302585093f;
+        float lg = MathK.Log(m) / ln10;
+        return K.GARLAND_V1 / 3.6f * MathK.Exp(ln10 * (K.GARLAND_B * lg + K.GARLAND_C * lg * lg));
+    }
+
+    /// <summary>
+    /// How far an animal reaches in a step, in metres (2026-11-01): its own body length and the distance it sprints in a
+    /// chase, T_CHASE at Garland's top speed for its mass, times its own top speed against a plain body's (speed ratio,
+    /// at most 2: speed genes, legs, wings). A step is hours, so a strike is not a bite at arm's length but the last
+    /// rush of a stalk; most chases last 10-30 s (Elliott, Cowan &amp; Holling 1977). 60 m at 0.1 kg, 125 m at 1 kg, 225 m
+    /// at 40 kg for plain bodies (was 1 + 0.4 M^(1/3) units: 66-130 m, plus 0.5 + 0.4 M^(1/3) units of target).
+    /// </summary>
+    public static float ReachM(float m, float speedRatio, float lengthM)
+        => lengthM + SprintMps(m) * K.T_CHASE * Math.Clamp(speedRatio, 0f, 2f);
 
     /// <summary>Where a flier can stand, perch, feed or rest once landed: land; shallow water if it wades on legs or
     /// swims; open water if it swims well enough to stay up (DEEP_SWIM).</summary>
@@ -221,7 +252,7 @@ public static class Body
     public static float FlightFullStep(float m)
     {
         float netRef = FlightPowerMin(K.FLY_M_REF) - K.C_BASAL * MathK.Pow(K.FLY_M_REF, K.EXP_BASAL);
-        float walkRef = K.C_MOVE * K.C_SPEED * MathK.Pow(K.FLY_M_REF, K.EXP_MOVE);   // per unit distance, two pairs of full legs at full speed
+        float walkRef = K.C_MOVE * MathK.Pow(K.FLY_M_REF, K.EXP_MOVE);   // per unit distance, two pairs of full legs at full speed
         return netRef / (K.FLY_COT_RATIO * walkRef) * MathK.Pow(m / K.FLY_M_REF, 1f / 6f);
     }
 

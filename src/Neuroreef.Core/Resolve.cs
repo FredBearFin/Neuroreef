@@ -58,6 +58,7 @@ public static class Resolve
         // ---- 1. move (realm rule, DESIGN §9.2)
         float h = w.IHeading[i], spd = w.ISpeed[i];
         float nx = w.X[i], ny = w.Y[i];
+        float x0 = nx, y0 = ny;   // where its way this step began: a strike or a mating reaches along the way (2026-11-01)
         // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
         // drinking water within reach, it lands and walks (or stands) on its legs; it stays in the air only over ground it
         // cannot stand on (2026-10-31). An urge to eat with nothing here to eat does not ground it: it flies on to look
@@ -189,11 +190,10 @@ public static class Resolve
                 w.Energy[i] -= K.C_STRIKE * mass;                       // no target, no strike (DESIGN §5)
                 spent += K.C_STRIKE * mass;
                 T.Strikes[s]++;
-                float dx = World.Delta1(w.X[v] - w.X[i]), dy = World.Delta1(w.Y[v] - w.Y[i]);
-                float reachAll = w.PReach[i] + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(v));
+                float reachAll = Decide.StrikeReach(w.PReach[i], 0f, MathK.Cbrt(w.ApparentMass(v)));
                 // in water they meet only where their depths overlap (Respiration.Overlap; 1 when neither is in water)
                 float meet = Respiration.Overlap(w, i, v);
-                if (dx * dx + dy * dy <= reachAll * reachAll && (meet >= 1f || Rng.U(seed, step, (uint)i, Rs.Meet) < meet))
+                if (AlongWay(w, i, x0, y0, w.X[v], w.Y[v]) <= reachAll * reachAll && (meet >= 1f || Rng.U(seed, step, (uint)i, Rs.Meet) < meet))
                 {
                     if (strikeAttempt) metrics?.Apply(P.STRIKE);
                     if (preyEat) metrics?.Apply(P.EAT);
@@ -206,14 +206,13 @@ public static class Resolve
                 w.Energy[i] -= K.C_STRIKE * mass;
                 spent += K.C_STRIKE * mass;
                 T.Strikes[s]++;
-                float dx = World.Delta1(pl.X - w.X[i]), dy = World.Delta1(pl.Y - w.Y[i]);
-                float reachAll = w.PReach[i] + 0.5f + 0.4f * pl.MassCbrt;
-                if (dx * dx + dy * dy <= reachAll * reachAll) pl.Struck(w, i);
+                float reachAll = Decide.StrikeReach(w.PReach[i], 0f, pl.MassCbrt);
+                if (AlongWay(w, i, x0, y0, pl.X, pl.Y) <= reachAll * reachAll) pl.Struck(w, i);
             }
         }
 
         // ---- 5. mate / lay (DESIGN §8)
-        if ((acts & BIT_MATE) != 0 && w.IMate[i] >= 0) r += Mate(w, i, w.IMate[i], cell);
+        if ((acts & BIT_MATE) != 0 && w.IMate[i] >= 0) r += Mate(w, i, w.IMate[i], cell, x0, y0);
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
 
         // ---- 6a. voice (Revision M): a sound costs a little energy, and is heard by everyone near on the next step
@@ -376,12 +375,17 @@ public static class Resolve
             return MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty * coat;
         }
         if (spd <= 0f) return 0f;
-        float cot = K.C_MOVE * K.C_SPEED * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;
+        float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)
         bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > K.SHALLOW;
         if (swimming) return cot;
         float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
         return cot * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);
     }
+
+    /// <summary>Squared distance from (tx, ty) to the way organism i went this step, from (x0, y0) to where it is now
+    /// (2026-11-01): a step is hours, so what it passed near on the way it could reach.</summary>
+    static float AlongWay(World w, int i, float x0, float y0, float tx, float ty)
+        => Decide.PathDist2(World.Delta1(w.X[i] - x0), World.Delta1(w.Y[i] - y0), World.Delta1(tx - x0), World.Delta1(ty - y0));
 
     /// <summary>Put food into the gut. Returns the reward for it (taste of energy).</summary>
     // water in each food, per unit eaten, when fully moist (DESIGN §9.4, Revision K, ecology review): live plants hold
@@ -603,12 +607,12 @@ public static class Resolve
     /// whether young result depends on how alike their genes are, p = exp(-(d/D_COMPAT)^2), so close relatives
     /// breed freely, diverged ones rarely, and species separate gradually. Hermaphrodites both conceive.
     /// </summary>
-    static float Mate(World w, int i, int j, int cell)
+    static float Mate(World w, int i, int j, int cell, float x0, float y0)
     {
         if (!Decide.Ready(w, i) || w.StageOf[j] == St.Dead || !Decide.ValidPartner(w, i, j)) return 0;
-        float dx = World.Delta1(w.X[j] - w.X[i]), dy = World.Delta1(w.Y[j] - w.Y[i]);
-        float rr = w.PReach[i] * 2f + 0.5f;
-        if (dx * dx + dy * dy > rr * rr) return 0;
+        // both close in: within the sum of their reaches of the way i went this step (2026-11-01; was 2 x i's reach + 0.5 units of where it ended)
+        float rr = w.PReach[i] + w.PReach[j];
+        if (AlongWay(w, i, x0, y0, w.X[j], w.Y[j]) > rr * rr) return 0;
         if (w.FreeTop == 0 && !w.Grow(1)) { Life.Full(w); return 0; }     // no room for young (the world at its memory limit): nothing happens, nothing is paid
         Decide.Metrics?.Allow(P.MATE);
         w.Energy[i] -= K.C_MATE * w.PM[i]; w.Energy[j] -= K.C_MATE * w.PM[j];
