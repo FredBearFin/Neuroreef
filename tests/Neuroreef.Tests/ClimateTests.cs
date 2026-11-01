@@ -348,7 +348,10 @@ public class ClimateTests
     }
 
     [Fact] // a fields-only world: trees thin out with height where it is cold; the climate moves no water in or out of the land
-    [BigWorld]   // the treeline compares thirds of one latitude band: on a 256 map the band is too few cells to average out
+    // (2026-11-01, the 1 km world: no [BigWorld]. The map sits at one latitude, so the treeline compares thirds of all the
+    // land, not of a band of rows, and the 256 map holds enough of it. On the 1024 map (4 km) the lowest third lies within
+    // ~15 m of its lakes: wet, peaty ground where shrubs win and trees grow worse whatever the cold (tree cover against
+    // moisture r -0.30, WetDur -0.32, peat -0.27), so the law of cold and height is measured where the wet does not swamp it)
     public void VegetationFollowsTemperatureAndWaterIsConserved()
     {
         (double moist, double rain, double et, double residual) Run(float climate) => With(climate, () =>
@@ -381,8 +384,8 @@ public class ClimateTests
         Assert.True(on.moist > off.moist, $"moisture {on.moist:F3} with the climate, {off.moist:F3} without");
         // a treeline: on land made alike everywhere (the same wet soil and sparse young woodland, no fire and no drought
         // years), at fixed latitude, trees spread less on high ground with a climate, and alike without one. 2026-11-01 (the
-        // 1 km world): the map sits at one latitude, set here to a cool 52° (the 1024 map's hills reach 433 m; at 48°, after the
-        // wetlands merge, there was no line: 1.072 against 1.047)
+        // 1 km world): the map sits at one latitude, set here to a cool 52°, where the 256 map's hills of ~150 m reach the cold
+        // limit of trees (at 37°, the middle of the old band of rows, hills this low hold no treeline: 1.00, as they should)
         double Treeline(float climate) => With(climate, () =>
         {
             float fire = Nature.Fire, drought = Nature.Drought, lat0 = Nature.Latitude; Nature.Fire = 0f; Nature.Drought = 0f; Nature.Latitude = 52f;
