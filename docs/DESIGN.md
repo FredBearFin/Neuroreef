@@ -21,8 +21,9 @@ should be easy to see the whole thing", "we don't need worlds that reach 60k pop
   the creatures' factor (x2.1 at x20), as many to a field cell as its cover fits crowns of that size. Explore is always
   x1, so its eye height (1.7 m), speeds and weapon reaches are in the same metres as the bodies. In the overview no
   animal is drawn shorter than 2.4 px, so the whole map shows where the animals are as a sprinkling of dots, not a carpet.
-- Swimmers are drawn under the water's surface at their depth when the AGENTS record carries one (declared in the meta
-  message as agentFields.depth = { offset, type, scale in m }), fading into the water with depth and the water's murk.
+- Swimmers are drawn under the water's surface at their depth (AGENTS format 7: depth in m, at true scale), fading
+  into the water's colour with depth and its murk (algae, plankton); an air-breather that spends only part of each step
+  at depth dives for that share of an 8 s cycle and is at the surface for the rest. Never below the bed.
 
 **High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
 Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and

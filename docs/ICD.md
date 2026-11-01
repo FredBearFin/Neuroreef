@@ -1,6 +1,6 @@
 # NEUROREEF 2 — INTERFACE CONTROL DOCUMENT
 
-Document NR-ICD-001, Revision G (AGENTS format 6 adds inherited appearance genes). This is the link between the simulation server and the browser
+Document NR-ICD-001, Revision H (AGENTS format 7 adds depth in the water, time at depth and breathing; format 6 added inherited appearance genes). This is the link between the simulation server and the browser
 console. Encoders: `src/Neuroreef.Core/Snapshot.cs` (AGENTS) and `src/Neuroreef.Server/Wire.cs`
 (all others). Decoder: `src/Neuroreef.Server/wwwroot/js/net.js`. Test: `tests/Neuroreef.Tests/WireTests.cs`.
 
@@ -83,7 +83,7 @@ x and y may fall outside [0, FW); take them modulo FW to place them. The river p
 | Offset | Type | Field |
 |---|---|---|
 | 8 | u32 | count n |
-| 12 | 42 B × n | records (every living organism except embryos); header byte 1 = format version 6 |
+| 12 | 46 B × n | records (every living organism except embryos); header byte 1 = format version 7 |
 
 Each record:
 
@@ -111,11 +111,21 @@ Each record:
 | 24 | u8 | bits 0–3 the second sound of its utterance, bits 4–7 the third (0 none; Revision N) |
 | 25 | u8 | bits 4–7 fur (insulation gene × 15), bits 0–3 appendages (× 15) (Revision O; reserved 0 before) |
 | 26–41 | i8[16] | inherited appearance genes, in the order below; each maps to 0..1 as (g+127)/254 |
+| 42 | u16 | depth below the water's surface, decimetres (metres × 10; 0 at the surface or out of water) |
+| 44 | u8 | share of the step spent at that depth × 255 (the rest at the surface: an air-breather's dives; 255 for a fish or a bottom-walker) |
+| 45 | u8 | bits 0–3 lungs × 15 (0 gills only, 15 lungs only); bits 4–7 oxygen debt × 15 (0 breathing freely, 15 about to suffocate or drown) |
 
 Appearance genes: length, width, height, head size, neck length, tail length, limb placement,
 limb shape, fin shape, wing shape, hue, saturation, lightness, markings, marking scale,
 and marking hue. These are organism genes, not values generated from serials or clade labels.
-The first 26 record bytes retain their format-5 meaning.
+The first 42 record bytes retain their format-6 meaning (the first 26 their format-5 meaning).
+
+Depth (format 7, `src/Neuroreef.Core/Respiration.cs`): metres of water above the animal. The
+column under it is the cell's water depth (the WORLD frame's depth byte gives it coarsely; in metres
+it is `Depth / ElevPerM`). A swimmer holds a depth its depth-preference gene picks, pulled up when out
+of breath; an air-breather dives there on a held breath for the given share of the step and is at the
+surface the rest, so a renderer can show it at the depth (diving) or at the surface by that share.
+A non-swimmer in water is either on the bottom (depth = the column) or at the surface (0).
 
 ### 0x03 FIELDS (~1 Hz; `view.fieldsMs` sets the interval)
 

@@ -48,6 +48,7 @@ public static class Life
         w.Grown[c] = 0;
         w.Thirst[c] = 0; w.Fatigue[c] = 0; w.Age[c] = 0; w.Pain[c] = 0; w.Cooldown[c] = 0; w.Timer[c] = 0; w.LastFear[c] = 0;
         w.ThermStrain[c] = 0; w.HeatNeed[c] = 0; w.TOp[c] = K.T_REF;
+        w.Z[c] = 0; w.ZShare[c] = 0; w.O2Debt[c] = 0;   // it starts breathing freely, at the surface (Respiration.cs)
         PathMemory.Clear(w, c);   // a newborn remembers no place yet (Revision P)
         // sex: the mother's sex-ratio gene gives the chance of a daughter (0 = female)
         float pFemale = mother >= 0 && w.PHerm[mother] == 0 ? w.PSexRatio[mother] : 0.5f;
@@ -168,14 +169,18 @@ public static class Life
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
         double y = 0, heatNeed = 0; int n = 0;
         Span<double> stock = stackalloc double[Pools.NFIELD];
+        Span<float> reached = stackalloc float[Pools.N];
         for (int dy = -rc; dy <= rc; dy++)
             for (int dx = -rc; dx <= rc; dx++)
             {
                 if ((dx * dx + dy * dy) * cs * cs > r * r) continue;
                 int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
                 if (!w.CellAllows(c, cell, realm)) continue;
-                y += Fields.Yield(w, cell, diet); n++;
-                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell];
+                // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
+                if (!Respiration.Breathable(w, c, cell, out float z, out float share)) continue;
+                for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share);
+                y += Fields.Yield(w, cell, reached); n++;
+                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Respiration.Access(w, cell, p, z, share);
                 if (Climate.On) heatNeed += DayNeed(w, c, cell);
             }
         if (n == 0) return 0f;

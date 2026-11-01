@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from '../lib/OrbitControls.js';
-import { agentState, agentGenes, REC, setAgentFields } from './net.js';
+import { agentState, agentGenes, REC } from './net.js';
 import { Scale, MODEL_LEN } from './scale.js';
 import { Look } from './look/look.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBodies, bodySize, appearanceColor } from './creatures/body.js';
@@ -49,7 +49,6 @@ export class World3D {
     this.W = meta.world;
     // how big bodies and plants are drawn: true size x the view's magnification (js/scale.js)
     this.scale = new Scale(meta.explore && meta.explore.metresPerUnit);
-    setAgentFields(meta);
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, matchMedia('(max-width: 900px)').matches ? 1.25 : 2));
@@ -500,11 +499,12 @@ export class World3D {
         e.legs = o.legs; e.fins = o.fins; e.wings = o.wings; e.loco = o.loco; e.legPairs = o.legPairs; e.finPairs = o.finPairs; e.eyePairs = o.eyePairs;
         e.fly = o.loco === 'Fly'; e.swim = o.loco === 'Swim';
         e.sight = o.sight; e.armour = o.armour; e.strike = o.strike; e.meat = o.meat;
-        e.fur = o.fur; e.append = o.append;
+        e.fur = o.fur; e.append = o.append; e.lungs = o.lungs;
         (e.appearance ||= new Float32Array(16)).set(o.appearance);
       }
       e.call = o.call; e.call2 = o.call2; e.call3 = o.call3; if (o.call) e.callT = now;
-      e.depthM = o.depthM;   // a swimmer's depth (NaN when the server does not send it)
+      // a swimmer's depth below the surface (m) and the share of the step it spends there (an air-breather surfaces the rest)
+      e.depth = o.depth; e.atDepth = o.atDepth; e.breath = o.breath; e.serial = o.serial;
     }
     for (const [s, e] of this.agents) if (e.gen !== gen) this.agents.delete(s);
     this.count = a.n;
@@ -1029,9 +1029,9 @@ export class World3D {
 
   /**
    * Where an organism of drawn size sc stands at (x, y): on the ground; a walker in water wades with its body half
-   * under; a swimmer at its depth under the surface when the server sends one (AGENTS depth: fish under, a diver down,
-   * an air-breather back at the surface), else just under the surface. Sets e.under (0..15: how far the water hides it,
-   * with depth and the water's murk) for the body shader.
+   * under; a swimmer at its depth under the surface (AGENTS format 7: depth in m, and the share of the step spent there,
+   * so a fish stays down and an air-breather dives for that share of a cycle and comes up to breathe for the rest), never
+   * below the bed. Sets e.under (0..15: how far the water hides it, with depth and the water's murk) for the body shader.
    */
   _height(e, x, y, sc = this._size(e)) {
     e.under = 0;
@@ -1039,8 +1039,14 @@ export class World3D {
     const g = this.ground ? this.ground.heightAt(x, y, this.camera.position) : this._ground(x, y), ci = this._cellOf(x, y), sf = this.surfH[ci];
     if (!(sf === sf) || sf <= g) return g;                       // dry ground (sf NaN: no water here)
     if (!e.swim) return Math.max(g, sf - 0.4 * sc);              // wading
-    const bed = g + 0.25 * sc, dm = e.depthM;
-    if (!(dm === dm)) return Math.max(bed, sf - 0.3 * sc);        // no depth sent: swimming at the surface
+    const bed = g + 0.25 * sc;
+    let dm = e.depth > 0 ? e.depth : 0;
+    const at = e.atDepth === undefined ? 1 : e.atDepth;
+    if (dm > 0 && at < 0.98) {
+      // an 8 s cycle (its own phase): down for the share 'at', easing up and down over a tenth of it, at the surface the rest
+      const u = (performance.now() / 8000 + ((e.serial || 0) % 997) / 997) % 1, w = 0.1;
+      dm *= at <= 0.02 ? 0 : smooth(0, w, u) * (1 - smooth(at - w, at, u));
+    }
     const y0 = Math.max(bed, Math.min(sf - 0.3 * sc, sf - dm * this.scale.upm));
     // lost from view over a few metres in clear water, sooner where algae and plankton cloud it
     const murk = this._murkAt(ci), vis = 6 / (1 + 3 * murk), dd = (sf - y0) / this.scale.upm;

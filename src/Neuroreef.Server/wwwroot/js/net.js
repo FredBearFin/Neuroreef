@@ -1,6 +1,6 @@
 // The link to the simulation (docs/ICD.md). Decodes frames into plain objects and hands them to listeners.
 
-export const REC = 42;   // bytes per AGENTS record (header byte 1 = 6)
+export const REC = 46;   // bytes per AGENTS record (header byte 1 = 7: depth, time at depth, lungs and oxygen debt at 42-45)
 export const T_WORLD = 1, T_AGENTS = 2, T_FIELDS = 3, T_TELEMETRY = 4, T_HISTORY = 5, T_PROBE = 6;
 
 export class Link {
@@ -98,20 +98,6 @@ export class Link {
   }
 }
 
-// Where a swimmer's depth is in an AGENTS record: meta.agentFields.depth = { offset, type ('u8' | 'u16' | 'f32'),
-// scale (metres per count; default 1) } when the server declares it (the respiration work: fish under the surface,
-// divers diving). Without it no depth is read, and swimmers are drawn just under the surface.
-let DEPTH_FIELD = null;
-const SIZES = { u8: 1, u16: 2, f32: 4 };
-export function setAgentFields(meta) {
-  const d = meta && meta.agentFields && meta.agentFields.depth;
-  DEPTH_FIELD = d && d.offset >= 0 ? { offset: d.offset | 0, type: d.type || 'u8', size: SIZES[d.type || 'u8'] || 1, scale: d.scale > 0 ? d.scale : 1 } : null;
-}
-function readField(dv, o, D) {
-  const v = D.type === 'f32' ? dv.getFloat32(o, true) : D.type === 'u16' ? dv.getUint16(o, true) : dv.getUint8(o);
-  return v * D.scale;
-}
-
 /** Decode one format-6 AGENTS record; reuse out and its appearance buffer. */
 export function agentAt(a, k, world, out) {
   agentState(a, k, world, out);
@@ -134,9 +120,9 @@ export function agentState(a, k, world, out) {
   out.serial = dv.getUint32(o + 8, true);
   out.call = b[o + 21] >> 4;                             // the first sound of its utterance this step: 0 none, 1..8
   out.call2 = b[o + 24] & 15; out.call3 = b[o + 24] >> 4; // its second and third sounds (Revision N), 0 none
-  // a swimmer's depth under the water's surface, in metres, when the server sends it (NaN: not sent; drawn at the surface)
-  const D = DEPTH_FIELD;
-  out.depthM = D && D.offset + D.size <= (a.rec || REC) ? readField(dv, o + D.offset, D) : NaN;
+  out.depth = dv.getUint16(o + 42, true) / 10;           // metres below the water's surface (respiration, format 7)
+  out.atDepth = b[o + 44] / 255;                         // share of the step spent at that depth
+  out.breath = (b[o + 45] >> 4) / 15;                    // oxygen debt as a share of the lethal level
   return out;
 }
 
@@ -153,6 +139,7 @@ export function agentGenes(a, k, out) {
   out.finPairs = Math.min(4, b[o + 22] || 1);             // side fins
   out.eyePairs = Math.min(4, b[o + 23] || 1);
   out.locoCode = b[o + 21] & 15;                         // computed by the sim: 0 walk, 1 wade, 2 swim, 3 fly, 4 settled
+  out.lungs = (b[o + 45] & 15) / 15;                     // 0 gills .. 1 lungs (respiration, format 7)
   out.fur = (b[o + 25] >> 4) / 15; out.append = (b[o + 25] & 15) / 15;   // fur and appendages, 0..1 (Revision O)
   const appearance = out.appearance ||= new Float32Array(16);
   for (let j = 0; j < 16; j++) appearance[j] = (dv.getInt8(o + 26 + j) + 127) / 254;

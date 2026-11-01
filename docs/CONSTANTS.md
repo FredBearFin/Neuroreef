@@ -139,7 +139,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | R_BIRTH | 2 | - | reward: per offspring produced | HT |
 | R_PAIN | 4 | - | reward: per unit damage / Emax (negative) | HT |
 | R_FEAR | 0.5 | - | reward: per unit fear rise (negative) | HT |
-| MUT_RATE | 1.01445E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
+| MUT_RATE | 1.01051E-05 | - | mutation probability per brain or reflex byte (1/LEN: about one mutation per offspring) | ECO: on the order of one mutation per genome per generation in functional sequence (Drake 1998; Lynch 2010); was 0.02 (~39 per offspring, mutational meltdown) |
 | MUT_BODY | 0.01 | - | mutation probability per body gene per birth (about 0.4 body changes per newborn) | ECO: each body gene stands for a polygenic trait of many loci; mutational heritability ~1e-3 per trait per generation (Lynch & Walsh 1998), so a trait changes far more often than one brain byte |
 | FOUNDER_BODY_SD | 12 | int8 | standing variation of founders' body genes around their ancestor (SD) | ECO: morphological traits vary with a CV of about 5-10% in natural populations (Houle 1992) |
 | MUT_SMALL | 2 | int8 | small mutation sigma | HT |
@@ -808,6 +808,30 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAVA_D | 8 | m | rock over a lava tube | ECO: roofs of a few m to ~15 m (Greeley 1987) |
 | LAVA_SKY | 0.1 | - | chance per cell of a lava tube that its roof has fallen in (a skylight, an entrance) | ECO: skylights every few hundred m along active tubes (Kauahikaua et al. 1998); HT |
 
-## 36. Organisms
+## 36. Respiration
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| LUNG_SCOPE | 10 | xbasal | most oxygen full lungs take up in sea-level air, as a multiple of basal metabolism (an aerobic scope) | ECO: maximal over basal oxygen uptake is ~10 in mammals and birds (Weibel & Hoppeler 2005; Bishop 1999) |
+| GILL_SCOPE | 4 | xbasal | most oxygen full gills take up in air-saturated water at T_REF, as a multiple of basal metabolism | ECO: the aerobic scope of fishes is 2-5 (Killen et al. 2016; Clark, Sandblom & Jutfelt 2013): water holds ~1/30 of air's oxygen and is ~800x denser and ~50x more viscous, so gills extract more (~80% against ~25%) but cannot pump much more of it (Schmidt-Nielsen 1997; Dejours 1981) |
+| GILL_AIR | 0.02 | - | share of gills' uptake left in air: the lamellae collapse and stick together, and dry | ECO: out of water the secondary lamellae coalesce and a few % of the gas-exchange area stays open; most fishes suffocate within minutes to hours in air, and air-breathing fishes have stiffened or reduced gills (Graham 1997). With GILL_SCOPE, 0.08 of basal: a warm body suffocates at once, a cold-blooded one at 20 °C (its rate ~0.2) slowly |
+| SKIN | 0.2 | xbasal | oxygen the skin takes up at M = 1, as a multiple of basal metabolism; it scales with surface over volume, M^(-1/3), and fur or feathers (the insulation gene) cover it | ECO: small frogs and salamanders take 25-50% of their resting oxygen through the skin, lungless salamanders all of it (Feder & Burggren 1985); a 0.1-unit body here takes 0.43 of basal |
+| GILL_EVAP | 3 | x | out of water, full gills make a body dry out this many times faster again (their wet surface evaporates): x (1 + GILL_EVAP x gill share) | ECO: gills are a thin, wet epithelium of 10-50x the body's skin area; out of water fishes and gill-breathing crabs lose water many times faster than air-breathers of their size, and amphibious fishes and land crabs have reduced gills (Graham 1997; Burggren & McMahon 1988); HT |
+| GILL_VENT | 0.1 | - | share of its metabolism a gill-breather spends pumping water over its gills, in air-saturated water at T_REF; more as the water holds less oxygen (x saturation^-1) | ECO: ventilating water costs fishes ~10% of resting metabolism, breathing air costs mammals 1-2% (Schmidt-Nielsen 1997; Jones & Schwarzfeld 1974) |
+| AIR_VENT | 0.02 | - | share of its metabolism an air-breather spends breathing at sea level; more in thin air (x partial pressure^-1) | ECO: 1-2% at rest in mammals (Schmidt-Nielsen 1997) |
+| O2_STORE | 0.035 | basal steps | oxygen stored in blood, muscle and lungs for a breath-hold dive, in steps of basal metabolism at M = 1; it grows as M, so a dive lasts ~M^0.25 | ECO: aerobic dive limits of ~6 min at 1 kg to ~1 h for great whales, ~M^0.25-0.3 (Schreer & Kovacs 1997; Kooyman 1989; Halsey, Butler & Blackburn 2006); 0.035 steps of ~3 h is 6 min |
+| DEBT_MAX | 2 | basal steps | oxygen debt a body bears before it dies (anaerobic metabolism), in steps of basal metabolism at M = 1, x M: so ~M^0.25 steps without oxygen at rest | ECO: vertebrates live minutes to hours on anaerobic glycolysis, the anoxia-tolerant (crucian carp, turtles) far longer in the cold (Hochachka & Somero 2002); a cold body burns less and lasts longer here (Heat.Rate) |
+| DIVE_V | 1.5 | m/s | vertical speed of a diving swimmer | ECO: divers descend at 1-2 m/s whatever their size (Schreer & Kovacs 1997; Watanabe et al. 2011) |
+| K_LIGHT | 0.1 | 1/m | light attenuation coefficient of water (Beer-Lambert, I = I0 exp(-k z)): plankton, which grows by light, lies near the surface | ECO: 0.05-0.2 /m in lakes and coastal seas (Kirk 2011); 1% of the light at ~46 m |
+| Z_MIX | 15 | m | depth of the wind-mixed surface layer of standing water: as warm as the surface and saturated with oxygen | ECO: epilimnia of lakes 5-20 m, ocean mixed layers 10-100 m (Wetzel 2001) |
+| Z_THERMO | 30 | m | below the mixed layer the water cools toward T_DEEP by e per this depth (the thermocline) | ECO: Wetzel 2001 |
+| T_DEEP | 4 | °C | temperature of deep standing water | ECO: fresh water is densest at 4 °C, and hypolimnia stay near it (Wetzel 2001) |
+| Z_HYPOX | 50 | m | below the mixed layer of stratified standing water, oxygen falls by e per this depth; fully when the surface is T_DEEP + 16 °C warmer, not at all when it is no warmer (cold lakes mix) | ECO: hypolimnetic oxygen depletion in warm stratified lakes, oxygen minimum zones at 200-1,000 m in the sea (Wetzel 2001; Keeling, Kortzinger & Gruber 2010); HT |
+| STAND_H | 0.25 | m | standing height of a body of M = 1 on full legs, ~M^(1/3): water shallower than this leaves its head in the air | ECO: shoulder height ~0.25 m at 1 kg to ~1.5 m at 300 kg (Garcia & da Silva 2006) |
+| LEG_PADDLE | 0.3 | - | legs paddle: a share of a fin's worth for keeping its head above water | ECO: most land mammals swim by paddling (Fish 1993) |
+| BOTTOM_BAND | 2 | m | an animal within this height of the bottom reaches what lies on it (attached algae, detritus) | HT |
+| STRIKE_DZ | 5 | m | two animals in water reach each other only when their depths are within this | HT: a lunge or bite; a step is hours, so this stands for how often they meet in the column |
+
+## 37. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).
