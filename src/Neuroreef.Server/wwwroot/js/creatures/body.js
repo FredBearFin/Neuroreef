@@ -14,7 +14,8 @@ export { bodyMaterial, locoOf };
 /** Body mass from the mass gene (-127..127), as the sim expresses it. */
 export function massOf(g) { return 0.1 * Math.pow(40 / 0.1, (g + 128) / 255); }   // MASS_LO 0.1 .. MASS_HI 40 (byte 12 carries the body's actual size)
 
-/** View scale of an organism of this mass (model units to world units): length grows as mass^(1/3). */
+/** View size of an organism of this mass (model units; its length grows as mass^(1/3)). The shader reads the mass
+ *  back from it. World units are this x the view's bodyK (js/scale.js: the true scale x the magnification). */
 export function bodySize(mass) { return 1.5 * Math.cbrt(mass); }
 
 /** Most pairs of legs, of side fins and of eyes a body can have (their genes give 1..4 each). */
@@ -139,8 +140,9 @@ function writeGenes(B, k4, b) {
   for (let j = 0; j < 4; j++) for (let c = 0; c < 4; c++) B.morph[j].array[k4 + c] = appearance[j * 4 + c];
 }
 
-// the packed counts (aClade.w): meat-eating (0..15) * 512 + loco * 64 + (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1)
-const cladeCode = (b) => Math.round(Math.min(1, Math.max(0, b.meat || 0)) * 15) * 512 +
+// the packed counts (aClade.w): how far under water (0..15) * 8192 + meat-eating (0..15) * 512 + loco * 64 +
+// (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1)
+const cladeCode = (b) => (b.under | 0) * 8192 + Math.round(Math.min(1, Math.max(0, b.meat || 0)) * 15) * 512 +
   (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
 
 // ------------------------------------------------------------------ stable instance slots (the live view)

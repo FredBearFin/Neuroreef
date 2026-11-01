@@ -1,7 +1,8 @@
 // Explore mode: walk the world on foot at its own scale, and hunt (the owner's request, 2026-11-01).
 //
 // Scale: the land is drawn at true scale, a field cell (FCELL = 4 units) being GEO_CELL_M = 218 m and the relief's
-// H_RELIEF = 3000 m being RELIEF = 55 units (world3d.js), so a metre is 4 / 218 = 55 / 3000 = 0.018 units. The person's
+// H_RELIEF = 8000 m being RELIEF = 146.8 units (world3d.js), so a metre is 4 / 218 = 0.018 units; the animals and plants
+// are drawn at true size too (js/scale.js: Explore is always x1, the overview magnifies). The person's
 // eye is 1.7 m above the ground; it walks at 1.5 m/s and runs at 5 m/s (Ctrl held, or F, multiplies by 10: the map is
 // many km across). It stands on the drawn ground (world3d.groundWater), wades slowly through shallow water and swims at
 // the surface of deep water, and the map wraps at its edges as the animals' does.
@@ -26,9 +27,10 @@ export class Explore {
   constructor(world, link, meta, view) {
     this.world = world; this.link = link; this.meta = meta;
     const ex = meta.explore || {};
-    // units per metre, from the view's own vertical scale and the sim's field cell (the same, 0.018)
-    this.upm = RELIEF / (ex.hRelief || 3000);
-    this.upmH = 4 / (ex.geoCellM || 218);
+    // units per metre: the view's (world.scale, js/scale.js: the sim's metres per unit, 0.018), which is the relief's own
+    // vertical scale (RELIEF / H_RELIEF). The creatures and plants are drawn at true size here (x1), so the eye height,
+    // walking speed and every weapon's reach are in the same metres as the bodies they aim at
+    this.upmV = RELIEF / (ex.hRelief || 8000);
     this.weapons = ex.weapons || [];
     this.maxHp = ex.maxHp || 100;
     this.hud = new ExploreHud(view);
@@ -43,6 +45,8 @@ export class Explore {
     world.explore = this;
     this._wire();
   }
+
+  get upm() { return this.world.scale.upm; }
 
   // ------------------------------------------------------------------ entering and leaving
   enter() {
@@ -74,9 +78,9 @@ export class Explore {
     this.projectiles = [];
     // back to an orbit over where the person stood
     const w = this.world, cam = w.camera, g = w.heightAt(this.pos.x, this.pos.z);
-    cam.fov = 55; cam.near = 0.3; cam.far = this.camWas ? this.camWas.far : cam.far; cam.updateProjectionMatrix();
+    cam.fov = 55; cam.near = 0.01; cam.far = this.camWas ? this.camWas.far : cam.far; cam.updateProjectionMatrix();
     w.controls.target.set(this.pos.x, g, this.pos.z);
-    cam.position.set(this.pos.x - 20, g + 14, this.pos.z + 20);
+    cam.position.set(this.pos.x - 1.2, g + 0.9, this.pos.z + 1.2);   // ~100 m back, over where the person stood
     w.controls.update();
   }
 

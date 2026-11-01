@@ -65,8 +65,9 @@ export class Link {
         break;
       }
       case T_AGENTS: {
-        const n = dv.getUint32(8, true);
-        this.emit('agents', { step, n, bytes: new Uint8Array(buf, 12, n * REC), dv: new DataView(buf, 12, n * REC) });
+        // the record size from the frame itself (a later format may add fields after the 42 bytes of format 6)
+        const n = dv.getUint32(8, true), rec = n > 0 ? Math.max(REC, Math.floor((buf.byteLength - 12) / n)) : REC;
+        this.emit('agents', { step, n, rec, bytes: new Uint8Array(buf, 12, n * rec), dv: new DataView(buf, 12, n * rec) });
         break;
       }
       case T_FIELDS: {
@@ -105,7 +106,7 @@ export function agentAt(a, k, world, out) {
 
 /** The part of record k that changes from step to step: position, heading, clade, stage, flags, actions, serial, calls. */
 export function agentState(a, k, world, out) {
-  const o = k * REC, dv = a.dv, b = a.bytes;
+  const o = k * (a.rec || REC), dv = a.dv, b = a.bytes;
   out.x = dv.getUint16(o, true) * world / 65536;
   out.y = dv.getUint16(o + 2, true) * world / 65536;
   out.h = b[o + 4] * (Math.PI * 2 / 256);
@@ -127,7 +128,7 @@ export function agentState(a, k, world, out) {
 
 /** The part of record k its genes give, the same for its whole life: body size, organs, pairs, locomotion, fur, appearance. */
 export function agentGenes(a, k, out) {
-  const o = k * REC, dv = a.dv, b = a.bytes;
+  const o = k * (a.rec || REC), dv = a.dv, b = a.bytes;
   // the organism's own body genes (bytes 12-19, int8): organ sizes are (g + 127) / 254, 0..1
   const gm = dv.getInt8(o + 12);
   out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.1 * Math.pow(40 / 0.1, out.m01);   // the body's actual size (its size class's floor included)

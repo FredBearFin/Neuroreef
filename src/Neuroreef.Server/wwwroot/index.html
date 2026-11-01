@@ -46,6 +46,11 @@
       <button data-cam="ride" title="First person: see what the selected animal sees">Ride-along</button>
       <button data-cam="explore" title="Walk the world yourself (WASD, mouse to look, Esc to leave) and hunt with a spear, bow or rifle. The animals see you as a 70 kg predator.">Explore</button>
     </div>
+    <div id="scalebox" class="floating">
+      <button id="fitworld" title="See the whole world at once (Home key)">Whole world</button>
+      <label id="magbox" title="Animals are drawn bigger than they are so you can see them from the overview: a 1 kg animal is 10 cm long, and the sim's animals live hundreds of metres apart. Plants are magnified by the square root of it. Explore always shows true size. Keys: [ and ].">
+        <span>creature size</span> <b id="mag-v">×20</b><input id="mag" type="range" min="0" max="6" step="1"><span id="mag-k" class="k">magnified</span></label>
+    </div>
     <div id="experience" class="floating">
       <select id="exp-species" title="Experience a clade: pick a random living member and follow it"></select>
       <button id="exp-go">Experience</button>
@@ -62,7 +67,7 @@
     <div id="splits" class="floating"></div>
     <div id="translator" class="floating hidden"></div>
     <div id="fights" class="floating" title="Strikes, kills and blood-drinking as they happen. Tap a line to fly there."></div>
-    <div id="hint" class="floating">drag to orbit · scroll or pinch to zoom · tap an animal to inspect it</div>
+    <div id="hint" class="floating">drag to orbit · scroll toward a place to zoom · double-click to dive in · Home: whole world · [ ]: creature size · tap an animal to inspect it</div>
   </section>
 
   <aside id="panel">

@@ -3,6 +3,29 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**A world you see whole, and bodies at their true size** (2026-11-01; Options.cs, setup.html, js/scale.js,
+js/world3d.js, js/look/vegetation.js; images docs/art/scale/). The owner: "the worlds are too damn big now ... the world
+should be easy to see the whole thing", "we don't need worlds that reach 60k population", and animals and plants drawn
+~100-400 times their size (a 1 kg animal 80 m long, shrubs 50 m). Now:
+- The default map of the prehistory and the world is the region, 512 units = 28 km (it was the continent, 1024 = 56 km):
+  it has a mountain range, a branching river system, lakes and karst, and its whole surface fits one view. A region
+  feeds about a quarter of a continent's animals (some thousands to ~25,000). Valley, continent and supercontinent stay
+  on the setup screen and --map / --world-map.
+- The overview opens on the whole map (fitWorld: centred, from above at a gentle tilt); Home or the Whole world button
+  returns to it; the wheel zooms toward the cursor (from the whole map to a few metres in ~60 notches) and a double-click
+  dives to a quarter of the distance there; the view centre follows the ground and the camera never goes under it.
+- Bodies are drawn at their true length, 0.1 M^(1/3) m times the length gene's share of the body (ICD §2.1: 1 kg about
+  10 cm, 40 kg about 34 cm; metres per unit and bodyLenM1kg from meta/status.units, and each juvenile's present length
+  from status.bodyLenM), times the overview's "creature size" control
+  (x1, 2, 5, 10, 20, 50, 100; default x20, labelled as magnified; keys [ and ]). Plants are drawn at the sim's plant
+  height in metres (trees 3-45 m, shrubs up to 4 m, grass tufts 0.5 m, boulders a few metres), times the fourth root of
+  the creatures' factor (x2.1 at x20), as many to a field cell as its cover fits crowns of that size. Explore is always
+  x1, so its eye height (1.7 m), speeds and weapon reaches are in the same metres as the bodies. In the overview no
+  animal is drawn shorter than 1.8 px, so the whole map shows where the animals are as a sprinkling of dots, not a carpet.
+- Swimmers are drawn under the water's surface at their depth (AGENTS format 7: depth in m, at true scale), fading
+  into the water's colour with depth and its murk (algae, plankton); an air-breather that spends only part of each step
+  at depth dives for that share of an 8 s cycle and is at the surface for the rest. Never below the bed.
+
 **High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
 Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and
 mtn_after_*: _shade top-down, _view the highest peak, _view2 the highest below 45° latitude, both at true scale). The
