@@ -42,6 +42,10 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Rivers along their own lines (2026-11-01) re-pinned it: D-infinity routing in the relief's erosion and the drainage,
+        // channel heads from the hillslopes' spread discharge (CHANNEL_C 0.005), channels laid along smoothed and meandering
+        // lines, and pond sites allowed POND_GAP_RIVER from a river, so the same seed has other relief, water, soil and plants.
+        // It was 0xDF8F10A05E11EEE6 after caves.
         // Caves and karst (2026-11-01) re-pinned it: sinkholes and losing rivers swallow surface water and karst groundwater
         // drains through conduits to springs (Caves.Drain), so the same seed has other soil water, ponds and springs. It was
         // 0xFC6EEB6D3DB2914 before.
@@ -63,7 +67,7 @@ public class ClimateTests
         // same seed, map and steps.
         // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
         // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
-        Assert.Equal(0xDF8F10A05E11EEE6UL, h);
+        Assert.Equal(0x753FBC092B902E01UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

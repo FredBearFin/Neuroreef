@@ -113,6 +113,7 @@ public static class Terrain
         var stand = new byte[n];
         for (int i = 0; i < n; i++) stand[i] = (byte)(w.LakeOf[i] >= 0 ? 1 : 0);
         Distance(stand, 1, w.DistWater);
+        var standDist = (float[])w.DistWater.Clone();
         Climate.Build(w);   // height, continentality and the temperature now (Revision O); draws no random numbers
         Distance(w.Cell, (byte)Realm.Water, w.DistWater);
         Distance(w.Cell, (byte)Realm.Land, w.DistLand);
@@ -122,12 +123,15 @@ public static class Terrain
         // every cell of a closed basin the running water has left (the routing fills it to its rim: it is where rain gathers
         // and stands), as seasonal wetlands, pans and playas do. 2026-10-31: those are the hollows too small to hold a
         // lake and the dry floors of closed basins whose lake is smaller than the basin (net.Fill: the spill level).
+        // 2026-11-01: POND_GAP from the sea and the lakes, but only POND_GAP_RIVER from a river: hollows on a floodplain
+        // beside a river hold ponds and wetlands (oxbows, backswamps), and the denser channel network left few hollows
+        // POND_GAP from every river (1 pond site on seeds 3 and 4)
         uint ps = Rng.Hash(w.Seed, 0, 0, Rs.Pond);
         for (int y = 0; y < FW; y++)
             for (int x = 0; x < FW; x++)
             {
                 int i = y * FW + x;
-                if (w.Cell[i] != (byte)Realm.Land || w.DistWater[i] < K.POND_GAP) continue;
+                if (w.Cell[i] != (byte)Realm.Land || standDist[i] < K.POND_GAP || w.DistWater[i] < K.POND_GAP_RIVER) continue;
                 if (net.Fill[i] - w.Elev[i] >= K.BASIN_MIN && Rng.U(ps, 0, (uint)i, 0) < MathF.Min(1f, Nature.Ponds)) { w.PondSite[i] = 1; continue; }
                 bool low = true;
                 for (int dy = -K.POND_R; dy <= K.POND_R && low; dy++)
