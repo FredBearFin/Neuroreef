@@ -1040,7 +1040,9 @@ reviewed by the ecologist)
 - The strength of nature is a setting (Nature: plants, seasons, season length, droughts, fire, disease,
   thirst, water, ponds), multipliers on the documented constants; 1 = the law. Saved in every checkpoint.
 - Hunger senses prey: an animal that can digest meat or blood sees the value of the animal in reach as food
-  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants.
+  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants. (2026-11-01:
+  prey and plants are compared by the energy a bite of each gives, not by their worths, which saturate at ~1 for
+  any food; the way to food leads to prey only for what it would give beyond the food underfoot.)
 - Ancestors' diet preferences are sparse and random: good at 1-3 of all 15 foods, poor at the rest. Revision P: a
   guaranteed staple (grass on land, plankton in water) was tried and removed, as it put every ancestor in the same
   niche; an ancestor is instead a body its home range can feed. Drain or kill is a share (PDrain), not a switch.
@@ -1727,7 +1729,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | movement cost | on the ground C_MOVE·C_SPEED·M^EXP_MOVE·speed·(1 − LEG_SWING + LEG_SWING·legs·pairs/LEG_PAIRS_REF·speed/vmax) (cost of transport ~M^0.7 × speed, Taylor et al. 1982; leg swing, Marsh et al. 2004; no swing swimming); airborne FlightPowerMin(M)·(3/u + u³)/4 − basal, u = speed/v_mp ≥ FLY_U_MIN (§9.2b); all × (1 + INS_MOVE·fur) |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
-| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
+| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, M·(1 − Birth)/A_m·TISSUE_E/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15). Since 2026-11-01 the whole body is built at the energy of wet tissue (TISSUE_E = 7 MJ/kg), ~9 MJ per kg with GROWTH_EFF; it was C_CARC·M·ρ_meat (18 MJ/kg), 2.5x the cost of real growth |
 | reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
 
 ### 9.2 Movement and realm
@@ -1805,9 +1807,9 @@ A body's own mass is its first defence: a small striker rarely hurts a large ani
 
 | Case | Result |
 |---|---|
-| Hit | The victim loses C_DAMAGE·power energy and feels pain. It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space; the rest becomes CARRION (DETRITUS in water). |
+| Hit | The victim loses min(1, power/defence)·WOUND·Emax_v energy and feels pain (2026-11-01: the wound grows with the weapon's force against the body resisting it, so a predator matched to its prey kills what it catches; it was C_DAMAGE·power, ~4 landed hits for a fed prey of the striker's size). It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space, the carcass: the energy of C_CARC·M_v of wet tissue (TISSUE_E, 7 MJ/kg; it was C_CARC·M_v kg of meat at RHO_MEAT, 5x that) and the victim's reserve before the hit, in kg of meat at RHO_MEAT; the rest becomes CARRION (DETRITUS in water). |
 | Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy). The host dies only if its energy reaches 0 (cause: parasitism). |
-| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. |
+| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. An attacker this leaves without reserve is killed by the victim's clade (2026-11-01: it was counted as starved). |
 
 ### 9.6 Disease (Revision C, NR-329; Revision G)
 

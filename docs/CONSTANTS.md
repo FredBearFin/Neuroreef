@@ -118,7 +118,9 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RHO_LITTER | 1.8 | E/M | energy density of leaf litter | HT |
 | RHO_WOOD | 1.6 | E/M | energy density of dead wood | HT |
 | RHO_DETRITUS | 2.4 | E/M | energy density of aquatic detritus | HT |
-| RHO_MEAT | 4 | E/M | energy density of body tissue (meat); also the cost of building tissue | ECO: tissue ~2-4x the stored reserve per unit mass |
+| RHO_MEAT | 4 | E/M | energy density of meat as food: a kilogram in the gut on the plant pools' basis (a pool kilogram holds RHO_PLANT, 28.5 MJ: 1.58 kg of dry matter at PLANT_KJ_G), so the gut, a bite and digestion see meat and plants alike | ECO (2026-11-01): dry meat ~23 kJ/g (wet tissue 7 kJ/g at ~70% water) x 1.58 = 36 MJ = 4.1 E. What a body holds and costs is TISSUE_MJ_KG; until 2026-11-01 this was also the energy of 1 kg of live body |
+| TISSUE_MJ_KG | 7 | MJ/kg | energy in a kilogram of live body (wet tissue: muscle, bone, gut and skin) | ECO: wet animal tissue holds ~4-8 kJ/g, ~7 on average (Peters 1983; Robbins 1993: ~70% water, ~20% protein at 23.6 kJ/g, a little fat) |
+| TISSUE_E | 0.785192 | E/M | energy in a kilogram of live body (TISSUE_MJ_KG in energy units): what growth lays down per kg (over GROWTH_EFF) and what a carcass's edible tissue (C_CARC) holds | derived (2026-11-01): 0.79; both were C_CARC x RHO_MEAT = 2 E (18 MJ) per kg of body, so growing cost 24 MJ/kg against ~9 measured (Brody 1945) and a kill fed 5x the meat a carcass holds |
 | RHO_BLOOD | 3 | E/M | energy density of blood | ECO: below tissue |
 
 ## 8. Hunting
@@ -129,10 +131,11 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_CONF | 0.25 | - | prey-group confusion | V1 |
 | C_STRIKE | 0.004 | E/M | cost of a strike | HT |
 | C_RETAL | 0.06 | E | retaliation per unit of excess defence | HT |
-| C_CARC | 0.5 | M/M | edible tissue (carcass) per unit body mass; also the tissue built in growth | ECO: about half of live mass is edible tissue |
+| C_CARC | 0.5 | M/M | edible tissue (carcass) per unit body mass (a body is built whole, at TISSUE_E per kg) | ECO: about half of live mass is edible tissue |
 | JUV_DEFENCE | 0.25 | - | defence multiplier for juveniles | HT |
 | DEF_BASE | 0.5 | - | defence of an unarmoured body per unit mass (skin, muscle, bone) | ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999) |
-| C_DAMAGE | 0.4 | E | energy a landed hit removes per unit of strike power (strike x attacker mass) | ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H) |
+| C_DAMAGE | 0.4 | E | energy a landed hit takes from the person (Player.Struck) per unit of strike power (strike x attacker mass) | ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H) |
+| WOUND | 1 | - | share of a victim's full reserve a landed hit takes per unit of the attacker's power over the victim's defence (strike x mass against mass x (DEF_BASE + armour), x JUV_DEFENCE for the young) | ECO (2026-11-01): a wound grows with the weapon's force against the body resisting it; a predator matched to its prey kills it once it has caught it (captured prey up to the predator's own mass are nearly always killed: Elliott, Cowan & Holling 1977; Carbone et al. 1999). Replaces C_DAMAGE x power for animals, which needed ~4 hits to kill a fed prey of its own size |
 | C_DRAIN | 0.05 | E | parasite drain per strike at M=1 | HT |
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |

@@ -120,7 +120,9 @@ public static class K
     [K("Food", "energy density of leaf litter", "E/M", "HT")] public const float RHO_LITTER = 1.8f;
     [K("Food", "energy density of dead wood", "E/M", "HT")] public const float RHO_WOOD = 1.6f;
     [K("Food", "energy density of aquatic detritus", "E/M", "HT")] public const float RHO_DETRITUS = 2.4f;
-    [K("Food", "energy density of body tissue (meat); also the cost of building tissue", "E/M", "ECO: tissue ~2-4x the stored reserve per unit mass")] public const float RHO_MEAT = 4.0f;
+    [K("Food", "energy density of meat as food: a kilogram in the gut on the plant pools' basis (a pool kilogram holds RHO_PLANT, 28.5 MJ: 1.58 kg of dry matter at PLANT_KJ_G), so the gut, a bite and digestion see meat and plants alike", "E/M", "ECO (2026-11-01): dry meat ~23 kJ/g (wet tissue 7 kJ/g at ~70% water) x 1.58 = 36 MJ = 4.1 E. What a body holds and costs is TISSUE_MJ_KG; until 2026-11-01 this was also the energy of 1 kg of live body")] public const float RHO_MEAT = 4.0f;
+    [K("Food", "energy in a kilogram of live body (wet tissue: muscle, bone, gut and skin)", "MJ/kg", "ECO: wet animal tissue holds ~4-8 kJ/g, ~7 on average (Peters 1983; Robbins 1993: ~70% water, ~20% protein at 23.6 kJ/g, a little fat)")] public const float TISSUE_MJ_KG = 7f;
+    [K("Food", "energy in a kilogram of live body (TISSUE_MJ_KG in energy units): what growth lays down per kg (over GROWTH_EFF) and what a carcass's edible tissue (C_CARC) holds", "E/M", "derived (2026-11-01): 0.79; both were C_CARC x RHO_MEAT = 2 E (18 MJ) per kg of body, so growing cost 24 MJ/kg against ~9 measured (Brody 1945) and a kill fed 5x the meat a carcass holds")] public const float TISSUE_E = TISSUE_MJ_KG * 1e6f * C_BASAL / (BMR_W * STEP_S);
     [K("Food", "energy density of blood", "E/M", "ECO: below tissue")] public const float RHO_BLOOD = 3.0f;
 
     // ---------------------------------------------------------------- 4. hunting
@@ -128,10 +130,11 @@ public static class K
     [K("Hunting", "prey-group confusion", "-", "V1")] public const float C_CONF = 0.25f;
     [K("Hunting", "cost of a strike", "E/M", "HT")] public const float C_STRIKE = 0.004f;
     [K("Hunting", "retaliation per unit of excess defence", "E", "HT")] public const float C_RETAL = 0.06f;
-    [K("Hunting", "edible tissue (carcass) per unit body mass; also the tissue built in growth", "M/M", "ECO: about half of live mass is edible tissue")] public const float C_CARC = 0.5f;
+    [K("Hunting", "edible tissue (carcass) per unit body mass (a body is built whole, at TISSUE_E per kg)", "M/M", "ECO: about half of live mass is edible tissue")] public const float C_CARC = 0.5f;
     [K("Hunting", "defence multiplier for juveniles", "-", "HT")] public const float JUV_DEFENCE = 0.25f;
     [K("Hunting", "defence of an unarmoured body per unit mass (skin, muscle, bone)", "-", "ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999)")] public const float DEF_BASE = 0.5f;
-    [K("Hunting", "energy a landed hit removes per unit of strike power (strike x attacker mass)", "E", "ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H)")] public const float C_DAMAGE = 0.4f;
+    [K("Hunting", "energy a landed hit takes from the person (Player.Struck) per unit of strike power (strike x attacker mass)", "E", "ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H)")] public const float C_DAMAGE = 0.4f;
+    [K("Hunting", "share of a victim's full reserve a landed hit takes per unit of the attacker's power over the victim's defence (strike x mass against mass x (DEF_BASE + armour), x JUV_DEFENCE for the young)", "-", "ECO (2026-11-01): a wound grows with the weapon's force against the body resisting it; a predator matched to its prey kills it once it has caught it (captured prey up to the predator's own mass are nearly always killed: Elliott, Cowan & Holling 1977; Carbone et al. 1999). Replaces C_DAMAGE x power for animals, which needed ~4 hits to kill a fed prey of its own size")] public const float WOUND = 1f;
     [K("Hunting", "parasite drain per strike at M=1", "E", "HT")] public const float C_DRAIN = 0.05f;
     [K("Hunting", "pain added by a failed strike received", "-", "HT")] public const float PAIN_HIT = 0.6f;
     [K("Hunting", "pain decay per step", "/step", "HT")] public const float PAIN_DECAY = 0.03f;
