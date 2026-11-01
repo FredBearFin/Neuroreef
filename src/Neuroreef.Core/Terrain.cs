@@ -82,6 +82,7 @@ public static class Terrain
         var moistN = Fbm(ref r, 4, 4);
         var vegN = Fbm(ref r, 6, 3);
         BuildWater(w, rain0, moistN, vegN);
+        Caves.Build(w, rain0);   // caves and karst on the finished rock, relief and rivers (Caves.cs)
     }
 
     /// <summary>Normalise Elev to 0..1 and set the sea level: the Nature.Water quantile of elevation (the relief's base
