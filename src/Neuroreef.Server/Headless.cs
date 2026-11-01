@@ -20,6 +20,7 @@ public static class Headless
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
         Console.WriteLine($"start: {(bank != null ? $"the world, brains from gene bank ({bank.Total} genomes), no spawning" : "the world, RANDOM BRAINS, no spawning")}   alive {w.AliveCount}");
         Console.Write(CladeLoco(w)); Console.WriteLine(LocoReport(w));
+        Console.Write(WaterCensus(w));
         Header(w);
         var sw = Stopwatch.StartNew();
         long lastT = 0; ulong lastStep = 0;
@@ -168,6 +169,52 @@ public static class Headless
         if (o.SaveBank != null) { pre.SaveBank(o.SaveBank); Console.WriteLine("evolved brains saved: " + o.SaveBank); }
         if (o.Csv != null) { WriteCsv(pre.B[bestB].W, o.Csv); Console.WriteLine("telemetry written: " + o.Csv); }
         return 0;
+    }
+
+    /// <summary>
+    /// The water of a world in metres (2026-11-01; reporting only): water cells by depth (World.Depth / ElevPerM) for
+    /// all water and for rivers (water outside the sea and the lakes, LakeOf -1), how many are shallow (Realm.Shallow),
+    /// and the floodplain: land cells a river can flood (FloodFrom >= 0), their height above the channel's bed, and how
+    /// many flood at a discharge (season x this year's rain against the mean) of 1.35 (bankfull), 2 and 3.
+    /// </summary>
+    public static string WaterCensus(World w)
+    {
+        int n = Map.FW * Map.FW;
+        double[] edges = { 0.5, 1, 2, 5, 10, 30, 100, 400 };
+        string[] names = { "<0.5 m", "0.5-1", "1-2", "2-5", "5-10", "10-30", "30-100", "100-400", ">400" };
+        var all = new int[names.Length]; var riv = new int[names.Length];
+        int water = 0, rivers = 0, shallow = 0, fp = 0, f135 = 0, f2 = 0, f3 = 0;
+        double rivMax = 0, rivSum = 0;
+        var hand = new int[names.Length];
+        float perM = w.ElevPerM;
+        int Bin(double m) { int b = 0; while (b < edges.Length && m >= edges[b]) b++; return b; }
+        for (int i = 0; i < n; i++)
+        {
+            if (w.Cell[i] == (byte)Realm.Land)
+            {
+                if (w.FloodFrom[i] < 0) continue;
+                fp++;
+                hand[Bin(MathF.Max(0f, w.Elev[i] - w.Elev[w.FloodFrom[i]]) / perM)]++;
+                float fw = w.FloodWet[i];
+                if (fw <= 1.35f) f135++;
+                if (fw <= 2f) f2++;
+                if (fw <= 3f) f3++;
+                continue;
+            }
+            water++;
+            if (w.Cell[i] == (byte)Realm.Shallow) shallow++;
+            double m = w.Depth[i] / perM;
+            all[Bin(m)]++;
+            if (w.LakeOf[i] < 0) { rivers++; riv[Bin(m)]++; rivSum += m; rivMax = Math.Max(rivMax, m); }
+        }
+        string Row(int[] c, int tot) => string.Join("  ", names.Select((s, b) => $"{s} {(tot > 0 ? 100.0 * c[b] / tot : 0),4:F1}%"));
+        var sb = new StringBuilder();
+        sb.AppendLine($"WATER CENSUS: {water:N0} water cells ({100.0 * water / n:F1}% of the map), {rivers:N0} river cells ({(water > 0 ? 100.0 * rivers / water : 0):F0}% of water), {shallow:N0} shallow ({(water > 0 ? 100.0 * shallow / water : 0):F0}%)");
+        sb.AppendLine($"WATER CELLS by depth:  {Row(all, water)}");
+        sb.AppendLine($"RIVER CELLS by depth:  {Row(riv, rivers)}   mean {(rivers > 0 ? rivSum / rivers : 0):F1} m, deepest {rivMax:F1} m");
+        sb.AppendLine($"FLOODPLAIN: {fp:N0} cells, height above the bed:  {Row(hand, fp)}");
+        sb.AppendLine($"FLOODPLAIN flooded at discharge x1.35 {(fp > 0 ? 100.0 * f135 / fp : 0):F1}%  x2 {(fp > 0 ? 100.0 * f2 / fp : 0):F1}%  x3 {(fp > 0 ? 100.0 * f3 / fp : 0):F1}%  ({f2:N0} cells at x2)");
+        return sb.ToString();
     }
 
     /// <summary>Voices of a world (Revision N; reporting only): per clade that has spoken, its living members' mean voice

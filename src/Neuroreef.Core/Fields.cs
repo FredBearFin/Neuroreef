@@ -20,6 +20,7 @@ public static class Fields
         // climate (Revision O): this row's temperature for this step; with Climate = 0 every factor below is skipped
         bool clim = Climate.On;
         float ta = 0f, tb = 0f;
+        float lightD = K.LIGHT_D * w.ElevPerM;   // metres to elevation (2026-11-01)
         if (clim) Climate.RowParams(w, y, out ta, out tb);
         float[] Tmp = w.Temp;
         for (int x = 0; x < FW; x++)
@@ -58,7 +59,7 @@ public static class Fields
             {
                 // water producers (DESIGN §10.3)
                 float lim = N / (N + K.K_N);
-                float light = MathK.Exp(-w.Depth[i] / K.SHALLOW);
+                float light = MathK.Exp(-w.Depth[i] / lightD);   // Beer-Lambert to the bottom
                 float ga = (K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim) * light;
                 float gp = K.R_PH * Nature.Plants * lim * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
                 if (clim)
@@ -104,7 +105,7 @@ public static class Fields
         {
             float lim = N / (N + K.K_N);
             float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
-            float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / K.SHALLOW);
+            float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / (K.LIGHT_D * w.ElevPerM));
             float ph = K.R_PH * plants * lim * 0.25f * fe;
             y += diet[(int)Pool.Algae] * Pools.Rho[(int)Pool.Algae] * al;
             y += diet[(int)Pool.Phyto] * Pools.Rho[(int)Pool.Phyto] * ph;

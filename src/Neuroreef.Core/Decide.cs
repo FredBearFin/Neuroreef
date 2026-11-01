@@ -10,6 +10,14 @@ namespace Neuroreef;
 
 public static class Decide
 {
+    /// <summary>The depth sense (2026-11-01): log(1 + depth / SHALLOW) over its value at the deepest a fully finned body
+    /// goes (SHALLOW + SWIM_DEPTH_RANGE), 0..1. Depths run from centimetres (streams) to kilometres (the sea), so a
+    /// linear sense over the whole range would read every river and pond as 0; SHALLOW reads 0.08, 10 m 0.28, 100 m 0.53.</summary>
+    public static readonly float DepthSenseMax = MathK.Log(1f + (K.SHALLOW + K.SWIM_DEPTH_RANGE) / K.SHALLOW);
+
+    public static float DepthSense(World w, int cell)
+        => Math.Clamp(MathK.Log(1f + MathF.Max(0f, w.Depth[cell]) / w.ShallowElev) / DepthSenseMax, 0f, 1f);
+
     /// <summary>Probe output for one selected animal (written by the worker that owns that slot).</summary>
     public sealed class ProbeBuf
     {
@@ -217,7 +225,7 @@ public static class Decide
         f[F.FOOD_GRAD] = MathK.Tanh(MathF.Sqrt(fgx * fgx + fgy * fgy) * 3f);
         bool inWater = (w.Cell[cell] & (byte)Realm.Water) != 0;
         f[F.IN_WATER] = inWater ? 1f : 0f;
-        f[F.DEPTH] = Math.Clamp(w.Depth[cell] / (K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE)), 0f, 1f);
+        f[F.DEPTH] = DepthSense(w, cell);
         f[F.WATER_CLOSE] = MathF.Max(0f, 1f - w.DistDrink[cell] / K.SENSE_WATER);   // drinkable water: lakes and full ponds
         f[F.LAND_CLOSE] = MathF.Max(0f, 1f - w.DistLand[cell] / K.SENSE_WATER);
         // path integration (Revision P): the remembered way back to where it last drank and where it last fed well

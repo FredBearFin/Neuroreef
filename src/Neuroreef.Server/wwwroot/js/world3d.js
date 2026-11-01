@@ -1032,7 +1032,7 @@ function wrapPatch(mat, U, key) {
 }
 
 /** The river plane for a server that does not send it: open water above lake level drains to its lowest wet
- *  neighbour (else its lowest), sized from its depth (depth = SHALLOW x RIVER_D x (flow / threshold)^0.4). */
+ *  neighbour (else its lowest), sized from its depth (depth = RIVER_D x (flow / threshold)^0.4 m, 2026-11-01; drawn at least 0.15 units deep). */
 function deriveRivers(w) {
   const fw = w.fw, n = fw * fw, out = new Uint8Array(n), seaB = Math.ceil(w.sea * 255);
   for (let i = 0; i < n; i++) {

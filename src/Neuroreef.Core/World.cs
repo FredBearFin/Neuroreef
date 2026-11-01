@@ -181,6 +181,8 @@ public sealed class World
     /// <summary>Elevation (0..1) per metre at the game's vertical scale: 1 - SeaLevel above the lakes is H_RELIEF m. A height
     /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
     public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / K.H_RELIEF;
+    /// <summary>K.SHALLOW (m) in elevation units, as World.Depth (2026-11-01).</summary>
+    public float ShallowElev => K.SHALLOW * ElevPerM;
     // ---- water cycle (WaterCycle.cs): stores in mm of water over a cell, fluxes in mm x cells per update (WC_EVERY steps).
     // Fixed at WaterCycle.Init: the rain pattern (relative to the land mean; a lake cell holds its row's land mean), soil
     // capacity, the drainage receivers and their topological order (outlets first), the lake each cell drains to
@@ -480,12 +482,13 @@ public sealed class World
         {
             float depth = MathF.Max(0f, Depth[cell]);
             float wade = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
-            float mix = Math.Clamp(depth / K.SHALLOW, 0f, 1f);
+            float shallow = ShallowElev;
+            float mix = Math.Clamp(depth / shallow, 0f, 1f);
             float v = wade + (PVWater[i] - wade) * mix;
             float maxDepth = MaxWaterDepth(i);
-            if (maxDepth > K.SHALLOW)
+            if (maxDepth > shallow)
             {
-                float load = Math.Clamp((depth - K.SHALLOW) / (maxDepth - K.SHALLOW), 0f, 1f);
+                float load = Math.Clamp((depth - shallow) / (maxDepth - shallow), 0f, 1f);
                 v *= 1f - 0.5f * load;
             }
             return v;
@@ -515,7 +518,9 @@ public sealed class World
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 
-    public float MaxWaterDepth(int i) => K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
+    /// <summary>The deepest water body i enters, in elevation units as Depth: SHALLOW + SWIM_DEPTH_RANGE x fins metres
+    /// (2026-11-01: in metres; it was SHALLOW x (1 + 14 fins) in elevation).</summary>
+    public float MaxWaterDepth(int i) => (K.SHALLOW + K.SWIM_DEPTH_RANGE * PFins[i]) * ElevPerM;
 
     public bool CellAllows(int i, int cell) => CellAllows(i, cell, RealmOf(i));
 

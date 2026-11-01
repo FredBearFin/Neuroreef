@@ -74,7 +74,11 @@ public class ClimateTests
         // and FLOOD_HAND are in metres (they were in elevation, 2.7 x deeper at the 8,000-m relief), and a terminal lake no
         // longer stands over a saddle above the dry hollow beyond it, so lakes, soils, ponds and banks moved. It was
         // 0xC7DCAB9771F0850D on the merged mountains, rivers and caves before.
-        Assert.Equal(0xA072ED289084F27EUL, h);
+        // Metric water depths (2026-11-01) re-pinned it: SHALLOW (1 m), river depth (RIVER_D, 2 m at RIVER_Q1) and the
+        // swimming depth are in metres (they were in elevation, rivers 100-400 m deep), benthic algae see light over
+        // LIGHT_D (10 m), and a floodplain's floor is FLOOD_FLOOR of its height above the river, so realms, algae and
+        // floods moved. It was 0xA072ED289084F27E before.
+        Assert.Equal(0x50BC73C698A5AAEEUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

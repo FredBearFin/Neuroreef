@@ -315,7 +315,7 @@ public class AppearanceTests
     {
         var w = new World(4, 1);
         Array.Fill(w.Cell, (byte)Realm.Deep);
-        Array.Fill(w.Depth, K.SHALLOW * 5f);
+        Array.Fill(w.Depth, w.ShallowElev * 5f);
         var genome = new sbyte[G.LEN];
         genome[G.B_LEGS] = 127; genome[G.B_FINS] = genome[G.B_WINGS] = -127;
         w.Evo.MutRate = w.Evo.MutBody = 0;

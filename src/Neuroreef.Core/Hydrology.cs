@@ -263,6 +263,9 @@ public static partial class Hydrology
     /// 2026-10-31: a river is every water cell outside the sea and the lakes (LakeOf -1), and the river that floods a
     /// cell is the channel cell of that river's cross-section (World.FloodFrom of a river cell, set by Waters), whose
     /// discharge the water cycle carries; height is measured from the channel's bed.
+    /// 2026-11-01: river depths are metric (a few metres, RIVER_D), and a cell's mean height above its river (tens of
+    /// metres on a field cell that holds valley floor and side) is not its floor's: the stage reaches the cell when it
+    /// stands FLOOD_FLOOR x that height above bankfull, Depth (wet^f - BANKFULL^f) >= FLOOD_FLOOR x height.
     /// </summary>
     public static void Floodplain(World w, Net net)
     {
@@ -286,8 +289,8 @@ public static partial class Hydrology
             if (d < 0 || steps[c] > K.FLOOD_R) continue;
             float above = w.Elev[c] - w.Elev[d];
             if (above > hand) continue;
-            // stage / mean depth = wet^f; it reaches the cell when Depth (wet^f - BANKFULL^f) >= height above the river
-            w.FloodWet[c] = MathK.Pow(bank + MathF.Max(0f, above) / w.Depth[d], 1f / K.RIVER_DEPTH_EXP);
+            // stage / mean depth = wet^f; it reaches the cell when Depth (wet^f - BANKFULL^f) >= the floor's height
+            w.FloodWet[c] = MathK.Pow(bank + K.FLOOD_FLOOR * MathF.Max(0f, above) / w.Depth[d], 1f / K.RIVER_DEPTH_EXP);
             w.FloodFrom[c] = d;
         }
     }
@@ -570,8 +573,11 @@ public static partial class Hydrology
         Discharge();
         Array.Copy(Q, w.Flow, n);
 
-        // 8. hydraulic geometry: depth on every cell, a channel's width over its valley floor
+        // 8. hydraulic geometry: depth on every cell, a channel's width over its valley floor. A channel's mean depth is
+        // RIVER_D (Q / RIVER_Q1)^RIVER_DEPTH_EXP metres (Leopold & Maddock 1953; 2026-11-01: metric, it was a share of
+        // SHALLOW in elevation, 100-400 m at the 8,000-m relief), and water is shallow to SHALLOW metres
         Array.Clear(w.Depth); Array.Clear(w.RivW);
+        float perM = w.ElevPerM, shallow = w.ShallowElev;
         var dep = w.Depth; var of = w.FloodFrom;
         Array.Fill(of, -1);
         for (int i = 0; i < n; i++)
@@ -580,7 +586,7 @@ public static partial class Hydrology
         {
             if (!chan[c]) continue;
             float qr = Q[c] / (K.RIVER_Q1 * scale);
-            float d = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP));
+            float d = K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP) * perM;
             dep[c] = MathF.Max(d, 1e-5f); of[c] = c;
             // the river's half-width beyond its channel cell: every eligible cell within the whole cells of it, and the
             // lowest one of the next ring for a half cell more (a river 2 cells wide spreads to its lower side)
@@ -611,7 +617,7 @@ public static partial class Hydrology
             }
         }
         for (int i = 0; i < n; i++)
-            w.Cell[i] = (byte)(dep[i] <= 0f ? Realm.Land : dep[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
+            w.Cell[i] = (byte)(dep[i] <= 0f ? Realm.Land : dep[i] <= shallow ? Realm.Shallow : Realm.Deep);
         return net;
     }
 

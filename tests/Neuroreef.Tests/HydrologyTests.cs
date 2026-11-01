@@ -87,9 +87,11 @@ public class HydrologyTests
         {
             if (w.Cell[i] != (byte)Realm.Land && w.LakeOf[i] < 0)
             {
-                // every river cell is drinkable and wadeable, and belongs to a channel's cross-section
+                // every river cell is drinkable, as deep as rivers are (2026-11-01: centimetres to tens of metres, the
+                // Amazon ~50 m; they were 100-400 m), and belongs to a channel's cross-section
                 Assert.Equal(1, w.Wet[i]); Assert.Equal(0f, w.DistDrink[i]);
-                Assert.True(w.Depth[i] > 0f && w.Depth[i] <= K.SHALLOW, $"river depth {w.Depth[i]}");
+                float m = w.Depth[i] / w.ElevPerM;
+                Assert.True(m > 0.01f && m <= 30f, $"river depth {m} m");
                 Assert.True(Channel(w, w.FloodFrom[i]), $"river cell {i} belongs to no channel");
             }
             if (!Channel(w, i)) continue;
@@ -138,7 +140,7 @@ public class HydrologyTests
         Assert.True(beside < passed / 4, $"{beside} of {passed} cells past the threshold lie beside their river");
     }
 
-    [Fact] // downstream hydraulic geometry: depth ~ Q^0.4 up to wadeable, width ~ Q^0.5: the big rivers are several cells wide
+    [Fact] // downstream hydraulic geometry: depth ~ Q^0.4 in metres, width ~ Q^0.5: the big rivers are several cells wide
     public void RiversFollowHydraulicGeometry()
     {
         var w = new World(16, 3);
@@ -152,7 +154,7 @@ public class HydrologyTests
         {
             if (!Channel(w, i)) continue;
             float qr = w.Flow[i] / q1;
-            float d = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP));
+            float d = K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP) * w.ElevPerM;   // metres to elevation (2026-11-01)
             Assert.Equal(d, w.Depth[i], 1e-6f);                                   // depth ~ Q^0.4 (Leopold & Maddock 1953)
             if (qr < 1f) { smallW += section[i]; nSmall++; Assert.Equal(1, section[i]); }   // under RIVER_Q1: one cell
             else if (qr >= 9f) { bigW += section[i]; nBig++; }                     // 3 cells wide or more by width ~ Q^0.5

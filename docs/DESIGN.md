@@ -83,11 +83,39 @@ For the renderer and the 3D view (not changed here; wwwroot is theirs):
 Not done:
 - Elevation-unit constants (SHALLOW, RIVER_BANK, FLOOD_HAND, ALLUV_D, BASIN_MIN) now mean ~2.7 x as many metres. Done at
   the integration (2026-11-01): RIVER_BANK, FLOOD_HAND, ALLUV_D, BASIN_MIN and LAKE_MIN_DEPTH are in metres (converted by
-  World.ElevPerM), at what they meant when the hydrology was tuned (H_RELIEF 3,000 m, 1 - SeaLevel ~0.7). SHALLOW stays
-  a game depth in elevation (swimming, light, the shallow realm), and FLOW_EPS is numerical.
+  World.ElevPerM), at what they meant when the hydrology was tuned (H_RELIEF 3,000 m, 1 - SeaLevel ~0.7). SHALLOW stayed
+  a game depth in elevation (swimming, light, the shallow realm) until the metric water depths below; FLOW_EPS is numerical.
 - Fault scarps along plate boundaries.
 - The parallel gully comb on uniform slopes may come from Refine's roughness: Fbm with its base lattice on the coarse
   grid, upsampled by exactly 2. Not yet tried.
+**Metric water depths** (2026-11-01; Constants SHALLOW, LIGHT_D, SWIM_DEPTH_RANGE, RIVER_D, FLOOD_FLOOR; Hydrology.Waters
+step 8 and Floodplain, World.ShallowElev / MaxWaterDepth / GroundSpeed, Decide.DepthSense, Fields, Terrain; Headless
+WATER CENSUS). World.Depth stays in elevation, but every water-depth constant is now in metres and converted with
+World.ElevPerM. At H_RELIEF 8,000 m the old elevation constants made rivers 100-400 m deep and "shallow" water ~400 m.
+- SHALLOW = 1 m: the shallow realm, the most a finless body enters, where swimming starts and the wade-to-swim speed
+  blend. MaxWaterDepth = SHALLOW + SWIM_DEPTH_RANGE (6,000 m) x fins: a fully finned body still reaches every sea floor.
+- River depth = RIVER_D (2 m) x (Q / RIVER_Q1)^0.4. A one-cell (~220 m) river is 2 m deep (width/depth ~100). The cap at
+  SHALLOW is gone, so big rivers are deeper than wading depth.
+- Benthic algae see light over LIGHT_D = 10 m (Beer-Lambert, K_d 0.1/m), no longer over SHALLOW.
+- The depth sense is log(1 + depth / SHALLOW) / log(1 + (SHALLOW + SWIM_DEPTH_RANGE) / SHALLOW). A linear sense over 6 km
+  would read every river as 0. Brains evolved on the old linear sense read it differently.
+- Floodplain stage: FloodWet = (BANKFULL^f + FLOOD_FLOOR x height / Depth)^(1/f). Height above the bed is 10-100 m for
+  90% of floodplain cells, while rivers are now a few metres deep. Unchanged, the formula would flood almost nothing.
+  The stage instead has to reach the cell's valley floor, FLOOD_FLOOR (0.013) of its mean height above the bed. That
+  keeps the flood extent of before.
+- The wire's depth byte (Depth x 2000) reads 0 for rivers now; the 3D view already draws rivers at least 0.15 units deep.
+Measured (512 map, seeds 3 / 5 / 7, `--headless --world-map 512 --steps 0 --empty`, WATER CENSUS):
+- Before: 51-60% of water cells 100-400 m deep, 11-17% deeper than 400 m, 3-7% shallower than 10 m. Rivers averaged
+  179-184 m (deepest 316-324 m), and 80-86% of water was "shallow".
+- After: river cells are 0.5-1 m 5-6%, 1-2 m 38-43%, 2-5 m 43-55%, 5-10 m 1-10% (mean 2.4-2.6 m, deepest 5.5-8 m).
+  All water: 19-23% shallower than 2 m, 43-51% shallower than 10 m, 33-37% deeper than 100 m (lakes and sea; the terrain
+  sets those). Shallow (<= 1 m) water is 3-4% of water cells, against 80-86% before.
+- Floods at twice the mean discharge: 57 / 50 / 65% of floodplain cells (57 / 52 / 64% before); at three times 89-94%
+  (91-94% before).
+- Consequences: finless walkers (and the Wade habitat) lose most rivers and lakes as ground. They drink from the bank
+  (DistDrink <= 1.5 cells) and wade streams and river margins. Rivers become barriers to them, and algae move from deep
+  lakes to rivers and shores.
+
 **Rivers that run along their own lines** (2026-11-01; Hydrology.Route and Waters, Channels.cs, RiverStats.cs, Wire
 RIVERS; images docs/art/terrain2/riv_before_*.png and riv_after_*.png, tools/RiverProbe). The owner: "the rivers are
 weird". Measured before (1024 map, seeds 3, 7, 11; RiverStats):
@@ -221,7 +249,7 @@ Now:
   less than CHANNEL_A_MIN. Every cell below a head is channel, down to its lake or the sea. A head is judged by its
   inflow, not its own rain: a channel cell is water, and the rain on it never reaches the water cycle's streams.
 - *Hydraulic geometry* (Leopold & Maddock 1953). Depth = RIVER_D x SHALLOW x (Q / RIVER_Q1)^0.4, at most SHALLOW, so every
-  river stays wadeable. Width = sqrt(Q / RIVER_Q1) cells, from 1 to RIVER_W_MAX. A wider river covers the cells beside its
+  river stays wadeable (until 2026-11-01: now RIVER_D x (Q / RIVER_Q1)^0.4 metres, see Metric water depths). Width = sqrt(Q / RIVER_Q1) cells, from 1 to RIVER_W_MAX. A wider river covers the cells beside its
   channel that are at most RIVER_BANK (m; x SHALLOW before 2026-11-01) above the channel's bed, in a parabolic cross-section. FloodFrom of a
   river cell is its channel cell: floodplains and floods read that channel's depth and discharge.
 - *The water cycle.* Lakes are processed upstream first (LakeRank). A lake rises LakeSill above its level at creation
