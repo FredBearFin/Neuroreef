@@ -23,7 +23,9 @@ public class PlantProductionTests
     const int NW = 8, NT = 4, YEARS_SPIN = 6, YEARS_MEASURE = 2;
     static readonly float[] Ws = { 0.08f, 0.12f, 0.18f, 0.25f, 0.35f, 0.5f, 0.7f, 0.9f };
     static readonly float[] Ts = { 2f, 8f, 15f, 25f };
-    const float SWING = 6f;   // the seasonal half-range of the air temperature (°C)
+    // the seasonal half-range of the air temperature (K) of each band: wide in the cold (boreal and continental), narrow in
+    // the tropics, as on Earth (round 2, 2026-11-01; was 6 K everywhere, which gave the 15 °C band no winter)
+    static readonly float[] Swing = { 14f, 12f, 9f, 3f };
 
     /// <summary>Run the column world and read each band (the band's edge columns and rows, where seed crosses from the
     /// next band, are left out).</summary>
@@ -49,8 +51,8 @@ public class PlantProductionTests
         {
             for (int y = 0; y < FW; y++) Fields.Row(w, y);
             Fields.Swap(w);
-            float sw = SWING * MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)L) / L);
-            for (int i = 0; i < n; i++) { w.Temp[i] = Ts[i / FW / bh] + sw; w.Moisture[i] = Ws[i % FW / bw]; }
+            float sw = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)L) / L);
+            for (int i = 0; i < n; i++) { int bt = i / FW / bh; w.Temp[i] = Ts[bt] + Swing[bt] * sw; w.Moisture[i] = Ws[i % FW / bw]; }
             Plants.BeginStep(w);
             for (int k = 0; k < Plants.StripeRows; k++) Plants.StripeRow(w, k);
             Plants.Commit(w);
@@ -83,7 +85,7 @@ public class PlantProductionTests
 
     public static string Table(Band[] r)
     {
-        var sb = new StringBuilder("NPP gC/m2/yr [tree cover | live wood kg/m2 | leafy kg/m2] by annual T (rows) and soil moisture (columns)\n  T\\W  ");
+        var sb = new StringBuilder("NPP gC/m2/yr [tree cover | live wood kg/m2 | leafy kg/m2] by annual T (rows; seasonal swing 14, 12, 9, 3 K) and soil moisture (columns)\n  T\\W  ");
         foreach (var x in Ws) sb.Append($"{x,22:F2}");
         sb.AppendLine();
         for (int bt = 0; bt < NT; bt++)

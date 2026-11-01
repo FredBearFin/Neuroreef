@@ -25,6 +25,10 @@ public static class Climate
 {
     // ---- response tables: TT_N entries of TT_STEP from TT_LO (nearest entry)
     /// <summary>(e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens saturation vapour pressure): how evaporation dries the soil.</summary>
+    /// <summary>Plants' transpiration demand against T_REF, inverted (2026-11-01): e_s(T_REF) / e_s(T). The vapour pressure
+    /// deficit of air at a given humidity follows e_s(T), so warm air demands more water for the same carbon
+    /// (Tanner &amp; Sinclair 1983) and the supply/demand ratio of transpiration falls (Plants.Gross).</summary>
+    public static readonly float[] Demand = Table(t => Es(K.T_REF) / Es(t));
     public static readonly float[] Evap = Table(t => MathK.Pow(Es(t) / Es(K.T_REF), -K.EVAP_BETA));
     /// <summary>Yan & Hunt (1999) growth curves of grass, shrubs and trees, 1 at T_REF, at most PLANT_CAP; 0 outside (Tmin, Tmax).</summary>
     public static readonly float[] FGrass = Beta(K.GRASS_TMIN, K.GRASS_TOPT, K.GRASS_TMAX),

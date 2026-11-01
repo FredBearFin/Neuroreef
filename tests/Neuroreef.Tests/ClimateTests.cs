@@ -87,6 +87,8 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Plants round 2 (2026-11-01) re-pinned it: Beer's law over the cell's whole leafy cover and stem life ~ height
+        // (LIFE_EXP 1); the cold limit and the vapour-pressure demand are 1 at T_REF. It was 0x9C04DA49A393C7B2.
         // Canopy production and live wood (2026-11-01) re-pinned it: a canopy's crown growth is bounded by what its leaves fix
         // (REPRO_RATE x fe x Beer's-law interception), woody plants put the rest into live wood that dies into Pool.Wood and
         // immobilises nitrogen, and water-limited growth follows the supply/demand ratio (W_SUP = E_MAX_ROOT / PET a day,
@@ -130,7 +132,7 @@ public class ClimateTests
         // main) and the 1 km world (GEO_CELL_M 16 m, the relief, rain, channels and latitude at the map's scale; 0x39C9346B584497BC
         // before the plant merge) re-pinned it.
         // A flood before a riparian wetland's waterlogging (Ponds.Update) moved it again from 0xAD0A92D522612469.
-        Assert.Equal(0x9C04DA49A393C7B2UL, h);
+        Assert.Equal(0x9D198E74A912EFAFUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
@@ -412,6 +414,7 @@ public class ClimateTests
                 cells.Sort((a, b) => w.Elev[a].CompareTo(w.Elev[b]));
                 int third = cells.Count / 3; double lo = 0, hi = 0;
                 for (int k = 0; k < third; k++) { lo += w.Tree[cells[k]]; hi += w.Tree[cells[cells.Count - 1 - k]]; }
+                Console.WriteLine($"TREELINE climate {climate}: tree cover low third {lo / third:F3}, high third {hi / third:F3}");
                 return hi / Math.Max(1e-9, lo);
             }
             finally { Nature.Fire = fire; Nature.Drought = drought; Nature.Latitude = lat0; }

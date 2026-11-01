@@ -136,6 +136,29 @@ public class PlantTests
         Assert.True(hp <= dt * K.REPRO_RATE * Plants.Intercept(0.8f) * 1.6f, $"herb sward production {hp} per update, canopy bound {dt * K.REPRO_RATE * Plants.Intercept(0.8f)}");
     }
 
+    [Fact] // 2026-11-01 (round 2): growth stops below ~5 °C at the meristems; short plants run warmer than the air, a tall
+           // tree at air temperature, so in the cold trees stop growing first (the physical treeline, Körner & Paulsen 2004)
+    public void ColdStopsTreesBeforeHerbs()
+    {
+        float tall = 15f, herb = 0.1f;
+        Assert.Equal(0f, Plants.ColdGrowth(K.T_GROW_MIN - 0.5f, tall));
+        Assert.True(Plants.ColdGrowth(K.T_GROW_MIN - 0.5f, herb) > 0.4f, "a short herb near the ground still grows");
+        Assert.Equal(1f, Plants.ColdGrowth(K.T_GROW_MIN + K.T_GROW_RAMP + 0.1f, tall));
+        Assert.True(Plants.ColdGrowth(7f, tall) < Plants.ColdGrowth(9f, tall), "growth rises with warmth above the threshold");
+        // warmth also raises transpiration demand (vapour pressure deficit): the same soil water buys less growth when hot
+        var mid = Express((PT.HEIGHT, XOfHeight(0.3f)));
+        Assert.True(Plants.Net(mid, 0, 0.25f, 0.8f, 28f, 1f) < Plants.Net(mid, 0, 0.25f, 0.8f, K.T_REF, 1f));
+    }
+
+    [Fact] // 2026-11-01 (round 2): stems live as long as mature forests' mortality says, 1-2% a year (Stephenson & van Mantgem 2005)
+    public void TreeLifeMatchesForestMortality()
+    {
+        float Years(float h) => 1f / (Express((PT.HEIGHT, XOfHeight(h)))[Ph.LIFE] * K.T_SEASON);
+        Assert.InRange(Years(15f), 40f, 70f);
+        Assert.InRange(Years(30f), 80f, 130f);
+        Assert.InRange(Years(0.3f), 0.5f, 1.5f);   // the reference herb: a year
+    }
+
     [Fact] // 2026-11-01: a new world (and a save from before the wood stock) starts its live wood from the woody cover
     public void LiveWoodStartsFromWoodyCover()
     {

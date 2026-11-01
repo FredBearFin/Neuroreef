@@ -194,7 +194,8 @@ public static class Plants
         float ne = N + P[o + Ph.NFIXN], fn = ne / (ne + P[o + Ph.KNE]);
         float les = P[o + Ph.LES];
         float gc = r0 * les * A * ft * P[o + Ph.TAMP] * fl * fn * P[o + Ph.GCF];
-        float gw = r0 * les * P[o + Ph.GWF] * sw;
+        // water: the supply/demand ratio of transpiration, the demand rising with the air's vapour pressure deficit (e_s(T))
+        float gw = r0 * les * P[o + Ph.GWF] * sw * Climate.Demand[Climate.Idx(T)];
         return gc + gw > 0f ? Norm * Nature.Plants * Colim(gc, gw) * Waterlog(P, o, anox) : 0f;
     }
 
@@ -457,6 +458,12 @@ public static class Plants
             float laS = id[SHRUB] != 0 ? Pe[id[SHRUB] * NP + Ph.LA] : 1f, laT = id[TREE] != 0 ? Pe[id[TREE] * NP + Ph.LA] : 1f;
             float shT = onT ? B[TREE] * laT : 0f, shS = onS ? B[SHRUB] * laS : 0f;
             float lH = MathF.Max(0.02f, 1f - 0.85f * shT - 0.35f * shS), lS = MathF.Max(0.02f, 1f - 0.70f * shT), lP = lS * (1f - 0.2f * B[SHRUB]);
+            // (2026-11-01, round 2) the cell's leafy cover intercepts light by Beer's law as one canopy: each leaf of it fixes
+            // Intercept(total) / total of what a leaf in a closed canopy fixes (more when the cell is sparse, never a sapling's
+            // own sparse boost under a closed canopy); the strata's shading of each other stays in their light (L)
+            float leafTot = 0f;
+            for (int k = 0; k < SLOTS; k++) if (id[k] != 0 && (flags & (1 << k)) != 0) leafTot += B[k];
+            float perLeaf = leafTot > 1e-4f ? Intercept(leafTot) / leafTot : K.CANOPY_KL / InterceptFull;
             float prod = 0f, fixedShare = 0f, litter = 0f, wood = 0f, fenvB = 0f, fenvBsum = 0f, fenvR = 0f, fenvRsum = 0f;
             float woodProd = 0f, woodCover = 0f, woodDeath = 0f;
             float g0 = B[HERB], s0 = B[SHRUB], t0 = B[TREE], p0 = B[SAP];
@@ -494,8 +501,11 @@ public static class Plants
                 // Before, crown growth was the whole production: a closed forest made only its leaf turnover and a sward of
                 // short-lived herbs turned its cover over ~10 times a year, both unbounded by what leaves can fix
                 float fe = G0 / (r0 * (1f + K.RESP));
-                float pc = on ? K.REPRO_RATE * Nature.Plants * fe * Intercept(b) : 0f;
-                float grow = net > 0f ? MathF.Min(net * b * room, pc) : net * b;
+                // the cold (round 2): tissue formation is sink-limited by the meristems' temperature (ColdGrowth), which
+                // limits crown growth, wood and seed but not the losses
+                float fc = ColdGrowth(T, k == SAP ? K.H_SAP : Pe[o + Ph.H]);
+                float pc = on ? K.REPRO_RATE * Nature.Plants * fe * b * perLeaf * fc : 0f;
+                float grow = net > 0f ? MathF.Min(net * b * room * fc, pc) : net * b;
                 float lit = on ? Pe[o + Ph.CLIT] * b : 0f;
                 float wmin = Pe[o + Ph.WMIN];
                 float mdr = r0 * K.DROUGHT_M * MathF.Max(0f, wmin - wk) / MathF.Max(wmin, 0.05f) * Pe[o + Ph.DRM] * (on ? 1f : K.LEAFOFF_RESP);
@@ -514,7 +524,7 @@ public static class Plants
                 float Rk = 0f;
                 if (k != SAP && on && b >= 0.05f + 0.25f * Pe[o + Ph.XH] && phen > 1e-3f)
                 {
-                    float R = dt * Pe[o + Ph.AR] * phen * K.REPRO_RATE * Nature.Plants * fe * b;
+                    float R = dt * Pe[o + Ph.AR] * phen * K.REPRO_RATE * Nature.Plants * fe * b * fc;
                     Rk = R;
                     // pollen: wind from leafy neighbours of the same stratum, and what animals carried here
                     float bn = 0f; int best = 0; float bb = 0f;
@@ -648,6 +658,19 @@ public static class Plants
     static readonly float RhoMid = K.RHO_LO + 0.5f * K.RHO_SPAN;
 
     static readonly float InterceptFull = 1f - MathK.Exp(-K.CANOPY_KL);
+
+    /// <summary>
+    /// Share of its tissue growth a plant of height h (m) can make at air temperature T (2026-11-01, round 2): growth is
+    /// limited by the meristems' temperature, not by photosynthesis, and stops below T_GROW_MIN, rising over T_GROW_RAMP
+    /// above it, so over a season it follows the degree-days above the threshold (Körner &amp; Paulsen 2004; Körner 2012;
+    /// Rossi et al. 2007). Short plants are decoupled from the air and run warmer by DT_SHORT x exp(-h / H_COUPLE); a tall
+    /// tree's meristems are at air temperature: what puts the treeline where trees, not herbs, stop growing.
+    /// </summary>
+    public static float ColdGrowth(float T, float h)
+    {
+        float tt = T + K.DT_SHORT * MathK.Exp(-h / K.H_COUPLE);
+        return Math.Clamp((tt - K.T_GROW_MIN) / K.T_GROW_RAMP, 0f, 1f);
+    }
 
     /// <summary>Light a canopy of leafy cover b intercepts, in closed canopies (Beer's law, CANOPY_KL; 2026-11-01): b at
     /// small cover x 1 / (1 - exp(-CANOPY_KL)), 1 at full cover.</summary>

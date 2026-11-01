@@ -159,7 +159,15 @@ Wetlands (Wetlands.cs; nothing places one):
   W_SUP = E_MAX_ROOT 5 mm/day over PET_REF a day (1.83; the supply/demand ratio of transpiration, Haxeltine & Prentice
   1996; Sitch et al. 2003), colimited with the carbon-limited rate by a non-rectangular hyperbola of curvature
   COLIM_THETA 0.95 (Collatz et al. 1991). Before, W_SUP 3 and a rectangular hyperbola made soil at 0.2 of capacity
-  nearly as productive as at 0.4 (desert NPP 2x the measured).
+  nearly as productive as at 0.4 (desert NPP 2x the measured). Round 2: the demand side, the water-limited rate x
+  e_s(T_REF) / e_s(T) (Climate.Demand: warm air's vapour pressure deficit buys less carbon per water; Tanner & Sinclair 1983).
+- *Round 2 (2026-11-01).* Beer's law over the cell's whole leafy cover (each leaf fixes Intercept(total) / total of a
+  closed canopy's leaf), so a sapling under a closed canopy gets no sparse-leaf boost. Cold: tissue formation is limited
+  by the meristems' temperature, 0 below T_GROW_MIN 5 °C, rising over T_GROW_RAMP 5 K (degree-days above it; Körner &
+  Paulsen 2004; Körner 2012; Rossi et al. 2007); short plants run DT_SHORT 4 K x exp(-h / H_COUPLE 0.5 m) warmer than
+  the air, tall trees at air temperature, so trees stop growing first in the cold (ColdGrowth: limits crown growth, wood
+  and seed, not the losses). Stem life: LIFE_EXP 1 (lifespan ~ M^1/4, M ~ H^4: Marba et al. 2007; Niklas 1994), a 15 m
+  tree 50 years and a 30 m tree 100, the 1-2% a year of mature forests (Stephenson & van Mantgem 2005); was 0.75 (19 years).
 Measured (512 map, seeds 3, 5, 7; a new world and one more year, no animals; WetProbe):
 - Wetlands 0.55 / 0.41 / 1.06% of the land (69 / 54 / 144 cells): marsh 8 / 6 / 8, swamp 16 / 5 / 30, fen 38 / 38 / 95,
   bog 7 / 5 / 11. Settings: lake and sea shores 13 / 13 / 23 cells, river banks 42 / 26 / 59, spring lines away from
