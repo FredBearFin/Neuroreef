@@ -951,6 +951,24 @@ for giants: the leg-load term of walking speed (LOAD_DRAG x M^(1/3) x ...) is ne
 load better than the reference, and above ~14 t with three or four leg pairs made the speed negative or infinite; the
 gain is now at most twice the plain body's speed (it never binds up to 1.7 t).
 
+**Small founders in a world of tiny bodies** (2026-11-01, the owner saw no founder below 41 g in a 1 g-1 kg world, seed 7,
+at step 120). Measured on founding alone (256 map, 60 founders, seeds 1-20, no step): 19 of the 20 seeds founded bodies
+below 41 g (the smallest 1.0 g), so seed 7 was largely chance: ancestor mass is log-uniform from the class floor to
+BodySize.Max, and two of its three random smallest-class ancestors happened to draw ~41 g on their first, viable, draw.
+But the founding test did thin small bodies, for a reason that was not physics: a random ancestor's brain was drawn at
+2-24 units whatever its body, while a unit costs the same in any body (energy per neuron is about constant) and the brain
+may take at most BRAIN_SHARE_MAX = 25% of basal cost. Basal cost falls as M^0.75, so most draws under ~10 g failed the
+brain share, and the redraw drew a new mass too: of the draws under 10 g (not counting the big-brained ancestor), about 5
+in 56 were viable. Seed 7's third smallest-class ancestor was redrawn from small bodies to 320 g this way. Now a random
+ancestor's brain is drawn up to what its body can surely pay for (Body.UnitsAffordable: 25% of the basal cost of the
+cheapest body of its mass; ~30 units at 0.1 kg, ~5 at 10 g, ~1 at 1 g), as small animals have small brains; above ~0.07 kg
+it never binds, so the default range founds exactly as before. After it, no random ancestor fails the brain share, about
+19 in 40 draws under 10 g are viable, all 20 seeds found bodies below 21 g and 9 of them reach 1.0-1.3 g (seed 7: 1.0 g).
+What still thins the smallest bodies is physics: below ~1.5 g even the smallest brain (BRAIN_MIN = 2 units) is more than
+25% of basal cost; a small body loses heat fast, which raises its day's need against what its bite and gut pass
+(FORAGE_MARGIN); and it must breathe where it is founded. The big-brained ancestor (BigBrainUnits, 256 by default, which is
+ancestor 0 and so in the smallest class) cannot be small at all: 256 units need about 0.7 kg or more.
+
 **Big brains fixed** (2026-10-30, found after the user saw the big-brained founders kill each other at once): the
 brain size was stored in a byte, so a 256-unit brain ran with 0 memory units while paying for 256; it is now a ushort.
 And newborn brains are calm at any size: founder output weights from memory unit h are scaled by BRAIN_START/h beyond

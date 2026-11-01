@@ -57,6 +57,15 @@ public static class Body
     /// <summary>The brain-size gene for a number of memory units (inverse of Units).</summary>
     public static sbyte UnitsGene(float units) => (sbyte)Math.Clamp((int)MathF.Round(MathK.Log(Math.Max(units, K.BRAIN_MIN) / K.BRAIN_MIN) / MathK.Log((float)G.NH / K.BRAIN_MIN) * 254f - 127f), -127, 127);
 
+    /// <summary>
+    /// The most memory units a body of m kg can surely pay for: its brain at most BRAIN_SHARE_MAX of its basal cost (the
+    /// founding test, Life.RangeCapacity), with the cheapest body of that mass (basal factor 0.5, Express). A unit costs the
+    /// same whatever the body (energy per neuron is about constant, Herculano-Houzel 2011), so it falls as M^0.75: ~30 units
+    /// at 0.1 kg, ~170 at 1 kg, ~5 at 10 g, 1 at 1 g. Clades.AncestorBody draws a random ancestor's brain within it.
+    /// </summary>
+    public static float UnitsAffordable(float m) =>
+        K.BRAIN_SHARE_MAX / (1f - K.BRAIN_SHARE_MAX) * 0.5f * MathK.Pow(m, K.EXP_BASAL) * K.BRAIN_REF / K.COST_BRAIN;
+
     public static void Express(World w, int i)
     {
         var gn = w.Genome.Slot(i);

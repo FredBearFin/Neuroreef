@@ -281,7 +281,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LIFE_RANGE | 2 | - | range of the lifespan and development multipliers (x/÷) | - |
 | COST_LONGEVITY | 0.25 | xbasal | basal cost per unit of extra lifespan (longer life needs more body repair) | ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977) |
 | DEVEL_AGING | 0.5 | - | lifespan scales with the development multiplier to this power (fast developers age sooner) | ECO: the fast-slow life-history continuum |
-| BRAIN_START | 24 | units | ordinary ancestors start with a random brain of up to this many memory units | the old limit before Revision J was 12; Revision M: 24 |
+| BRAIN_START | 24 | units | ordinary ancestors start with a random brain of up to this many memory units (and no more than the body can pay for, Body.UnitsAffordable) | the old limit before Revision J was 12; Revision M: 24 |
 | BRAIN_MIN | 2 | units | fewest memory units a brain can have | - |
 | COST_BRAIN | 0.25 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M) |
 | BRAIN_REF | 256 | units | reference brain size for the brain cost: the largest brain (G.NH) | Revision M: was 12, the old limit |
