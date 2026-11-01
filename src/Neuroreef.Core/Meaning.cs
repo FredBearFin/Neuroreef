@@ -93,6 +93,7 @@ public static class Meaning
         S(F.FED_AHEAD, "the feeding place it remembers is ahead", "the feeding place it remembers is behind", "food ahead,this way to food", "food behind");
         S(F.FED_LEFT, "the feeding place it remembers is to the left", "the feeding place it remembers is to the right", "", "");
         S(F.FED_NEAR, "near where it last fed well", "far from where it last fed well", "pasture,feeding ground,home", "far from home");
+        S(F.BREATH, "out of breath", "breathing freely", "breath,air,surface,suffocating,drowning", "");
 
         string[] v =
         {

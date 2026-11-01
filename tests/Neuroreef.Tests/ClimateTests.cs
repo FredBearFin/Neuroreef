@@ -240,7 +240,8 @@ public class ClimateTests
         {
             var (w, i) = Animal(temp, water);
             w.Thirst[i] = 0f;
-            float dry = MathF.Min(1f, K.C_THIRST * Nature.Thirst * w.PThirstK[i] * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[0]));
+            // drying through the skin, and through gills if it has them (Respiration.Drying, 2026-11-01)
+            float dry = MathF.Min(1f, K.C_THIRST * Nature.Thirst * w.PThirstK[i] * Respiration.Drying(w, i) * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[0]));
             float b = w.PBasal[i], top = Heat.Operative(w, 0, w.PInsul[i], false);
             Heat.Balance(w.MassOf(i), w.PInsul[i], w.PAppend[i], top, false, b, b, out _, out float x, out _, out _);
             Resolve.Run(w, 1, 0);

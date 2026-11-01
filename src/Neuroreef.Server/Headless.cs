@@ -25,9 +25,11 @@ public static class Headless
         long lastT = 0; ulong lastStep = 0;
         bool stop = false;
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop = true; Console.WriteLine("stopping after this step (saving)..."); };
+        var water = new WaterWatch();
         for (long k = 0; k < o.Steps && !stop; k++)
         {
             sim.Step();
+            water.Sample(w);
             if (w.Step % (ulong)o.ReportEvery == 0)
             {
                 double dt = (sw.ElapsedMilliseconds - lastT) / 1000.0;
@@ -37,7 +39,7 @@ public static class Headless
             if (o.SaveBank != null && w.Step % 50000 == 0) GeneBank.Save(w, o.SaveBank);
         }
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
-        string summary = Summary(sim);
+        string summary = Summary(sim) + Environment.NewLine + water.Report(w);
         Console.Write(summary);
         if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, summary); Console.WriteLine("report written: " + o.ReportTxt); }
         if (o.SaveBank != null) { GeneBank.Save(w, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }
@@ -366,7 +368,7 @@ public static class Headless
         var o = new StringBuilder();
         o.AppendLine();
         o.AppendLine($"OBSERVATION REPORT at step {w.Step:N0} (seed {w.Seed}). Counts are totals for the whole run.");
-        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease cold heat  TOP FOOD (energy)");
+        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease cold heat hunted suffoc drowned  TOP FOOD (energy)");
         for (int s = 0; s < w.NS; s++)
         {
             if (!w.Sp[s].Used) continue;
@@ -423,4 +425,132 @@ public static class Headless
             f.WriteLine(sb.ToString());
         }
     }
+}
+
+/// <summary>
+/// Water census of a headless run (reporting only; reads the world, changes nothing). Every step, per clade: animal-steps
+/// on land, in shallow and in deep water, and how often an animal stepped from water onto land; lineages are marked by
+/// where their ancestor was founded (land or water). Over all animals on land: how high they stand (m above the sea),
+/// small (M below 10) and big bodies apart.
+/// </summary>
+public sealed class WaterWatch
+{
+    public static readonly float[] AltEdges = { 500f, 1500f, 2500f, 3500f, 4500f };
+    readonly long[] _land = new long[K.CLADES], _shallow = new long[K.CLADES], _deep = new long[K.CLADES], _exits = new long[K.CLADES];
+    readonly long[] _altSmall = new long[6], _altBig = new long[6];
+    public static readonly float[] ZEdges = { 0f, 2f, 10f, 30f, 100f };
+    readonly double[] _zSum = new double[K.CLADES], _diveM = new double[2];
+    readonly long[] _zN = new long[K.CLADES], _zGill = new long[6], _zLung = new long[6], _diveN = new long[2];
+    readonly long[] _orgLand = new long[3], _orgWater = new long[3];
+    // breathing classes from the physics: gills that cannot keep a day of living going in air (lungs below FIELD_METAB /
+    // LUNG_SCOPE), lungs that cannot under water (gills below FIELD_METAB / GILL_SCOPE), amphibious between
+    static readonly float LungsMin = K.FIELD_METAB / K.LUNG_SCOPE, LungsMax = 1f - K.FIELD_METAB / K.GILL_SCOPE;
+    static int Organ(float lungs) => lungs < LungsMin ? 0 : lungs > LungsMax ? 2 : 1;
+    uint[] _serial = Array.Empty<uint>();
+    byte[] _wet = Array.Empty<byte>();
+    long _samples;
+
+    public void Sample(World w)
+    {
+        if (_serial.Length < w.Cap) { Array.Resize(ref _serial, w.Cap); Array.Resize(ref _wet, w.Cap); }
+        _samples++;
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            int s = w.Spc[i], cell = World.FIdx(w.X[i], w.Y[i]);
+            byte kind = w.Cell[cell];
+            bool air = w.Airborne(i);
+            bool wet = (kind & (byte)Realm.Water) != 0 && !air;
+            if ((kind & (byte)Realm.Land) != 0)
+            {
+                _land[s]++;
+                if (!air)
+                {
+                    float m = (w.Elev[cell] - w.SeaLevel) / w.ElevPerM;
+                    int b = 0; while (b < AltEdges.Length && m >= AltEdges[b]) b++;
+                    (w.PM[i] >= 10f ? _altBig : _altSmall)[b]++;
+                }
+            }
+            else if ((kind & (byte)Realm.Deep) != 0) _deep[s]++;
+            else if ((kind & (byte)Realm.Shallow) != 0) _shallow[s]++;
+            int org = Organ(w.PLungs[i]);
+            if ((kind & (byte)Realm.Land) != 0) _orgLand[org]++; else if (wet) _orgWater[org]++;
+            if (wet)
+            {
+                _zSum[s] += w.Z[i]; _zN[s]++;
+                int b = 0; while (b < ZEdges.Length && w.Z[i] > ZEdges[b]) b++;
+                (org == 2 ? _zLung : _zGill)[b]++;
+                if (org == 2 && w.Z[i] > 0f) { _diveM[w.PM[i] >= 10f ? 1 : 0] += w.Z[i]; _diveN[w.PM[i] >= 10f ? 1 : 0]++; }
+            }
+            if (_serial[i] == w.Serial[i] && _wet[i] == 1 && (kind & (byte)Realm.Land) != 0) _exits[s]++;
+            _serial[i] = w.Serial[i]; _wet[i] = (byte)(wet ? 1 : 0);
+        }
+    }
+
+    public string Report(World w)
+    {
+        var o = new StringBuilder();
+        o.AppendLine($"WATER CENSUS over {_samples:N0} steps: per clade, where its animal-steps were (land / shallow / deep water), steps from water onto land, and its living now");
+        o.AppendLine("CLADE        FOUNDED   ALIVE   LAND%  SHALLOW%  DEEP%   ONTO LAND  (per 1000 water steps)   LUNGS  DEPTH IN WATER (m)  DIED: SUFFOC DROWNED");
+        long wl = 0, ww = 0, we = 0;
+        for (int s = 0; s < K.CLADES; s++)
+        {
+            if (!w.Sp[s].Used) continue;
+            long tot = _land[s] + _shallow[s] + _deep[s];
+            bool waterBorn = w.Sp[s].Ancestor >= w.Evo.AncestorsLand;
+            int alive = 0; double lungs = 0;
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile && w.Spc[i] == s) { alive++; lungs += w.PLungs[i]; }
+            double per = _shallow[s] + _deep[s] > 0 ? 1000.0 * _exits[s] / (_shallow[s] + _deep[s]) : 0;
+            string lg = alive > 0 ? (lungs / alive).ToString("F2") : "  - ";
+            o.AppendLine($"{w.Sp[s].Name,-12} {(waterBorn ? "water" : "land"),-8}{alive,6}  {Pct(_land[s], tot),6:F1}  {Pct(_shallow[s], tot),8:F1}  {Pct(_deep[s], tot),5:F1}  {_exits[s],10}  {per,8:F1}" +
+                $"                 {lg,5}  {(_zN[s] > 0 ? _zSum[s] / _zN[s] : 0),18:F1}  {w.T.Deaths[s * Cause.N + Cause.Suffocated],12} {w.T.Deaths[s * Cause.N + Cause.Drowned],7}");
+            if (waterBorn) { wl += _land[s]; ww += _shallow[s] + _deep[s]; we += _exits[s]; }
+        }
+        o.AppendLine($"water-founded lineages: {Pct(wl, wl + ww):F1}% of their animal-steps on land; {we:N0} steps from water onto land ({(ww > 0 ? 1000.0 * we / ww : 0):F1} per 1000 animal-steps in water)");
+        string Org(int k) => $"{Pct(_orgLand[k], _orgLand[k] + _orgWater[k]):F1}% of {_orgLand[k] + _orgWater[k]:N0}";
+        o.AppendLine($"by breathing organ (all animals), share of animal-steps on land: gills (lungs < {LungsMin:F2}) {Org(0)}; amphibious {Org(1)}; lungs (> {LungsMax:F2}) {Org(2)}");
+        {
+            // the gill-breathers ashore now, and why they live: their size, warm-bloodedness, legs, oxygen debt and thirst
+            int n = 0; double m = 0, endo = 0, legs = 0, debt = 0, thirst = 0, rate = 0, nearW = 0;
+            for (int i = 0; i < w.Cap; i++)
+            {
+                if (w.StageOf[i] < St.Juvenile || Organ(w.PLungs[i]) != 0) continue;
+                int c = World.FIdx(w.X[i], w.Y[i]);
+                if (w.Cell[c] != (byte)Realm.Land || w.Airborne(i)) continue;
+                n++; m += w.PM[i]; endo += w.PEndo[i]; legs += w.PLegs[i]; debt += Respiration.Breathless(w, i); thirst += w.Thirst[i];
+                rate += Climate.On ? Heat.Rate(Heat.Core(w.TOp[i], w.PEndo[i])) : 1f;
+                if (w.DistWater[c] <= 1.5f) nearW++;
+            }
+            if (n > 0) o.AppendLine($"gill-breathers ashore now: {n}; mean mass {m / n:F2}, warm-bloodedness {endo / n:F2}, metabolic rate x{rate / n:F2} of warm, legs {legs / n:F2}, breathless {debt / n:F2}, thirst {thirst / n:F2}; {100 * nearW / n:F0}% within 1.5 cells of water");
+        }
+        string Hist(long[] h) { long t = h.Sum(); return string.Join("  ", Enumerable.Range(0, 6).Select(b => $"{Label(b)} {Pct(h[b], t):F1}%")) + $"  (n {t:N0})"; }
+        o.AppendLine("ALTITUDE of animal-steps on land (not airborne), m above the sea:");
+        o.AppendLine("  small (M < 10): " + Hist(_altSmall));
+        o.AppendLine("  big   (M >= 10): " + Hist(_altBig));
+        string ZHist(long[] h) { long t = h.Sum(); return string.Join("  ", Enumerable.Range(0, 6).Select(b => $"{ZLabel(b)} {Pct(h[b], t):F1}%")) + $"  (n {t:N0})"; }
+        {
+            float[] ce = { 2f, 10f, 30f, 100f, 400f }; var ch = new long[6]; long rivers = 0;
+            for (int c = 0; c < Map.FW * Map.FW; c++)
+            {
+                if ((w.Cell[c] & (byte)Realm.Water) == 0) continue;
+                float d = Respiration.ColumnM(w, c); int b = 0; while (b < ce.Length && d >= ce[b]) b++; ch[b]++;
+                if (w.FloodFrom[c] >= 0) rivers++;
+            }
+            long tc = ch.Sum();
+            o.AppendLine($"WATER CELLS by depth of the column (m): <2 {Pct(ch[0], tc):F1}%  2-10 {Pct(ch[1], tc):F1}%  10-30 {Pct(ch[2], tc):F1}%  30-100 {Pct(ch[3], tc):F1}%  100-400 {Pct(ch[4], tc):F1}%  >=400 {Pct(ch[5], tc):F1}%  (n {tc:N0}, rivers {rivers:N0})");
+        }
+        o.AppendLine("DEPTH of animal-steps in water, m below the surface:");
+        o.AppendLine("  gills or amphibious: " + ZHist(_zGill));
+        o.AppendLine("  lungs:               " + ZHist(_zLung));
+        o.AppendLine($"  air-breathers' dives: mean depth {(_diveN[0] > 0 ? _diveM[0] / _diveN[0] : 0):F1} m small (M < 10, n {_diveN[0]:N0}), {(_diveN[1] > 0 ? _diveM[1] / _diveN[1] : 0):F1} m big (n {_diveN[1]:N0})");
+        long suf = 0, dro = 0, all = 0;
+        for (int s = 0; s < K.CLADES; s++) { suf += w.T.Deaths[s * Cause.N + Cause.Suffocated]; dro += w.T.Deaths[s * Cause.N + Cause.Drowned]; for (int c = 0; c < Cause.N; c++) all += w.T.Deaths[s * Cause.N + c]; }
+        o.AppendLine($"DEATHS: {suf:N0} suffocated, {dro:N0} drowned, of {all:N0} ({Pct(suf + dro, all):F1}%)");
+        return o.ToString();
+    }
+
+    static string ZLabel(int b) => b == 0 ? "surface" : b == ZEdges.Length ? $">{ZEdges[^1]:0}" : $"{ZEdges[b - 1]:0}-{ZEdges[b]:0}";
+
+    static string Label(int b) => b == 0 ? $"<{AltEdges[0]:0}" : b == AltEdges.Length ? $">={AltEdges[^1]:0}" : $"{AltEdges[b - 1]:0}-{AltEdges[b]:0}";
+    static double Pct(long a, long t) => t > 0 ? 100.0 * a / t : 0;
 }

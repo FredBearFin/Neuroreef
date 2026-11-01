@@ -49,6 +49,11 @@ public sealed class World
     [PerSlot] public float[] ThermStrain;      // heat strain from shortfalls beyond what the body can make or lose (1 = death by cold or heat)
     [PerSlot] public float[] HeatNeed;         // last step's heat need (HEAT_NEED sense): tanh(made - evaporated, in basal units)
     [PerSlot] public float[] TOp;              // last step's operative temperature (°C), for telemetry
+    // ---- agents: breathing and the water column (2026-11-01, Respiration.cs). Phenotype: its respiratory organ (0 gills, 1
+    // lungs) and its depth preference (0 surface, 1 bottom). State, written by RESOLVE (own slot): its depth below the water's
+    // surface (m; 0 out of water), the share of the step it spends there (the rest at the surface: an air-breather's dives),
+    // and its oxygen debt (energy units of metabolism it could not draw oxygen for; DEBT_MAX x M kills)
+    [PerSlot] public float[] PLungs, PDive, Z, ZShare, O2Debt;
     [PerSlot] public float[] PThirstK;         // how fast it dries out, against C_THIRST (body size and the water-economy gene)           // share of successful strikes that drain blood instead of killing            // parental care level (0 = none; DESIGN §7.8)
     [PerSlot] public float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
     [PerSlot] public byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PHerm;
@@ -235,6 +240,7 @@ public sealed class World
         + 4 * 4 + 1                              // Revision P: remembered drink and feeding vectors
         + PG.N + G.NMHC + 4 * 4                  // Revision R: pathogen genome, immune memory key, 8 floats where 4 were
         + 5 * 2 + 4                              // Revision S: seed in gut and coat, pollen
+        + 5 * 4                                  // 2026-11-01: lungs, depth preference, depth, time at depth, oxygen debt
         + Body.NLOOK + 4 + 64;                   // derived (World.D): look signature, MHC diversity, packed neighbour
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
@@ -273,6 +279,7 @@ public sealed class World
         PLoco = new byte[c]; PRealm = new byte[c]; PSexual = new byte[c]; PLive = new byte[c]; PParasite = new byte[c]; PDrain = new float[c]; PThirstK = new float[c]; PWaterEcon = new float[c]; PVoice = new float[c]; PFloor = new float[c]; PImit = new float[c]; PImitAge = new float[c]; PLegPairs = new byte[c];
         PInsul = new float[c]; PAppend = new float[c]; PEndo = new float[c]; PReadyE = new float[c]; PWire = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new ushort[c]; PHerm = new byte[c];
+        PLungs = new float[c]; PDive = new float[c]; Z = new float[c]; ZShare = new float[c]; O2Debt = new float[c];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c];
         PgLoad = new float[c]; PgGene = new byte[c * PG.N]; Strain = new sbyte[c * G.NMHC]; PgFit = new float[c]; ImmEff = new float[c]; ImmMem = new float[c];

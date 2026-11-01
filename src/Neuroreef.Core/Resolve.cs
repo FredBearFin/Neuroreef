@@ -84,6 +84,8 @@ public static class Resolve
             metrics.Add(ref metrics.SprintMoved);
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool waterCell = (w.Cell[cell] & (byte)Realm.Water) != 0;
+        // where in the water column it holds, and the oxygen it draws there (2026-11-01, Respiration.cs)
+        var breath = Respiration.Place(w, i, cell, airborne);
 
         if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < K.FIRE_KILL) { Die(w, i, Cause.Fire, -1); return; }
 
@@ -155,12 +157,15 @@ public static class Resolve
                 if (e <= 0) continue;
                 float em = 1f, bm = 1f;
                 if (p <= (int)Pool.Root && !waterCell) { Plants.Taste(w, p, cell, bite0, out em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
-                float v = e * Pools.Rho[p] * MathF.Min(pass * bm, w.Pool[p][cell]);
+                // in water, what it reaches at its depth: plankton by the light, algae and detritus on the bottom (Respiration.Access)
+                float here = waterCell ? w.Pool[p][cell] * Respiration.Access(w, i, cell, p) : w.Pool[p][cell];
+                float v = e * Pools.Rho[p] * MathF.Min(pass * bm, here);
                 if (v > bv) { bv = v; best = p; bestEff = e; bestBM = bm; }
             }
             if (best >= 0)
             {
-                float bite = MathF.Min(MathF.Min(bite0 * bestBM, w.Pool[best][cell]), gutCap - w.Gut[i]);
+                float reach = waterCell ? w.Pool[best][cell] * Respiration.Access(w, i, cell, best) : w.Pool[best][cell];
+                float bite = MathF.Min(MathF.Min(bite0 * bestBM, reach), gutCap - w.Gut[i]);
                 if (bite > 0)
                 {
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
@@ -186,7 +191,9 @@ public static class Resolve
                 T.Strikes[s]++;
                 float dx = World.Delta1(w.X[v] - w.X[i]), dy = World.Delta1(w.Y[v] - w.Y[i]);
                 float reachAll = w.PReach[i] + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(v));
-                if (dx * dx + dy * dy <= reachAll * reachAll)
+                // in water they meet only where their depths overlap (Respiration.Overlap; 1 when neither is in water)
+                float meet = Respiration.Overlap(w, i, v);
+                if (dx * dx + dy * dy <= reachAll * reachAll && (meet >= 1f || Rng.U(seed, step, (uint)i, Rs.Meet) < meet))
                 {
                     if (strikeAttempt) metrics?.Apply(P.STRIKE);
                     if (preyEat) metrics?.Apply(P.EAT);
@@ -258,6 +265,8 @@ public static class Resolve
         if (Climate.On)
         {
             top = Heat.Operative(w, cell, w.PInsul[i], immersed);
+            // below the mixed layer the water is colder (Respiration.WaterT), for the share of the step it is down there
+            if (immersed && w.ZShare[i] > 0f) top += w.ZShare[i] * (Respiration.WaterT(w, cell, w.Z[i]) - top);
             core = Heat.Core(top, w.PEndo[i]);
             rateT = Heat.Rate(core);
         }
@@ -288,8 +297,13 @@ public static class Resolve
             w.ThermStrain[i] = MathF.Max(0f, w.ThermStrain[i] + K.STRAIN_GAIN * (shortCold + shortHot) / fullBasal - K.STRAIN_REC);
             T.SpendHeat[s] += thermo;
         }
-        w.Energy[i] -= basal + moveCost + grow + thermo;
-        T.SpendBasal[s] += basal; T.SpendMove[s] += moveCost; T.SpendGrowth[s] += grow;
+        // breathing (2026-11-01): what pumping its medium costs, and its oxygen debt from what its organs could not draw
+        float gasp0 = Respiration.Breathless(w, i);
+        float breathe = Respiration.Breathe(w, i, breath, basal + moveCost + thermo);
+        // air hunger hurts (one of the strongest aversive sensations; Banzett et al. 2008): a rising debt is felt as pain is
+        r -= K.R_PAIN * MathF.Max(0f, Respiration.Breathless(w, i) - gasp0);
+        w.Energy[i] -= basal + moveCost + grow + thermo + breathe;
+        T.SpendBasal[s] += basal + breathe; T.SpendMove[s] += moveCost; T.SpendGrowth[s] += grow;
         float fat0 = w.Fatigue[i];
         float sprint = w.Gain[i * P.N + P.SPRINT];
         if (rest && fat0 > 0f) metrics?.Allow(P.REST);
@@ -312,7 +326,8 @@ public static class Resolve
         if (w.Energy[i] > emax) w.Energy[i] = emax;
 
         // an organism dries out on land, less on moist ground; in water it does not (DESIGN §9.4)
-        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * Nature.Thirst * w.PThirstK[i] * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
+        // (2026-11-01) gills out of water dry out fast (Respiration.Drying)
+        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * Nature.Thirst * w.PThirstK[i] * Respiration.Drying(w, i) * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
         // cooling by evaporation costs water, whatever the kidneys save (Revision O)
         if (evap > 0f && !waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.EVAP_REL * K.C_THIRST * Nature.Thirst * evap / (K.C_BASAL * mass));
         w.Age[i] += 1;
@@ -329,6 +344,7 @@ public static class Resolve
         if (w.Energy[i] <= 0) { Die(w, i, Cause.Starve, -1); return; }
         if (w.Thirst[i] >= 1f) { Die(w, i, Cause.Thirst, -1); return; }
         if (w.ThermStrain[i] >= 1f) { Die(w, i, shortCold > 0f ? Cause.Cold : Cause.Heat, -1); return; }
+        if (w.O2Debt[i] >= Respiration.DebtMax(w, i)) { Die(w, i, immersed ? Cause.Drowned : Cause.Suffocated, -1); return; }
         float life = w.PLife[i];
         if (w.Age[i] > life)
         {

@@ -78,6 +78,8 @@ public static class Body
         float ins = Organ(gn[G.B_INSUL]), app = Organ(gn[G.B_APPEND]);
         w.PInsul[i] = ins; w.PAppend[i] = app;
         w.PEndo[i] = Organ(gn[G.B_ENDO]);
+        // breathing (2026-11-01): gills or lungs or both at a share, and where in the water column it holds (Respiration.cs)
+        w.PLungs[i] = Organ(gn[G.B_LUNGS]); w.PDive[i] = Organ(gn[G.B_DIVE]);
         w.PReadyE[i] = K.READY_LO + (K.READY_HI - K.READY_LO) * Organ(gn[G.B_BREEDE]);
         w.PVoice[i] = voice;
         // vocal learning (Revision N): how strongly matching a remembered tutor reinforces its own calls, and for how

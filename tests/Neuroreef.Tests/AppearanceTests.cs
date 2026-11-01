@@ -24,7 +24,7 @@ public class AppearanceTests
         Assert.Equal(Enumerable.Range(G.APPEARANCE, G.NAPPEARANCE), genes);
         Assert.Equal(G.APPEARANCE + G.NAPPEARANCE, G.B_MHC);
         Assert.Equal(G.B_MHC + G.NMHC, G.BODY + G.NBODY);
-        Assert.Equal(68, G.NBODY);
+        Assert.Equal(70, G.NBODY);   // 70: lungs and depth preference (2026-11-01)
         Assert.Equal(0f, Body.Organ(-127));
         Assert.Equal(0.5f, Body.Organ(0));
         Assert.Equal(1f, Body.Organ(127));
@@ -260,8 +260,8 @@ public class AppearanceTests
     {
         var w = VisibleWorld();
         var before = Frame(w);
-        Assert.Equal(6, before[1]);
-        Assert.Equal(42, Snapshot.REC);
+        Assert.Equal(7, before[1]);
+        Assert.Equal(46, Snapshot.REC);
         Assert.Equal(12 + 3 * Snapshot.REC, before.Length);
         for (int i = 0; i < 3; i++)
             for (int k = 0; k < G.NAPPEARANCE; k++)
@@ -284,7 +284,7 @@ public class AppearanceTests
         var w = VisibleWorld();
         using var bank = new MemoryStream();
         GeneBank.Save(w, bank);
-        Assert.Equal(12, GeneBank.Version);
+        Assert.Equal(13, GeneBank.Version);
         bank.Position = 0;
         var loaded = GeneBank.Load(bank);
         foreach (var genome in loaded.Genomes[0])
@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(21, Checkpoint.Version);   // 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
+            Assert.Equal(22, Checkpoint.Version);   // 22: respiration (genes, sense, depth and oxygen debt per slot, causes suffocated and drowned); 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Assert.True(w.GenomeOf(i).SequenceEqual(restored.GenomeOf(i)), $"genome of slot {i}");
