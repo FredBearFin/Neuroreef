@@ -21,7 +21,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | CAPACITY | 16384 | slots | agent slots (animals, eggs, embryos) a world starts with: it grows as births need more, limited only by memory (World.Grow) | HT: ~212 KB per slot with 256-unit brains (World.SlotBytes); not a cap since 2026-10-31: a seed gives the same run from any start |
 | LAKE_SHARE | 0.1 | fraction | share of the map below sea level (Nature.Water, the default): the sea; lakes above it come from the water balance of closed basins (2026-10-31; before, every cell below this quantile was a lake at one level) | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
-| T_SEASON | 3000 | steps | season period (one year), by default | ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K) |
+| T_SEASON | 3000 | steps | season period (one year), by default | ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K); since 2026-11-01 a step is STEP_H and the lifespan at M=1 is 2 years (C_LIFE) |
 | A_SEASON | 0.45 | - | season amplitude on moisture | V1 |
 | SAMPLE_EVERY | 32 | steps | telemetry sample interval | HT |
 | RING | 4096 | samples | telemetry ring length | HT |
@@ -64,11 +64,12 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_EMAX | 2 | E/M | energy reserve per unit mass | ECO: stored reserve of the same order as tissue energy |
 | C_GUT | 0.3 | M/M | gut capacity per unit mass | HT |
 | C_DIGEST | 0.025 | M/step | digestion rate at M=1 | ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997) |
+| C_ABSORB | 0.028 | E/step | energy the gut can absorb per step at M=1 (x M^0.75): digestion passes rich digesta only as fast as their energy is taken up (Resolve), and the food a forager picks is worth at most this a step | ECO (2026-11-01): intestinal nutrient transport has a set capacity with modest spare (Karasov & Diamond 1983; Diamond 1991), and maximal sustained energy budgets reach ~7x basal (Hammond & Diamond 1997: lactating mice ~7, cold-exposed rodents 5-7, birds feeding young ~4). Before, mass alone bounded digestion, so seeds (7 E/M, 0.75 digestible), fruit and nectar gave 30-47x basal at 0.1 kg against 6.7x for grass |
 | C_BITE | 0.06 | M/step | bite size at M=1 | Revision M: x5 with digestion (a bite fills the gut faster than it empties) |
 | C_SPEED | 11.5942 | units/step | top speed per step at M=1 (walk): DMD_M / STEPS_PER_DAY / TRAVEL_SHARE / M_PER_UNIT | derived (2026-11-01): 632 m a step (11.6 units); was 1.2 units (65 m) from V1, so animals covered ~1/9 of a real day range |
 | C_TURN | 0.32 | rad/step | turn rate at M=1 | V1 |
-| C_LIFE | 3200 | steps | lifespan at M=1 | V1 |
-| C_MATURE | 250 | steps | maturity age at M=1 | V1 |
+| C_LIFE | 5995.89 | steps | lifespan at M=1 (the age at which senescence sets in): 730 days | ECO (2026-11-01): wild mammals of ~1 kg rarely live past 2-3 years (wild rabbits, Thompson & King 1994; ~0.75 years at 20 g as wild mice, ~5 years at 40 kg); lifespan / maturity ~6, against Charnov's (1993) adult life expectancy of ~1.4 maturity ages and maximum longevities of ~10 (Prothero & Juergens 1987). Was 3200 steps (V1), set when a step had no duration |
+| C_MATURE | 985.626 | steps | maturity age at M=1 (the fastest a juvenile can grow to adult size, on a full reserve): 120 days | ECO (2026-11-01): age at first reproduction of mammals ~M^0.25-0.3 (Millar & Zammuto 1983; Charnov 1993): house mouse 20 g 6 weeks (x 0.38 = 45 days here), rat 0.3 kg 10 weeks (89 days), rabbit 2 kg 4-5 months (143 days), roe deer 25 kg 14 months (268 days). Was 250 steps (V1: 30 days), 3-5x too fast |
 | C_SIGHT | 1.10092 | units | sight range at M=1: C_SIGHT_M / M_PER_UNIT | derived (2026-11-01): 1.1 units (60 m); was 16 (870 m) from V1 |
 | C_MOVE | 6.54121E-05 | E/(M^0.7*unit) | net cost of moving one unit at M=1 (x M^EXP_MOVE x distance): COT_J x M_PER_UNIT in energy units (C_BASAL is BMR_W x STEP_S) | ECO (2026-11-01): the cost of transport of Taylor, Heglund & Maloiy (1982) on the energy scale Kleiber's metabolism sets; 6.5e-5 per unit, 1.6% of a step's basal metabolism at 1 kg. Was 0.004 x C_SPEED = 0.0048 (Revision M), 73x the measured cost per metre, when a step's travel was 65 m |
 | EXP_MOVE | 0.7 | - | mass exponent of the cost of transport | ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982) |
@@ -105,6 +106,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | RHO_GRASS | 3.2 | E/M | energy density of grass | V1 |
 | RHO_BROWSE | 3.6 | E/M | energy density of browse (leaves) | HT |
+| RHO_PLANT | 3.2 | E/M | energy of a unit of plant production (cover): what reproduction turns into fruit, seed and nectar keeps it, so their mass is the production over their own density (Plants), and a bite of roots takes this much cover per unit of its energy | mass and energy balance (2026-11-01): the energy of herb tissue (RHO_GRASS); before, a unit of production became a unit of nectar, seed or fruit, 2.5, 2.2 and 1.9x its energy |
 | RHO_FRUIT | 6 | E/M | energy density of fruit | HT |
 | RHO_SEED | 7 | E/M | energy density of seeds | HT |
 | RHO_NECTAR | 8 | E/M | energy density of nectar | HT |
@@ -223,8 +225,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BIRTH_HI | 0.3 | - | largest newborn mass as a share of adult mass | ECO: precocial mammals |
 | FOV_LO | 120 | degrees | narrowest field of view a gene can give | ECO: forward-facing predators |
 | FOV_HI | 360 | degrees | widest field of view a gene can give | ECO: prey with lateral eyes |
-| C_GEST | 150 | steps | gestation (or incubation) at M=1, scaling with M^0.25 | ECO: gestation scales about as M^0.25 |
-| C_COOL | 150 | steps | breeding cooldown at M=1, scaling with M^0.25 | ECO: as gestation |
+| C_GEST | 410.678 | steps | gestation (or incubation) at M=1 for a newborn of a tenth of adult mass: 50 days, x M^0.25 x sqrt(newborn share / 0.1) | ECO (2026-11-01): gestation ~M^0.25 (Kihlstroem 1972; Blueweiss et al. 1978), longer for precocial young (Martin & MacLarnon 1985): house mouse 19 days (14 here), rabbit 1.5 kg at 3% 31 days (30), guinea pig 0.9 kg at 10% 68 days (49), deer 50 kg at 8% 200 days (119). Was 150 steps (V1: 18 days) |
+| C_COOL | 410.678 | steps | breeding cooldown at M=1 from conception (the shortest interval between litters): 50 days, x M^0.25 | ECO (2026-11-01): interbirth intervals of small mammals are about a gestation plus part of a lactation, ~M^0.25 (Millar 1977): house mouse ~20-25 days (19 here), rat 24-30 (37), wild rabbits 5-7 litters in a breeding season (55 days at 1.5 kg). Was 150 steps (V1: 18 days) |
 | DEEP_SWIM | 0.3 | - | swimming power (share of the body's top speed in water) needed to stay in deep water | ECO: staying up in open water needs swimming power |
 | SWIM_DEPTH_RANGE | 14 | x | additional maximum water depth per unit fin size, in SHALLOW-depth units | HT |
 | CRAWL | 0.05 | - | a legless body crawls on land at this share of its top speed | ECO: worms, snakes and stranded fish move slowly without legs |
@@ -556,7 +558,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | B_SEED0 | 0.01 | cover | most cover recruited from a bank per update | HT |
 | EST0 | 0.005 | - | establishment per seed per update at full growth | HT: a bank of 0.05 cover of reference seed recruits ~90% of B_SEED0 |
 | BROWSE_H | 6 | m | height an animal browses up to | ECO: browsers reach ~5-6 m (du Toit 1990) |
-| BROWSE_LOSS | 0.5 | - | woody cover lost per unit browse eaten | HT: as the old sapling loss |
+| BROWSE_LOSS | 1 | - | woody cover lost per unit browse eaten | mass balance (2026-11-01): leaves and shoots eaten are the woody plant's own mass, so a unit of browse is a unit of its cover (RHO_BROWSE is the energy of woody tissue in reach). Was 0.5 (HT, as the old sapling loss): browse, regrowing toward its own capacity, fed browsers twice what the plants lost |
 | BURR_PICK | 0.002 | /step | share of a bank of full hooks caught in a coat per step, x M^(2/3) x (0.3 + fur) | ECO: epizoochory (Sorensen 1986; Couvreur et al. 2004) |
 | BURR_DROP | 0.03 | /step | share of seed in a coat that falls off per step | ECO: Couvreur et al. 2004 |
 | M_GAPE | 1 | M | body mass whose gape passes a reference seed whole | ECO: gape limits the seed size dispersed (Wheelwright 1985) |

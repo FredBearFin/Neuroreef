@@ -32,7 +32,7 @@ public sealed class World
     [PerSlot] public int[] MotherSlot, Children, LastChildSlot, Matured;
     [PerSlot] public uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
-    [PerSlot] public float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
+    [PerSlot] public float[] PM, PBasal, PGut, PDig, PAbsorb, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
     [PerSlot] public float[] PLen;          // adult body length in metres (Body.LengthM, 2026-11-01); PSight, PReach, PVmax are in units of K.M_PER_UNIT m
     [PerSlot] public byte[] PLitter;
     [PerSlot] public float[] PDiet;            // Cap * Pools.N digestive efficiencies
@@ -270,7 +270,7 @@ public sealed class World
         Spc = new byte[c]; StageOf = new byte[c]; Sex = new byte[c]; Flags = new byte[c];
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
         MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
-        PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PBite = new float[c]; PLife = new float[c];
+        PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PAbsorb = new float[c]; PBite = new float[c]; PLife = new float[c];
         PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PLen = new float[c]; PTurn = new float[c]; PVmax = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PLitter = new byte[c];
         PDiet = new float[c * Pools.N]; PCare = new float[c];

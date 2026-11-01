@@ -14,6 +14,7 @@ public sealed class Telemetry
     // ---- running counters (cumulative)
     public readonly long[] Created, Births, Conceptions, Deaths, KillMatrix, Strikes, Kills, Matings, Lays, Immigrants, Infections;
     public readonly double[] Intake, SpendBasal, SpendMove, SpendGrowth, SpendRepro, SpendHeat, RewardSum, CareGiven;
+    public readonly double[] EatenMass = new double[Pools.N];   // food mass taken from each pool by all animals (reporting only, 2026-11-01)
     public readonly long[] InfByRoute = new long[4];   // new infections by how they were caught: contact, ground, food, water (Revision R)
     public long SlotShortage, FullSteps;
     public ulong LastFullStep = ulong.MaxValue;

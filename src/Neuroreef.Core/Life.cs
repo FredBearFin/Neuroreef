@@ -195,7 +195,7 @@ public static class Life
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
             float pass = MathF.Min(MathF.Min(w.PBite[c], w.PDig[c]), 0.5f * (float)(stock[p] / n));
-            rate = MathF.Max(rate, diet[p] * Pools.Rho[p] * pass);
+            rate = MathF.Max(rate, MathF.Min(w.PAbsorb[c], diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         if (rate < K.FORAGE_MARGIN * need) return 0f;
         return (float)(y / need);
