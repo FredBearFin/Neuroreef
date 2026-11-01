@@ -74,7 +74,7 @@ public static class Decide
             if (e <= 0) continue;
             float bm = 1f;
             if (taste && land && p <= (int)Pool.Root) { Plants.Taste(w, p, cell, bite, out float em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
-            v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite * bm, w.Pool[p][cell]));
+            v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite * bm, w.Pool[p][cell] * Pools.Kg[p]));   // kg of food (Pools.Kg)
         }
         return Worth(v, need);
     }

@@ -5,6 +5,11 @@
 // growth form, biome or outcome is designed. The food pools animals eat (grass, browse, fruit, seed, nectar, root) come
 // from the slots and their traits, and animals taste the plants' defences when they eat.
 //
+// Units (2026-11-01): cover and every plant pool are shares of the field cell, so growth per unit cover is growth per
+// square metre at any cell size; a unit is PLANT_KG_M2 of dry matter on each m2 (Pools.Kg: kg in a cell). Animals bite,
+// sense and swallow kg (Resolve, Eaten, Deposit, Burrs convert). Reproduction draws on REPRO_RATE per unit leafy cover,
+// the production of a closed canopy at NPP_MAX.
+//
 // Schedule (Simulation.Step, after FIELDS): every step one stripe of rows (y = step mod EVERY) is updated in place with
 // dt = EVERY, rows of the stripe in parallel (each reads at most one row up and down, which no other row of the stripe
 // writes). Phase A of a row grows its plants and releases their seeds (own bank, own SeedOut, own long-distance
@@ -61,6 +66,9 @@ public sealed class PlantTable
     // in cover (food mass) units; Commit adds each row's into Production. Nothing reads it back
     public readonly double[] RowProd;
     public readonly double[] Production = new double[5];
+    // production per cell (cover units, every slot and reproduction; reporting only, 2026-11-01: NR_ECO's NPP by biome).
+    // Each row writes only its own cells; nothing reads it back; not saved
+    [NonSerialized] public readonly float[] CellProd;
     public long Created, Freed, Establish, Crosses, Mutations, FailedCross, TableFull, PendFull;
     public double WindSeed, WaterSeed, GutSeed, CacheSeed, BurrSeed, ReleasedNb, GatheredNb;
     public long CensusSteps;
@@ -76,6 +84,7 @@ public sealed class PlantTable
         PendLo = new ulong[fw * K.PLANT_PEND]; PendHi = new uint[fw * K.PLANT_PEND]; PendParent = new ushort[fw * K.PLANT_PEND];
         RowStat = new double[fw * NSTAT];
         RowProd = new double[fw * 5];
+        CellProd = new float[fw * fw];
         for (int i = Cap - 1; i >= 1; i--) Free[FreeTop++] = i;
     }
 
@@ -558,6 +567,7 @@ public static class Plants
             for (int k = 0; k < SLOTS; k++) w.POcc[i * SLOTS + k] = (ushort)(B[k] > 1e-7f ? id[k] : 0);
             w.PFlags[i] = (byte)flags;
             Li[i] += litter; Wo[i] += wood;
+            t.CellProd[i] += prod;
 
             // the food pools the plants make: browse (leaves in reach), roots, the decay of fruit, nectar and the seed bank
             float cap = 0f, capR = 0f;
@@ -653,7 +663,7 @@ public static class Plants
                 for (int q = 0; q < 9; q++) inTot += Incoming(w, q, s, n, FW, x, y, xl, xr, yu, yd, blk, share);
                 if (inTot <= 0f) continue;
                 gathered += inTot;
-                if (!land) { De[i] += inTot; water += inTot; continue; }
+                if (!land) { De[i] += inTot * (Pools.Kg[(int)Pool.Seed] / Pools.Kg[(int)Pool.Detritus]); water += inTot; continue; }
                 int bo = s * n + i;
                 float tot = w.BankM[bo] + inTot, u = Rng.U(seed, step, (uint)bo, Rs.PlantPick + 4) * tot;
                 w.BankM[bo] = tot;
@@ -899,8 +909,8 @@ public static class Plants
         return (1f - th * f) / (1f - 0.5f * K.THORN_B * f);
     }
 
-    /// <summary>After an animal ate bite of pool p in this cell (RESOLVE, serial): what it took from the plants, the seed
-    /// it swallowed (with their parents) and the pollen it carried. eff is its assimilation of the bite.</summary>
+    /// <summary>After an animal ate bite (kg) of pool p in this cell (RESOLVE, serial): what it took from the plants, the
+    /// seed it swallowed (kg, with their parents) and the pollen it carried. eff is its assimilation of the bite.</summary>
     public static void Eaten(World w, int a, int cell, int p, float bite, float eff)
     {
         var t = w.Flora; var Pe = t.Phe; int NP = PlantTable.NP, n = Map.FW * Map.FW;
@@ -915,7 +925,7 @@ public static class Plants
                     float ws = s != 0 ? w.Shrub[cell] * Reach(Pe, s * NP, false) : 0f, wt = tr != 0 ? w.Tree[cell] * Reach(Pe, tr * NP, false) : 0f;
                     float wp = sp != 0 ? w.Sapling[cell] * Reach(Pe, sp * NP, true) : 0f, sum = ws + wt + wp;
                     if (sum <= 0f) return;
-                    float loss = K.BROWSE_LOSS * bite / sum;
+                    float loss = K.BROWSE_LOSS * bite / Pools.Kg[(int)Pool.Browse] / sum;   // the bite in cover (Pools.Kg)
                     w.Shrub[cell] = MathF.Max(0f, w.Shrub[cell] - loss * ws); w.Tree[cell] = MathF.Max(0f, w.Tree[cell] - loss * wt); w.Sapling[cell] = MathF.Max(0f, w.Sapling[cell] - loss * wp);
                     return;
                 }
@@ -937,7 +947,7 @@ public static class Plants
                     int bs = 0; float bb = -1f;
                     for (int s = 0; s < 3; s++) if (w.BankM[s * n + cell] > bb) { bb = w.BankM[s * n + cell]; bs = s; }
                     int mom = w.BankMom[bs * n + cell], dad = w.BankDad[bs * n + cell];
-                    float keep = MathF.Max(0f, 1f - bite / tot);
+                    float keep = MathF.Max(0f, 1f - bite / Pools.Kg[(int)Pool.Seed] / tot);   // the bite in the bank's units (Pools.Kg)
                     for (int s = 0; s < 3; s++) w.BankM[s * n + cell] *= keep;
                     GutAdd(w, a, mom, dad, bite * (1f - eff), uf);
                     return;
@@ -973,13 +983,15 @@ public static class Plants
         if (dad == 0) w.GutSeedDad[a] = (ushort)mom;
     }
 
-    /// <summary>Seed an animal leaves in a cell (in dung, a cache, from its fur): into the bank of its stratum, or lost in water.</summary>
+    /// <summary>Seed (m kg) an animal leaves in a cell (in dung, a cache, from its fur): into the bank of its stratum, or
+    /// lost in water. The banks are in cover units (Pools.Kg converts).</summary>
     public static void Deposit(World w, int cell, int mom, int dad, float m, int vector)
     {
         if (m <= 0f) return;
         var t = w.Flora;
         if (vector == 0) t.GutSeed += m; else if (vector == 1) t.CacheSeed += m; else t.BurrSeed += m;
-        if (w.Cell[cell] != (byte)Realm.Land || mom == 0 || t.Used[mom] == 0) { w.Pool[(int)Pool.Detritus][cell] += m; return; }
+        if (w.Cell[cell] != (byte)Realm.Land || mom == 0 || t.Used[mom] == 0) { w.Pool[(int)Pool.Detritus][cell] += m / Pools.Kg[(int)Pool.Detritus]; return; }
+        m /= Pools.Kg[(int)Pool.Seed];
         if (dad == 0 || t.Used[dad] == 0) dad = mom;
         int s = (int)t.P(mom, Ph.STRAT);
         BankAdd(w, s, cell, mom, dad, m, Rng.U(w.Seed, (uint)w.Step, (uint)cell, Rs.PlantPick + 8 + (uint)vector));
@@ -988,7 +1000,7 @@ public static class Plants
     }
 
     /// <summary>Burrs (RESOLVE, each animal on land each step): hooked seed in the banks catch in its coat (more on a big,
-    /// furry body; Sorensen 1986; Couvreur 2004) and fall off at BURR_DROP per step.</summary>
+    /// furry body; Sorensen 1986; Couvreur 2004) and fall off at BURR_DROP per step. The coat holds kg (FurSeed).</summary>
     public static void Burrs(World w, int a, int cell)
     {
         float fur = w.FurSeed[a];
@@ -1012,6 +1024,7 @@ public static class Plants
             if (m <= 0f) continue;
             w.BankM[bo] -= m;
             float u = Rng.U(w.Seed, (uint)w.Step, (uint)a, Rs.PlantPick + 11 + (uint)s);
+            m *= Pools.Kg[(int)Pool.Seed];   // into kg
             w.FurSeed[a] += m;
             if (w.FurSeedG[a] == 0 || u * w.FurSeed[a] < m) { w.FurSeedG[a] = (ushort)mom; w.FurSeedDad[a] = w.BankDad[bo]; }
         }
@@ -1051,18 +1064,20 @@ public static class Plants
             if (k == HERB)
             {
                 float room = MathF.Max(0f, 1f - s - tr);
-                y += diet[(int)Pool.Grass] * Pools.Rho[(int)Pool.Grass] * em * MathF.Max(0f, G0 - K.RESP * r0 * Pe[o + Ph.LES]) * 0.25f * room * room;
+                y += diet[(int)Pool.Grass] * Pools.ECell[(int)Pool.Grass] * em * MathF.Max(0f, G0 - K.RESP * r0 * Pe[o + Ph.LES]) * 0.25f * room * room;
                 dR += K.R_R * Nature.Plants * fe * b * 0.25f;
             }
             else { float c = b * Reach(Pe, o, false); dB += K.R_B * Nature.Plants * fe * 0.5f * c * em; fB += c; if (k == SHRUB) dR += K.R_R * Nature.Plants * fe * b * 0.25f; }
         }
-        y += diet[(int)Pool.Browse] * Pools.Rho[(int)Pool.Browse] * dB;
+        y += diet[(int)Pool.Browse] * Pools.ECell[(int)Pool.Browse] * dB;
         // fruit, seed and nectar carry the energy of the production they are made of (RHO_PLANT per unit, 2026-11-01)
-        y += diet[(int)Pool.Fruit] * K.RHO_PLANT * dF;
-        y += diet[(int)Pool.Seed] * K.RHO_PLANT * dSd;
-        y += diet[(int)Pool.Nectar] * K.RHO_PLANT * dNc;
-        y += diet[(int)Pool.Root] * Pools.Rho[(int)Pool.Root] * dR;
-        y += diet[(int)Pool.Litter] * Pools.Rho[(int)Pool.Litter] * dL;
+        // a unit of cover is Pools.Kg kg of food in the cell (2026-11-01): the yield is energy per step in the cell
+        float kg = Pools.Kg[(int)Pool.Grass];
+        y += diet[(int)Pool.Fruit] * K.RHO_PLANT * kg * dF;
+        y += diet[(int)Pool.Seed] * K.RHO_PLANT * kg * dSd;
+        y += diet[(int)Pool.Nectar] * K.RHO_PLANT * kg * dNc;
+        y += diet[(int)Pool.Root] * Pools.ECell[(int)Pool.Root] * dR;
+        y += diet[(int)Pool.Litter] * Pools.ECell[(int)Pool.Litter] * dL;
         return y;
     }
 
