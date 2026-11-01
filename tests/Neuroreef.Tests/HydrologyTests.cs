@@ -126,7 +126,7 @@ public class HydrologyTests
             float q = net.HeadIn![i] * 0.999f;
             float down = v.LakeOf[r] >= 0 ? v.Elev[r] + v.Depth[r] : v.Elev[r];
             float dist = (i % Map.FW != r % Map.FW && i / Map.FW != r / Map.FW) ? 1.4142135f : 1f;
-            float s = MathF.Max(0f, v.Elev[i] - down) / dist;
+            float s = MathF.Max(0f, v.Elev[i] - down) / dist * (K.H_RELIEF / (1f - v.SeaLevel) / K.GEO_CELL_M);   // m/m (2026-11-01)
             if (!(q >= K.CHANNEL_A_MIN * scale && (q >= K.RIVER_ACC * scale || q * s * s >= K.CHANNEL_C))) continue;
             passed++;
             if (Channel(v, i)) continue;

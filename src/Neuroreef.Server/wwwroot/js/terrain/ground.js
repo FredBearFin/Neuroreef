@@ -261,6 +261,13 @@ export class Ground {
     };
     m.customProgramCacheKey = () => 'nr-ground-1';
     if (patch) patch(m, 'nr-ground-1');
+    // the same surface for shadow maps (mesh.customDepthMaterial): its vertices are placed here too
+    const dm = this.depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    dm.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, U);
+      sh.vertexShader = VERT_DECL + sh.vertexShader.replace('#include <begin_vertex>', VERT_MAIN);
+    };
+    dm.customProgramCacheKey = () => 'nr-ground-depth-1';
     this.geo = patchGeometry();
     this.cap = 0; this._grow(512);
     this.mesh = new THREE.Mesh(this.geo, m);
@@ -369,7 +376,7 @@ export class Ground {
   }
 
   dispose() {
-    this.geo.dispose(); this.material.dispose();
+    this.geo.dispose(); this.material.dispose(); this.depthMaterial.dispose();
     for (const t of Object.values(this.tex)) t.dispose();
   }
 }

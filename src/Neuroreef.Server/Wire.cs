@@ -18,7 +18,7 @@ public static class Wire
           "algae", "phyto", "detritus", "fire", "scent", "moisture", "nutrient", "pollination", "pond", "temp", "frozen",
           "plant height", "toxin", "thorns", "drought tolerance", "fleshy fruit", "leaf-on", "flora",   // Revision S: the plants' genes
           "flood",     // 2026-10-31: a flooded floodplain (Wet = 3)
-          "snow", "volcanic", "sedimentary", "alluvium" };   // 2026-11-01, terrain materials: snow cover, surface rock, alluvium
+          "snow", "volcanic", "sedimentary", "alluvium", "limestone" };   // 2026-11-01, terrain materials: snow cover, surface rock, alluvium
     public static int FieldsSize => 12 + FieldLayers.Length * FD * FD;
 
     // probe float layout (offsets in floats after the 24-byte probe header)
@@ -197,12 +197,13 @@ public static class Wire
             >= 22 and <= 28 => PlantLayer(w, layer - 22, i),
             29 => w.Wet[i] == 3 ? 1f : 0f,
             // terrain materials (2026-11-01, display only): the snowpack's cover (1 - e^(-SWE / 30 mm); 0 without the water
-            // cycle), the share of the surface rock that is volcanic or sedimentary (the rest crystalline), and the alluvium's
+            // cycle), the share of the surface rock that is volcanic, sedimentary or limestone (34; the rest crystalline), the alluvium's
             // depth as 1 - e^(-depth / ALLUV_D)
             30 => w.WaterOn && w.Cell[i] == (byte)Realm.Land ? 1f - MathF.Exp(-w.Snow[i] / 30f) : 0f,
             31 => w.Rock[i] == Neuroreef.Rock.Volcanic ? 1f : 0f,
             32 => w.Rock[i] == Neuroreef.Rock.Sedimentary ? 1f : 0f,
             33 => 1f - MathF.Exp(-w.Alluvium[i] / K.ALLUV_D),
+            34 => w.Rock[i] == Neuroreef.Rock.Limestone ? 1f : 0f,
             _ => 0f,
         };
     }
