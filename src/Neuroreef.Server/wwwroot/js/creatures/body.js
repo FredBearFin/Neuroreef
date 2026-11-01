@@ -124,11 +124,14 @@ export function bodyMesh(base, material, cap) {
   return { mesh, cap, anim, geneA, geneB, clade, morph, slots };
 }
 
-function writeMatrix(M, o, x, y, z, h, sx, sy) {
+// sf, ss: the ground's slope (rise per run) along the body's forward (+x) and left (+z) axes. A body on a slope is
+// sheared to it, not tilted: it stays upright while every foot stands on the slope (the shader reads its size from
+// the horizontal part of the x column)
+function writeMatrix(M, o, x, y, z, h, sx, sy, sf = 0, ss = 0) {
   const ca = Math.cos(h), sa = Math.sin(h);
-  M[o] = ca * sx; M[o + 1] = 0; M[o + 2] = sa * sx; M[o + 3] = 0;
+  M[o] = ca * sx; M[o + 1] = sf * sx; M[o + 2] = sa * sx; M[o + 3] = 0;
   M[o + 4] = 0; M[o + 5] = sy; M[o + 6] = 0; M[o + 7] = 0;
-  M[o + 8] = -sa * sx; M[o + 9] = 0; M[o + 10] = ca * sx; M[o + 11] = 0;
+  M[o + 8] = -sa * sx; M[o + 9] = ss * sx; M[o + 10] = ca * sx; M[o + 11] = 0;
   M[o + 12] = x; M[o + 13] = y; M[o + 14] = z; M[o + 15] = 1;
 }
 
@@ -141,9 +144,10 @@ function writeGenes(B, k4, b) {
 }
 
 // the packed counts (aClade.w): how far under water (0..15) * 8192 + meat-eating (0..15) * 512 + loco * 64 +
-// (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1)
+// (fin pairs - 1) * 16 + (eye pairs - 1) * 4 + (leg pairs - 1). The pose follows b.pose when set (what the body is
+// doing now: a flier landed walks, a body under water swims), else its locomotion
 const cladeCode = (b) => (b.under | 0) * 8192 + Math.round(Math.min(1, Math.max(0, b.meat || 0)) * 15) * 512 +
-  (LOCO_CODE[b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
+  (LOCO_CODE[b.pose || b.loco] ?? 0) * 64 + (pairsOf(b.finPairs) - 1) * 16 + (pairsOf(b.eyePairs) - 1) * 4 + (pairsOf(b.legPairs) - 1);
 
 // ------------------------------------------------------------------ stable instance slots (the live view)
 // Each organism keeps its instance slot while it stays drawn in a mesh, so its genes, appearance and colour are
@@ -160,10 +164,10 @@ export function beginBodies(B) {
 
 /**
  * Draw the organism with this key (its serial; any stable key) in this frame: as setBody, in the slot it had last
- * frame, or a new one (its genes written then). The genes are taken to be the same for its life. Returns false when
+ * frame, or a new one (its genes written then); sf, ss the ground's slope under it (writeMatrix). The genes are taken to be the same for its life. Returns false when
  * the mesh is full and the organism has no slot in it.
  */
-export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl) {
+export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest, r, g, bl, sf = 0, ss = 0) {
   const S = B.slots;
   let k = S.of.get(key), fresh = false;
   if (k === undefined) {
@@ -171,7 +175,7 @@ export function placeBody(B, key, x, y, z, h, sx, sy, b, gait, phase, acts, rest
     S.of.set(key, k); S.key[k] = key; fresh = true;
   }
   S.seen[k] = S.frame;
-  writeMatrix(B.mesh.instanceMatrix.array, k * 16, x, y, z, h, sx, sy);
+  writeMatrix(B.mesh.instanceMatrix.array, k * 16, x, y, z, h, sx, sy, sf, ss);
   const k4 = k * 4, A = B.anim.array, CL = B.clade.array;
   A[k4] = gait; A[k4 + 1] = phase; A[k4 + 2] = acts; A[k4 + 3] = rest;
   if (fresh) writeGenes(B, k4, b);

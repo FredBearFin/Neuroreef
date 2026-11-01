@@ -47,7 +47,7 @@ float bit(float v, float b) { return mod(floor(v / b), 2.0); }
 vec3 rotA(vec3 p, vec3 c, vec3 ax, float a) { p -= c; float s = sin(a), k = cos(a); return c + p * k + cross(ax, p) * s + ax * dot(ax, p) * (1.0 - k); }
 
 // ---- per-instance state, set once at the top of main and read by the part surfaces below
-float bT, bPh, bGait, bRest, bAir, bFish, bWalk, bSwim, bSess, bEat, bStrikeA, bBiped;
+float bT, bPh, bGait, bRest, bAir, bFish, bWalk, bSwim, bSess, bEat, bStrikeA, bBiped, bPant, bCall;
 float gLegs, gFins, gWings, gSight, gArmour, gStrike, gFur, gAppend, gMeat;
 float nLegPairs, nFinPairs, nEyePairs;
 float rX, rY, rZ, hR, furV, cY;
@@ -294,7 +294,9 @@ vec3 wingAt(float s, float t, float bone, float th, out vec3 hint) {
   wn = vec3(wn.x, wn.y * cp + wn.z * sp, wn.z * cp - wn.y * sp);
   hint = normalize(T * wn.x + N * wn.y + B * bSide * wn.z);
   oSkin = vec4(s, t, 0.3, bone > 0.5 ? 1.0 : 6.0);
-  return sh + T * w.x + N * w.y + B * bSide * w.z;
+  vec3 wp = sh + T * w.x + N * w.y + B * bSide * w.z;
+  wp.y = mix(wp.y, max(wp.y, 0.004), fold * (1.0 - bFish));   // folded on a body lying low, the wing rests on the ground, not in it
+  return wp;
 }
 
 /** Side fin pair bIdx: a membrane with rays from the lower flank; spread and paddling in water, laid back
@@ -395,6 +397,19 @@ vec3 bodyPart(vec3 L, out vec3 hint) {
   return plate(L, hint);
 }
 vec3 gBodyP; vec3 gBodyN;
+
+/** Snout-to-rump reach (along x, from the hips to the nose) of the spine built with this pitch, neck and head angle:
+ *  the same construction as the body's own (GLSL_BODY), so the body can be fitted to its true length. */
+float noseReach(float pitch, float neckUp, float headA) {
+  vec3 dB = vec3(cos(pitch), sin(pitch), 0.0);
+  float xa = (-0.85 + 1.7 * 0.24) * rX * bBiped;
+  vec3 shift = vec3(xa, 0.0, 0.0) - dB * xa;
+  vec3 h = -dB * 0.85 * rX + shift, s = dB * 0.85 * rX + shift;
+  vec3 nDir = vec3(cos(neckUp), sin(neckUp), 0.0), hDir = vec3(cos(headA), sin(headA), 0.0);
+  vec3 ds = normalize(dB + nDir * (0.3 + 0.7 * smoothstep(0.0, 0.5 * rX, lK)));
+  vec3 o = s + normalize(nDir * 0.8 + ds * 0.2) * lK;
+  return o.x + hDir.x * lF - h.x;
+}
 `;
 
 const GLSL_BODY = `
@@ -404,6 +419,8 @@ const GLSL_BODY = `
   bT = uTime; bGait = aAnim.x; bPh = aAnim.y * 6.28318; bRest = aAnim.w;
   float acts = aAnim.z;
   bEat = max(bit(acts, 1.0), bit(acts, 4.0)); bStrikeA = bit(acts, 2.0);
+  // above the action byte: oxygen debt (AGENTS byte 45, 0..15) x 256 and calling (4096), set by world3d.js
+  bPant = smoothstep(0.25, 0.9, mod(floor(acts / 256.0), 16.0) / 15.0); bCall = bit(acts, 4096.0);
   float pk = floor(aClade.w + 0.5);
   vUnder = floor(pk / 8192.0) / 15.0; pk = mod(pk, 8192.0);   // how far under water it is (0 dry or at the surface .. 1 lost from view)
   gMeat = floor(pk / 512.0) / 15.0; pk = mod(pk, 512.0);
@@ -417,7 +434,8 @@ const GLSL_BODY = `
   bAir = fl * (1.0 - bRest);
   // the instance's scale: a resting body is drawn squashed (0.7) and a corpse flattened (under 0.5); the body
   // lies down here instead, and the squash is undone at the end
-  float sx = length(instanceMatrix[0].xyz) / uBodyK, sy = length(instanceMatrix[1].xyz) / uBodyK;   // the view size (mass)
+  // (the x column's horizontal part: a body standing on a slope is sheared to it, body.js writeMatrix)
+  float sx = length(instanceMatrix[0].xz) / uBodyK, sy = length(instanceMatrix[1].xyz) / uBodyK;   // the view size (mass)
   float squash = sy / max(sx, 1e-6), corpse = step(squash, 0.5);
   float unsq = (bRest > 0.5 && fl < 0.5) || corpse > 0.5 ? 1.0 / squash : 1.0;
   float massI = pow(max(sx / (corpse > 0.5 ? 1.725 : 1.5), 0.05), 3.0);
@@ -448,18 +466,23 @@ const GLSL_BODY = `
   footLen = legLen * mix(0.17, 0.28, limbShape);
   float ab = legLen - footLen;
   float lieY = rY * 0.9 * furV;
-  gaitW = 6.28318 * (0.9 / sqrt(max(legLen * sx, 0.08))) * (0.6 + 0.8 * bGait);
-  stride = legLen * 0.5 * min(1.0, bGait * 1.3);
+  // the stride quickens and lengthens with speed up to a gallop (the sim's animals cover hundreds of body lengths in
+  // a step, so a running body is shown at its fastest gait, not at a speed its feet could keep)
+  gaitW = 6.28318 * (0.9 / sqrt(max(legLen * sx, 0.08))) * (0.6 + 1.4 * bGait);
+  stride = legLen * mix(0.5, 0.62, bGait) * min(1.0, bGait * 1.3);
   liftH = legLen * 0.14;
   wingF = 6.0 + 9.0 * pow(massI, -0.17);
 
   // ---- the spine: pitch of the trunk, neck and head angles, tail carriage
-  float pitch = mix(0.06 + 0.18 * (aMorphA.z - 0.5) + 0.14 * smoothstep(0.4, 1.0, neckG) * (1.0 - sprawl),
-                    mix(0.62, 0.2, tailG), bBiped * legE) * bWalk;
+  float pitchW = mix(0.06 + 0.18 * (aMorphA.z - 0.5) + 0.14 * smoothstep(0.4, 1.0, neckG) * (1.0 - sprawl),
+                     mix(0.62, 0.2, tailG), bBiped * legE);
+  float pitch = pitchW * bWalk;
   pitch += bRest * fl * mix(0.15, 0.45, bBiped);    // a perched flyer sits up
   pitch *= 1.0 - bRest * (1.0 - fl) * 0.7;
+  float neck0 = mix(mix(0.3, 1.15, smoothstep(0.1, 0.8, neckG)), 0.08, bFish);
   float neckUp = mix(mix(0.3, 1.15, smoothstep(0.1, 0.8, neckG)), 0.08, max(bFish, bAir * 0.85));
   neckUp = max(neckUp, pitch + 0.15) - bEat * (0.9 + 0.6 * neckUp) * (1.0 - bFish) - bStrikeA * 0.5 * neckUp;
+  neckUp += (0.25 * bCall + 0.12 * bPant) * (1.0 - bFish) * (1.0 - bEat);   // the head up to call, or to gasp for air
   float headA = mix(pitch * 0.4 - 0.12, -0.35, smoothstep(0.2, 1.0, neckUp - pitch * 0.5)) - bEat * 0.7;
   float tailDroop = mix(mix(0.15, 0.95, tailG), 0.25 * tailG, bBiped) * (1.0 - bFish) * (1.0 - 0.7 * bAir);
   tailDroop -= 0.35 * gFur * (1.0 - tailG);           // a short furry tail is carried up
@@ -468,6 +491,11 @@ const GLSL_BODY = `
   float sn = mix(0.75, 0.45 + 1.15 * gStrike, gMeat);  // muzzle length: diet and strike
   lF = hR * (1.3 + 1.25 * sn);
   lT = max(rX * mix(0.08, 2.5, tailG) * (1.0 + 0.5 * gAppend), rY * 0.8 * furV);   // no tail still has a rounded rump
+  // true length: the whole body is scaled so its snout-to-rump length standing (or swimming) is the sim's, MODEL_LEN
+  // (js/scale.js) x its length gene's share of the volume; the head and neck genes no longer make it longer than that
+  float pitch0 = pitchW * (1.0 - bFish);
+  neck0 = max(neck0, pitch0 + 0.15);
+  float fitL = 1.25 * axes.x / max(noseReach(pitch0, neck0, mix(pitch0 * 0.4 - 0.12, -0.35, smoothstep(0.2, 1.0, neck0 - pitch0 * 0.5))), 0.2);
   vec3 C = vec3(0.0), dB = vec3(cos(pitch), sin(pitch), 0.0);   // built at height 0, raised onto its legs below
   float xa = (-0.85 + 1.7 * 0.24) * rX * bBiped;      // a biped pivots over its hips
   vec3 shift = vec3(xa, 0.0, 0.0) - dB * xa;
@@ -500,7 +528,10 @@ const GLSL_BODY = `
   vec3 up = vec3(0.0, cY, 0.0);
   kT += up; kH += up; kS += up; kO += up; kN += up;
   jawOpen = bStrikeA * (0.35 + 0.5 * gStrike) * abs(sin(bT * 9.0 + bPh)) + bEat * 0.22 * abs(sin(bT * 10.0 + bPh));
-  breath = (0.018 + 0.03 * bSess) * sin(bT * mix(2.6, 1.2, big) + bPh) * (1.0 - corpse);
+  jawOpen = max(jawOpen, bCall * 0.45 * smoothstep(-0.2, 0.6, sin(bT * 6.0 + bPh)));   // a call: the mouth opens with each sound
+  jawOpen = max(jawOpen, bPant * (0.18 + 0.12 * sin(bT * 7.0 + bPh)));             // out of breath: gasping, mouth open
+  // breathing; out of breath (oxygen debt) it heaves, fast and deep
+  breath = mix(0.018 + 0.03 * bSess, 0.075, bPant) * sin(bT * mix(mix(2.6, 1.2, big), 7.5, bPant) + bPh) * (1.0 - corpse);
   swimW = rX * 0.22 * (0.4 + bGait);
   tailSway = lT * (0.1 + 0.18 * bGait) * (1.0 - bFish) * (1.0 - corpse);
 
@@ -527,7 +558,9 @@ const GLSL_BODY = `
   }
   // strike lunges forward
   p.x += bStrikeA * 0.08 * abs(sin(bT * 7.0 + bPh));
-  // the instance squash undone (normals through the inverse transpose)
+  // the instance squash undone (normals through the inverse transpose); fitted to its true length (about the point on
+  // the ground under it, so the feet stay where they stand)
+  p *= fitL;
   p.y *= unsq; n.y /= unsq;
   gBodyP = p; gBodyN = n;
 
