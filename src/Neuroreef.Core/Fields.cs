@@ -112,8 +112,11 @@ public static class Fields
         {
             float lim = N / (N + K.K_N);
             float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
-            float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / w.ShallowE);
-            float ph = K.R_PH * plants * lim * 0.25f * fe;
+            // what a grazer can take at half the room is the growth there less what dies there into detritus (M x 1/2), as
+            // land plants count growth less respiration (Plants.Yield). 2026-11-01: before, the deaths were counted twice,
+            // here and as detritus, and at the old rates the plankton's net growth at half its room was below zero
+            float al = MathF.Max(0f, (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / w.ShallowE) - 0.5f * K.M_A);
+            float ph = MathF.Max(0f, K.R_PH * plants * lim * 0.25f * fe - 0.5f * K.M_PH);
             y += diet[(int)Pool.Algae] * Pools.ECell[(int)Pool.Algae] * al;
             y += diet[(int)Pool.Phyto] * Pools.ECell[(int)Pool.Phyto] * ph;
             y += diet[(int)Pool.Detritus] * Pools.ECell[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + K.M_PH * Pl[(int)Pool.Phyto][i]);
