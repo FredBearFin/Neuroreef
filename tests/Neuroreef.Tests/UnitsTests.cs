@@ -40,8 +40,10 @@ public class UnitsTests
         Assert.Equal(K.C_SIGHT_M, K.C_SIGHT * K.M_PER_UNIT, 3);
         Assert.Equal(K.FLY_V_CAP_M, K.FLY_V_CAP * K.M_PER_UNIT, 1);
         Assert.InRange(256 * K.M_PER_UNIT, 900f, 1100f);                         // the default map, ~1 km
-        Assert.Equal(256, new Server.Options().WorldMap);
-        Assert.Equal(256, new Server.Options().PreMap);
+        // the default map (2026-11-01, the owner after the size sweep): 2048, 8.2 km at 16 m a cell
+        Assert.Equal(2048, new Server.Options().WorldMap);
+        Assert.Equal(2048, new Server.Options().PreMap);
+        Assert.InRange(2048 * K.M_PER_UNIT, 8000f, 8500f);
         // the vertical scale grows with the map as width^RELIEF_HURST: a valley's hills, ~150 m, on the default map
         Assert.InRange(Map.Relief(256), 100f, 200f);
         Assert.True(Map.Relief(512) > Map.Relief(256) && Map.Relief(1024) > Map.Relief(512) && Map.Relief(2048) > Map.Relief(1024));

@@ -25,8 +25,9 @@ public sealed class Options
     // default world of ~1 km across, one valley with a stream, hills and a pond"): 256 units is 1 km at 16 m a field cell,
     // the whole of it in one view. The region (512, 2 km), the continent (1024, 4 km; 2026-10-30: against 512 the same
     // worlds kept 4-13 lineages instead of 3) and the supercontinent (2048, 8 km) stay choices on the setup screen and
-    // --map / --world-map
-    public int PreMap = 256, WorldMap = 256;
+    // --map / --world-map. 2026-11-01 (the owner, after the size sweep): the default is the supercontinent, 8 km, the
+    // smallest map that kept 7-13 lineages at about the real (Damuth) density; one branch by default so it fits a home PC
+    public int PreMap = 2048, WorldMap = 2048;
     public int AncestorsLand = K.ANCESTORS_LAND, AncestorsWater = K.ANCESTORS_WATER;
     public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
@@ -51,7 +52,7 @@ public sealed class Options
     }
     public bool NoSetup, SetupDone;
     public bool NoCheckpoint, ResumePrehistory, ResumeWorld, NewWorld;
-    public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = K.BRANCHES;
+    public int PrehistorySteps = K.PREHISTORY_STEPS, Branches = 1;   // one branch: an 8 km default map is ~4 GB a branch (2026-11-01)
 
     /// <summary>The prehistory's starting evolution settings from the command line.</summary>
     /// <summary>The live world's mutation: the prehistory's, x WorldMut (a small valley needs it to show change).</summary>
@@ -94,7 +95,7 @@ public sealed class Options
   --prehistory          run a new prehistory even if evolved.nrbank exists
   --random-brains       skip the prehistory: the world with random brains (most species will die out)
   --load-bank FILE      begin the world with the brains in this gene bank
-  --branches N          prehistory branches (default 3)
+  --branches N          prehistory branches (default 1)
   --prehistory-steps N  length of the prehistory (default 500000 steps = 500 million symbolic years)
   --seed N              world and run seed: the same N gives the same map, ancestors and names
                         (default: a new random seed every time; it is printed at start)
@@ -121,9 +122,9 @@ public sealed class Options
   --founders N          prehistory: founders per ancestor (default 600)
   --branch-slots N      prehistory: animal slots each branch starts with (default 16384; it grows as needed)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
-  --map valley|region|continent|supercontinent        map of the prehistory (default valley; 256/512/1024/2048 units,
+  --map valley|region|continent|supercontinent        map of the prehistory (default supercontinent; 256/512/1024/2048 units,
                         1/2/4/8 km across)
-  --world-map valley|region|continent|supercontinent  map of the world you watch (default valley, as big as the prehistory)
+  --world-map valley|region|continent|supercontinent  map of the world you watch (default supercontinent, as big as the prehistory)
   --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
   --mating-drive X      strength of the breeding instinct (default 1)
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X

@@ -41,7 +41,7 @@
     world that grows from it. Choose the land, how harsh nature is, and how life starts. Nothing is created until you press
     Start. 1× on a nature setting is the documented law; the rest is your choice.</p>
   <div class="presets"><span class="k" style="color:var(--dim)">Presets:</span>
-    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (laptop)">Light (laptop)</a><a data-p="normal" data-name="Normal valley (default)">Normal valley (default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a></div>
+    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (4 km)">Light (4 km)</a><a data-p="normal" data-name="Normal (8 km, default)">Normal (8 km, default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a></div>
   <div id="groups"></div>
 </main>
 <div class="est"><div class="in">
@@ -75,9 +75,9 @@ function defs() {
   return [
     { g: 'Land', note: 'the prehistory evolves on a bigger map; the world you watch can be smaller', rows: [
       { key: 'preMap', label: 'Map of the prehistory', list: MAPS, val: V.preMap, fmt: mapFmt,
-        help: 'Where life evolves. A valley (the default, 1 km) is seen whole on one screen; a region is four times it and a continent sixteen times: more animals and lineages, at that much more memory and CPU.' },
+        help: 'Where life evolves. The default is 8 km (Supercontinent): the smallest map that keeps many lineages at real animal densities. A valley is 1 km, a region 2 km, a continent 4 km: smaller is lighter but holds fewer lineages.' },
       ...(ev ? [] : [{ key: 'worldMap', label: 'Map of your world', list: MAPS, val: V.worldMap, fmt: mapFmt,
-        help: 'Where you watch. A valley (the default, 1 km) fits on one screen: a valley with its stream, hills and a lake; a region is four times it, a continent sixteen times (much more to scroll over).' }]),
+        help: 'Where you watch. The default is 8 km, as big as the prehistory; a valley (1 km) fits on one screen, a region is 2 km, a continent 4 km.' }]),
       { key: 'water', label: 'Water', min: 0.03, max: 0.4, step: 0.01, val: V.water, fmt: (v) => Math.round(v * 100) + '% of the land',
         help: 'How much of the map is lakes and sea.' },
       { key: 'ponds', label: 'Ponds', min: 0, max: 1, step: 0.05, val: V.ponds, fmt: (v) => Math.round(v * 100) + '% of basins',
@@ -262,10 +262,11 @@ function bodyEstimate() {
 
 const PRESETS = {
   pet: { preMap: 256, worldMap: 256, branches: 2, branchSlots: 8192, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.3 },
-  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.3 },
-  // the default (2026-11-01, the owner: a world ~1 km across, one valley with a stream, hills and a pond, several hundred
-  // animals at true size): a valley, 1 km
-  normal: { preMap: 256, worldMap: 256, branches: 3, branchSlots: 8192, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
+  // lighter: a continent (4 km), 7-12 lineages in the size sweep at ~3-3.6 GB, but 2-11x the real density
+  light: { preMap: 1024, worldMap: 1024, branches: 1, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 128, worldSlots: 16384, rate: 3, climate: 0.3 },
+  // the default (2026-11-01, the owner chose it after the size sweep): 8 km, the smallest map that kept 7-13 lineages near
+  // the real (Damuth) density, ~4 GB with one branch
+  normal: { preMap: 2048, worldMap: 2048, branches: 1, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 3, climate: 0.3 },
   // a region (2 km): four times the land
   region: { preMap: 512, worldMap: 512, branches: 2, branchSlots: 12288, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
   big: { preMap: 1024, worldMap: 1024, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.5 },
