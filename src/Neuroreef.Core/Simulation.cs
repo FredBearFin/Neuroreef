@@ -152,6 +152,10 @@ public sealed class Simulation : IDisposable
         foreach (var (a, clade, hx, hy, probe) in later) { WaitedClades.Add(clade); FoundAncestor(seed, a, clade, hx, hy, nLand, bigLand, bigWater, tmpl, probe, ref key, mayWait: false); }
     }
 
+    /// <summary>The genome of each clade's founded ancestor, the body the founding judged viable (null if the clade was not
+    /// founded); its founders vary around it (Clades.VaryBody, Brain.VaryBrain). Kept for this run only, not saved.</summary>
+    public readonly sbyte[]?[] FoundedAncestors = new sbyte[]?[K.CLADES];
+
     /// <summary>The clades whose ancestors were tested after the others, on the animals living in their ranges (reporting).</summary>
     public readonly System.Collections.Generic.List<int> WaitedClades = new();
 
@@ -193,6 +197,7 @@ public sealed class Simulation : IDisposable
         // least GROUP_SIZE founders, however little fed them)
         if (bestT < 0) return true;
         Ancestor(anc, seed, a, bestT, land, big);
+        FoundedAncestors[clade] = (sbyte[])anc.Clone();
         int units = Body.Units(anc[G.B_BRAIN]);
         // founders: FOUND_FILL of what its home range (widened until it feeds Founders, Life.RangeFor) can feed at this
         // body's size, brain and diet, at most Founders, spread over that range in groups of up to GROUP_SIZE

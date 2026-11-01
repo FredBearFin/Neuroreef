@@ -12,14 +12,15 @@ namespace Neuroreef.Tests;
 public class EcologyTests
 {
     [Fact] // NR-315, NR-316: random ancestors are filtered for viability, never given realm body templates: each its own
-           // clade, each starting where its realm allows, nearly each able to live on what its home range grows (Revision P)
+           // clade, each starting where its realm allows, each founded ancestor able to live on what its home range grows
+           // (Revision P; 2026-11-01: asserted of the ancestor the founding judged, not of a share of its founders)
     public void AncestorsAreRandomViableBodiesOfTheirRealm()
     {
         using var sim = new Simulation(16384, 7, 1);
         var w = sim.W;
         int used = 0; for (int s = 0; s < K.CLADES; s++) if (w.Sp[s].Used) used++;
         Assert.Equal(K.ANCESTORS_LAND + K.ANCESTORS_WATER, used);
-        var fed = new int[K.CLADES]; var founders = new int[K.CLADES];
+        var founders = new int[K.CLADES]; var first = Enumerable.Repeat(-1, K.CLADES).ToArray();
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] < St.Juvenile) continue;
@@ -27,24 +28,54 @@ public class EcologyTests
             bool land = s < K.ANCESTORS_LAND;
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             Assert.True(w.CellAllows(i, World.FIdx(w.X[i], w.Y[i]), w.RealmOf(i) & (land ? Realm.Land : Realm.Water)));
-            var c = w.Sp[s];
-            // in the realm it was founded in, as the founding judges it (2026-11-01: a water lineage on water foods)
-            founders[s]++; if (Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR, land ? Realm.Land : Realm.Water) > 0f) fed[s]++;
+            founders[s]++; if (first[s] < 0) first[s] = i;
             Assert.True(w.PStrike[i] <= 0.65f * K.STRIKE_MAX, $"clade {s} strike {w.PStrike[i]}");   // weapons and armour start in the same range (Revision L)
         }
-        // nearly every ancestor is a body its home range can feed (of ANCESTOR_TRIES random bodies; a big size class may find
-        // none and start with the best fed, as the founding says). The ancestor is the centre of its founders' variation,
-        // so it is measured by them: most of its founders can live there. (Revision R: it was measured by whichever founder
-        // came first in the slots; on the new land seed 7 drew three clades whose first founder varied just below the
-        // FORAGE_MARGIN cutoff, while 39-100% of each clade's founders could live on its home range.)
-        // (2026-11-01, organ upkeep and breathing costs in the founding need: the first draw that passes sits near the
-        // cutoff, and its founders vary to both sides of it. On seed 7 two land clades had 45% and 48% of founders fed
-        // (a near-gill-breathing wader whose founders with less lung cannot breathe ashore, and a cold-blooded walker),
-        // and two small water clades 12 of 26 and 1 of 7. So an ancestor counts as viable when a third of its founders
-        // can live there; it was half.)
-        var viable = Enumerable.Range(0, K.CLADES).Select(s => founders[s] > 0 && 3 * fed[s] >= founders[s]).ToArray();
-        int nv = viable.Count(v => v), ns = founders.Count(v => v > 0);
-        Assert.True(nv >= ns - 2, $"only {nv} of {ns} ancestors can live on their home range");
+        // What the founding guarantees (Simulation.FoundAncestor), and so what is asserted: the ANCESTOR is viable. It is
+        // the first of ANCESTOR_TRIES random bodies whose home range, in the realm it is founded in, feeds at FOUND_FILL at
+        // least a breeding group (Life.BreedingGroup), and its founders are as many as that range feeds, at most Founders.
+        // Its founders vary around it without bias (Clades.VaryBody: zero-mean normal noise on each body gene), so it is
+        // the centre of their variation. But the first passing draw can sit anywhere above the cutoff, often just above
+        // it, so about half of its founders or more may fall below it. The founding promises nothing about that share,
+        // so it is not asserted. (Until 2026-11-01 this test asserted that half the founders of nearly every clade were
+        // fed: true on c1cc490 by the slack its margins happened to leave, but no law; with organ upkeep and breathing
+        // costs in the need, seed 7 gave 45% and 48% for two land clades, 12 of 26 and 1 of 7 for two water clades.)
+        int nFounded = 0;
+        for (int s = 0; s < K.CLADES; s++)
+        {
+            var anc = sim.FoundedAncestors[s];
+            Assert.Equal(founders[s] > 0, anc != null);
+            if (anc == null) continue;
+            nFounded++;
+            var realm = s < K.ANCESTORS_LAND ? Realm.Land : Realm.Water;
+            // the founders vary around the ancestor: each body gene's median is the ancestor's, within four times the
+            // median's sampling error (1.25 SD / sqrt n) and rounding
+            float tol = 4f * 1.2533f * K.FOUNDER_BODY_SD / MathF.Sqrt(founders[s]) + 1f;
+            var v = new System.Collections.Generic.List<int>();
+            for (int k = G.BODY; k < G.BODY + G.NBODY; k++)
+            {
+                if (k >= G.B_MHC && k < G.B_MHC + G.NMHC) continue;   // drawn afresh per founder (MHC polymorphism)
+                v.Clear();
+                for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile && w.Spc[i] == s) v.Add(w.Genome[(long)i * G.LEN + k]);
+                v.Sort();
+                float med = v.Count % 2 == 1 ? v[v.Count / 2] : 0.5f * (v[v.Count / 2 - 1] + v[v.Count / 2]);
+                Assert.True(MathF.Abs(med - anc[k]) <= tol, $"clade {s} gene {k - G.BODY}: founders' median {med}, ancestor {anc[k]}");
+            }
+            // the ancestor's own body, made where its first founder stands, breathes there, and its home range feeds at
+            // FOUND_FILL at least its breeding group and at least as many as were founded (the ranges were measured on the
+            // animals then living; the clades founded since only add prey, carrion and dung)
+            int a = Life.Found(w, s, anc, true, 0xA0000u + (uint)s, w.X[first[s]], w.Y[first[s]], realm);
+            Assert.True(a >= 0);
+            Assert.True(Respiration.Breathable(w, a, World.FIdx(w.X[a], w.Y[a])), $"ancestor {s} cannot breathe where its founders stand");
+            var c = w.Sp[s];
+            float cap = Life.RangeCapacity(w, a, c.HomeX, c.HomeY, c.HomeR, realm);
+            int group = Life.BreedingGroup(w, a);
+            Life.FreeSlot(w, a); w.T.Created[s]--;
+            int fedN = Simulation.FoundersFed(cap, group, w.Evo.Founders);
+            Assert.True(fedN >= group, $"ancestor {s}: its range feeds {K.FOUND_FILL * cap:F1} at FOUND_FILL, a breeding group is {group}");
+            Assert.True(fedN >= founders[s], $"ancestor {s}: its range feeds {K.FOUND_FILL * cap:F1} at FOUND_FILL, {founders[s]} were founded");
+        }
+        Assert.True(nFounded > 0);
         // the ancestors differ from each other: their bodies are random, not designed
         // (by their mass genes: several bodies of one size class can sit exactly at its floor)
         // (of the founded ones: an ancestor no body of which can live where it starts is not founded, Simulation.FoundAncestors)
