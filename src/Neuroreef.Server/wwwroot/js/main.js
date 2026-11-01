@@ -5,6 +5,7 @@ import { World3D } from './world3d.js';
 import { Panels, bar } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
 import { Explore } from './explore/explore.js';   // EXPLORE: walk and hunt (js/explore/)
+import { MAGS } from './scale.js';
 
 const $ = (id) => document.getElementById(id);
 const link = new Link();
@@ -137,7 +138,7 @@ function setCam(m) {
     if (world.selected) { world.selected = 0; probe = null; link.send({ cmd: 'select', serial: 0, follow: false }); panels.renderProbe(null); }
     world.setMode('explore'); explore.enter();
     for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
-    hud();
+    hud(); showMag();
     return;
   }
   if (m !== 'overview' && !world.selected && $('exp-species').value !== '') {
@@ -147,11 +148,36 @@ function setCam(m) {
   world.setMode(m);
   for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
   if (world.selected) link.send({ cmd: 'follow', on: m !== 'overview' });
-  hud();
+  hud(); showMag();
+}
+
+// ------------------------------------------------------------------ how big things are drawn, and the whole world
+
+/** The creature size control: the magnification (overview and the animal cameras), or true size in Explore. */
+function showMag() {
+  if (!world) return;
+  const ex = world.mode === 'explore', m = world.scale.creatureMag;
+  $('scalebox').classList.toggle('explore', ex);
+  $('mag').value = MAGS.indexOf(world.scale.mag);
+  $('mag-v').textContent = ex ? '×1' : '×' + m;
+  $('mag-k').textContent = ex ? 'true size' : m === 1 ? 'true size' : `magnified · plants ×${world.scale.plantMag.toFixed(1).replace(/\.0$/, '')}`;
+}
+
+function wireScale() {
+  world.onScale = showMag;
+  $('mag').oninput = () => world.setMagnification(MAGS[+$('mag').value]);
+  $('fitworld').onclick = () => { if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); };
+  addEventListener('keydown', (e) => {
+    if (!world || world.mode === 'explore' || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Home') { e.preventDefault(); if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); }
+    else if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.mag); }
+  });
+  showMag();
 }
 
 function buildControls() {
   for (const b of document.querySelectorAll('#cams button')) b.onclick = () => setCam(b.dataset.cam);
+  wireScale();
   const sel = $('exp-species');
   fillExperience();
   $('exp-go').onclick = () => {
@@ -241,6 +267,7 @@ function status(s) {
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
   if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
+  if (world && world.scale.fromServer(s)) world.setMagnification(world.scale.mag);   // the sim's own metres, when it sends them
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +
     (s.rain < -0.15 ? ' · drought year' : s.rain > 0.15 ? ' · wet year' : '');
   $('s-random').classList.toggle('hidden', s.bankSource !== 'random' || s.phase !== 'live');

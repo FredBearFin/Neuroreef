@@ -52,9 +52,10 @@ export class Lighting {
     // the shadow map: a square round the part of the ground in view, its size from the zoom
     const camD = camera.position.distanceTo(target);
     let R, c = this._c;
-    if (mode === 'overview') { R = Math.min(700, Math.max(28, camD * 1.05)); c.copy(target); }
+    // (close up, as small as the view: the bodies and plants are drawn at true size or near it, a few metres to tens)
+    if (mode === 'overview') { R = Math.min(700, Math.max(0.6, camD * 1.05)); c.copy(target); }
     else {
-      R = 60;
+      R = mode === 'explore' ? 12 : Math.max(1, Math.min(60, camD * 3));
       camera.getWorldDirection(this._f); this._f.y = 0; this._f.normalize();
       c.copy(camera.position).addScaledVector(this._f, R * 0.55);
     }
@@ -89,6 +90,6 @@ export function bodyDepthMaterial(bodyMat) {
     bodyMat.onBeforeCompile(sh);
     sh.fragmentShader = frag;
   };
-  dm.customProgramCacheKey = () => 'neuroreef-body-depth-v1';
+  dm.customProgramCacheKey = () => 'neuroreef-body-depth-v2';
   return dm;
 }

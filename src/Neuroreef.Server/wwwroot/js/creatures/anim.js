@@ -32,10 +32,11 @@ import * as THREE from 'three';
 const GLSL_COMMON = `
 uniform float uTime;
 uniform float uSpeciesOverlay;
+uniform float uBodyK;   // world units per view-size unit (js/scale.js): the true scale x the view's magnification
 attribute vec3 aAux;
 attribute vec4 aAnim; attribute vec4 aGeneA; attribute vec4 aGeneB; attribute vec4 aClade;
 attribute vec4 aMorphA; attribute vec4 aMorphB; attribute vec4 aMorphC; attribute vec4 aMorphD;
-varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern;
+varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying float vUnder;
 
 vec3 pigment(float h, float s, float l) {
   vec3 rgb = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
@@ -404,6 +405,7 @@ const GLSL_BODY = `
   float acts = aAnim.z;
   bEat = max(bit(acts, 1.0), bit(acts, 4.0)); bStrikeA = bit(acts, 2.0);
   float pk = floor(aClade.w + 0.5);
+  vUnder = floor(pk / 8192.0) / 15.0; pk = mod(pk, 8192.0);   // how far under water it is (0 dry or at the surface .. 1 lost from view)
   gMeat = floor(pk / 512.0) / 15.0; pk = mod(pk, 512.0);
   float loco = floor(pk / 64.0);
   nFinPairs = mod(floor(pk / 16.0), 4.0) + 1.0; nEyePairs = mod(floor(pk / 4.0), 4.0) + 1.0; nLegPairs = mod(pk, 4.0) + 1.0;
@@ -415,7 +417,7 @@ const GLSL_BODY = `
   bAir = fl * (1.0 - bRest);
   // the instance's scale: a resting body is drawn squashed (0.7) and a corpse flattened (under 0.5); the body
   // lies down here instead, and the squash is undone at the end
-  float sx = length(instanceMatrix[0].xyz), sy = length(instanceMatrix[1].xyz);
+  float sx = length(instanceMatrix[0].xyz) / uBodyK, sy = length(instanceMatrix[1].xyz) / uBodyK;   // the view size (mass)
   float squash = sy / max(sx, 1e-6), corpse = step(squash, 0.5);
   float unsq = (bRest > 0.5 && fl < 0.5) || corpse > 0.5 ? 1.0 / squash : 1.0;
   float massI = pow(max(sx / (corpse > 0.5 ? 1.725 : 1.5), 0.05), 3.0);
@@ -543,7 +545,8 @@ const GLSL_BODY = `
 `;
 
 const GLSL_FRAG_COMMON = `
-varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern;
+varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying float vUnder;
+uniform vec3 uWaterCol;
 vec2 nrHash(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
 /** Distances to the nearest and second nearest cell point (Worley). */
 vec2 nrCells(vec2 p) {
@@ -650,7 +653,7 @@ const GLSL_EMISSIVE = `
 /** The one material all organisms share (near and far meshes). uTime in material.userData.uniforms. */
 export function bodyMaterial() {
   const mat = new THREE.MeshLambertMaterial();
-  const u = { uTime: { value: 0 }, uSpeciesOverlay: { value: 0 } };
+  const u = { uTime: { value: 0 }, uSpeciesOverlay: { value: 0 }, uBodyK: { value: 1 }, uWaterCol: { value: new THREE.Color(0.03, 0.12, 0.16) } };
   mat.userData.uniforms = u;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -662,8 +665,10 @@ export function bodyMaterial() {
       .replace('#include <common>', '#include <common>\n' + GLSL_FRAG_COMMON)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + GLSL_COLOR)
       .replace('#include <normal_fragment_begin>', GLSL_NORMAL)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + GLSL_EMISSIVE);
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + GLSL_EMISSIVE)
+      // a swimmer under the surface: lost into the water's colour with its depth (and the water's murk)
+      .replace('#include <fog_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uWaterCol, vUnder);\n#include <fog_fragment>');
   };
-  mat.customProgramCacheKey = () => 'neuroreef-body-v2';
+  mat.customProgramCacheKey = () => 'neuroreef-body-v3';
   return mat;
 }

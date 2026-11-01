@@ -65,8 +65,9 @@ export class Link {
         break;
       }
       case T_AGENTS: {
-        const n = dv.getUint32(8, true);
-        this.emit('agents', { step, n, bytes: new Uint8Array(buf, 12, n * REC), dv: new DataView(buf, 12, n * REC) });
+        // the record size from the frame itself (a later format may add fields after the 42 bytes of format 6)
+        const n = dv.getUint32(8, true), rec = n > 0 ? Math.max(REC, Math.floor((buf.byteLength - 12) / n)) : REC;
+        this.emit('agents', { step, n, rec, bytes: new Uint8Array(buf, 12, n * rec), dv: new DataView(buf, 12, n * rec) });
         break;
       }
       case T_FIELDS: {
@@ -97,6 +98,20 @@ export class Link {
   }
 }
 
+// Where a swimmer's depth is in an AGENTS record: meta.agentFields.depth = { offset, type ('u8' | 'u16' | 'f32'),
+// scale (metres per count; default 1) } when the server declares it (the respiration work: fish under the surface,
+// divers diving). Without it no depth is read, and swimmers are drawn just under the surface.
+let DEPTH_FIELD = null;
+const SIZES = { u8: 1, u16: 2, f32: 4 };
+export function setAgentFields(meta) {
+  const d = meta && meta.agentFields && meta.agentFields.depth;
+  DEPTH_FIELD = d && d.offset >= 0 ? { offset: d.offset | 0, type: d.type || 'u8', size: SIZES[d.type || 'u8'] || 1, scale: d.scale > 0 ? d.scale : 1 } : null;
+}
+function readField(dv, o, D) {
+  const v = D.type === 'f32' ? dv.getFloat32(o, true) : D.type === 'u16' ? dv.getUint16(o, true) : dv.getUint8(o);
+  return v * D.scale;
+}
+
 /** Decode one format-6 AGENTS record; reuse out and its appearance buffer. */
 export function agentAt(a, k, world, out) {
   agentState(a, k, world, out);
@@ -105,7 +120,7 @@ export function agentAt(a, k, world, out) {
 
 /** The part of record k that changes from step to step: position, heading, clade, stage, flags, actions, serial, calls. */
 export function agentState(a, k, world, out) {
-  const o = k * REC, dv = a.dv, b = a.bytes;
+  const o = k * (a.rec || REC), dv = a.dv, b = a.bytes;
   out.x = dv.getUint16(o, true) * world / 65536;
   out.y = dv.getUint16(o + 2, true) * world / 65536;
   out.h = b[o + 4] * (Math.PI * 2 / 256);
@@ -119,12 +134,15 @@ export function agentState(a, k, world, out) {
   out.serial = dv.getUint32(o + 8, true);
   out.call = b[o + 21] >> 4;                             // the first sound of its utterance this step: 0 none, 1..8
   out.call2 = b[o + 24] & 15; out.call3 = b[o + 24] >> 4; // its second and third sounds (Revision N), 0 none
+  // a swimmer's depth under the water's surface, in metres, when the server sends it (NaN: not sent; drawn at the surface)
+  const D = DEPTH_FIELD;
+  out.depthM = D && D.offset + D.size <= (a.rec || REC) ? readField(dv, o + D.offset, D) : NaN;
   return out;
 }
 
 /** The part of record k its genes give, the same for its whole life: body size, organs, pairs, locomotion, fur, appearance. */
 export function agentGenes(a, k, out) {
-  const o = k * REC, dv = a.dv, b = a.bytes;
+  const o = k * (a.rec || REC), dv = a.dv, b = a.bytes;
   // the organism's own body genes (bytes 12-19, int8): organ sizes are (g + 127) / 254, 0..1
   const gm = dv.getInt8(o + 12);
   out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.1 * Math.pow(40 / 0.1, out.m01);   // the body's actual size (its size class's floor included)

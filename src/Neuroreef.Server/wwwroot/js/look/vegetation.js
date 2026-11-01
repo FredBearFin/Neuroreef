@@ -10,14 +10,19 @@
 // - Bushes: round, berried (where the sim's fruit is fleshy and there is fruit) or thorny scrub (thorns).
 // - Grass tufts: only round the camera, as dense as the grass layer, yellowing as the soil dries.
 // - Rocks: on steep slopes and the high bare ground, sparse where plants cover the ground.
-// How many plants a field cell gets, and the thinning with distance within a budget (bigger plants where fewer are
-// kept), are as before (world3d.js, 2026-10-31).
+// Sizes (2026-11-01): every plant at its true size in metres (the sim's plant height; a shrub at most 4 m, a grass
+// tuft half a metre, boulders a few metres) times the plants' magnification (js/scale.js: x1 in Explore, the fourth
+// root of the creatures' in the overview), and as many to a field cell as its cover fits crowns of that size; the
+// thinning with distance within a budget keeps the near ones and fewer, a little bigger, far away.
 
 import * as THREE from 'three';
 
-const TREE_NEAR = 120, BUSH_NEAR = 50, TREE_BUDGET = 40000, SHRUB_BUDGET = 14000;
+const TREE_NEAR = 70, BUSH_NEAR = 60, TREE_BUDGET = 40000, SHRUB_BUDGET = 14000;   // near: within this many plant heights
 const NEAR_CAP = 9000, FAR_CAP = 24000, SHRUB_CAP = 16000, ROCK_CAP = 6000, GRASS_CAP = 14000, FLAME_CAP = 1500;
-const GRASS_R = 46, GRASS_STEP = 0.85, ROCK_R = 320;
+const TREES_MAX = 600, SHRUBS_MAX = 800;    // most trees and shrubs drawn in one field cell (full cover of small crowns)
+const GRASS_M = 0.8, GRASS_STEP_M = 0.7;    // a grass tuft model is 0.8 m tall at x1; tufts stand ~0.7 m apart
+const ROCK_M = 1.6;                         // a boulder's mean size (m); drawn within ROCK_REACH of them
+const ROCK_REACH = 250, FLAME_M = 2.5;
 const H_LO = -1.3, H_SPAN = 2.9;             // plant height layer: log10 m = H_LO + H_SPAN x value (Constants.cs)
 const FOUNDERS_GUESS = 16;
 
@@ -286,7 +291,7 @@ function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, f
           #ifdef USE_INSTANCING
             vec3 io = (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz;
             float sz = length(instanceMatrix[1].xyz);
-            vNearFade = smoothstep(0.55 * sz + 1.0, 0.95 * sz + 3.0, distance(io, cameraPosition));
+            vNearFade = smoothstep(0.5 * sz + 0.004, 0.9 * sz + 0.012, distance(io, cameraPosition));
           #endif
         }`);
     if (fade) sh.fragmentShader = 'varying float vNearFade;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
@@ -344,9 +349,14 @@ export class Vegetation {
     const v = this.v, f = v.fields; if (!f || !v.world || !v.tiles) return;
     const c = v.controls.target, cam = v.camera.position, W = v.W;
     const camD = cam.distanceTo(c);
+    const sc = v.scale, upm = sc.upm, pm = sc.plantMag, mpu = sc.mpu;
     this._grass(force);
-    if (!force && this._plantC && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < Math.max(10, camD * 0.12) &&
-        cam.distanceTo(this._plantCam) < Math.max(10, camD * 0.15)) return;
+    // the view moved less than a share of its distance: keep the plants (and re-plant at most ~4 times a second)
+    const now = performance.now();
+    if (!force && this._plantC && this._plantPm === pm && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < Math.max(0.01, camD * 0.12) &&
+        cam.distanceTo(this._plantCam) < Math.max(0.01, camD * 0.15)) return;
+    if (!force && this._plantT && now - this._plantT < 250) return;
+    this._plantPm = pm; this._plantT = now;
     const t0 = performance.now();
     this._plantC = c.clone(); this._plantCam = cam.clone();
     const Ly = this._layers(), d = Ly.d, cs = W / d;
@@ -356,6 +366,10 @@ export class Vegetation {
     const ccx = Math.floor(c.x / cs), ccy = Math.floor(c.z / cs);
     if (!this._pd || this._pd.length < side * side) { this._pd = new Float32Array(side * side); this._pt = new Float32Array(side * side); this._ps = new Float32Array(side * side); this._pi = new Int32Array(side * side * 2); }
     const PD = this._pd, PT = this._pt, PS = this._ps, PI = this._pi;
+    // how tall the trees and shrubs of a field cell are drawn (units), and how many crowns of that size its cover holds
+    const heightM = (fi) => Ly.H && Ly.H[fi] ? Math.pow(10, H_LO + H_SPAN * Ly.H[fi] / 255) : 12;
+    const treeU = (hM) => Math.min(45, Math.max(3, hM)) * pm * upm, shrubU = (hM) => Math.min(4, Math.max(0.4, hM)) * pm * upm;
+    const fits = (crown, max) => Math.min(max, Math.max(3, 0.7 * (cs / crown) ** 2));
     let m = 0;
     for (let dy = -r0; dy <= r0; dy++) for (let dx = -r0; dx <= r0; dx++) {
       const gx = ccx + dx, gy = ccy + dy, px = (gx + 0.5) * cs, pz = (gy + 0.5) * cs;
@@ -363,7 +377,9 @@ export class Vegetation {
       const dist = Math.hypot(px - cam.x, v.heightAt(px, pz) - cam.y, pz - cam.z);
       if (dist > fogFar) continue;
       const fx = ((gx % d) + d) % d, fy = ((gy % d) + d) % d, fi = fy * d + fx;
-      PD[m] = Math.max(1, dist); PT[m] = Ly.T[fi] / 255 * 3.2; PS[m] = Ly.S[fi] / 255 * 4; PI[2 * m] = gx; PI[2 * m + 1] = gy; m++;
+      const hM = heightM(fi);
+      PD[m] = Math.max(0.01, dist); PT[m] = Ly.T[fi] / 255 * fits(0.45 * treeU(hM), TREES_MAX); PS[m] = Ly.S[fi] / 255 * fits(1.2 * shrubU(hM), SHRUBS_MAX);
+      PI[2 * m] = gx; PI[2 * m + 1] = gy; m++;
     }
     const D0t = fitBudget(PD, PT, m, TREE_BUDGET), D0s = fitBudget(PD, PS, m, SHRUB_BUDGET);
     const mat = this._m, q = this._q, p = this._p, s = this._s, col = this._c, eul = this._e;
@@ -378,15 +394,16 @@ export class Vegetation {
       const tempC = Ly.TP ? Ly.TP[fi] / 255 * 90 - 40 : 15, cold = clamp01((8 - tempC) / 18);
       const drought = Ly.DT ? Ly.DT[fi] / 255 : 0.3, leafOn = Ly.LO ? Ly.LO[fi] / 255 : 1, frost = Ly.FZ ? Ly.FZ[fi] / 255 : 0;
       const fire = Ly.F[fi] > 0, moist = Ly.M ? Ly.M[fi] / 255 : 0.5;
-      const hM = Ly.H && Ly.H[fi] ? Math.pow(10, H_LO + H_SPAN * Ly.H[fi] / 255) : 12;
+      const hM = heightM(fi);
       const lineage = Ly.FL && Ly.FL[fi] ? Math.round(Ly.FL[fi] / 255 * (FOUNDERS_GUESS + 1)) : 0;
       const lh = hash1(lineage * 7919 + 13);
+      // thinned with distance: fewer, a little bigger, trees far away (as many crowns' worth of cover)
       const keepT = Math.min(1, (D0t / dist) ** 2);
-      if (((hsh >>> 4) & 1023) / 1024 < keepT) {
-        const grow = Math.min(3, 1 / Math.sqrt(keepT));
-        const ntree = Math.floor(PT[k] + (hsh & 255) / 256);
-        // tree size from the tallest plant (exaggerated as the animals are: 4 m ~ 4.4 units, 40 m ~ 11)
-        const baseH = Math.min(12, Math.max(3.6, 2.6 * Math.pow(Math.max(2, hM), 0.4)));
+      const ntree = Math.floor(PT[k] * keepT + (hsh & 255) / 256);
+      if (ntree > 0) {
+        const grow = Math.min(2, 1 / Math.sqrt(keepT));
+        // tree size from the tallest plant, in metres (3..45 m) x the plants' magnification
+        const baseH = treeU(hM), treeNear = TREE_NEAR * baseH;
         // the lineage's growth form: each founding lineage leans conifer or broadleaf, the climate decides the rest
         const pCon = clamp01((lh & 1 ? 0.6 : 0.12) + 0.75 * cold - 0.3 * drought);
         const pUmb = (1 - cold) * clamp01((drought - 0.55) * 2.5) * (moist < 0.5 ? 1 : 0.4);
@@ -405,52 +422,54 @@ export class Vegetation {
           const hj = baseH * (0.72 + 0.5 * ((hsh >>> 24) & 15) / 16) * (form === UMBRELLA ? 0.75 : 1);
           const wide = form === SPRUCE ? 0.95 : form === POPLAR ? 0.95 : 1.0;
           const sh = hj * Math.sqrt(grow), sw = hj * wide * grow * (0.9 + 0.2 * u2);
-          p.set(x, v.heightAt(x, y) - 0.1, y); q.setFromAxisAngle(UP, (hsh & 63) / 10); s.set(sw, sh, sw);
+          p.set(x, v.heightAt(x, y) - 0.03 * sh, y); q.setFromAxisAngle(UP, (hsh & 63) / 10); s.set(sw, sh, sw);
           mat.compose(p, q, s);
           // foliage colour: the lineage's own shade, yellowing as the leaves go, snow in frost, charred in fire
           tint(col, lh, u2, deciduous && form !== BARE ? 1 - leafOn : 0, frost, fire, form);
-          if (dist < TREE_NEAR && nNear[form] < NEAR_CAP) { const o = this.near[form]; o.setMatrixAt(nNear[form], mat); o.setColorAt(nNear[form]++, col); }
+          if (dist < treeNear && nNear[form] < NEAR_CAP) { const o = this.near[form]; o.setMatrixAt(nNear[form], mat); o.setColorAt(nNear[form]++, col); }
           else if (nFar[form] < FAR_CAP) { const o = this.far[form]; o.setMatrixAt(nFar[form], mat); o.setColorAt(nFar[form]++, col); }
         }
       }
       const keepS = Math.min(1, (D0s / dist) ** 2);
       hsh = hash1(hsh + 17);
-      if (((hsh >>> 4) & 1023) / 1024 < keepS) {
-        const grow = Math.min(3, 1 / Math.sqrt(keepS));
-        const nsh = Math.floor(PS[k] + ((hsh >> 8) & 255) / 256);
+      const nsh = Math.floor(PS[k] * keepS + ((hsh >> 8) & 255) / 256);
+      if (nsh > 0) {
+        const grow = Math.min(2, 1 / Math.sqrt(keepS)), bushH = shrubU(hM), bushNear = BUSH_NEAR * bushH;
         const thorny = Ly.TH ? Ly.TH[fi] / 255 : 0, fleshy = Ly.FF && Ly.FR ? (Ly.FF[fi] / 255) * Math.min(1, Ly.FR[fi] / 80) : 0;
         for (let j = 0; j < nsh; j++) {
           hsh = hash1(hsh + 17);
           const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
           if (world.cell[v._cellOf(x, y)] !== 1) continue;
           const u = ((hsh >>> 20) & 255) / 256, kind = u < thorny * 0.9 ? THORN : u < thorny * 0.9 + fleshy ? BERRY : BUSH;
-          const nearB = dist < BUSH_NEAR && nB[kind] < this.bush[kind].instanceMatrix.count;
+          const nearB = dist < bushNear && nB[kind] < this.bush[kind].instanceMatrix.count;
           if (!nearB && nBF >= SHRUB_CAP) continue;
-          const sc = (0.75 + ((hsh >>> 24) & 15) / 22) * Math.min(1.6, Math.max(0.7, Math.pow(Math.min(hM, 4), 0.35)));
-          p.set(x, v.heightAt(x, y) - 0.05, y); q.setFromAxisAngle(UP, (hsh & 63) / 10); s.set(sc * grow, sc * Math.sqrt(grow), sc * grow);
+          const sb = (0.75 + ((hsh >>> 24) & 15) / 22) * bushH;
+          p.set(x, v.heightAt(x, y) - 0.05 * sb, y); q.setFromAxisAngle(UP, (hsh & 63) / 10); s.set(sb * grow, sb * Math.sqrt(grow), sb * grow);
           mat.compose(p, q, s);
           tint(col, lh, u, 1 - leafOn, frost, fire, -1);
           if (nearB) { this.bush[kind].setMatrixAt(nB[kind], mat); this.bush[kind].setColorAt(nB[kind]++, col); }
           else { if (kind === THORN) col.multiplyScalar(0.85); this.bushFar.setMatrixAt(nBF, mat); this.bushFar.setColorAt(nBF++, col); }
         }
       }
-      // rocks: on steep slopes and the highest bare ground, within ROCK_R of the camera (not a plant: the ground's own)
-      if (dist < ROCK_R) {
+      // rocks: on steep slopes and the highest bare ground, near the camera (not a plant: the ground's own); boulders a
+      // few metres across, as many to a field cell as before by the ground they cover
+      const rockU = ROCK_M * pm * upm, rockR = Math.min(320, ROCK_REACH * rockU), rockN = Math.min(15, (1 / rockU) ** 2 * 0.15);
+      if (dist < rockR) {
         const cx = Math.floor((gx + 0.5) * cs / S), cy = Math.floor((gy + 0.5) * cs / S);
         const at = (x, y) => H[(((y % fw) + fw) % fw) * fw + (((x % fw) + fw) % fw)];
         const sl = Math.hypot(at(cx + 1, cy) - at(cx - 1, cy), at(cx, cy + 1) - at(cx, cy - 1)) / (2 * S);
         const hi = clamp01((at(cx, cy) / 55 - 0.62) * 3);
         const cover = Math.min(1, (Ly.T[fi] + Ly.S[fi] + 0.5 * (Ly.G ? Ly.G[fi] : 0)) / 255);
         const rocky = clamp01((sl - 0.32) * 2.2) + hi;
-        let nr = Math.floor(rocky * (3.2 - 2.2 * cover) * (dist < 120 ? 1 : 0.5) + ((hsh >>> 9) & 255) / 256);
+        let nr = Math.floor(rocky * (3.2 - 2.2 * cover) * Math.max(1, rockN) * (dist < 0.4 * rockR ? 1 : 0.5) + ((hsh >>> 9) & 255) / 256);
         for (let j = 0; j < nr; j++) {
           hsh = hash1(hsh + 31);
           const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
           if (world.cell[v._cellOf(x, y)] !== 1) continue;
           const kind = (hsh >>> 20) % 3; if (nR[kind] >= this.rocks[kind].instanceMatrix.count) continue;
-          const sc = 0.45 + 1.7 * Math.pow(((hsh >>> 23) & 255) / 256, 2.4) * (1 + rocky * 0.5);
+          const sr = (0.3 + 2.4 * Math.pow(((hsh >>> 23) & 255) / 256, 2.4) * (1 + rocky * 0.5)) * rockU;
           eul.set((((hsh >>> 3) & 15) / 15 - 0.5) * 0.5, (hsh & 63) / 10, (((hsh >>> 7) & 15) / 15 - 0.5) * 0.5);
-          p.set(x, v.heightAt(x, y) + 0.02 * sc, y); q.setFromEuler(eul); s.set(sc, sc, sc);
+          p.set(x, v.heightAt(x, y) + 0.02 * sr, y); q.setFromEuler(eul); s.set(sr, sr, sr);
           mat.compose(p, q, s);
           const g = 0.9 + 0.25 * (((hsh >>> 13) & 15) / 15);
           col.setRGB(g * (1 + 0.06 * hi), g, g * (1 - 0.04 * hi));
@@ -462,7 +481,8 @@ export class Vegetation {
         for (let j = 0; j < 3 && nf < FLAME_CAP; j++) {
           hsh = hash1(hsh + 99);
           const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
-          p.set(x, v.heightAt(x, y) + 1.2, y); q.identity(); s.set(1, 1, 1);
+          const fs = FLAME_M * pm * upm;
+          p.set(x, v.heightAt(x, y) + 1.2 * fs, y); q.identity(); s.set(fs, fs, fs);
           this.flames.setMatrixAt(nf++, mat.compose(p, q, s));
         }
       }
@@ -479,13 +499,16 @@ export class Vegetation {
   _grass(force) {
     const v = this.v, cam = v.camera.position, g = this.grass;
     const ground = v.heightAt(cam.x, cam.z), alt = cam.y - ground;
-    if (alt > 70) { g.count = 0; this._grassC = null; return; }
-    if (!force && this._grassC && Math.hypot(cam.x - this._grassC.x, cam.z - this._grassC.z) < 5) return;
+    // tufts at their size (x the plants' magnification), in a disc round the camera as big as the budget allows
+    const gu = v.scale.plantMag * v.scale.upm, st = GRASS_STEP_M * gu, R = st * 54, tuft = GRASS_M * gu;
+    if (alt > R * 1.2) { g.count = 0; this._grassC = null; return; }
+    if (!force && this._grassC && this._grassU === gu && Math.hypot(cam.x - this._grassC.x, cam.z - this._grassC.z) < st * 6) return;
+    this._grassU = gu;
     const t0 = performance.now();
     this._grassC = cam.clone();
     const Ly = this._layers(), d = Ly.d, cs = v.W / d, world = v.world;
     const mat = this._m, q = this._q, p = this._p, s = this._s, col = this._c;
-    const R = GRASS_R, st = GRASS_STEP, x0 = Math.floor((cam.x - R) / st), x1 = Math.ceil((cam.x + R) / st);
+    const x0 = Math.floor((cam.x - R) / st), x1 = Math.ceil((cam.x + R) / st);
     const z0 = Math.floor((cam.z - R) / st), z1 = Math.ceil((cam.z + R) / st);
     let n = 0;
     for (let iz = z0; iz <= z1 && n < GRASS_CAP; iz++) for (let ix = x0; ix <= x1 && n < GRASS_CAP; ix++) {
@@ -497,9 +520,9 @@ export class Vegetation {
       if (((h >>> 16) & 1023) / 1024 >= cover * 0.9) continue;
       if (world.cell[v._cellOf(x, z)] !== 1) continue;
       h = hash1(h);
-      const fade = 1 - smooth(R * 0.7, R, r), sc = (0.4 + 0.4 * (h & 255) / 256) * (0.6 + 0.6 * cover) * fade;
-      if (sc < 0.05) continue;
-      p.set(x, v.heightAt(x, z) - 0.02, z); q.setFromAxisAngle(UP, ((h >>> 8) & 63) / 10); s.set(sc * 1.2, sc, sc * 1.2);
+      const fade = 1 - smooth(R * 0.7, R, r), sc = (0.4 + 0.4 * (h & 255) / 256) * (0.6 + 0.6 * cover) * fade * tuft;
+      if (sc < 0.05 * tuft) continue;
+      p.set(x, v.heightAt(x, z) - 0.02 * sc, z); q.setFromAxisAngle(UP, ((h >>> 8) & 63) / 10); s.set(sc * 1.2, sc, sc * 1.2);
       g.setMatrixAt(n, mat.compose(p, q, s));
       // as the terrain paints grass: green, yellowing where the soil is dry; frost whitens it
       const dry = 1 - (Ly.M ? Ly.M[fi] / 255 : 0.5), j = 0.85 + 0.3 * ((h >>> 16) & 255) / 256;
