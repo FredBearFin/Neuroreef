@@ -247,7 +247,7 @@ public static class K
     [K("Body", "range of the lifespan and development multipliers (x/÷)", "-", "-")] public const float LIFE_RANGE = 2f;
     [K("Body", "basal cost per unit of extra lifespan (longer life needs more body repair)", "xbasal", "ECO: disposable-soma theory: longevity costs somatic maintenance (Kirkwood 1977)")] public const float COST_LONGEVITY = 0.25f;
     [K("Body", "lifespan scales with the development multiplier to this power (fast developers age sooner)", "-", "ECO: the fast-slow life-history continuum")] public const float DEVEL_AGING = 0.5f;
-    [K("Body", "ordinary ancestors start with a random brain of up to this many memory units", "units", "the old limit before Revision J was 12; Revision M: 24")] public const int BRAIN_START = 24;
+    [K("Body", "ordinary ancestors start with a random brain of up to this many memory units (and no more than the body can pay for, Body.UnitsAffordable)", "units", "the old limit before Revision J was 12; Revision M: 24")] public const int BRAIN_START = 24;
     [K("Body", "fewest memory units a brain can have", "units", "-")] public const int BRAIN_MIN = 2;
     [K("Body", "basal cost of a brain of BRAIN_REF memory units, scaled by units in use", "xbasal", "ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M)")] public const float COST_BRAIN = 0.25f;
     [K("Body", "reference brain size for the brain cost: the largest brain (G.NH)", "units", "Revision M: was 12, the old limit")] public const int BRAIN_REF = 256;

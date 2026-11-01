@@ -384,6 +384,20 @@ public sealed class World
     /// <summary>Memory kept free of slots: an eighth of what the machine (or container) gives the process, at least 1 GB.</summary>
     public static long MemoryReserve(long available) => Math.Max(available / 8, 1L << 30);
 
+    /// <summary>
+    /// The slots a world (or each of share prehistory branches) starts with by default: a quarter of the memory the machine
+    /// (or container) gives the process, over BytesPerSlot, in whole GROW_BLOCKs, clamped to DEFAULT_SLOTS_LO..HI. 2026-11-01:
+    /// a fixed 16,384 (3.4 GB) was most of an 8 GB PC before the 8 km land; a quarter of 16 GB is about 19,000 slots, 4 GB.
+    /// Only where a run starts: a world grows as births need (Grow), and a seed gives the same run from any start size.
+    /// </summary>
+    public static int DefaultSlots(int share = 1) => DefaultSlots(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, share);
+    public static int DefaultSlots(long available, int share)
+    {
+        long slots = available / 4 / Math.Max(1, share) / BytesPerSlot / GROW_BLOCK * GROW_BLOCK;
+        return (int)Math.Clamp(slots, DEFAULT_SLOTS_LO, DEFAULT_SLOTS_HI);
+    }
+    public const int DEFAULT_SLOTS_LO = 4096, DEFAULT_SLOTS_HI = 32768;
+
     static long _slotBytes;
     /// <summary>Memory one slot takes: every per-slot array of the world and of its derived cache (bytes).</summary>
     public long SlotBytes => _slotBytes != 0 ? _slotBytes : _slotBytes = PerSlot.BytesPerSlot(this, Cap) + PerSlot.BytesPerSlot(D, Cap);

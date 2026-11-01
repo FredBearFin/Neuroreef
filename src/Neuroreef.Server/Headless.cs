@@ -14,6 +14,7 @@ public static class Headless
     public static int Run(Options o, GeneBank.Data? bank)
     {
         var clock = Stopwatch.StartNew();
+        Console.WriteLine(Options.MemoryLine("the world", o.Capacity, o.MaxCapacity));
         using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, empty: o.Empty, terrainSeed: o.Seed, evo: o.WorldSettings(), maxCapacity: o.MaxCapacity);
         Console.WriteLine($"world built in {clock.Elapsed.TotalSeconds:F1} s");
         var w = sim.W;
@@ -83,6 +84,7 @@ public static class Headless
             catch (Exception ex) { Console.Error.WriteLine($"cannot resume from {o.CheckpointPath}: {ex.Message}"); return 2; }
         var clock = Stopwatch.StartNew();
         bool resume = o.CheckpointPath != null && File.Exists(o.CheckpointPath);
+        Console.WriteLine(Options.MemoryLine(o.Branches == 1 ? "the prehistory branch" : "the prehistory branches", o.BranchSlots, o.MaxCapacity, o.Branches));
         using var pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, e, restore: resume, maxCapacity: o.MaxCapacity);   // resuming: no land built only to be overwritten
         if (!resume) Console.WriteLine($"{pre.B.Length} branches built in {clock.Elapsed.TotalSeconds:F1} s");
         var s0 = pre.Pending;

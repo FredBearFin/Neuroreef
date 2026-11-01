@@ -7,7 +7,9 @@ namespace Neuroreef.Server;
 public sealed class Options
 {
     public uint Seed;   // 0 until chosen: --seed N, or a fresh random one for every new world (Parse)
-    public int Capacity = K.CAPACITY;   // slots a world (--capacity) or branch (--branch-slots) starts with: it grows as births need more
+    // slots a world (--capacity) or branch (--branch-slots) starts with: it grows as births need more. Default: a quarter of
+    // the machine's memory (World.DefaultSlots; a branch's share of it if there are several), so it suits the machine
+    public int Capacity = World.DefaultSlots();
     public int MaxCapacity;             // --max-capacity: the most slots a world or branch may grow to (0: as many as memory holds)
     // every core: the step loop's main thread works its share of each phase instead of waiting (2026-10-31: cores - 1 left a
     // quarter of a 4-core machine idle in the live server and headless runs)
@@ -19,7 +21,7 @@ public sealed class Options
     public int ReportEvery = 2000;
     public string? LoadBank, SaveBank, Csv, CheckpointPath;
     public double CheckpointMinutes = 30;
-    public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots = K.BRANCH_CAPACITY;
+    public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots;   // BranchSlots 0 until Parse: World.DefaultSlots(Branches)
     // the map of a prehistory and of the world: a valley by default (2026-11-01, the owner: "the worlds are too damn big ...
     // the world should be easy to see the whole thing"; first a region of 512 units, 28 km, then the valley; then "a
     // default world of ~1 km across, one valley with a stream, hills and a pond"): 256 units is 1 km at 16 m a field cell,
@@ -99,7 +101,8 @@ public sealed class Options
   --prehistory-steps N  length of the prehistory (default 500000 steps = 500 million symbolic years)
   --seed N              world and run seed: the same N gives the same map, ancestors and names
                         (default: a new random seed every time; it is printed at start)
-  --capacity N          agent slots the world starts with (default 16384); it grows as births need more,
+  --capacity N          agent slots the world starts with (default: a quarter of the memory, 4,096-32,768;
+                        about 19,000 = 4 GB on a 16 GB PC); it grows as births need more,
                         limited only by memory (it keeps an eighth of the machine's memory, at least 1 GB, free)
   --max-capacity N      the most slots a world or prehistory branch may grow to (default: as many as memory holds)
   --threads N           worker threads (default: all cores, max 8)
@@ -120,10 +123,11 @@ public sealed class Options
                         on land; 0 = none)
   --big-brain-units N   prehistory: memory units of a big-brained ancestor (default 256; others start with up to 24)
   --founders N          prehistory: founders per ancestor (default 600)
-  --branch-slots N      prehistory: animal slots each branch starts with (default 16384; it grows as needed)
+  --branch-slots N      prehistory: animal slots each branch starts with (default: as --capacity, shared
+                        among the branches; it grows as needed)
   --no-setup            skip the setup screen before a new prehistory (use the defaults or these options)
-  --map valley|region|continent|supercontinent        map of the prehistory (default supercontinent; 256/512/1024/2048 units,
-                        1/2/4/8 km across)
+  --map valley|region|continent|supercontinent        map of the prehistory, and of the world unless --world-map is given
+                        (default supercontinent; 256/512/1024/2048 units, 1/2/4/8 km across)
   --world-map valley|region|continent|supercontinent  map of the world you watch (default supercontinent, as big as the prehistory)
   --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
   --mating-drive X      strength of the breeding instinct (default 1)
@@ -149,9 +153,23 @@ public sealed class Options
   --print-constants     print docs/CONSTANTS.md and exit
 ";
 
+    /// <summary>What limits a run, printed at start: the slots it starts with, their memory, and how far memory (or
+    /// --max-capacity) lets it grow (World.Grow keeps World.MemoryReserve free).</summary>
+    public static string MemoryLine(string what, int slots, int maxCapacity, int worlds = 1)
+    {
+        long avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, reserve = World.MemoryReserve(avail);
+        long per = World.BytesPerSlot, most = Math.Max(0, avail - reserve) / per / Math.Max(1, worlds);
+        string limit = maxCapacity > 0 && maxCapacity < most ? $"{Math.Max(maxCapacity, slots):N0} (--max-capacity)" : $"about {Math.Min(most, World.MaxSlots):N0} (memory, less the land)";
+        return $"memory: {what} start{(worlds == 1 ? "s" : "")} with {slots:N0} slots x {per / 1024:N0} KB = {Gb((long)slots * per)}" +
+            $"{(worlds > 1 ? $" each ({worlds})" : "")}; {Gb(avail)} available, {Gb(reserve)} kept free; " +
+            $"{(worlds > 1 ? "each" : "it")} may grow to {limit} slots";
+    }
+    static string Gb(long b) => $"{b / (double)(1L << 30):F1} GB";
+
     public static Options Parse(string[] a)
     {
         var o = new Options();
+        bool worldMapSet = false;
         for (int i = 0; i < a.Length; i++)
         {
             string s = a[i];
@@ -185,8 +203,10 @@ public sealed class Options
                 case "--founders": o.Founders = int.Parse(Next()); o.NoSetup = true; break;
                 case "--branch-slots": o.BranchSlots = Math.Clamp(int.Parse(Next()), 2048, World.MaxSlots); o.NoSetup = true; break;
                 case "--no-setup": o.NoSetup = true; break;
-                case "--map": o.PreMap = MapSide(Next()); o.NoSetup = true; break;
-                case "--world-map": o.WorldMap = MapSide(Next()); break;
+                // the world is as big as the prehistory unless --world-map says otherwise (2026-11-01: --map valley with
+                // --headless --random-brains built the 8 km default world, since only the prehistory took the map)
+                case "--map": o.PreMap = MapSide(Next()); if (!worldMapSet) o.WorldMap = o.PreMap; o.NoSetup = true; break;
+                case "--world-map": o.WorldMap = MapSide(Next()); worldMapSet = true; break;
                 case "--ancestors-land": o.AncestorsLand = int.Parse(Next()); o.NoSetup = true; break;
                 case "--ancestors-water": o.AncestorsWater = int.Parse(Next()); o.NoSetup = true; break;
                 case "--mating-drive": o.MatingDrive = F(Next()); break;
@@ -215,6 +235,7 @@ public sealed class Options
         }
         // every new world is different: its map, its ancestors' bodies and brains and their names all come from the
         // seed, so with no --seed it is drawn at random (a saved world or prehistory resumes with its own seed)
+        if (o.BranchSlots == 0) o.BranchSlots = World.DefaultSlots(o.Branches);
         while (o.Seed == 0) o.Seed = (uint)System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, int.MaxValue);
         if (o.Evolve)
         {

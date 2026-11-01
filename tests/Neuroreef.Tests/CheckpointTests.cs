@@ -13,6 +13,14 @@ namespace Neuroreef.Tests;
 
 public class CheckpointTests
 {
+    // CI memory (2026-11-01: the ubuntu test job was killed after ~7 minutes on its 16 GB runner): with 16 ancestors of up
+    // to 600 founders, a world of 8,192 slots grew to ~27,000 slots (~6 GB) within 200 steps, and these tests hold two to
+    // four worlds at once. What they check is that a save round-trips exactly, which does not depend on how many animals
+    // there are, so their worlds start with at most FEW founders an ancestor (still hundreds of animals, and growing), and
+    // with fewer slots (a world grows as births need, and a seed gives the same run from any start size)
+    const int FEW = 60;
+    static EvoSettings Few => new() { Founders = FEW };
+
     static byte[] Hash(string p) { using var f = File.OpenRead(p); return System.Security.Cryptography.SHA256.HashData(f); }
 
     static byte[] State(World w)
@@ -91,7 +99,7 @@ public class CheckpointTests
     [Fact] // a save of format 16 (before the evolving plants): the animals, genomes, clades and step survive; the land is rebuilt
     public void OldSaveKeepsItsAnimalsAndRebuildsTheLand()
     {
-        using var a = new Simulation(8192, 93, 2);
+        using var a = new Simulation(2048, 93, 2, evo: Few);
         for (int k = 0; k < 300; k++) a.Step();
         var w = a.W;
         string path = Path.GetTempFileName();
@@ -133,7 +141,7 @@ public class CheckpointTests
             Assert.True(r.T.Births.SequenceEqual(w.T.Births));
 
             // the land is the one a new world of this seed has: the same relief, and plants grown from the spin-up
-            using var fresh = new Simulation(8192, 93, 2, empty: true);
+            using var fresh = new Simulation(1024, 93, 2, empty: true);   // only its land is compared
             Assert.True(fresh.W.Elev.AsSpan().SequenceEqual(r.Elev));
             Assert.True(fresh.W.POcc.AsSpan().SequenceEqual(r.POcc));
             Assert.True(r.Flora.Live > 0);
@@ -176,7 +184,7 @@ public class CheckpointTests
     [Fact] // a saved world holds the slots in use only for its big per-slot arrays (genomes, brains), and round-trips exactly
     public void SaveSkipsDeadSlotsAndRoundTrips()
     {
-        using var a = new Simulation(8192, 95, 2);
+        using var a = new Simulation(4096, 95, 2, evo: Few);
         for (int k = 0; k < 100; k++) a.Step();
         string path = Path.GetTempFileName();
         try
@@ -199,7 +207,7 @@ public class CheckpointTests
     [Fact] // a world that grew is saved at its size and continues exactly, loaded into a world built at any size
     public void GrownWorldRoundTrips()
     {
-        using var a = new Simulation(1024, 96, 2);
+        using var a = new Simulation(1024, 96, 2, evo: Few);
         for (int k = 0; k < 150; k++) a.Step();
         Assert.True(a.W.Cap > 1024, $"the world never grew ({a.W.Cap} slots)");
         string path = Path.GetTempFileName();
@@ -231,13 +239,13 @@ public class CheckpointTests
         string path = Path.GetTempFileName();
         try
         {
-            using var a = new Prehistory(2, 1024, 87, 2);
+            using var a = new Prehistory(2, 1024, 87, 2, Few);
             for (int k = 0; k < 60; k++) foreach (var s in a.B) s.Step();
             Assert.True(a.B[0].W.Cap > 1024 || a.B[1].W.Cap > 1024, "no branch grew");
             Checkpoint.Save(a, path);
             var (n, cap, seed) = Checkpoint.PrehistoryHeader(path);
             Assert.Equal(Math.Max(a.B[0].W.Cap, a.B[1].W.Cap), cap);
-            using var c = new Prehistory(n, 2048, seed, 2, restore: true);
+            using var c = new Prehistory(n, 2048, seed, 2, Few, restore: true);   // started with the settings it was run with, as a resumed run is
             c.LoadCheckpoint(path);
             for (int b = 0; b < 2; b++)
             {
@@ -345,7 +353,7 @@ public class CheckpointTests
         string path = Path.GetTempFileName();
         try
         {
-            using var a = new Prehistory(2, 2048, 83, 2);
+            using var a = new Prehistory(2, 2048, 83, 2, Few);
             using (var bw = new BinaryWriter(File.Create(path)))
             {
                 bw.Write("NRCK"u8.ToArray()); bw.Write((ushort)16);
@@ -373,7 +381,7 @@ public class CheckpointTests
         Nature.WorldMap = Map.W;   // the world that follows is on the prehistory's map: branch 0's land is kept for it
         try
         {
-            using var pre = new Prehistory(2, 2048, 84, 2);
+            using var pre = new Prehistory(2, 2048, 84, 2, Few);
             for (int b = 0; b < 2; b++)
             {
                 using var alone = new Simulation(2048, 84 + 1000u * (uint)b, 1, null, prehistory: true, terrainSeed: 84, evo: pre.Pending);
@@ -389,19 +397,19 @@ public class CheckpointTests
     [Fact] // the world that begins on branch 0's land is the world that grows its own
     public void WorldOnAPrehistoryLandIsTheSame()
     {
-        using var branch = new Simulation(2048, 85, 2, prehistory: true, keepLand: true, evo: new EvoSettings { MutRate = 0.002f });
+        using var branch = new Simulation(2048, 85, 2, prehistory: true, keepLand: true, evo: new EvoSettings { MutRate = 0.002f, Founders = FEW });
         var land = branch.StartLand!;
         Assert.Equal(Land.Stage.Grown, land.Is);
-        using var own = new Simulation(4096, 85, 2);
-        using var given = new Simulation(4096, 85, 2, land: land);
+        using var own = new Simulation(2048, 85, 2, evo: Few);
+        using var given = new Simulation(2048, 85, 2, evo: Few, land: land);
         Assert.True(land.Fits(given.W));
         Assert.True(State(own.W).AsSpan().SequenceEqual(State(given.W)), "the world on the given land differs");
         for (int k = 0; k < 100; k++) { own.Step(); given.Step(); }
         Assert.True(State(own.W).AsSpan().SequenceEqual(State(given.W)), "the world on the given land runs differently");
         // a land for another seed is not used
-        using var other = new Simulation(4096, 86, 2, empty: true, land: land);
+        using var other = new Simulation(1024, 86, 2, empty: true, land: land);
         Assert.False(land.Fits(other.W));
-        using var otherOwn = new Simulation(4096, 86, 2, empty: true);
+        using var otherOwn = new Simulation(1024, 86, 2, empty: true);
         Assert.True(State(otherOwn.W).AsSpan().SequenceEqual(State(other.W)));
     }
 
