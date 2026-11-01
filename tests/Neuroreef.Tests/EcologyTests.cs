@@ -237,15 +237,20 @@ public class EcologyTests
         Assert.InRange(basalRest, 0.5f * w.PBasal[0], 1.01f * w.PBasal[0]);   // basal, a little less resting (REST_BASAL)
         // eating while trying to travel fast: it lands and walks at its ground speed, paying a walk, not flight
         float eating = Spent(eat, w.PVAir[0], 1f);
-        Assert.False(w.Airborne(0));
-        Assert.True(w.Speed[0] <= w.GroundVmax(0, World.FIdx(w.X[0], w.Y[0])) * 1.001f + 1e-5f);
+        // (2026-11-01: a step's walk is ~10 units now, so it ends cells away, where the footing differs; Airborne judges
+        // the speed by the cell it ends in, so the walk is checked against the ground it set off on)
+        Assert.True(w.Speed[0] <= w.GroundVmax(0, cell) * 1.001f + 1e-5f);
         // an urge to eat with nothing here to eat does not ground it
         Spent(eat, w.PVAir[0], 0f);
         Assert.True(w.Airborne(0));
-        // travelling at its air speed it flies, and pays for the share of the step it is in the air (several times basal)
+        // travelling at its air speed it flies, and pays for the share of the step it is in the air. (2026-11-01: with the
+        // cost of transport in real units a step's ~2.5 km of flight is a few minutes in the air at ~10x basal, so a
+        // flying step costs ~1.5x a resting one; it was > 3x when moving cost 73 times too much per metre)
         float flying = Spent(0u, w.PVAir[0]);
         Assert.True(w.Airborne(0));
-        Assert.True(flying > 3f * basalRest, $"flying {flying}, resting {basalRest}");
+        float duty = MathF.Min(1f, w.PVAir[0] / Body.FlightFullStep(m));
+        Assert.True(duty > 0f && duty < 0.2f, $"in the air {duty:P1} of the step");
+        Assert.True(flying > basalRest + 0.5f * (Body.FlightPowerMin(m) - basal) * duty, $"flying {flying}, resting {basalRest}");
         Assert.True(eating < flying);
         Assert.True(basal > 0f);
     }
@@ -953,7 +958,7 @@ public class EcologyTests
             var c = w.Sp[w.Spc[i]];
             Assert.True(c.HomeR >= K.HOME_R * Map.W && c.HomeR <= K.HOME_R_MAX * Map.W + 1e-3f, $"{c.Name}: range {c.HomeR}");
             float dx = World.Delta1(w.X[i] - c.HomeX), dy = World.Delta1(w.Y[i] - c.HomeY);
-            total++; if (dx * dx + dy * dy <= MathF.Pow(c.HomeR + K.GROUP_SPREAD, 2)) inside++;
+            total++; if (dx * dx + dy * dy <= MathF.Pow(c.HomeR + Life.HomeRangeR(w.PM[i]), 2)) inside++;   // a founder lies within its body's home range of its group (2026-11-01: was GROUP_SPREAD)
         }
         Assert.True(inside > 0.9 * total, $"only {inside} of {total} founders are within their home range");
         float closest = float.MaxValue;

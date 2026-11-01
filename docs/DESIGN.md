@@ -475,8 +475,8 @@ by taking away its omniscient senses and giving it a self-motion sense"). Before
 steered down a map-wide distance field (DistDrink, DistLand), so an animal knew the way to water from anywhere, and a
 memory of where water was could add nothing.
 - *Water and land are sensed only nearby.* SEEK_WATER and SEEK_LAND point the way only when water (or land) lies within
-  SENSE_WATER = 8 cells (32 units, MAX_SIGHT, the range WATER_CLOSE and LAND_CLOSE already faded over); beyond it they
-  give no direction.
+  SENSE_WATER = 8 cells (32 units, 1.74 km: the horizon of an eye ~0.24 m above flat ground, 2026-11-01; it was set
+  equal to the old MAX_SIGHT); beyond it they give no direction.
 - *Path integration (dead reckoning).* Each animal keeps a vector back to where it last drank and one to where it last
   fed well (a bite worth FED_WELL steps' need), updated in RESOLVE from its own movement (PathMemory.cs). Its estimate of
   each step's move is off by a random vector of SD PI_ERR x the distance moved, so the remembered place drifts as the
@@ -714,8 +714,9 @@ evolution can drop.)
   in the order of how strongly each is intended (highest gain first; Engesser & Townsend 2019). A fired sound left out
   of the utterance counts as not made for learning. `World.Call` holds 3 bytes per slot. An utterance of n sounds costs
   C_CALL x basal x (1 - CALL_SYL + CALL_SYL x n), CALL_SYL = 0.5. There are 8 + 56 + 336 = 400 utterance types.
-- Range is the caller's: a call carries HEAR_R x voice x M^(1/3) (HEAR_R = 16), at most MAX_SIGHT = 32, so the 5x5
-  hash neighbourhood (HCELL 16) holds every caller a listener can hear. BUILD sorts this step's callers by hash cell
+- Range is the caller's: a call carries HEAR_R x voice x M^(1/3) (HEAR_R_M = 870 m = 16 units), at most MAX_HEAR (3 km),
+  so the 5x5 callers' hash neighbourhood (HCELL_CALL = 32, its own grid since 2026-11-01) holds every caller a listener
+  can hear. BUILD sorts this step's callers by callers' hash cell
   (`CallStart`, `CallSorted`) and a listener scans all of them, with no neighbour cap. Loudness is 1 - d / range.
   Before, hearing used the listener's sight radius and the 64-neighbour cap.
 - The focal caller: each listener attends to one caller, the loudest that looks alike (Body.LooksAlike), else the
@@ -933,6 +934,19 @@ circumstances emerge")
 - Small life is modelled as super-individuals.
 
 ---
+
+## 0b. Real units (2026-11-01)
+
+The animals now live in the land's metres. A step is STEP_H = 2.922 h (T_SEASON = 3000 steps are 365.25 days), a unit is
+M_PER_UNIT = 54.5 m (GEO_CELL_M / FCELL), masses are kg. Sight is 60 m x M^0.2 for a 1 kg target (eye size and acuity,
+Kiltie 2000; Burton 2008), hearing 870 m x voice x M^(1/3), a step's top travel 632 m x M^0.25 (the day range, Garland
+1983, over the share of top speed animals use, TRAVEL_SHARE), the cost of moving a metre Taylor et al.'s (1982) on
+Kleiber's energy scale, a strike's reach the body plus a 15 s sprint at Garland's top speed, a founder group's spread the
+home range of its body (HR_KM2 x M, Jetz et al. 2004). A step is hours, so what an animal perceives is what lay within
+sight of the way it travelled (Decide.Perceive: the disc of the band's area, Gerritsen & Strickler 1977), and a strike or
+a mating reaches along that way (Resolve.AlongWay). The bodies' hash cell (HCELL = 8, 7x7 cells) is sized from the
+largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call. docs/CONSTANTS.md group Units has every
+value and its source; docs/ICD.md §2.1 what the console gets.
 
 ## 1. The idea in one page
 
@@ -1533,8 +1547,8 @@ because its genes differ moves to the nearest allowed cell, or dies.
   P = P_min·(3/u + u³)/4, u = v/v_mp (induced power ~1/u, profile and parasite ~u³); hovering (u below
   FLY_U_MIN) costs 2× P_min. The speed of least power is FLY_VMP = 4× the walking-speed allometry (birds cruise
   5-15 m/s, walkers travel 1-2 m/s); top air speed is v_mp·x where the curve meets the margin, at most
-  FLY_X_MAX = 1.6 (1.49× P_min there) and at most FLY_V_CAP = 16 units/step (one hash cell: an animal senses only
-  MAX_SIGHT around it once per step). A step is hours, so its speed is a step's travel: a flier that could land
+  FLY_X_MAX = 1.6 (1.49× P_min there) and at most FLY_V_CAP = 128 units/step (7 km; 2026-11-01: an animal perceives
+  along the way it travelled, out to MAX_PERCEIVE). A step is hours, so its speed is a step's travel: a flier that could land
   is in the air only for the share of the step its distance needs, spd / FlightFullStep(M), and pays the power for
   that share; FlightFullStep is calibrated so flying at v_mp costs FLY_COT_RATIO = 0.4 of walking per distance at
   M = 1 (Tucker 1970; Schmidt-Nielsen 1972), growing as M^0.3 (0.17 at M = 0.1, 0.93 at M = 13). A flier that

@@ -24,12 +24,19 @@ public static class Headless
         var sw = Stopwatch.StartNew();
         long lastT = 0; ulong lastStep = 0;
         bool stop = false;
+        // encounter census (2026-11-01, NR_UNITS=1): what each decision senses, and how far animals travel per step
+        bool units = Environment.GetEnvironmentVariable("NR_UNITS") == "1";
+        if (units) Decide.Metrics = new Decide.DecisionMetrics();
+        double moved = 0, movedMax = 0; long animalSteps = 0;
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop = true; Console.WriteLine("stopping after this step (saving)..."); };
         var water = new WaterWatch();
         for (long k = 0; k < o.Steps && !stop; k++)
         {
             sim.Step();
             water.Sample(w);
+            if (units)
+                for (int i = 0; i < w.Cap; i++)
+                    if (w.StageOf[i] >= St.Juvenile) { moved += w.Speed[i]; movedMax += w.Vmax(i); animalSteps++; }
             if (w.Step % (ulong)o.ReportEvery == 0)
             {
                 double dt = (sw.ElapsedMilliseconds - lastT) / 1000.0;
@@ -41,6 +48,21 @@ public static class Headless
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
         string summary = Summary(sim) + Environment.NewLine + water.Report(w);
         Console.Write(summary);
+        if (units)
+        {
+            var m = Decide.Metrics!; var T = w.T;
+            long conc = 0, mat = 0, kills = 0, starve = 0, thirst = 0, strikes = 0, lineages = 0;
+            for (int s = 0; s < w.NS; s++)
+            {
+                conc += T.Conceptions[s]; mat += T.Matings[s]; kills += T.Kills[s]; strikes += T.Strikes[s];
+                starve += T.Deaths[s * Cause.N + Cause.Starve]; thirst += T.Deaths[s * Cause.N + Cause.Thirst];
+                if (sim.ActiveCount[s] > 0) lineages++;
+            }
+            double d = Math.Max(1, m.Decisions), mpu = Player.M_PER_UNIT;
+            Console.WriteLine($"UNITS: alive {w.AliveCount}  lineages {lineages}  conceptions {conc}  matings {mat}  strikes {strikes}  kills {kills}  starved {starve}  thirst {thirst}");
+            Console.WriteLine($"UNITS: decisions {m.Decisions:N0}  other in sight {m.SeeOther / d:P1}  kin in sight {m.SeeKin / d:P1}  ready partner in sight {m.SeeMate / d:P1}  strike target in reach {m.InReach / d:P1}");
+            Console.WriteLine($"UNITS: moved per animal-step {moved / Math.Max(1, animalSteps) * mpu:F0} m (top speed {movedMax / Math.Max(1, animalSteps) * mpu:F0} m), x{24.0 * K.T_SEASON / 8766.0:F2} steps a day");
+        }
         if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, summary); Console.WriteLine("report written: " + o.ReportTxt); }
         if (o.SaveBank != null) { GeneBank.Save(w, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }
         if (o.Csv != null) { WriteCsv(w, o.Csv); Console.WriteLine("telemetry written: " + o.Csv); }

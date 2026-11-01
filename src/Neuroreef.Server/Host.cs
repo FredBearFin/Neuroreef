@@ -419,6 +419,7 @@ public static class Host
                         season = w.SeasonAt(Map.W * 0.5f), mapSide = Map.W, rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                         player = PlayerState(h),
+                        units = Wire.Units(), bodyLenM = Wire.BodyLengths(w),   // 2026-11-01: metres per unit, step length; each organism's body length (m)
                     }), ct);
                 }
                 if (t >= nextAnalysis)

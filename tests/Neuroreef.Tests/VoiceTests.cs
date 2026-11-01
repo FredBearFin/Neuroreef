@@ -139,7 +139,7 @@ public class VoiceTests
         for (int k = 0; k < F.NSOUND; k++) Assert.Equal(0f, Feat(w, L, F.FOC_POS_0 + k));
     }
 
-    [Fact] // a caller is heard as far as its voice and body carry it (HEAR_R x voice x M^(1/3), at most MAX_SIGHT)
+    [Fact] // a caller is heard as far as its voice and body carry it (HEAR_R x voice x M^(1/3), at most MAX_HEAR)
     public void CallRangeIsTheCallers()
     {
         var (w, x, y) = NewWorld(5);

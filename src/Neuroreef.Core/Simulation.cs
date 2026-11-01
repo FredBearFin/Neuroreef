@@ -306,7 +306,7 @@ public sealed class Simulation : IDisposable
         Lap(6);
     }
 
-    /// <summary>BUILD: counting sort of every visible agent (not embryos) into the 16-unit hash grid.</summary>
+    /// <summary>BUILD: counting sort of every visible agent (not embryos) into the HCELL-unit hash grid.</summary>
     void Build() => BuildFor(W);
 
     /// <summary>Rebuild the spatial hash of a world (BUILD phase).</summary>
@@ -343,25 +343,36 @@ public sealed class Simulation : IDisposable
             nb.Slot = i; nb.Serial = w.Serial[i]; nb.Stage = w.StageOf[i];
             fixed (sbyte* dst = nb.Look) new ReadOnlySpan<sbyte>(look, i * Body.NLOOK, Body.NLOOK).CopyTo(new Span<sbyte>(dst, Body.NLOOK));
         }
-        // this step's callers (Revision N): every organism that made a sound last step, sorted by hash cell like the
-        // others, with how far its call carries: HEAR_R x voice x M^(1/3) (a bigger, louder animal is heard further),
-        // at most MAX_SIGHT so that the 5x5 cell neighbourhood holds every caller a listener can hear. A listener scans
-        // all of them, with no cap on how many
-        Array.Clear(w.CellCount);
+        // this step's callers (Revision N): every organism that made a sound last step, sorted by the callers' own hash
+        // (HCELL_CALL, coarser than the bodies' since 2026-11-01: a call carries kilometres, sight a few hundred metres),
+        // with how far its call carries: HEAR_R x voice x M^(1/3) (a bigger, louder animal is heard further), at most
+        // MAX_HEAR, so that the 5x5 callers' cells around a listener hold every caller it can hear. A listener scans all
+        // of them, with no cap on how many
+        int nc = Map.CGW * Map.CGW;
+        var callCount = w.CellCount;   // (GW^2 >= CGW^2 cells: HCELL_CALL > HCELL)
+        Array.Clear(callCount);
         for (int i = 0; i < w.Cap; i++)
         {
             w.CallR[i] = 0f;
-            int c = w.CellOf[i];
-            if (c < 0 || w.Call[i * F.MAX_SYL] == 0 || w.StageOf[i] < St.Juvenile) continue;
-            w.CallR[i] = MathF.Min(K.MAX_SIGHT, K.HEAR_R * w.PVoice[i] * MathK.Cbrt(w.MassOf(i)));
-            w.CellCount[c]++;
+            if (w.CellOf[i] < 0 || w.Call[i * F.MAX_SYL] == 0 || w.StageOf[i] < St.Juvenile) continue;
+            w.CallR[i] = MathF.Min(K.MAX_HEAR, K.HEAR_R * w.PVoice[i] * MathK.Cbrt(w.MassOf(i)));
+            callCount[CallCell(w.X[i], w.Y[i])]++;
         }
         acc = 0;
-        for (int c = 0; c < n; c++) { w.CallStart[c] = acc; acc += w.CellCount[c]; }
-        w.CallStart[n] = acc;
-        Array.Clear(w.CellCount);
+        for (int c = 0; c < nc; c++) { w.CallStart[c] = acc; acc += callCount[c]; }
+        w.CallStart[nc] = acc;
+        Array.Clear(callCount);
         for (int i = 0; i < w.Cap; i++)
-            if (w.CallR[i] > 0f) { int c = w.CellOf[i]; w.CallSorted[w.CallStart[c] + w.CellCount[c]++] = i; }
+            if (w.CallR[i] > 0f) { int c = CallCell(w.X[i], w.Y[i]); w.CallSorted[w.CallStart[c] + callCount[c]++] = i; }
+    }
+
+    /// <summary>The callers' hash cell (HCELL_CALL units a side) of a place.</summary>
+    public static int CallCell(float x, float y)
+    {
+        int cx = (int)(x / K.HCELL_CALL), cy = (int)(y / K.HCELL_CALL);
+        if ((uint)cx >= Map.CGW) cx = World.WrapI(cx, Map.CGW);
+        if ((uint)cy >= Map.CGW) cy = World.WrapI(cy, Map.CGW);
+        return cy * Map.CGW + cx;
     }
 
     // last known facts about the probed animal, kept while it lives (its slot may be reused after death)
