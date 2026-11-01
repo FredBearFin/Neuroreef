@@ -36,6 +36,8 @@ const STAIN_MAX = 1024;       // blood stains on the ground
 const BLOOD_MAX = 2500;       // blood droplets in the air at once
 const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sinking for the last quarter
 const NEAR_PX = 22;          // organisms drawn longer than this on screen (pixels) get the detailed body
+const SWIM_FINS = (0.3 - 0.1) / 0.9;   // fins at which a body swims in deep water (Body.GroundRealm: 0.1 + 0.9 fins >= DEEP_SWIM 0.3)
+const FLY_VM = 90;           // metres per step x M^0.17 above which a flier is taken to be in the air (a landed one walks: _air)
 const DOT_PX = 1.8;          // in the overview no organism is drawn shorter than this (a dot where it is, never a carpet)
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
@@ -485,13 +487,21 @@ export class World3D {
 
   setAgents(a) {
     const now = performance.now();
-    this.frameDt = Math.min(250, Math.max(16, now - this.frameT)); this.frameT = now;
+    // (up to 0.7 s: at a few steps a second the frames are that far apart, and the animals glide between them
+    // instead of moving for a quarter second and standing still for the rest)
+    this.frameDt = Math.min(700, Math.max(16, now - this.frameT)); this.frameT = now;
     const gen = (this._gen = (this._gen || 0) + 1), W = this.W, o = this.tmp;
     for (let k = 0; k < a.n; k++) {
       agentState(a, k, W, o);
       let e = this.agents.get(o.serial);
-      if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h }; this.agents.set(o.serial, e); }
-      else { e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h; }
+      if (!e) { e = { x: o.x, y: o.y, h: o.h, px: o.x, py: o.y, ph: o.h, st: a.step, vm: 0 }; this.agents.set(o.serial, e); }
+      else {
+        // its speed, in metres per step (a frame may carry several steps): a flier faster than it walks is in the air
+        const ds = a.step - e.st;
+        if (ds > 0) { let dx = o.x - e.x, dy = o.y - e.y; dx -= Math.round(dx / W) * W; dy -= Math.round(dy / W) * W; e.vm = Math.hypot(dx, dy) * this.scale.mpu / ds; }
+        e.st = a.step;
+        e.px = e.x; e.py = e.y; e.ph = e.h; e.x = o.x; e.y = o.y; e.h = o.h;
+      }
       e.sp = o.sp; e.stage = o.stage; e.acts = o.acts; e.scan = o.scan; e.rest = o.rest; e.energy = o.energy; e.gen = gen; e.carry = o.carrying;
       // the body its genes built is the same for its life: decoded the first time its serial is seen (and again only if
       // the first gene bytes differ, as when another world, whose serials start again at 1, is shown)
@@ -900,7 +910,7 @@ export class World3D {
     let total = 0;
     for (const e of this.agents.values()) if (e.stage !== 0) total++;
     if (total > this.far.cap) { let cap = this.far.cap; while (cap < total) cap *= 2; this.far = this._allocBodies(this.far, this.farGeo, cap); }
-    const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0];
+    const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0], SL = [0, 0];
     const camX = this.camera.position.x, camY = this.camera.position.y, camZ = this.camera.position.z;
     // sizes: true size x the magnification (bk: world units per view-size unit); on screen, pixels per unit at distance 1
     const bk = this.scale.bodyK, ppu = this.canvas.clientHeight / (2 * Math.tan(this.camera.fov * Math.PI / 360));
@@ -951,7 +961,11 @@ export class World3D {
       }
       let sc = this._size(e);
       let gy = this._height(e, x, y, sc);
-      if (e.fly && !e.rest) gy += this._lift(sc, t, serial);
+      // a flier in the air (eased up and down as it takes off and lands): wings out; landed it walks or perches
+      let rs = e.rest ? 1 : 0;
+      const air = e.fly ? this._air(e, x, y, now) : 0;
+      if (air > 0.01) { gy += this._lift(sc, t, serial) * air; e.pose = 'Fly'; rs = e.rest ? 1 : 1 - air; e.grounded = false; }
+      else if (e.fly) e.pose = e.rest ? 'Fly' : e.pose || 'Walk';
       // gait from the distance moved since the last frame
       let mdx = e.x - e.px, mdy = e.y - e.py;
       if (mdx > Wh) mdx -= W; else if (mdx < -Wh) mdx += W;
@@ -959,13 +973,18 @@ export class World3D {
       const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * sc + 0.05 * bk));
       e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
       const ddx = x - camX, ddy = gy - camY, ddz = y - camZ, dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-      if (dots && sc < dots * dist) { sc = dots * dist; if (e.fly && !e.rest) gy = Math.max(gy, this.heightAt(x, y) + sc); }   // never smaller than a dot
+      if (dots && sc < dots * dist) { sc = dots * dist; if (air > 0.01) gy = Math.max(gy, this.heightAt(x, y) + sc * air); }   // never smaller than a dot
       if (!inView(x, gy, y, 3 * sc + 0.02)) continue;   // a body (wings and tail spread) lies well within 3 x its size
-      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997, rs = e.rest ? 1 : 0;
+      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997;
+      // out of breath (oxygen debt, 0..15) and calling ride above the action byte (anim.js)
+      acts |= Math.round((e.breath || 0) * 15) * 256 | (e.call && e.callT && now - e.callT < 600 ? 4096 : 0);
       // each organism keeps its instance slot (keyed by serial) while it stays in a mesh: only its matrix and animation
-      // are sent each frame. A near one goes to the far mesh when the near one is full
-      if (dist < nearK * sc && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb)) nn++;
-      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb)) nf++;
+      // are sent each frame. A near one goes to the far mesh when the near one is full; a near one standing on the
+      // ground is sheared to its slope (feet on the slope, not in it or above it)
+      const isNear = dist < nearK * sc;
+      if (isNear && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
+      if (isNear && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nn++;
+      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nf++;
     }
     // the killed: flattened, darkened bodies lying where they fell, sinking into the ground at the end
     this.corpses = this.corpses.filter((d) => { if (now - d.t0 < CORPSE_LIFE) return true; this.dead.delete(d.serial); return false; });
@@ -977,8 +996,11 @@ export class World3D {
       const ddx = x - camX, ddz = y - camZ, nr = nearK * sc;
       const ci = e.sp * 3, dk = 0.45 - 0.2 * a, r = rgb[ci] * dk + 0.18, g = rgb[ci + 1] * dk * 0.5, b = rgb[ci + 2] * dk * 0.5;
       const key = -d.serial;   // a corpse's slot is apart from the living animal's (serials are > 0)
-      if (ddx * ddx + ddz * ddz < nr * nr && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b)) nn++;
-      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b)) nf++;
+      e.pose = null;           // it lies as its body is built, not as it last moved (a flier shot down lies with wings folded)
+      const isNear = ddx * ddx + ddz * ddz < nr * nr;
+      if (isNear && e.grounded) this._slope(x, y, d.h, sc, SL); else SL[0] = SL[1] = 0;
+      if (isNear && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b, SL[0], SL[1])) nn++;
+      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b, SL[0], SL[1])) nf++;
     }
     finishBodies(near); finishBodies(far);
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
@@ -1026,35 +1048,47 @@ export class World3D {
     if (e.stage === 0) { const r = this._eggR(e); out.x = x; out.z = y; out.gy = this.heightAt(x, y); out.cy = out.gy + 0.8 * r; out.r = r; return out; }
     const sc = this._size(e);
     let gy = this._height(e, x, y, sc);
-    if (e.fly && !e.rest) gy += this._lift(sc, now / 1000, serial);
+    if (e.fly && e.air > 0.01) gy += this._lift(sc, now / 1000, serial) * e.air;
     out.x = x; out.z = y; out.gy = gy; out.cy = gy + 0.45 * sc; out.r = 0.55 * sc;
     return out;
   }
 
   /**
-   * Where an organism of drawn size sc stands at (x, y): on the ground; a walker in water wades with its body half
-   * under; a swimmer at its depth under the surface (AGENTS format 7: depth in m, and the share of the step spent there,
-   * so a fish stays down and an air-breather dives for that share of a cycle and comes up to breathe for the rest), never
-   * below the bed. Sets e.under (0..15: how far the water hides it, with depth and the water's murk) for the body shader.
+   * Where an organism of drawn size sc stands at (x, y): on the ground; in water where the sim holds it
+   * (Respiration.Uptake; AGENTS format 7: depth in m and the share of the step spent there): a swimmer (0.1 + 0.9 fins
+   * >= DEEP_SWIM, whatever its locomotion label) at its depth, so a fish stays down and an air-breather dives for that
+   * share of a cycle and comes up to breathe for the rest, never below the bed; any other body at depth walks on the bed
+   * (its depth is the whole column), else it wades or paddles at the surface. Sets e.under (0..15: how far the water
+   * hides it, with depth and the water's murk) for the body shader, e.grounded (its feet on the ground: it is sheared to
+   * the slope) and e.pose ('Swim' for a wader or landed flier swimming under water; null: as its locomotion).
    */
   _height(e, x, y, sc = this._size(e)) {
-    e.under = 0;
+    e.under = 0; e.grounded = true; e.pose = null;
     if (!this.world) return 0;
     const g = this.ground ? this.ground.heightAt(x, y, this.camera.position) : this._ground(x, y), ci = this._cellOf(x, y), sf = this.surfH[ci];
     if (!(sf === sf) || sf <= g) return g;                       // dry ground (sf NaN: no water here)
-    if (!e.swim) return Math.max(g, sf - 0.4 * sc);              // wading
-    const bed = g + 0.25 * sc;
-    let dm = e.depth > 0 ? e.depth : 0;
-    const at = e.atDepth === undefined ? 1 : e.atDepth;
-    if (dm > 0 && at < 0.98) {
-      // an 8 s cycle (its own phase): down for the share 'at', easing up and down over a tenth of it, at the surface the rest
-      const u = (performance.now() / 8000 + ((e.serial || 0) % 997) / 997) % 1, w = 0.1;
-      dm *= at <= 0.02 ? 0 : smooth(0, w, u) * (1 - smooth(at - w, at, u));
+    const swimmer = e.swim || (e.fins || 0) >= SWIM_FINS;
+    let dm = e.depth > 0 ? e.depth : 0, y0;
+    if (!swimmer) {
+      y0 = dm > 0 ? g : Math.max(g, sf - 0.4 * sc);             // on the bed; or wading, or paddling with its back awash
+      e.grounded = y0 === g;
+    } else {
+      const at = e.atDepth === undefined ? 1 : e.atDepth;
+      if (dm > 0 && at < 0.98) {
+        // an 8 s cycle (its own phase): down for the share 'at', easing up and down over a tenth of it, at the surface the rest
+        const u = (performance.now() / 8000 + ((e.serial || 0) % 997) / 997) % 1, w = 0.1;
+        dm *= at <= 0.02 ? 0 : smooth(0, w, u) * (1 - smooth(at - w, at, u));
+      }
+      if (!e.swim && dm <= 0.05) { y0 = Math.max(g, sf - 0.4 * sc); e.grounded = y0 === g; }   // a swimming wader at the surface wades
+      else {
+        y0 = Math.max(g + 0.25 * sc, Math.min(sf - 0.3 * sc, sf - dm * this.scale.upm));
+        e.grounded = false;
+        if (!e.swim) e.pose = 'Swim';                            // under water a wader (or a landed flier) swims
+      }
     }
-    const y0 = Math.max(bed, Math.min(sf - 0.3 * sc, sf - dm * this.scale.upm));
     // lost from view over a few metres in clear water, sooner where algae and plankton cloud it
     const murk = this._murkAt(ci), vis = 6 / (1 + 3 * murk), dd = (sf - y0) / this.scale.upm;
-    e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));
+    if (y0 < sf - 0.45 * sc) e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));   // (wading: its back is dry)
     return y0;
   }
 
@@ -1064,6 +1098,36 @@ export class World3D {
     const fw = this.world.fw, d = f.d, fi = Math.min(d - 1, ((ci / fw) | 0) >> 1) * d + Math.min(d - 1, (ci % fw) >> 1);
     const ka = this._kAlgae ??= this._layer('algae'), kp = this._kPhyto ??= this._layer('phyto');
     return Math.min(1, ((ka >= 0 ? f.data[ka * d * d + fi] : 0) + (kp >= 0 ? f.data[kp * d * d + fi] : 0)) / 255);
+  }
+
+  /**
+   * How far flier e is in the air now, 0 landed .. 1 flying, eased over about half a second as it takes off and lands.
+   * The sim (Resolve, World.Airborne) lands a flier whenever it can stand where it is and goes no faster than it walks
+   * (resting, eating or drinking land it); the frame does not say so, so it is read from its speed (e.vm, metres per
+   * step: a landed flier walks at most a few tens of metres a step, a flying one covers hundreds) and the ground.
+   */
+  _air(e, x, y, now) {
+    let want = 0;
+    if (!e.rest) {
+      const ci = this._cellOf(x, y), cell = this.world ? this.world.cell[ci] : 1;
+      const canLand = (cell & 1) || ((e.fins || 0) >= SWIM_FINS) || ((cell & 2) && (e.legs || 0) >= 0.3);   // Body.GroundRealm
+      want = !canLand || e.vm > FLY_VM * Math.pow(e.mass || 1, 0.17) ? 1 : 0;
+    }
+    if (e.air === undefined) e.air = want;
+    const dt = Math.min(0.25, Math.max(0, (now - (e.airT || now)) / 1000)); e.airT = now;
+    e.air += Math.sign(want - e.air) * Math.min(Math.abs(want - e.air), dt / 0.6);
+    return smooth(0, 1, e.air);
+  }
+
+  /** The ground's slope under a body of drawn size sc heading h at (x, y): out[0] rise per run forward, out[1] to its
+   *  left, over its own length (clamped to 45 degrees; a body is sheared to it, body.js writeMatrix). */
+  _slope(x, y, h, sc, out) {
+    const G = this.ground, cam = this.camera.position, d = 0.5 * sc, fx = Math.cos(h) * d, fz = Math.sin(h) * d;
+    if (!G) { out[0] = out[1] = 0; return out; }
+    const c = (v) => Math.max(-1, Math.min(1, v / (2 * d)));
+    out[0] = c(G.heightAt(x + fx, y + fz, cam) - G.heightAt(x - fx, y - fz, cam));
+    out[1] = c(G.heightAt(x - fz, y + fx, cam) - G.heightAt(x + fz, y - fx, cam));
+    return out;
   }
 
   /** A flyer's height over the ground (in its own drawn lengths), bobbing. */
@@ -1090,6 +1154,17 @@ export class World3D {
   setBodyLengths(list) {
     const m = this.lenM; m.clear();
     for (let i = 0; i + 1 < list.length; i += 2) m.set(list[i], list[i + 1]);
+  }
+
+  /** status.bodyLook: [serial, endothermy, fibre, ...] (0..1 each) for the body shader; a body whose values change
+   *  has its genes written again (e.gv, body.js placeBody). */
+  setBodyLooks(list) {
+    for (let i = 0; i + 2 < list.length; i += 3) {
+      const e = this.agents.get(list[i]); if (!e) continue;
+      // (fibre: its share of a budget spread over fifteen food pools; a third or more on fibrous food is a grazer)
+      const fib = Math.min(1, Math.max(0, (list[i + 2] - 0.12) / 0.3));
+      if (e.endo !== list[i + 1] || e.fibre !== fib) { e.endo = list[i + 1]; e.fibre = fib; e.gv = (e.gv | 0) + 1; }
+    }
   }
 
   /** Body mass of an organism (juveniles about half). */
