@@ -81,8 +81,10 @@ For the renderer and the 3D view (not changed here; wwwroot is theirs):
 - Wire.EncodeWorld sends Elev as one byte: at 8,000 m that is ~35 m a step (it was ~13 m), which terraces 218 m cells
   by ~9°; the elevation needs 16 bits (as Surface already is).
 Not done:
-- Elevation-unit constants (SHALLOW, RIVER_BANK, FLOOD_HAND, ALLUV_D, BASIN_MIN) now mean ~2.7 x as many metres. The
-  hydrology tests still pass, but the hydrologist may want them in metres.
+- Elevation-unit constants (SHALLOW, RIVER_BANK, FLOOD_HAND, ALLUV_D, BASIN_MIN) now mean ~2.7 x as many metres. Done at
+  the integration (2026-11-01): RIVER_BANK, FLOOD_HAND, ALLUV_D, BASIN_MIN and LAKE_MIN_DEPTH are in metres (converted by
+  World.ElevPerM), at what they meant when the hydrology was tuned (H_RELIEF 3,000 m, 1 - SeaLevel ~0.7). SHALLOW stays
+  a game depth in elevation (swimming, light, the shallow realm), and FLOW_EPS is numerical.
 - Fault scarps along plate boundaries.
 - The parallel gully comb on uniform slopes may come from Refine's roughness: Fbm with its base lattice on the coarse
   grid, upsampled by exactly 2. Not yet tried.
@@ -220,7 +222,7 @@ Now:
   inflow, not its own rain: a channel cell is water, and the rain on it never reaches the water cycle's streams.
 - *Hydraulic geometry* (Leopold & Maddock 1953). Depth = RIVER_D x SHALLOW x (Q / RIVER_Q1)^0.4, at most SHALLOW, so every
   river stays wadeable. Width = sqrt(Q / RIVER_Q1) cells, from 1 to RIVER_W_MAX. A wider river covers the cells beside its
-  channel that are at most RIVER_BANK x SHALLOW above the channel's bed, in a parabolic cross-section. FloodFrom of a
+  channel that are at most RIVER_BANK (m; x SHALLOW before 2026-11-01) above the channel's bed, in a parabolic cross-section. FloodFrom of a
   river cell is its channel cell: floodplains and floods read that channel's depth and discharge.
 - *The water cycle.* Lakes are processed upstream first (LakeRank). A lake rises LakeSill above its level at creation
   before it spills (0 for a full lake). What it spills runs down its outflow (LakeExit, along Recv) into the next lake

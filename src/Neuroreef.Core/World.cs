@@ -176,6 +176,9 @@ public sealed class World
     public readonly float[] TLapse, Cont;
     public float ClimateZ = 1f;                    // normaliser of the evaporation factor: the land as moist over a year as with no climate
     public float SeaLevel;
+    /// <summary>Elevation (0..1) per metre at the game's vertical scale: 1 - SeaLevel above the lakes is H_RELIEF m. A height
+    /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
+    public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / K.H_RELIEF;
     // ---- water cycle (WaterCycle.cs): stores in mm of water over a cell, fluxes in mm x cells per update (WC_EVERY steps).
     // Fixed at WaterCycle.Init: the rain pattern (relative to the land mean; a lake cell holds its row's land mean), soil
     // capacity, the drainage receivers and their topological order (outlets first), the lake each cell drains to

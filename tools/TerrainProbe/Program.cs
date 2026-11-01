@@ -40,7 +40,7 @@ for (int a = 2; a < args.Length; a++)
     var rk = new int[Rock.N]; int nl = 0;
     for (int i = 0; i < n; i++) if (w.Elev[i] >= w.SeaLevel) { rk[w.Rock[i]]++; nl++; }
     int a0 = 0, a1 = 0, vA = 0, v0 = 0;
-    for (int i = 0; i < n; i++) if (w.Elev[i] >= w.SeaLevel) { if (w.Alluvium[i] > 0f) a0++; if (w.Alluvium[i] > K.ALLUV_D) a1++; if (w.Rock[i] == Rock.Volcanic) { v0++; if (w.Alluvium[i] > 0f) vA++; } }
+    for (int i = 0; i < n; i++) if (w.Elev[i] >= w.SeaLevel) { if (w.Alluvium[i] > 0f) a0++; if (w.Alluvium[i] > K.ALLUV_D * w.ElevPerM) a1++; if (w.Rock[i] == Rock.Volcanic) { v0++; if (w.Alluvium[i] > 0f) vA++; } }
     Console.WriteLine($"  land with alluvium > 0: {100.0 * a0 / nl:F1}%, > ALLUV_D: {100.0 * a1 / nl:F1}%; volcanic cells {v0}, {vA} with alluvium");
     Console.WriteLine("  land rock: " + string.Join(", ", Enumerable.Range(0, Rock.N).Select(k => $"{Rock.Names[k]} {100.0 * rk[k] / nl:F1}%")));
     File.WriteAllText(Path.Combine(dir, $"meta_{map}_{seed}.txt"), $"{Map.FW} {c.CW} {w.SeaLevel} {c.Sea} {s:F2} {c.Residual} {K.H_RELIEF} {K.CLIMATE} {K.T_EQ} {K.DT_EP} {K.LAPSE}\n");

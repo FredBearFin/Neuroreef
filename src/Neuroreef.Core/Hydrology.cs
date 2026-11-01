@@ -257,7 +257,7 @@ public static partial class Hydrology
 
     /// <summary>
     /// Floodplains (Revision Q): each land cell within FLOOD_R cells upstream of a river cell it drains into, and lower
-    /// than FLOOD_HAND x SHALLOW above it (height above the nearest drainage, Rennó et al. 2008), gets the wetness
+    /// than FLOOD_HAND (m) above it (height above the nearest drainage, Rennó et al. 2008), gets the wetness
     /// (season x this year's rain against the average) at which that river's stage reaches it; others get +inf.
     /// A river's stage goes as discharge^RIVER_DEPTH_EXP (Leopold & Maddock 1953) and tops its banks at BANKFULL.
     /// 2026-10-31: a river is every water cell outside the sea and the lakes (LakeOf -1), and the river that floods a
@@ -268,7 +268,7 @@ public static partial class Hydrology
     {
         int FW = Map.FW, n = FW * FW;
         var drain = new int[n]; var steps = new int[n];
-        float bank = MathK.Pow(K.BANKFULL, K.RIVER_DEPTH_EXP);
+        float bank = MathK.Pow(K.BANKFULL, K.RIVER_DEPTH_EXP), hand = K.FLOOD_HAND * w.ElevPerM;   // metres to elevation
         for (int q = 0; q < n; q++)
         {
             int c = net.Order[q], r = net.Recv[c];
@@ -285,7 +285,7 @@ public static partial class Hydrology
             int d = drain[c];
             if (d < 0 || steps[c] > K.FLOOD_R) continue;
             float above = w.Elev[c] - w.Elev[d];
-            if (above > K.FLOOD_HAND * K.SHALLOW) continue;
+            if (above > hand) continue;
             // stage / mean depth = wet^f; it reaches the cell when Depth (wet^f - BANKFULL^f) >= height above the river
             w.FloodWet[c] = MathK.Pow(bank + MathF.Max(0f, above) / w.Depth[d], 1f / K.RIVER_DEPTH_EXP);
             w.FloodFrom[c] = d;
@@ -395,6 +395,7 @@ public static partial class Hydrology
         var pq = new PriorityQueue<int, float>();
         var pool = new List<int>();
         float mmPerElev = K.H_RELIEF * 1000f / MathF.Max(1e-6f, 1f - sea);
+        float lakeMin = K.LAKE_MIN_DEPTH * w.ElevPerM, bankH = K.RIVER_BANK * w.ElevPerM;   // metres to elevation (2026-11-01)
         for (int q = n - 1; q >= 0; q--)
         {
             int c = order[q];
@@ -405,7 +406,7 @@ public static partial class Hydrology
             {
                 int a = cStart[k], b = cStart[k + 1], low = cLow[k];
                 float S = cSpill[k];
-                if (b - a >= K.LAKE_MIN_CELLS && S - h[low] >= K.LAKE_MIN_DEPTH)
+                if (b - a >= K.LAKE_MIN_CELLS && S - h[low] >= lakeMin)
                 {
                     // the pool rises from the floor: each next cell is the lowest one it touches (a sub-basin beyond a
                     // saddle fills to the saddle before the level rises on)
@@ -413,10 +414,21 @@ public static partial class Hydrology
                     pool.Clear(); pq.Clear();
                     pq.Enqueue(low, h[low]); stamp[low] = k;
                     float top0 = h[low], next = S;
+                    int atTop = 0; double budgetAtTop = budget;   // the pool and its budget before it first rose to top0
                     while (pq.TryDequeue(out int j, out float hj))
                     {
                         double cost = (double)yld[j] + loss[j];
-                        if (budget - cost < 0) { next = MathF.Min(S, hj); break; }
+                        if (budget - cost < 0)
+                        {
+                            next = MathF.Min(S, hj);
+                            // 2026-11-01: the next cell lies below the pool's top: the pool has risen over a saddle inside the
+                            // basin (top0) and its water runs down into the hollow beyond, which it cannot keep a lake in.
+                            // The lake stands at the saddle and spills over it: the cells from the saddle on are not lake
+                            // (it would stand above the dry ground beside them: jagged relief has many such sub-basins)
+                            if (next < top0) { pool.RemoveRange(atTop, pool.Count - atTop); budget = budgetAtTop; next = top0; top0 = h[low]; foreach (int p in pool) top0 = MathF.Max(top0, h[p]); }
+                            break;
+                        }
+                        if (hj > top0) { atTop = pool.Count; budgetAtTop = budget; }
                         budget -= cost; pool.Add(j); top0 = MathF.Max(top0, hj);
                         int x = j % FW, y = j / FW;
                         for (int dy = -1; dy <= 1; dy++)
@@ -585,7 +597,7 @@ public static partial class Hydrology
                     int r2 = dx * dx + dy * dy;
                     if (r2 == 0 || r2 > ring * ring + ring) continue;
                     int j = World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW);
-                    if (lake[j] >= 0 || chan[j] || h[j] > h[c] + K.RIVER_BANK * K.SHALLOW) continue;
+                    if (lake[j] >= 0 || chan[j] || h[j] > h[c] + bankH) continue;
                     if (r2 <= full * full + full) Bank(j, r2);
                     else if (half && (best < 0 || h[j] < h[best] || (h[j] == h[best] && j < best))) { best = j; bestR2 = r2; }
                 }

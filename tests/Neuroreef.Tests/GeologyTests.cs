@@ -292,11 +292,18 @@ public class GeologyTests
     public void GlaciersCutTheLandAboveTheSnowline()
     {
         // measured (1024 map, latitudes whose ELA is 0.3-3.5 km; seeds 3, 7, 11): land above the ELA 32/16/23% without
-        // glaciers, 26/9/18% with them; p99 height above the ELA 2.6/1.8/2.5 km against 2.1/1.3/1.8 km
+        // glaciers, 26/9/18% with them; p99 height above the ELA 2.6/1.8/2.5 km against 2.1/1.3/1.8 km.
+        // 2026-11-01, with the D-infinity routing (Hydrology.Route, which deep time routes its rivers and its ice on):
+        // 30.1/16.2/21.8% without glaciers, 26.4/9.1/16.7% with them (x 0.88/0.56/0.77); p99 2.9/1.9/2.7 km against
+        // 2.1/1.3/2.2 km. Ice and water now follow the D-infinity directions, drawn between the two facet neighbours, not
+        // the steepest of the 8 (with D8 on the coarse grid seed 3 was 30.8 -> 25.9%, x 0.84): the buzzsaw on seed 3 takes
+        // a smaller share of its land above the snowline, and the most height off its peaks (780 m at p99). So each seed
+        // must lose at least a tenth of its land above the ELA, and the three together a fifth (x 0.77 measured)
         int FW = Map.FW, n = FW * FW;
         var ela = new float[FW]; var tSea = new float[FW];
         Geology.Snowline(FW, ela, tSea);
-        foreach (var seed in new uint[] { 3, 11 })
+        double sum0 = 0, sum1 = 0;
+        foreach (var seed in new uint[] { 3, 7, 11 })
         {
             (double above, float p99, Geology.Crust c, World w) Run(bool glaciers)
             {
@@ -314,7 +321,8 @@ public class GeologyTests
             }
             var (a0, p0, _, _) = Run(false);
             var (a1, p1, c1, w1) = Run(true);
-            Assert.True(a1 < 0.85 * a0, $"seed {seed}: land above the ELA {a0:P1} without glaciers, {a1:P1} with them");
+            Assert.True(a1 < 0.9 * a0, $"seed {seed}: land above the ELA {a0:P1} without glaciers, {a1:P1} with them");
+            sum0 += a0; sum1 += a1;
             Assert.True(p1 < p0 - 200f, $"seed {seed}: p99 height above the ELA {p0:F0} m without glaciers, {p1:F0} m with them");
             // the glaciers of the last step lie above the snowline, or not far below it (their tongues melt within ~1 km)
             int ice = 0, iceHigh = 0;
@@ -325,6 +333,7 @@ public class GeologyTests
             }
             Assert.True(ice > 0.02 * n && iceHigh > 0.95 * ice, $"seed {seed}: {ice} glacier cells, {iceHigh} of them above ELA - 1 km");
         }
+        Assert.True(sum1 < 0.8 * sum0, $"land above the ELA on the three seeds: {sum0:P1} without glaciers, {sum1:P1} with them");
     }
 
     [Fact] // relief grows with the rate of rock uplift: belts that rise faster stand higher (until crags and glaciers bound them)

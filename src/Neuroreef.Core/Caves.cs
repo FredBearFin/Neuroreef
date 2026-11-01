@@ -2,7 +2,8 @@
 // and lava tubes are where basalt flowed down gentle ground. Built once at Terrain.Build (Terrain.Finish), from the rock,
 // the relief, the rivers and the climate; fixed after that. Depends on the terrain seed alone, like the relief.
 //
-// Limestone. Geology makes three rocks; sedimentary rock is carbonate or clastic. Carbonate platforms grow in clear
+// Limestone. Geology's limestone (Rock.Limestone: the carbonate base of platform cover) is wholly carbonate. Its other
+// sedimentary rock is carbonate or clastic. Carbonate platforms grow in clear
 // shallow seas away from rivers that bring sand and mud (Schlager 2005), so the carbonate share of sedimentary rock rises
 // with distance from the crystalline and volcanic ground that sheds clastic sediment (CARB_L_CLASTIC), and which beds are
 // carbonate is a regional draw (formations: low-frequency noise seeded by the terrain seed). The CARB_SHARE of sedimentary

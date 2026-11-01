@@ -85,10 +85,11 @@ public static class WaterCycle
         float unit = K.P_MEAN * YearFrac;
         Array.Clear(w.LakeQm, 0, nl); Array.Clear(w.LakeLevel, 0, nl);
         for (int i = 0; i < n; i++) if (w.Outlet[i] >= 0) w.LakeQm[w.Outlet[i]] += unit * w.Rain[i] * (w.LakeOf[i] >= 0 ? 1f : 0.5f);
-        // soil: alluvium holds more water
+        // soil: alluvium holds more water (ALLUV_D in metres; Alluvium in elevation)
+        float alluvD = K.ALLUV_D * w.ElevPerM;
         for (int i = 0; i < n; i++)
         {
-            w.SoilCap[i] = K.SOIL_CAP * (1f + K.ALLUV_CAP * (1f - MathK.Exp(-w.Alluvium[i] / K.ALLUV_D)));
+            w.SoilCap[i] = K.SOIL_CAP * (1f + K.ALLUV_CAP * (1f - MathK.Exp(-w.Alluvium[i] / alluvD)));
             w.SoilWater[i] = w.Cell[i] == (byte)Realm.Land ? 0.5f * w.SoilCap[i] : 0f;
             w.Snow[i] = 0f; w.Ground[i] = 0f; w.Deep[i] = 0f; w.PondWater[i] = 0f; w.Seep[i] = 0f; w.Discharge[i] = 0f; w.DischargeMean[i] = 0f;
         }

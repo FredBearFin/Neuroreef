@@ -313,7 +313,7 @@ public class HydrologyTests
         Assert.True(fp > rest + 0.1, $"fertility {fp:F3} on floodplains, {rest:F3} elsewhere");
         // fertility follows alluvium cell by cell: the same soil with alluvium on it is richer
         for (int i = 0; i < n; i++)
-            if (w.Cell[i] == (byte)Realm.Land && w.Alluvium[i] > 3 * K.ALLUV_D) Assert.True(w.Fert[i] >= 0.1f + 0.9f * K.ALLUV_FERT, $"cell {i}: fertility {w.Fert[i]}");
+            if (w.Cell[i] == (byte)Realm.Land && w.Alluvium[i] > 3 * K.ALLUV_D * w.ElevPerM) Assert.True(w.Fert[i] >= 0.1f + 0.9f * K.ALLUV_FERT, $"cell {i}: fertility {w.Fert[i]}");
     }
 
     [Fact] // floods (the water cycle): when a wet year's runoff raises a river's discharge far enough over its mean, it tops its
@@ -455,36 +455,60 @@ public class HydrologyTests
         return w;
     }
 
-    /// <summary>Sinuosity (a ruler of 3 points) of the largest river where it runs between d0 and d1 cells from the sea.</summary>
+    /// <summary>Sinuosity (a ruler of 3 points) of the rivers on the valley floor between d0 and d1 cells from the sea: the
+    /// mean over the six largest rivers with a run of more than 20 points on the floor there (each its longest such run),
+    /// weighted by the run's length.
+    /// 2026-11-01: not the largest river alone. Streams on the side walls run down them onto the floor, and on the steep
+    /// valley the largest river was one: 73 cells across the wall, then down the floor's edge, an L whose turn read as
+    /// sinuosity 1.34. Which river is largest, and so its sinuosity (+-0.2 from river to river at one slope), moves with
+    /// the D-infinity draws (salted by the heights' bits) and the channel heads, here with the vertical scale and
+    /// CHANNEL_C in m/m. The meander law is about the rivers on the floor, and their mean is steady.</summary>
     static float Sinuosity(World w, int d0, int d1)
     {
-        var L = Hydrology.Lines(w)[0];
-        int FW = Map.FW;
+        int FW = Map.FW, rivers = 0;
+        double sum = 0, weight = 0;
         var pts = new System.Collections.Generic.List<(float x, float y)>();
-        foreach (var (x, y, _, _) in L.Points)
+        var run = new System.Collections.Generic.List<(float x, float y)>();
+        foreach (var L in Hydrology.Lines(w))
         {
-            float yy = ((y % FW) + FW) % FW, d = MathF.Min(yy, FW - yy);
-            if (d >= d0 && d <= d1) pts.Add((x, y));
+            pts.Clear(); run.Clear();
+            foreach (var (x, y, _, _) in L.Points)
+            {
+                float yy = ((y % FW) + FW) % FW, d = MathF.Min(yy, FW - yy), xx = ((x % FW) + FW) % FW;
+                bool floor = MathF.Abs(xx - (FW / 2 + 0.5f)) <= 21.5f;   // the 40-cell floor (and a cell's swing beyond it)
+                if (d >= d0 && d <= d1 && floor) { run.Add((x, y)); continue; }
+                if (run.Count > pts.Count) { pts.Clear(); pts.AddRange(run); }
+                run.Clear();
+            }
+            if (run.Count > pts.Count) { pts.Clear(); pts.AddRange(run); }
+            if (pts.Count <= 20) continue;
+            double len = 0;
+            for (int k = 3; k < pts.Count; k += 3) len += Math.Sqrt((pts[k].x - pts[k - 3].x) * (pts[k].x - pts[k - 3].x) + (pts[k].y - pts[k - 3].y) * (pts[k].y - pts[k - 3].y));
+            int e = (pts.Count - 1) / 3 * 3;
+            double chord = Math.Sqrt((pts[e].x - pts[0].x) * (pts[e].x - pts[0].x) + (pts[e].y - pts[0].y) * (pts[e].y - pts[0].y));
+            sum += pts.Count * len / chord; weight += pts.Count;
+            if (++rivers == 6) break;
         }
-        Assert.True(pts.Count > 20, $"{pts.Count} points of the river between {d0} and {d1} cells from the sea");
-        double len = 0;
-        for (int k = 3; k < pts.Count; k += 3) len += Math.Sqrt((pts[k].x - pts[k - 3].x) * (pts[k].x - pts[k - 3].x) + (pts[k].y - pts[k - 3].y) * (pts[k].y - pts[k - 3].y));
-        int e = (pts.Count - 1) / 3 * 3;
-        double chord = Math.Sqrt((pts[e].x - pts[0].x) * (pts[e].x - pts[0].x) + (pts[e].y - pts[0].y) * (pts[e].y - pts[0].y));
-        return (float)(len / chord);
+        Assert.True(rivers >= 2, $"{rivers} rivers with more than 20 points on the valley floor between {d0} and {d1} cells from the sea");
+        return (float)(sum / weight);
     }
 
     [Fact] // an alluvial river meanders on a low gradient and runs straighter as its valley steepens (Leopold & Wolman 1957,
-           // 1960): the same valley at three slopes; its trunk carries ~37 m3/s at bankfull, so it stops meandering above 0.0026
+           // 1960): the same valley at three slopes. Its trunk carries ~37 m3/s at bankfull at the sea, so it stops meandering
+           // above 0.0026 there; but over the reach measured (20-108 cells up) its rivers carry 3-12 m3/s, whose threshold is
+           // 0.004-0.008
     public void SinuosityRisesInLowlands()
     {
         int FW = Map.FW;
         var w = Valley(0.0003f);
-        float flat = Sinuosity(w, 20, FW / 2 - 20), mid = Sinuosity(Valley(0.0012f), 20, FW / 2 - 20), steep = Sinuosity(Valley(0.01f), 20, FW / 2 - 20);
-        // measured about 1.6, 1.44 and 1.00 (tools/RiverProbe valley:0.0003, valley:0.0012, valley:0.01)
-        Assert.True(flat > 1.35f, $"the flat valley's river has sinuosity {flat:F2}");
-        Assert.True(mid < flat - 0.1f && mid > 1.05f, $"sinuosity {mid:F2} on the steeper valley, {flat:F2} on the flat one");
-        Assert.True(steep < 1.05f, $"the steep valley's river has sinuosity {steep:F2}");
+        float flat = Sinuosity(w, 20, FW / 2 - 20), mid = Sinuosity(Valley(0.004f), 20, FW / 2 - 20), steep = Sinuosity(Valley(0.01f), 20, FW / 2 - 20);
+        // measured 1.58, 1.20 and 1.00 (2026-11-01; 1.49, 1.16 and 1.00 on the D-infinity rivers before the mountains). The
+        // middle valley was 0.0012 until 2026-11-01, measured 1.6 and 1.44 then on the largest river alone; but 0.0012 is
+        // well inside the meandering range over this reach (P ~1.7-1.9 by the law), where the floor bounds the meanders of
+        // both valleys (the rivers' mean was 1.46 on both: no difference to find), so the slope where they straighten is used
+        Assert.True(flat > 1.35f, $"the flat valley's rivers have sinuosity {flat:F2}");
+        Assert.True(mid < flat - 0.2f && mid > 1.05f, $"sinuosity {mid:F2} on the steeper valley, {flat:F2} on the flat one");
+        Assert.True(steep < 1.05f, $"the steep valley's rivers have sinuosity {steep:F2}");
         // the meanders stay continuous channels down to the sea
         for (int i = 0; i < FW * FW; i++)
         {

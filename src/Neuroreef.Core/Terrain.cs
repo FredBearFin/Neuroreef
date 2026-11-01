@@ -132,12 +132,13 @@ public static class Terrain
         // beside a river hold ponds and wetlands (oxbows, backswamps), and the denser channel network left few hollows
         // POND_GAP from every river (1 pond site on seeds 3 and 4)
         uint ps = Rng.Hash(w.Seed, 0, 0, Rs.Pond);
+        float basinMin = K.BASIN_MIN * w.ElevPerM, alluvD = K.ALLUV_D * w.ElevPerM;   // metres to elevation (2026-11-01)
         for (int y = 0; y < FW; y++)
             for (int x = 0; x < FW; x++)
             {
                 int i = y * FW + x;
                 if (w.Cell[i] != (byte)Realm.Land || standDist[i] < K.POND_GAP || w.DistWater[i] < K.POND_GAP_RIVER) continue;
-                if (net.Fill[i] - w.Elev[i] >= K.BASIN_MIN && Rng.U(ps, 0, (uint)i, 0) < MathF.Min(1f, Nature.Ponds)) { w.PondSite[i] = 1; continue; }
+                if (net.Fill[i] - w.Elev[i] >= basinMin && Rng.U(ps, 0, (uint)i, 0) < MathF.Min(1f, Nature.Ponds)) { w.PondSite[i] = 1; continue; }
                 bool low = true;
                 for (int dy = -K.POND_R; dy <= K.POND_R && low; dy++)
                     for (int dx = -K.POND_R; dx <= K.POND_R; dx++)
@@ -160,7 +161,7 @@ public static class Terrain
                 // parent material (Revision R): the soil weathers from the rock beneath it; FERT_VAR of local variation on top
                 w.Fert[i] = Math.Clamp(Rock.Fert[w.Rock[i]] + K.FERT_VAR * 2f * (m - 0.5f), 0.1f, 1f);
                 // alluvium (Revision Q): sediment laid down by running water makes young, rich soil
-                if (w.Cell[i] == (byte)Realm.Land) w.Fert[i] = MathF.Min(1f, w.Fert[i] + K.ALLUV_FERT * (1f - MathK.Exp(-w.Alluvium[i] / K.ALLUV_D)));
+                if (w.Cell[i] == (byte)Realm.Land) w.Fert[i] = MathF.Min(1f, w.Fert[i] + K.ALLUV_FERT * (1f - MathK.Exp(-w.Alluvium[i] / alluvD)));
                 w.Moisture[i] = w.MoistBase[i];
             }
         if (Climate.On)

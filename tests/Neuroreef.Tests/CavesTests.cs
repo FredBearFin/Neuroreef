@@ -36,7 +36,9 @@ public class CavesTests
         for (int i = 0; i < n; i++)
         {
             byte k = w.CaveKind[i];
-            if (w.Carb[i] > 0f) Assert.Equal(Rock.Sedimentary, w.Rock[i]);
+            // carbonate is sedimentary rock, or Geology's limestone (2026-11-01: Rock.Limestone), which is wholly carbonate
+            if (w.Carb[i] > 0f) Assert.True(w.Rock[i] == Rock.Sedimentary || w.Rock[i] == Rock.Limestone, $"cell {i}: carbonate {w.Carb[i]} on {Rock.Names[w.Rock[i]]}");
+            if (w.Rock[i] == Rock.Limestone) Assert.Equal(1f, w.Carb[i]);
             bool karst = w.Carb[i] >= K.CARB_MIN && w.LakeOf[i] < 0;
             if ((k & (Caves.Karst | Caves.Sinkhole | Caves.Spring | Caves.Losing | Caves.Ponor)) != 0 || w.CaveSpring[i] >= 0 || w.CaveSink[i] > 0f)
                 Assert.True(karst, $"cell {i}: karst feature {k} on rock {Rock.Names[w.Rock[i]]} with carbonate {w.Carb[i]}");
@@ -129,10 +131,17 @@ public class CavesTests
         }
         double without = Run(false), with = Run(true);
         float take = pour * w.CaveSink[sink];
+        // what a ponor does not swallow (1 - CAVE_PONOR) runs on, and may sink again downstream into the same spring's
+        // conduits (2026-11-01: on the combined terrain the first such sinkhole, a ponor, has another ponor of the same spring
+        // 3 cells down its stream, which took 66 of the 120 that ran on): the most that can emerge is what every swallowing
+        // cell of this spring on the overflow's course could take of it
+        double most = take, left = pour - take;
+        for (int c = w.Recv[sink]; c >= 0 && left > 0; c = w.Recv[c])
+            if (w.CaveSink[c] > 0f && w.CaveSpring[c] == sp) { most += left * w.CaveSink[c]; left *= 1f - w.CaveSink[c]; }
         // the deep groundwater passes GW_TAU's share of itself on each update; the rest of what arrived has emerged
         float k = MathF.Min(1f, 365f * WaterCycle.YearFrac / K.GW_TAU);
         Assert.True(with - without >= 0.8 * (1 - k) * take, $"poured {pour:F0}, swallowed {take:F0}, {with - without:F0} more emerged at spring {sp}");
-        Assert.True(with - without <= take * 1.0001 + 1e-3, $"swallowed {take:F0}, {with - without:F0} more emerged");
+        Assert.True(with - without <= most * 1.0001 + 1e-3, $"swallowed {take:F0} here, at most {most:F0} with the overflow's own sinkholes, {with - without:F0} more emerged");
         restore();
     }
 

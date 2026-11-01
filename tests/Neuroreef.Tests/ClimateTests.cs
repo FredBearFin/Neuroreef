@@ -70,7 +70,11 @@ public class ClimateTests
         // Mountains (2026-11-01) re-pinned it: each rock fails at its own critical slope, talus, glaciers above the snowline,
         // the relief no longer scaled down to 3,000 m (H_RELIEF 8,000 m, the game's vertical scale) and limestone, so the same
         // seed has other land, water and plants. Also the D-infinity rivers and karst caves. It was 0x753FBC092B902E01 before the mountains.
-        Assert.Equal(0xC7DCAB9771F0850DUL, h);
+        // The terrain integration (2026-11-01) re-pinned it: the depth constants LAKE_MIN_DEPTH, ALLUV_D, BASIN_MIN, RIVER_BANK
+        // and FLOOD_HAND are in metres (they were in elevation, 2.7 x deeper at the 8,000-m relief), and a terminal lake no
+        // longer stands over a saddle above the dry hollow beyond it, so lakes, soils, ponds and banks moved. It was
+        // 0xC7DCAB9771F0850D on the merged mountains, rivers and caves before.
+        Assert.Equal(0xA072ED289084F27EUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
