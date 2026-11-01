@@ -14,9 +14,9 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WORLD | 1024 | units | side of the toroidal world | HT |
 | FCELL | 4 | units | field cell side | V1 |
 | FW | 256 | cells | field grid side (WORLD/FCELL) | - |
-| HCELL | 8 | units | spatial-hash cell side (bodies): the 7x7 cells around an animal hold everything it can perceive in a step, MAX_PERCEIVE = 3 x HCELL | derived (2026-11-01): from the largest perception radius of a step in real metres (MAX_SIGHT widened by the path, Decide.Perceive); was 16 when sight reached 32 units (1.7 km) |
+| HCELL | 8 | units | spatial-hash cell side (bodies) at the default body sizes: the 7x7 cells around an animal hold everything it can perceive in a step, MAX_PERCEIVE = 3 x HCELL (a world of bigger bodies has wider cells: Map.HCell, BodySize) | derived (2026-11-01): from the largest perception radius of a step in real metres (MAX_SIGHT widened by the path, Decide.Perceive); was 16 when sight reached 32 units (1.7 km) |
 | GW | 128 | cells | spatial-hash grid side | - |
-| HCELL_CALL | 32 | units | spatial-hash cell side (callers): the 5x5 cells around a listener hold every caller it can hear, MAX_HEAR <= 2 x HCELL_CALL | derived (2026-11-01): from the loudest call in real metres (HEAR_R_M x MASS_HI^(1/3) = 3 km); a map side must be a multiple of it |
+| HCELL_CALL | 32 | units | spatial-hash cell side (callers) at the default body sizes: the 5x5 cells around a listener hold every caller it can hear, MAX_HEAR <= 2 x HCELL_CALL (Map.HCellCall for other body sizes, BodySize) | derived (2026-11-01): from the loudest call in real metres (HEAR_R_M x MASS_HI^(1/3) = 3 km); a map side must be a multiple of it |
 | MAX_PERCEIVE | 24 | units | the farthest a step's perception reaches (sight along the way travelled, Decide.Perceive): the 7x7 hash neighbourhood | derived: 3 x HCELL (1.3 km); the largest walker's reaches ~18 units, so it binds only for the fastest fliers |
 | CAPACITY | 16384 | slots | agent slots (animals, eggs, embryos) a world starts with: it grows as births need more, limited only by memory (World.Grow) | HT: ~212 KB per slot with 256-unit brains (World.SlotBytes); not a cap since 2026-10-31: a seed gives the same run from any start |
 | LAKE_SHARE | 0.1 | fraction | share of the map below sea level (Nature.Water, the default): the sea; lakes above it come from the water balance of closed basins (2026-10-31; before, every cell below this quantile was a lake at one level) | HT |
@@ -28,7 +28,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LONG_RING | 2048 | samples | long-history ring length (one sample in LONG_EVERY) | HT: with LONG_EVERY it covers 33 million steps |
 | LONG_EVERY | 512 | samples | samples between long-history samples | HT |
 | MAX_NEIGH | 64 | animals | max neighbours examined per animal per step | HT |
-| MAX_SIGHT | 6.06592 | units | max sight range: the farthest eye (MASS_HI, sight gene x BODY_RANGE_TRAIT, the narrowest field of view FOV_LO) while scanning (SCAN_SIGHT); 2.0913 = MASS_HI^EXP_SIGHT (a test checks it) | derived (2026-11-01): 332 m; was 32 units (1.7 km) for any eye, even a mouse's |
+| MAX_SIGHT | 6.06592 | units | max sight range at the default body sizes (BodySize.MaxSight: x (largest body / MASS_HI)^EXP_SIGHT): the farthest eye (MASS_HI, sight gene x BODY_RANGE_TRAIT, the narrowest field of view FOV_LO) while scanning (SCAN_SIGHT); 2.0913 = MASS_HI^EXP_SIGHT (a test checks it) | derived (2026-11-01): 332 m; was 32 units (1.7 km) for any eye, even a mouse's |
 | SCAN_SIGHT | 1.3 | x | sight gained while scanning (standing still and looking: SCAN) | HT |
 
 ## 2. Units
@@ -206,10 +206,10 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_SPEED | 0.4 | - | basal cost per unit of extra speed | HT |
 | COST_SIGHT | 0.15 | - | basal cost per unit of extra sight | HT |
 | ARMOUR_DRAG | 0.2 | - | speed loss per unit of armour in water and air (on land armour is part of the load the legs carry, LOAD_DRAG) | HT |
-| MASS_LO | 0.1 | M | smallest body mass a mass gene can give (the floor of the smallest size class) | ECO: Revision M: 0.01 gave tiny bodies 32x the numbers from the same food; the user (2026-10-30) asked for size classes with their own floors |
-| FLOOR_CLASSES | 4 | - | number of body-plan size classes; class k cannot be smaller than Body.Floors[k] (0.1, 1, 3, 10) | designed: the user (2026-10-30): classes with different floors, inherited, rarely changing; size evolves freely above the floor |
+| MASS_LO | 0.1 | M | smallest body mass a mass gene can give (the floor of the smallest size class) by default; the setup screen's Bodies (BodySize.Min, 0.001..50000 kg) may set another | ECO: Revision M: 0.01 gave tiny bodies 32x the numbers from the same food; the user (2026-10-30) asked for size classes with their own floors |
+| FLOOR_CLASSES | 4 | - | number of body-plan size classes; class k cannot be smaller than Body.Floors[k] (0.1, 1, 3, 10 by default; in another body-size range the same log proportions of it, or the floors set up, BodySize) | designed: the user (2026-10-30): classes with different floors, inherited, rarely changing; size evolves freely above the floor |
 | FLOOR_MUT | 5E-05 | - | chance per birth that the size class steps up or down one class | designed: the user: inherited, rarely changes (a body-plan change is rare; ~1 in 20,000 births) |
-| MASS_HI | 40 | M | largest body mass a mass gene can give | ECO: a large mammal-sized organism (relative units) |
+| MASS_HI | 40 | M | largest body mass a mass gene can give by default; the setup screen's Bodies (BodySize.Max) may set another | ECO: a large mammal-sized organism (relative units) |
 | LIMB_MIN | 0.3 | - | organ size (0..1) below which an organ is vestigial (for describing and drawing bodies; speeds are smooth) | - |
 | COST_LIMB | 0.15 | xbasal | basal cost per unit of fin size per pair of fins (legs pay instead while they walk: LEG_SWING) | ECO: locomotor muscle is maintained at a cost |
 | COST_WING | 0.15 | xbasal | basal cost per unit of wing size (upkeep of wings and flight muscle; the power of flying is paid while airborne, FLIGHT_MULT) | ECO: flight muscle is 15-25% of a bird's mass (Greenewalt 1962; Marden 1987), maintained like any muscle; until 2026-10-31 this was 0.5 x mass^(1/3), standing in for the flight power now paid per step |
@@ -220,7 +220,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TAU_FERM | 2 | - | fermentation time scale of fibre, in units of M^0.25 retention: the share fermented is 1 - exp(-M^0.25 / this), relative to M = 1 | ECO: Jarman-Bell principle (Demment & Van Soest 1985; Clauss et al. 2013): fibre digestibility rises from ~25% in small to ~60% in large herbivores; 2 gives x0.63 at M = 0.1, x1.5 at 10, x1.8 at 40 |
 | DIET_BUDGET | 1 | - | length (L2 norm) of the vector of digestive efficiencies: a generalist spreads it, a specialist concentrates it | ECO: digestive specialisation trades off breadth against efficiency |
 | LITTER_MAX | 12 | young | largest litter a gene can give | - |
-| NEWBORN_MIN | 0.01 | M | smallest newborn (or egg) mass | ECO: eggs and young have a physical smallest size (Revision M) |
+| NEWBORN_MIN | 0.01 | M | smallest newborn (or egg) mass by default: a tenth of MASS_LO, and a tenth of the smallest body in another range (BodySize.NewbornMin) | ECO: eggs and young have a physical smallest size (Revision M) |
 | BIRTH_LO | 0.01 | - | smallest newborn mass as a share of adult mass | ECO: fish and insect eggs |
 | BIRTH_HI | 0.3 | - | largest newborn mass as a share of adult mass | ECO: precocial mammals |
 | FOV_LO | 120 | degrees | narrowest field of view a gene can give | ECO: forward-facing predators |
@@ -242,7 +242,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | CALL_SYL | 0.5 | - | share of a call's cost that grows with each syllable: an utterance of n syllables costs C_CALL x basal x (1 - CALL_SYL + CALL_SYL x n) | ECO: a longer song costs more, but much of a call's cost is the start-up (Oberweger & Goller 2001; Ophir et al. 2010) |
 | HEAR_R_M | 870 | m | how far a full voice of a body of M=1 kg carries (range = HEAR_R_M x voice x M^(1/3)) | ECO: bigger animals call louder and are heard further (Fletcher 2004; Wiley & Richards 1978): a songbird of 20-60 g is heard by its kind at ~100-300 m (Brenowitz 1982), a 40 kg wolf's howl at 6-10 km (Harrington & Mech 1979); x M^(1/3) through both gives 0.5-2.3 km at 1 kg. The old 16 units (870 m) lies in that range, so hearing is kept; until 2026-11-01 calls were cut off at MAX_SIGHT (1.7 km) |
 | HEAR_R | 15.9633 | units | how far a full voice of a body of M=1 carries, in world units | derived: HEAR_R_M / M_PER_UNIT = 16 |
-| MAX_HEAR | 54.5937 | units | the farthest any call carries: HEAR_R x MASS_HI^(1/3) (3.42, a test checks it) at a full voice | derived: 3 km; the callers' hash (HCELL_CALL) is sized from it |
+| MAX_HEAR | 54.5937 | units | the farthest any call carries at the default body sizes: HEAR_R x MASS_HI^(1/3) (3.42, a test checks it) at a full voice (BodySize.MaxHear: of the largest body of the range) | derived: 3 km; the callers' hash (HCELL_CALL) is sized from it |
 | FOCAL_KEEP | 0.7 | - | a listener keeps attending to the same caller while it calls at least this share as loud as the loudest alike caller | ECO/HT: listeners stream one source among many (Bee & Micheyl 2008); hysteresis keeps attention from flickering |
 | TMPL_HALF | 1000 | steps | steps over which the counts of a remembered tutor's syllable pairs halve | ECO/HT: a template fades without new tutoring; about a third of a year (Doupe & Kuhl 1999; Tchernichovski et al. 2001); the young copy form from elders, so a language changes by iterated learning (Kirby, Cornish & Smith 2008) |
 | IMIT_RBAR | 0.05 | /step of calling | rate of the running mean of an organism's own match to its template | HT: a baseline, as RBAR_RATE is for reward |

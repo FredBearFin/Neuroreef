@@ -76,6 +76,7 @@ public static class Program
         if (newPrehistory && !o.NoSetup && !o.SetupDone) Setup.Run(o);
         if (!o.ResumePrehistory) o.ApplyNature(prehistory: newPrehistory);   // a resumed one already took its own
         Console.WriteLine("nature: " + Nature.Describe());
+        Console.WriteLine(BodySize.Describe());
         Console.WriteLine($"seed {o.Seed} (run with --seed {o.Seed} to make this same world again)");
         return Host.Run(o, bank);
     }

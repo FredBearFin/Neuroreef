@@ -47,6 +47,32 @@ public static class Decide
     }
 
     /// <summary>
+    /// For a hash grid of side g: true for each Ring offset that lands on a cell an earlier offset already gave (2026-11-01).
+    /// Only a grid narrower than the 7x7 neighbourhood has such offsets (a world of big bodies on a small map, or the
+    /// callers' grid of a 128 map); there each cell is searched once, so no animal is counted twice. On a grid of 7 or more
+    /// every entry is false and the search is as before.
+    /// </summary>
+    static bool[] RingRepeats(int g)
+    {
+        var r = new bool[Ring.Length];
+        if (g >= 7) return r;
+        for (int o = 0; o < Ring.Length; o++)
+            for (int k = 0; k < o && !r[o]; k++)
+                r[o] = World.WrapI(Ring[o].dx - Ring[k].dx, g) == 0 && World.WrapI(Ring[o].dy - Ring[k].dy, g) == 0;
+        return r;
+    }
+    sealed class RepeatTable { public int G = -1; public bool[] R = Array.Empty<bool>(); }
+    static RepeatTable _repeatBody = new(), _repeatCall = new();
+    static bool[] Repeats(ref RepeatTable cache, int g)
+    {
+        var c = cache;   // one read of one reference: another worker may replace it with an equal table
+        if (c.G == g) return c.R;
+        var t = new RepeatTable { G = g, R = RingRepeats(g) };
+        cache = t;
+        return t.R;
+    }
+
+    /// <summary>
     /// What eating here is worth to this animal (0..1): the energy of one bite of the best food in the cell it can
     /// digest, against what it burns per step (FIELD_METAB x basal), as 1 - exp(-bite / need). A bite that pays for a
     /// step reads 0.63. (Before 2026-10-30 it was measured against the best food the diet could ever give, so a
@@ -85,12 +111,12 @@ public static class Decide
     /// </summary>
     public static float Perceive(float sight, bool scanning, float moved)
     {
-        float r = MathF.Min(K.MAX_SIGHT, sight * (scanning ? K.SCAN_SIGHT : 1f));
-        return MathF.Min(K.MAX_PERCEIVE, MathF.Sqrt(r * r + 2f * r * moved * (1f / MathF.PI)));
+        float r = MathF.Min(BodySize.MaxSight, sight * (scanning ? K.SCAN_SIGHT : 1f));
+        return MathF.Min(Map.MaxPerceive, MathF.Sqrt(r * r + 2f * r * moved * (1f / MathF.PI)));
     }
 
     /// <summary>The hash cells to search for a perception radius R: the 3x3, 5x5 or 7x7 around its cell.</summary>
-    public static int Offsets(float R) => R <= K.HCELL ? 9 : R <= 2 * K.HCELL ? 25 : 49;
+    public static int Offsets(float R) => R <= Map.HCell ? 9 : R <= 2 * Map.HCell ? 25 : 49;
 
     /// <summary>How near another of this size (cube root of mass) must be for a strike to reach it: its own reach (body and
     /// sprint, Body.ReachM), the other's body, and the way it can still go this step (vmax; 0 for the strike itself).</summary>
@@ -144,7 +170,7 @@ public static class Decide
              strikeKin = new() { D = 1e9f, J = -1 };
         float o2Mass = -1f, strikeBigMass = -1f;
         float reach = w.PReach[i];
-        int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
+        int hcx = (int)(x / Map.HCell), hcy = (int)(y / Map.HCell);
         int nOff = Offsets(R);
         Span<int> neighbours = stackalloc int[K.MAX_NEIGH];
         Span<uint> priorities = stackalloc uint[K.MAX_NEIGH];
@@ -287,9 +313,11 @@ public static class Decide
         int jA = -1, jB = -1; float lA = 0, lB = 0, dxA = 0, dyA = 0, dxB = 0, dyB = 0, dA = 0, dB = 0;   // loudest alike caller, loudest of any kind
         int prevF = w.IFocal[i]; float lPrev = 0, dxP = 0, dyP = 0, dP = 0; bool prevAlike = false;
         if (prevF >= 0 && w.Serial[prevF] != w.IFocalSerial[i]) prevF = -1;          // the slot holds another animal now
-        int ccx = (int)(x / K.HCELL_CALL), ccy = (int)(y / K.HCELL_CALL);           // the callers' hash (HCELL_CALL; MAX_HEAR <= 2 cells)
+        int ccx = (int)(x / Map.HCellCall), ccy = (int)(y / Map.HCellCall);         // the callers' hash (Map.HCellCall; BodySize.MaxHear <= 2 cells)
+        var callRepeat = Repeats(ref _repeatCall, Map.CGW);
         for (int o = 0; o < 25; o++)
         {
+            if (callRepeat[o]) continue;   // a cell already searched (a grid narrower than 5)
             int hc = World.WrapI(ccy + Ring[o].dy, Map.CGW) * Map.CGW + World.WrapI(ccx + Ring[o].dx, Map.CGW);
             for (int q = w.CallStart[hc], qe = w.CallStart[hc + 1]; q < qe; q++)
             {
@@ -569,8 +597,10 @@ public static class Decide
         candidates = 0;
         var near = w.D.Near;
         uint mySerial = w.Serial[i];
+        var repeat = Repeats(ref _repeatBody, Map.GW);
         for (int o = 0; o < nOff; o++)
         {
+            if (repeat[o]) continue;   // a cell already searched (a grid narrower than 7)
             int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
             for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
             {
@@ -643,10 +673,12 @@ public static class Decide
             allMate = new() { D = 1e9f, J = -1 }, allStrike = new() { D = 1e9f, J = -1 },
             allStrikeBig = new() { D = 1e9f, J = -1 }, allStrikeKin = new() { D = 1e9f, J = -1 };
         float o2Mass = -1f, strikeBigMass = -1f;
-        int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
+        int hcx = (int)(x / Map.HCell), hcy = (int)(y / Map.HCell);
         float vmax = w.Vmax(i);
+        var repeat = Repeats(ref _repeatBody, Map.GW);
         for (int o = 0; o < nOff; o++)
         {
+            if (repeat[o]) continue;
             int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
             for (int q = w.CellStart[hc], qe = w.CellStart[hc + 1]; q < qe; q++)
             {

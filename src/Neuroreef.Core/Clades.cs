@@ -107,8 +107,8 @@ public static class Clades
         int B = G.BODY;
         // Realm is a founding viability constraint, not a body template.
         body[G.B_FLOOR - B] = (sbyte)Math.Clamp(floorClass, 0, K.FLOOR_CLASSES - 1);
-        float fl = Body.Floors[body[G.B_FLOOR - B]];
-        body[G.B_MASS - B] = G.ToGeneLog(fl * MathK.Pow(K.MASS_HI / fl, U(0)), K.MASS_LO, K.MASS_HI);
+        float fl = Body.Floors[body[G.B_FLOOR - B]];   // its class's floor up to the world's largest body, on the world's scale (BodySize)
+        body[G.B_MASS - B] = G.ToGeneLog(fl * MathK.Pow(BodySize.Max / fl, U(0)), BodySize.Min, BodySize.Max);
         body[G.B_SPEED - B] = (sbyte)((U(1) - 0.5f) * 60f);
         body[G.B_SIGHT - B] = (sbyte)((U(2) - 0.5f) * 60f);
         // armour and weapons from the same range, so neither side of an arms race starts ahead (Revision L, ecology review)
@@ -206,7 +206,7 @@ public static class Clades
     static readonly string[] VisName = { "size", "eyes", "armour", "weapons", "legs", "fins", "wings", "leg pairs", "fin pairs", "eye pairs",
         "body length", "body width", "body height", "head size", "neck length", "tail length", "limb position", "limb shape", "fin shape", "wing shape" };
     const int V = 20;
-    static readonly float MassUnit = MathK.Log(1.5f) / MathK.Log(K.MASS_HI / K.MASS_LO) * 254f;
+    static float MassUnit => MathK.Log(1.5f) / MathK.Log(BodySize.Max / BodySize.Min) * 254f;   // on the world's mass-gene scale (BodySize)
     static bool PairTrait(int k) => k >= 7 && k <= 9;
     static float VisUnit(int k) => k == 0 ? MassUnit : PairTrait(k) ? 254f / 4f : 0.15f * 254f;
     // size is the body's actual size (its class floor included), not the mass gene alone
@@ -218,7 +218,7 @@ public static class Clades
             Body.Dimensions(g[G.B_LENGTH], g[G.B_WIDTH], g[G.B_HEIGHT], out float length, out float width, out float height);
             return MathK.Log(k == 10 ? length : k == 11 ? width : height) / MathK.Log(1.5f);
         }
-        return k == 0 ? MathK.Log(w.PM[i] / K.MASS_LO) / MathK.Log(1.5f) : g[VisGene[k]] / VisUnit(k);
+        return k == 0 ? MathK.Log(w.PM[i] / BodySize.Min) / MathK.Log(1.5f) : g[VisGene[k]] / VisUnit(k);
     }
 
     /// <summary>

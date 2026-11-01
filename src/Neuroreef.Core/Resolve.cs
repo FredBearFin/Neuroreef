@@ -536,7 +536,7 @@ public static class Resolve
         float e = mass * Pools.Rho[pool] * eff;
         // water from food and from digesting it (metabolic water: how seed-eating desert rodents live without drinking)
         float content = FoodWater[pool] * (LivePlant(pool) ? MathF.Min(1f, w.Moisture[cell] * 1.4f) : 1f);
-        float wet = K.K_FOODWATER * (mass * content + K.MET_WATER * e / K.RHO_MEAT) / MathF.Max(w.MassOf(i), 1e-3f);
+        float wet = K.K_FOODWATER * (mass * content + K.MET_WATER * e / K.RHO_MEAT) / MathF.Max(w.MassOf(i), 1e-6f);   // (a guard only: a 1 g world's newborns are 0.1 g)
         float rel = MathF.Min(w.Thirst[i], wet);
         w.Thirst[i] -= rel;
         w.Gut[i] += mass; w.GutEnergy[i] += e; w.GutWaste[i] += mass * (1f - eff);

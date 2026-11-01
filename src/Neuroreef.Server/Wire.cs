@@ -345,7 +345,9 @@ public static class Wire
     {
         metresPerUnit = K.M_PER_UNIT, stepHours = K.STEP_H, stepSeconds = K.STEP_S, stepsPerDay = K.STEPS_PER_DAY, stepsPerYear = K.T_SEASON,
         mapWidthM = Map.WidthM, fieldCellM = K.GEO_CELL_M, bodyLenM1kg = K.BODY_L_M, sightM1kg = K.C_SIGHT_M, hearM1kg = K.HEAR_R_M,
-        maxSightM = K.MAX_SIGHT * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
+        maxSightM = BodySize.MaxSight * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
+        // the world's body sizes (BodySize, 2026-11-01): record byte 12 is a body's mass on the log scale massMinKg..massMaxKg
+        massMinKg = BodySize.Min, massMaxKg = BodySize.Max, floorsKg = BodySize.Floors,
     };
 
     /// <summary>

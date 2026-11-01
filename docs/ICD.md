@@ -97,7 +97,7 @@ Each record:
 | 6 | u8 | bits 0–1 stage (0 egg, 1 juvenile, 2 adult); bit 2 carrying; bit 3 scanning; bit 4 resting; bits 5–7 energy/Emax × 7 |
 | 7 | u8 | actions fired this step: bit 0 EAT, 1 STRIKE, 2 DRINK, 3 MATE, 4 REST, 5 MARK, 6 LAY, 7 CACHE |
 | 8 | u32 | serial (unique for the run) |
-| 12 | i8 | body gene: mass (value = MASS_LO·(MASS_HI/MASS_LO)^((g+128)/255)) |
+| 12 | i8 | the body's actual mass on the mass gene's scale: kg = lo·(hi/lo)^((g+128)/255), lo and hi the world's body sizes (units `massMinKg`, `massMaxKg`; 0.1 and 40 by default) |
 | 13 | i8 | body gene: legs (organ size (g+127)/254) |
 | 14 | i8 | body gene: fins |
 | 15 | i8 | body gene: wings |
@@ -230,6 +230,7 @@ divided by `metresPerUnit`. `meta.units` and every `status.units` carry:
 | `fieldCellM` | 218 | a field cell's side |
 | `bodyLenM1kg` | 0.1 | body length of a 1 kg body before its shape genes (a cube of water of its mass) |
 | `sightM1kg`, `maxSightM` | 60, 332 | how far a 1 kg eye sees a 1 kg body; the farthest any eye sees |
+| `massMinKg`, `massMaxKg`, `floorsKg` | 0.1, 40, [0.1, 1, 3, 10] | the world's body sizes (BodySize, set up once; 2026-11-01): the mass gene's range and the four size classes' smallest bodies; record byte 12 is on this scale; `maxSightM` follows the largest body |
 | `hearM1kg` | 870 | how far a full voice of a 1 kg body carries (× voice × M^(1/3)) |
 | `senseWaterM` | 1744 | how far drinkable water is sensed (SENSE_WATER cells) |
 

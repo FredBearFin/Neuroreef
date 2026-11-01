@@ -319,7 +319,7 @@ public sealed class Simulation : IDisposable
         {
             byte st = w.StageOf[i];
             if (st == St.Dead || st == St.Embryo) { w.CellOf[i] = -1; continue; }
-            int cx = (int)(w.X[i] / K.HCELL), cy = (int)(w.Y[i] / K.HCELL);
+            int cx = (int)(w.X[i] / Map.HCell), cy = (int)(w.Y[i] / Map.HCell);
             if ((uint)cx >= Map.GW) cx = World.WrapI(cx, Map.GW);
             if ((uint)cy >= Map.GW) cy = World.WrapI(cy, Map.GW);
             int c = cy * Map.GW + cx;
@@ -350,13 +350,13 @@ public sealed class Simulation : IDisposable
         // MAX_HEAR, so that the 5x5 callers' cells around a listener hold every caller it can hear. A listener scans all
         // of them, with no cap on how many
         int nc = Map.CGW * Map.CGW;
-        var callCount = w.CellCount;   // (GW^2 >= CGW^2 cells: HCELL_CALL > HCELL)
+        var callCount = w.CellCount;   // (GW^2 >= CGW^2 cells: Map.HCellCall >= Map.HCell)
         Array.Clear(callCount);
         for (int i = 0; i < w.Cap; i++)
         {
             w.CallR[i] = 0f;
             if (w.CellOf[i] < 0 || w.Call[i * F.MAX_SYL] == 0 || w.StageOf[i] < St.Juvenile) continue;
-            w.CallR[i] = MathF.Min(K.MAX_HEAR, K.HEAR_R * w.PVoice[i] * MathK.Cbrt(w.MassOf(i)));
+            w.CallR[i] = MathF.Min(BodySize.MaxHear, K.HEAR_R * w.PVoice[i] * MathK.Cbrt(w.MassOf(i)));
             callCount[CallCell(w.X[i], w.Y[i])]++;
         }
         acc = 0;
@@ -367,10 +367,10 @@ public sealed class Simulation : IDisposable
             if (w.CallR[i] > 0f) { int c = CallCell(w.X[i], w.Y[i]); w.CallSorted[w.CallStart[c] + callCount[c]++] = i; }
     }
 
-    /// <summary>The callers' hash cell (HCELL_CALL units a side) of a place.</summary>
+    /// <summary>The callers' hash cell (Map.HCellCall units a side) of a place.</summary>
     public static int CallCell(float x, float y)
     {
-        int cx = (int)(x / K.HCELL_CALL), cy = (int)(y / K.HCELL_CALL);
+        int cx = (int)(x / Map.HCellCall), cy = (int)(y / Map.HCellCall);
         if ((uint)cx >= Map.CGW) cx = World.WrapI(cx, Map.CGW);
         if ((uint)cy >= Map.CGW) cy = World.WrapI(cy, Map.CGW);
         return cy * Map.CGW + cx;
