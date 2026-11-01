@@ -595,7 +595,7 @@ public static class Resolve
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + 0.3f);
             w.PendingR[v] -= K.R_PAIN * drain / MathF.Max(w.EmaxOf(v), 1e-3f);
             float m = MathF.Min(space, drain / K.RHO_BLOOD);
-            if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell);
+            if (m > 0) { rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell); w.T.EatenMass[(int)Pool.Blood] += m; }   // reporting only
             bool dead = w.Energy[v] <= 0;
             w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], dead ? Telemetry.F_DRAINED : Telemetry.F_BITE, w.Step, w.Serial[a], w.Serial[v]);
             if (dead) { w.T.Kills[w.Spc[a]]++; w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
@@ -604,7 +604,7 @@ public static class Resolve
         // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
         float carcass = K.C_CARC * w.MassOf(v) + ev / K.RHO_MEAT;
         float eat = MathF.Min(space, carcass);
-        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; }
+        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; w.T.EatenMass[(int)Pool.Meat] += eat; }   // reporting only
         w.T.Kills[w.Spc[a]]++;   // only a death counts as a kill (a blood meal is not one)
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
         w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], egg ? Telemetry.F_EGG : Telemetry.F_KILL, w.Step, w.Serial[a], w.Serial[v]);
