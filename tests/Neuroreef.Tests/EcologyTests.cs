@@ -907,7 +907,10 @@ public class EcologyTests
         void Year(float anom) { w.RainAnom = anom; for (int u = 0; u < perYear; u++) { w.Step += K.WC_EVERY; WaterCycle.Update(w); } }
         int sites = 0; for (int c = 0; c < n; c++) sites += w.PondSite[c];
         Assert.True(sites > 0, "no pond sites");
-        int Ponded() { int k = 0; for (int c = 0; c < n; c++) if (w.PondSite[c] != 0 && w.Wet[c] == 2) k++; return k; }
+        // a pond holds water (PondWater >= POND_WET; 2026-11-01: not Wet == 2, which since the wetlands merge also marks a
+        // waterlogged wetland: on 16 m cells the pond sites lie in riparian hollows less than a metre above their stream, whose
+        // water table the stream holds up through a drought, so all 12 read Wet == 2 while their ponds fell from 12 to 9)
+        int Ponded() { int k = 0; for (int c = 0; c < n; c++) if (w.PondSite[c] != 0 && w.PondWater[c] >= K.POND_WET) k++; return k; }
         Year(0.5f);   // a wet year
         int wet = Ponded();
         Assert.True(wet > sites / 3, $"{wet} of {sites} ponds full in a wet year");
@@ -917,9 +920,7 @@ public class EcologyTests
         int dry = Ponded();
         // (2026-10-31: was < 0.8 x wet. On land graded by its rivers the few pond sites left are mostly fed by groundwater
         // and outlast a drought: 14 against 16)
-        // (2026-11-01, the 1 km world: on 16 m cells every pond site left is fed by groundwater and holds through the drought:
-        // 12 against 12)
-        Assert.True(dry <= wet, $"{dry} ponds after a drought, {wet} after a wet year");
+        Assert.True(dry < wet, $"{dry} ponds after a drought, {wet} after a wet year");
         for (int c = 0; c < n; c++) if (w.Wet[c] != 0) Assert.Equal(0f, w.DistDrink[c]);
     }
 

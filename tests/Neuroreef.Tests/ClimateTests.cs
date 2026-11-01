@@ -124,7 +124,8 @@ public class ClimateTests
         // then the wetlands and creature-variety merges (0xCDEE23A10F68B3AA), plant production per m2 (0xF898BD7EC229FF9F on
         // main) and the 1 km world (GEO_CELL_M 16 m, the relief, rain, channels and latitude at the map's scale; 0x39C9346B584497BC
         // before the plant merge) re-pinned it.
-        Assert.Equal(0xAD0A92D522612469UL, h);
+        // A flood before a riparian wetland's waterlogging (Ponds.Update) moved it again from 0xAD0A92D522612469.
+        Assert.Equal(0x39C887C08E839DDFUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

@@ -357,12 +357,9 @@ public class HydrologyTests
         // now: this map's rivers are 0.3-m brooks that rise centimetres, so only the cells level with their channel flood (4-5
         // in a wet year; over 50 when rivers were 0.5 x SHALLOW, 90-320 m, deep)
         for (int u = 0; u < perYear && fl <= 2; u++) { Advance(1); fl = Ponds.Flooded(w); }
-        // (2026-11-01, the 1 km world: on 16 m cells of the 1024 map's hills a floodplain cell stands metres above its stream,
-        // whose stage (0.3 m deep at the least, Hydrology.DepthM) never reaches it: 0 flooded. Asked where the floodplain can
-        // flood at all. Measured: 899 cells' FloodWet is under a wet season's 2.3 x the mean, yet the water cycle's discharge
-        // (groundwater-smoothed) never tops it: 0 flooded. So the count is asked only on maps of 218-m-scale floodplains;
-        // what floods must still be soaked and fed below. For the hydrology agent: floods of brooks on 16 m cells.
-        if (K.GEO_CELL_M > 50f) Assert.True(fl > 2, $"{fl} cells flooded in a wet year");
+        // (2026-11-01, the 1 km world: on 16 m cells ~900 floodplain cells are topped in a wet year, but they are riparian
+        // wetlands too, and Ponds.Update counted the waterlogging before the flood, so none read flooded; a flood now comes first)
+        Assert.True(fl > 2, $"{fl} cells flooded in a wet year");
         double after = 0;
         for (int i = 0; i < n; i++)
         {
