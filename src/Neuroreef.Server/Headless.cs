@@ -26,11 +26,12 @@ public static class Headless
         bool stop = false;
         // encounter census (2026-11-01, NR_UNITS=1): what each decision senses, and how far animals travel per step
         bool units = Environment.GetEnvironmentVariable("NR_UNITS") == "1";
+        if (Environment.GetEnvironmentVariable("NR_DIAG") == "1") Diag.D = new Diag();   // feeding-chain census (2026-11-01)
         if (units) Decide.Metrics = new Decide.DecisionMetrics();
         double moved = 0, movedMax = 0; long animalSteps = 0;
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop = true; Console.WriteLine("stopping after this step (saving)..."); };
         var water = new WaterWatch();
-        var eco = Environment.GetEnvironmentVariable("NR_ECO") == "1" ? new EcoWatch(w) : null;   // ecology census (2026-11-01)
+        var eco = Environment.GetEnvironmentVariable("NR_ECO") == "1" ? new EcoWatch(sim) : null;   // ecology census (2026-11-01)
         for (long k = 0; k < o.Steps && !stop; k++)
         {
             sim.Step();
@@ -50,6 +51,7 @@ public static class Headless
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
         string summary = Summary(sim) + Environment.NewLine + water.Report(w) + (eco != null ? Environment.NewLine + eco.Report(sim) : "");
         Console.Write(summary);
+        if (Diag.D != null) Console.Write(Diag.D.Report());
         if (units)
         {
             var m = Decide.Metrics!; var T = w.T;

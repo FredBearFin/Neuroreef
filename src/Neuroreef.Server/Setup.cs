@@ -46,7 +46,9 @@ public static class Setup
                 branches = o.Branches, branchSlots = o.BranchSlots,
                 steps = o.Evolve && o.StepsSet ? (int)Math.Clamp(o.Steps, 0, int.MaxValue) : o.PrehistorySteps,
                 worldSlots = o.Capacity, rate = o.Rate,
+                massMin = o.MassMin, massMax = o.MassMax, floors = o.Floors ?? BodySize.ProportionalFloors(o.MassMin, o.MassMax),
             },
+            massLimits = new[] { BodySize.LIMIT_LO, BodySize.LIMIT_HI }, massMinRatio = BodySize.MIN_RATIO, defaultFloors = BodySize.ProportionalFloors(K.MASS_LO, K.MASS_HI),
         }));
         app.MapPost("/api/setup", async (HttpContext ctx) =>
         {
@@ -66,9 +68,13 @@ public static class Setup
             o.PrehistorySteps = I("steps", 0, int.MaxValue, o.PrehistorySteps);   // 0 = until you begin the world (or stop it)
             if (o.Evolve) { o.Steps = o.PrehistorySteps; o.StepsSet = true; }   // the headless prehistory takes its length from --steps
             o.Capacity = I("worldSlots", 1024, World.MaxSlots, o.Capacity); o.Rate = F("rate", 0f, 120f, o.Rate);
+            // the bodies (BodySize clamps them again): the range, and the size classes' floors if the page sent four
+            o.MassMin = F("massMin", BodySize.LIMIT_LO, BodySize.LIMIT_HI, o.MassMin); o.MassMax = F("massMax", BodySize.LIMIT_LO, BodySize.LIMIT_HI, o.MassMax);
+            if (e.TryGetProperty("floors", out var fl) && fl.ValueKind == JsonValueKind.Array && fl.GetArrayLength() == K.FLOOR_CLASSES)
+                o.Floors = fl.EnumerateArray().Select(v => v.TryGetDouble(out double d) ? (float)d : float.NaN).ToArray();
             Console.WriteLine($"setup: prehistory on a {o.PreMap}-unit map, {o.Branches} branches x {o.BranchSlots:N0} slots, " +
                 $"{o.AncestorsLand} land + {o.AncestorsWater} water ancestors x {o.Founders} founders, {o.BigBrains} big-brained ({o.BigBrainUnits} units), " +
-                $"{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}; world {o.WorldMap}-unit map, {o.Capacity:N0} slots");
+                $"{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}; world {o.WorldMap}-unit map, {o.Capacity:N0} slots; bodies {BodySize.Kg(o.MassMin)}-{BodySize.Kg(o.MassMax)}");
             done.Set();
             return Results.Json(new { ok = true });
         });

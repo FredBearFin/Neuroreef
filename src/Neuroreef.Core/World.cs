@@ -546,7 +546,7 @@ public sealed class World
         float rough = MathF.Min(1f, d / K.ROUGH_REF);
         if (rough <= 0f) return 1f;
         float legs = PLegs[i], stab = K.LEG_STAB * legs * (PLegPairs[i] - 1) / 3f;
-        float small = MathK.Cbrt(1f / MathF.Max(MassOf(i), 1e-3f));
+        float small = MathK.Cbrt(1f / MathF.Max(MassOf(i), 1e-6f));   // (a guard only: a 1 g world's newborns are 0.1 g)
         return 1f / (1f + K.ROUGH_SLOW * rough * small * (1f - stab));
     }
 

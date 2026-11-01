@@ -96,6 +96,7 @@ function defs() {
       { key: 'climate', label: 'Climate strength', min: 0, max: 2, step: 0.05, val: V.climate, fmt: (v) => v == 0 ? 'none (20 °C)' : x(v),
         help: 'How strongly sun, height and seasons change temperature; 0 = everywhere 20 °C. Plants, soil and every body answer to it: nothing says where forest, tundra or desert is, or what body lives there.' },
     ] },
+    bodyGroup(V),
     { g: 'Life', note: 'how it starts; everything after is evolution', rows: [
       { key: 'ancestorsLand', label: 'Ancestors on land', min: 0, max: 12, step: 1, val: V.ancestorsLand, fmt: (v) => v,
         help: 'Random first species. Each is born with the drives (hunger, thirst, fatigue, fear, breeding) and is good at 1–3 random foods: any food, plants or meat. Each world draws new ancestors, names and a new map from a random seed, and only bodies that can feed themselves where they start become ancestors.' },
@@ -143,10 +144,11 @@ function build() {
       const inp = d.querySelector('input'), out = d.querySelector('b');
       r.get = () => r.list ? r.list[+inp.value] : +inp.value;
       r.set = (v) => { inp.value = r.list ? nearestIndex(r.list, v) : v; out.textContent = r.fmt(r.get()); };
-      inp.oninput = () => { out.textContent = r.fmt(r.get()); for (const a of document.querySelectorAll('[data-p]')) a.classList.remove('on'); estimate(); };
+      inp.oninput = () => { out.textContent = r.fmt(r.get()); for (const a of document.querySelectorAll('[data-p]')) a.classList.remove('on'); r.onchange && r.onchange(); estimate(); };
       r.set(r.val);
       rows.push(r);
     }
+    if (grp.extra) { const e = document.createElement('div'); e.innerHTML = grp.extra; box.append(e); grp.wire && grp.wire(e); }
   }
   estimate();
 }
@@ -159,8 +161,11 @@ function setv(k, v) { const r = rows.find((q) => q.key === k); if (r) r.set(v); 
 function calc(get) {
   // rough: a continent fed about 20,000-120,000 animals in past runs (a region a quarter of it, a valley a sixteenth: a
   // 2026-11-01 valley run held 1,300 after a year and 4,400 after 2.8 years, still rising); food scales with land area and plant growth
-  const feeds = (map) => { const area = (map / 1024) ** 2, land = (1 - get('water')) / 0.9, k = area * land * get('plants');
-    return [Math.round(20000 * k / 100) * 100, Math.round(120000 * k / 100) * 100]; };
+  // bodies (2026-11-01): those runs had the default 0.1-40 kg; numbers fall with size as real densities do (Damuth: x M^-0.66
+  // at the range's middle on a log scale, 2 kg for the default)
+  const mid = Math.sqrt((get('massMin') ?? 0.1) * (get('massMax') ?? 40)), sizeK = Math.pow(mid / 2, -0.66);
+  const feeds = (map) => { const area = (map / 1024) ** 2, land = (1 - get('water')) / 0.9, k = area * land * get('plants') * sizeK;
+    return [Math.round(20000 * k / 10) * 10, Math.round(120000 * k / 10) * 10]; };
   const ws = get('worldSlots'), wm = get('worldMap') ?? get('preMap'), [lo, hi] = feeds(wm), preHi = feeds(get('preMap'))[1];
   // memory: the prehistory and the world are never both in memory, so the larger of the two counts. Each starts with
   // its slots and grows them with its animals: at most the larger of its slots and the animals its map may feed (x1.3
@@ -181,6 +186,7 @@ function estimate() {
   let m = r >= 0.85 ? 'This needs more memory than the computer has: lower the branches or the slots. '
     : rm >= 0.85 ? 'If the animals grow to the top of the estimate, their slots will need most of the memory; the computer may slow down, and if the slots cannot grow, they, not nature, decide who is born. '
     : r >= 0.6 ? 'This will use most of the memory; the computer may slow down. ' : '';
+  m += bodyEstimate();
   if (val('ancestorsLand') + val('ancestorsWater') === 0) m += 'There must be at least one ancestor. ';
   if (val('ancestorsLand') + val('ancestorsWater') > 16) m += 'At most 16 ancestors in all. ';
   $('msg').textContent = m;
@@ -198,6 +204,60 @@ function labelPresets() {
       (e.most > e.start * 1.05 ? ` and up to ${gb(e.most)} if the animals reach the top of the estimate` : '') + (e.start >= info.ramBytes ? ' (more than this computer has)' : '');
     a.classList.toggle('toobig', e.start >= info.ramBytes * 0.85);
   }
+}
+
+// ---- bodies (2026-11-01, BodySize): the smallest and largest body the mass gene gives, and the size classes' floors.
+// The floors follow the range in the default's proportions (0.1, 1, 3, 10 of 0.1-40 kg) until you move one.
+const MASSES = (() => { const l = []; for (let e = -3; e <= 4; e++) for (const d of [1, 1.5, 2, 3, 4, 5, 7]) l.push(+(d * 10 ** e).toPrecision(3)); l.push(50000); return l; })();
+const kg = (v) => v >= 1000 ? `${+(v / 1000).toPrecision(3)} t` : v >= 1 ? `${+v.toPrecision(3)} kg` : `${+(v * 1000).toPrecision(3)} g`;
+const BODY_PRESETS = { normal: [0.1, 40], giants: [100, 20000], tiny: [0.001, 1] };
+let floorsEdited = false;
+/** The size classes' floors of a range in the default's log proportions (the server's BodySize.ProportionalFloors). */
+function propFloors(lo, hi) {
+  if (lo === 0.1 && hi === 40) return [0.1, 1, 3, 10];
+  return [0.1, 1, 3, 10].map((f, k) => k === 0 ? lo : lo * Math.pow(hi / lo, Math.log(f / 0.1) / Math.log(400)));
+}
+function syncFloors() {
+  if (floorsEdited) return;
+  const f = propFloors(val('massMin'), val('massMax'));
+  for (let k = 1; k <= 3; k++) { const r = rows.find((q) => q.key === 'floor' + k); if (r) { r.shown = f[k]; r.set(f[k]); } }
+}
+function bodyGroup(V) {
+  const fl = V.floors || propFloors(V.massMin, V.massMax);
+  const floorRow = (k) => ({ key: 'floor' + k, label: `Size class ${k + 1}: smallest body`, list: MASSES, val: fl[k], shown: fl[k],
+    fmt: function (v) { return kg(!floorsEdited && this.shown ? this.shown : v); }, onchange() { floorsEdited = true; },
+    help: k === 1 ? 'Each lineage belongs to one of four size classes (inherited, rarely changing); a body is never smaller than its class allows and evolves freely above it. The floors follow the range until you move one.' : '' });
+  return { g: 'Bodies', note: 'how small and how big an animal can be', rows: [
+    { key: 'massMin', label: 'Smallest body', list: MASSES, val: V.massMin, fmt: kg, onchange: syncFloors,
+      help: 'The mass gene runs on a log scale from the smallest to the largest body, so a mutation changes a body by a share of its size. Everything else (metabolism, speed, sight, voice, flight, heat, breath, lifespan) is each body\'s own physics of its mass: nothing else is chosen here.' },
+    { key: 'massMax', label: 'Largest body', list: MASSES, val: V.massMax, fmt: kg, onchange: syncFloors,
+      help: 'No body heavier than about 16 kg can fly (flight muscle power against the power flight needs); giants walk or swim, see and call farther, and live longer.' },
+    floorRow(1), floorRow(2), floorRow(3),
+  ], extra: `<div class="presets" style="margin-top:8px"><span class="k" style="color:var(--dim)">Bodies:</span>
+      <a data-b="normal">Normal<small>0.1–40 kg</small></a><a data-b="giants">Giants<small>100 kg–20 t</small></a><a data-b="tiny">Tiny<small>1 g–1 kg</small></a></div>
+      <div class="row" style="margin-top:8px"><div class="help" id="bodies-est"></div></div>`,
+    wire(e) {
+      for (const a of e.querySelectorAll('[data-b]')) a.onclick = () => {
+        const [lo, hi] = BODY_PRESETS[a.dataset.b]; floorsEdited = false; setv('massMin', lo); setv('massMax', hi); syncFloors();
+        for (const b of e.querySelectorAll('[data-b]')) b.classList.toggle('on', b === a);
+        estimate();
+      };
+    } };
+}
+/** Real animals of these sizes: herbivorous mammals live at log10(D per km2) = 1.30 - 0.66 log10(M kg) (Damuth 1981, 1987). */
+function bodyEstimate() {
+  const lo = val('massMin'), hi = val('massMax'), box = $('bodies-est');
+  if (lo === undefined || !box) return '';
+  const map = val('worldMap') ?? val('preMap'), land = (map * M_PER_UNIT / 1000) ** 2 * (1 - val('water'));
+  const dens = (m) => Math.pow(10, 1.30 - 0.66 * Math.log10(m)), mid = Math.sqrt(lo * hi);
+  const n = (m) => Math.round(dens(m) * land), num = (v) => v >= 100 ? Math.round(v).toLocaleString() : v >= 1 ? v.toFixed(1) : v.toPrecision(2);
+  box.innerHTML = `Real herbivores of these sizes live at about <b>${num(dens(lo))}</b> per km² (${kg(lo)}), <b>${num(dens(mid))}</b> (${kg(mid)}) and <b>${num(dens(hi))}</b> (${kg(hi)}) (Damuth 1981). ` +
+    `Your world has about ${Math.round(land).toLocaleString()} km² of land: one species of the smallest could number ~${n(lo).toLocaleString()}, of the middle size ~${n(mid).toLocaleString()}, of the largest ~${n(hi).toLocaleString()}. ` +
+    `The world does not follow this rule: food and energy decide, and the map is never resized for you.`;
+  if (lo > hi / 4) return 'The largest body must be at least four times the smallest. ';
+  if (n(mid) < 50) return `Bodies of ${kg(mid)} and up need a much bigger map: real ones of that size would be only ~${n(mid)} on this land, and so few die out easily. `;
+  if (n(hi) < 50) return `The largest bodies (${kg(hi)}) will be few on this map (real ones ~${n(hi)}): a bigger map holds more of them. `;
+  return '';
 }
 
 const PRESETS = {
@@ -221,6 +281,8 @@ for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
 $('go').onclick = async () => {
   $('go').disabled = true; $('msg').textContent = 'Creating the prehistory…';
   const body = {}; for (const r of rows) body[r.key] = r.get();
+  delete body.floor1; delete body.floor2; delete body.floor3;
+  if (floorsEdited) body.floors = [body.massMin, val('floor1'), val('floor2'), val('floor3')];   // else the server's own proportions
   await fetch('api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (info.evolve) {
     // Evolve.bat / LongRun.bat: no console follows; the run reports in its own window

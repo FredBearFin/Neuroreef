@@ -345,9 +345,11 @@ public static class Wire
     {
         metresPerUnit = K.M_PER_UNIT, stepHours = K.STEP_H, stepSeconds = K.STEP_S, stepsPerDay = K.STEPS_PER_DAY, stepsPerYear = K.T_SEASON,
         mapWidthM = Map.WidthM, fieldCellM = K.GEO_CELL_M, bodyLenM1kg = K.BODY_L_M, sightM1kg = K.C_SIGHT_M, hearM1kg = K.HEAR_R_M,
-        maxSightM = K.MAX_SIGHT * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
-        // 2026-11-01 (the 1 km world): the map's vertical scale (Elev (1 - sea) above the lakes is this many metres) and
-        // the latitude it sits at, so the console draws the relief at true scale (RELIEF = reliefM x FCELL / fieldCellM)
+        maxSightM = BodySize.MaxSight * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
+        // the world's body sizes (BodySize, 2026-11-01): record byte 12 is a body's mass on the log scale massMinKg..massMaxKg
+        massMinKg = BodySize.Min, massMaxKg = BodySize.Max, floorsKg = BodySize.Floors,
+        // 2026-11-01 (the 1 km world): the map's vertical scale (Elev (1 - sea) above the lakes is this many metres), so the
+        // console draws the relief at true scale (RELIEF = reliefM x FCELL / fieldCellM)
         reliefM = Map.ReliefM, fcell = K.FCELL,
     };
 

@@ -766,7 +766,7 @@ public class EcologyTests
         Act(w, a, P.REST); w.IActs[a] = 0; Act(w, b, P.REST); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         float costAdult = 10f - w.Energy[a], costJuv = 10f - w.Energy[b];
-        float growth = K.C_CARC * w.PM[b] * (1f - w.PBirth[b]) / w.PMature[b] * K.RHO_MEAT / K.GROWTH_EFF;
+        float growth = w.PM[b] * (1f - w.PBirth[b]) / w.PMature[b] * K.TISSUE_E / K.GROWTH_EFF;   // the whole body, at wet tissue's energy (2026-11-01)
         Assert.True(costJuv > growth * 0.99f, $"juvenile paid {costJuv}, growth alone costs {growth}");
         Assert.True(costAdult < costJuv);
     }

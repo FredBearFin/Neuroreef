@@ -1,6 +1,6 @@
 // Console entry point: connects to the simulation, builds the 3D view and the panels, wires controls.
 
-import { Link } from './net.js';
+import { Link, setMassRange } from './net.js';
 import { World3D, setRelief } from './world3d.js';
 import { Panels, bar, setUnits, when, span } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
@@ -51,6 +51,7 @@ link.listen('meta', (m) => {
   meta = m;
   setRelief(m);   // the relief's true scale follows the map on view (2026-11-01: a prehistory and its world may differ)
   setUnits(m.units);   // real units for every panel (ICD §2.1)
+  setMassRange(m.units);   // the world's body sizes: record byte 12 is on its scale
   $('s-seed').textContent = m.seed;
   if (!world) {
     world = new World3D($('gl'), meta);
@@ -316,7 +317,7 @@ function status(s) {
     const tot = lastPre.settings.totalSteps, my = Math.round(lastPre.step * lastPre.yearsPerStep / 1e6);
     $('s-pre').textContent = tot >= 2147483647 ? `PREHISTORY · ${my} Myr · branch ${s.view}` : `PREHISTORY · ${my} of ${Math.round(tot * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
   }
-  setUnits(s.units);
+  setUnits(s.units); setMassRange(s.units);
   $('s-step').textContent = s.step.toLocaleString();
   // the world's own clock (a step is 2.92 h); the prehistory's steps are symbolic years (its badge shows them)
   $('s-time-box').classList.toggle('hidden', s.phase === 'prehistory');

@@ -32,6 +32,10 @@ public sealed class Options
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
     public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f, Climate = K.CLIMATE;
     public int SeasonLength = K.T_SEASON;
+    // the bodies (BodySize, 2026-11-01): the mass gene's range in kg and the size classes' floors (null: in the default's
+    // proportions of the range). The default is 0.1-40 kg with floors 0.1, 1, 3 and 10 kg
+    public float MassMin = K.MASS_LO, MassMax = K.MASS_HI;
+    public float[]? Floors;
     // --validate N (Validate.cs): N seeds, each run normally and with the memory-reset control
     public int ValidateSeeds, BigBrainMin = 64;
     public bool SeedSet;
@@ -42,6 +46,7 @@ public sealed class Options
         Nature.Plants = Plants; Nature.Seasons = Seasons; Nature.SeasonLength = SeasonLength; Nature.Drought = Drought;
         Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap;
         Nature.Clamp();
+        BodySize.Set(MassMin, MassMax, Floors);   // before the map: its hash cells follow the largest body
         Map.Set(prehistory ? PreMap : WorldMap);
     }
     public bool NoSetup, SetupDone;
@@ -126,6 +131,10 @@ public sealed class Options
   --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
   --climate X           climate strength 0..2: how strongly sun, height and seasons change temperature
                         (default 0.6; 0 = everywhere 20 °C and no body-heat budget)
+  --bodies normal|giants|tiny   body sizes: 0.1-40 kg (default), 100 kg-20 t, or 1 g-1 kg
+  --body-min KG, --body-max KG   the smallest and largest body the mass gene gives (0.001..50000 kg)
+  --body-floors A,B,C,D the four size classes' smallest bodies in kg (default: 0.1, 1, 3, 10 in the same
+                        log proportions of the range)
   --world-mutation X    mutation in the world you watch, x the prehistory's (default 3: faster change in a small valley)
   --headless            run the world without the console and print reports
   --steps N             headless: number of steps (default 100000)
@@ -191,6 +200,10 @@ public sealed class Options
                 case "--ponds": o.Ponds = F(Next()); break;
                 case "--climate": o.Climate = F(Next()); break;
                 case "--world-mutation": o.WorldMut = F(Next()); break;
+                case "--bodies": (o.MassMin, o.MassMax) = BodyPreset(Next()); o.Floors = null; break;
+                case "--body-min": o.MassMin = F(Next()); break;
+                case "--body-max": o.MassMax = F(Next()); break;
+                case "--body-floors": o.Floors = Array.ConvertAll(Next().Split(','), F); if (o.Floors.Length != K.FLOOR_CLASSES) throw new ArgumentException($"--body-floors needs {K.FLOOR_CLASSES} masses"); break;
                 case "--big-brain-units": o.BigBrainUnits = int.Parse(Next()); o.NoSetup = true; break;
                 case "--validate": o.ValidateSeeds = Math.Max(1, int.Parse(Next())); o.Headless = true; break;
                 case "--big-brain-min": o.BigBrainMin = Math.Clamp(int.Parse(Next()), K.BRAIN_MIN, G.NH); break;
@@ -216,6 +229,14 @@ public sealed class Options
     }
 
     static float F(string v) => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>The setup screen's body presets (kg).</summary>
+    public static (float, float) BodyPreset(string v) => v.ToLowerInvariant() switch
+    {
+        "normal" => (K.MASS_LO, K.MASS_HI),
+        "giants" => (100f, 20000f),
+        "tiny" => (0.001f, 1f),
+        _ => throw new ArgumentException("--bodies normal|giants|tiny"),
+    };
     static int MapSide(string v)
     {
         int k = Array.IndexOf(Map.Names, v.ToLowerInvariant());

@@ -47,8 +47,9 @@ public static class Body
         float volumeScale = MathK.Cbrt(length * width * height);
         length /= volumeScale; width /= volumeScale; height /= volumeScale;
     }
-    /// <summary>The smallest body of each size class (the user, 2026-10-30).</summary>
-    public static readonly float[] Floors = { 0.1f, 1f, 3f, 10f };
+    /// <summary>The smallest body of each size class (the user, 2026-10-30): 0.1, 1, 3 and 10 kg at the default body sizes,
+    /// the world's own (BodySize) since 2026-11-01.</summary>
+    public static float[] Floors => BodySize.Floors;
     /// <summary>Memory units in use from the brain-size gene: log scale BRAIN_MIN..G.NH, so a mutation changes a brain
     /// by a share of its size, as with body mass (Revision M: on a linear scale of 256 units, ordinary founder variation
     /// swung a 12-unit brain by tens of units).</summary>
@@ -62,7 +63,7 @@ public static class Body
         Signature(w, i);   // its look and MHC diversity, cached for DECIDE and LIFECYCLE (see Signature)
         float floor = Floors[Math.Clamp((int)gn[G.B_FLOOR], 0, K.FLOOR_CLASSES - 1)];
         w.PFloor[i] = floor;
-        float m = MathF.Max(floor, G.GeneLog(gn[G.B_MASS], K.MASS_LO, K.MASS_HI));   // its size class's floor; free above it
+        float m = MathF.Max(floor, G.GeneLog(gn[G.B_MASS], BodySize.Min, BodySize.Max));   // its size class's floor; free above it (the world's range, BodySize)
         float fs = Mul(gn[G.B_SPEED], K.BODY_RANGE_TRAIT);
         float fsi = Mul(gn[G.B_SIGHT], K.BODY_RANGE_TRAIT);
         float armour = Organ(gn[G.B_ARMOUR]) * K.ARMOUR_MAX;
@@ -116,7 +117,7 @@ public static class Body
         w.PLife[i] = K.C_LIFE * t * life * MathK.Pow(devel, K.DEVEL_AGING);
         // a narrow field of view sees further (forward eyes), a wide one sees around but less far. In metres (2026-11-01):
         // C_SIGHT_M = 60 m at 1 kg, eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008)
-        w.PSight[i] = MathF.Min(K.MAX_SIGHT, K.C_SIGHT * MathK.Pow(m, K.EXP_SIGHT) * fsi * (1.6f - fov / 360f));
+        w.PSight[i] = MathF.Min(BodySize.MaxSight, K.C_SIGHT * MathK.Pow(m, K.EXP_SIGHT) * fsi * (1.6f - fov / 360f));
         w.PFovCos[i] = MathK.Cos(fov * 0.5f * MathF.PI / 180f);
         w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * (1f + K.FIN_TURN * (finPairs - 1) * fins);
 
@@ -127,7 +128,10 @@ public static class Body
         float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
         float loadDrag = K.LOAD_DRAG * MathK.Cbrt(m) * ((1f + armour) / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1) - 0.70710678f);
-        float vLand = v0 / (1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
+        // legs that share the weight better than the reference make the drag negative; the gain is at most twice the plain
+        // body's speed, as a speed ratio is elsewhere (ReachM). Up to 40 kg it never binds (-0.14 at most); without it a body
+        // of three or four leg pairs above ~14 t had a negative or infinite speed (2026-11-01, giants)
+        float vLand = v0 / MathF.Max(0.5f, 1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         float lengthShare = length;   // of the cube of its volume (LengthM)
@@ -166,7 +170,7 @@ public static class Body
         w.PStrike[i] = strike;
         w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathK.Exp(Organ(gn[G.B_LITTER]) * MathK.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
         float birth = G.GeneLog(gn[G.B_BIRTH], K.BIRTH_LO, K.BIRTH_HI);
-        birth = MathF.Min(K.BIRTH_HI, MathF.Max(birth, K.NEWBORN_MIN / m));   // eggs and young have a smallest size (Revision M)
+        birth = MathF.Min(K.BIRTH_HI, MathF.Max(birth, BodySize.NewbornMin / m));   // eggs and young have a smallest size (Revision M; a tenth of the world's smallest body, BodySize)
         w.PBirth[i] = birth;
         w.PSexual[i] = (byte)(gn[G.B_SEX] >= 0 ? 1 : 0);
         w.PLive[i] = (byte)(gn[G.B_LIVE] >= 0 ? 1 : 0);

@@ -139,6 +139,15 @@ public static class Resolve
 
         // ---- 3. eat (DESIGN §9.3)
         float gutCap = w.PGut[i] * mf;
+        var dg = Diag.D; int dgG = dg != null ? Diag.Group(w, i) : 0;   // feeding-chain census (reporting only)
+        if (dg != null)
+        {
+            bool eat = (acts & BIT_EAT) != 0, food = w.IFoodHere[i] > 0.5f;
+            dg.Steps[dgG]++; dg.Mass[dgG] += mass; dg.Fill[dgG] += w.Gut[i] / MathF.Max(gutCap, 1e-9f); dg.Hunger[dgG] += 1f - w.Energy[i] / emax;
+            if (food) dg.FoodHere[dgG]++;
+            if (eat) { dg.EatFired[dgG]++; if (food) dg.EatFiredFood[dgG]++; if (scanning) dg.EatScan[dgG]++; else if (w.Gut[i] >= gutCap) dg.EatFull[dgG]++; else if (airborne) dg.EatAir[dgG]++; }
+            else if (food && w.Energy[i] < 0.5f * emax) dg.HungryNoEat[dgG]++;
+        }
         // eating another organism is attacking it (DESIGN §9.3, Revision K): the same strike, chosen by hunger
         bool strikeAttempt = (acts & BIT_STRIKE) != 0;
         bool preyEat = (acts & BIT_EAT) != 0 && w.IEatPrey[i] != 0 && (acts & BIT_STRIKE) == 0 && w.PStrike[i] > 0;
@@ -167,6 +176,7 @@ public static class Resolve
                 float v = MathF.Min(absorb, e * Pools.Rho[p] * MathF.Min(pass * bm, here));
                 if (v > bv || (v == bv && v > 0f && e * Pools.Rho[p] > bestRho)) { bv = v; best = p; bestEff = e; bestBM = bm; bestRho = e * Pools.Rho[p]; }
             }
+            if (best < 0 && dg != null) dg.EatNone[dgG]++;
             if (best >= 0)
             {
                 float reach = (waterCell ? w.Pool[best][cell] * Respiration.Access(w, i, cell, best) : w.Pool[best][cell]) * Pools.Kg[best];
@@ -183,6 +193,7 @@ public static class Resolve
                     if (best == (int)Pool.Root) Plants.RootEaten(w, cell, units * K.RHO_ROOT / K.RHO_PLANT);
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * units);
                     if (!waterCell) Plants.Eaten(w, i, cell, best, bite, bestEff);   // what it took from the plants, and the seed and pollen it carries
+                    if (dg != null) { dg.EatOk[dgG]++; dg.BiteKg[dgG] += bite; dg.BiteE[dgG] += bite * Pools.Rho[best] * bestEff; }
                     r += Ingest(w, i, best, bite, bestEff, emax, cell);
                     Pathogens.Ate(w, i, cell);   // what lies on the food is swallowed with it: the faecal-oral route (Revision R)
                 }
@@ -190,6 +201,7 @@ public static class Resolve
         }
 
         // ---- 4. strike (DESIGN §9.4)
+        float e4 = w.Energy[i];   // what the strike section takes: its cost, and a victim striking back
         if ((acts & BIT_STRIKE) != 0 && w.PStrike[i] > 0)
         {
             int v = w.ITarget[i];
@@ -202,8 +214,10 @@ public static class Resolve
                 float reachAll = Decide.StrikeReach(w.PReach[i], 0f, MathK.Cbrt(w.ApparentMass(v)));
                 // in water they meet only where their depths overlap (Respiration.Overlap; 1 when neither is in water)
                 float meet = Respiration.Overlap(w, i, v);
+                if (dg != null) { dg.StrTry[dgG]++; dg.Strike[dgG] += K.C_STRIKE * mass; }
                 if (AlongWay(w, i, x0, y0, w.X[v], w.Y[v]) <= reachAll * reachAll && (meet >= 1f || Rng.U(seed, step, (uint)i, Rs.Meet) < meet))
                 {
+                    if (dg != null) { dg.StrReach[dgG]++; if (preyEat) dg.PreyEat[dgG]++; if (w.Spc[v] == s) dg.StrKin[dgG]++; }
                     if (strikeAttempt) metrics?.Apply(P.STRIKE);
                     if (preyEat) metrics?.Apply(P.EAT);
                     r += Strike(w, i, v, gutCap, emax);
@@ -220,6 +234,10 @@ public static class Resolve
             }
         }
 
+        float hurt4 = e4 - w.Energy[i] - ((acts & BIT_STRIKE) != 0 && w.PStrike[i] > 0 ? K.C_STRIKE * mass : 0f);
+        // a victim that struck back and took the rest of its reserve killed it (2026-11-01: it was counted as starved at
+        // the end of the step; measured: most 'starved' juveniles died so, with food in their gut)
+        if (hurt4 > 1e-6f && w.Energy[i] <= 0f) { int v = w.ITarget[i]; Die(w, i, Cause.Killed, v >= 0 ? w.Spc[v] : -1); return; }
         // ---- 5. mate / lay (DESIGN §8)
         if ((acts & BIT_MATE) != 0 && w.IMate[i] >= 0) r += Mate(w, i, w.IMate[i], cell, x0, y0);
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
@@ -228,6 +246,7 @@ public static class Resolve
         float eCall = w.Energy[i];
         int callType = Speak(w, i, acts, mass);
         spent += eCall - w.Energy[i];
+        if (dg != null) dg.Call[dgG] += eCall - w.Energy[i];
         if (metrics != null)
             for (int p = P.CALL_0; p < P.N; p++)
             {
@@ -287,7 +306,7 @@ public static class Resolve
         float grow = 0;
         if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
         {
-            float tissue = K.C_CARC * w.PM[i] * (1f - w.PBirth[i]) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
+            float tissue = w.PM[i] * (1f - w.PBirth[i]) * K.TISSUE_E / K.GROWTH_EFF;   // energy to build all of it (TissueCost)
             grow = Math.Clamp(MathF.Min(tissue / w.PMature[i] * w.Energy[i] / emax, w.Energy[i] - K.GROW_RESERVE * emax), 0f, tissue / w.PMature[i]);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
         }
@@ -312,6 +331,12 @@ public static class Resolve
         r -= K.R_PAIN * MathF.Max(0f, Respiration.Breathless(w, i) - gasp0);
         w.Energy[i] -= basal + moveCost + grow + thermo + breathe;
         T.SpendBasal[s] += basal + breathe; T.SpendMove[s] += moveCost; T.SpendGrowth[s] += grow;
+        if (dg != null)
+        {
+            dg.Basal[dgG] += basal; dg.Move[dgG] += moveCost; dg.Thermo[dgG] += thermo; dg.Breath[dgG] += breathe; dg.Grow[dgG] += grow;
+            dg.Kleiber[dgG] += K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL);
+            dg.Fmr[dgG] += 4.82f * MathK.Pow(mass * 1000f, 0.734f) * 1000f / K.STEPS_PER_DAY / Pools.EnergyJ;   // mammals' FMR, kJ/day (Nagy 1999)
+        }
         float fat0 = w.Fatigue[i];
         float sprint = w.Gain[i * P.N + P.SPRINT];
         if (rest && fat0 > 0f) metrics?.Allow(P.REST);
@@ -319,15 +344,18 @@ public static class Resolve
         if (rest && w.Fatigue[i] < fat0) metrics?.Apply(P.REST);
         r += K.R_REST * MathF.Max(0f, fat0 - w.Fatigue[i]);
 
+        float dgDe = 0f;   // census: energy absorbed this step
         if (w.Gut[i] > 1e-7f)
         {
             float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
             // the gut's absorptive capacity (C_ABSORB, 2026-11-01): rich digesta pass only as fast as their energy is taken up
             float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            if (dg != null) { if (d >= w.Gut[i]) { } else if (w.GutEnergy[i] * d / w.Gut[i] > absorbE) dg.AbsorbCapped[dgG]++; else dg.DigCapped[dgG]++; }
             if (w.GutEnergy[i] > absorbE) d = MathF.Min(d, w.Gut[i] * absorbE / w.GutEnergy[i]);
             float frac = d / w.Gut[i];
             float de = w.GutEnergy[i] * frac, dung = w.GutWaste[i] * frac, seedy = w.GutSeedy[i] * frac;
             w.Energy[i] += de;
+            if (dg != null) { dg.Absorbed[dgG] += de; dgDe = de; }
             w.Gut[i] -= d; w.GutEnergy[i] -= de; w.GutWaste[i] -= dung; w.GutSeedy[i] -= seedy;
             if (waterCell) w.Pool[(int)Pool.Detritus][cell] += dung / Pools.Kg[(int)Pool.Detritus];   // kg into the pool's units
             else w.Pool[(int)Pool.Dung][cell] += dung;
@@ -352,7 +380,12 @@ public static class Resolve
         T.RewardSum[s] += r;
 
         // ---- 8. death
-        if (w.Energy[i] <= 0) { Die(w, i, Cause.Starve, -1); return; }
+        if (w.Energy[i] <= 0)
+        {
+            if (dg != null && hurt4 > 1e-6f) dg.StarveHurt[dgG]++;
+            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
+            Die(w, i, Cause.Starve, -1); return;
+        }
         if (w.Thirst[i] >= 1f) { Die(w, i, Cause.Thirst, -1); return; }
         if (w.ThermStrain[i] >= 1f) { Die(w, i, shortCold > 0f ? Cause.Cold : Cause.Heat, -1); return; }
         if (w.O2Debt[i] >= Respiration.DebtMax(w, i)) { Die(w, i, immersed ? Cause.Drowned : Cause.Suffocated, -1); return; }
@@ -536,7 +569,7 @@ public static class Resolve
         float e = mass * Pools.Rho[pool] * eff;
         // water from food and from digesting it (metabolic water: how seed-eating desert rodents live without drinking)
         float content = FoodWater[pool] * (LivePlant(pool) ? MathF.Min(1f, w.Moisture[cell] * 1.4f) : 1f);
-        float wet = K.K_FOODWATER * (mass * content + K.MET_WATER * e / K.RHO_MEAT) / MathF.Max(w.MassOf(i), 1e-3f);
+        float wet = K.K_FOODWATER * (mass * content + K.MET_WATER * e / K.RHO_MEAT) / MathF.Max(w.MassOf(i), 1e-6f);   // (a guard only: a 1 g world's newborns are 0.1 g)
         float rel = MathF.Min(w.Thirst[i], wet);
         w.Thirst[i] -= rel;
         w.Gut[i] += mass; w.GutEnergy[i] += e; w.GutWaste[i] += mass * (1f - eff);
@@ -561,6 +594,8 @@ public static class Resolve
         float rew = 0;
         int cell = World.FIdx(w.X[v], w.Y[v]);
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
+        var dg = Diag.D; int dgG = dg != null ? Diag.Group(w, a) : 0;
+        if (dg != null) dg.StrP[dgG] += p;
         if (Rng.U(seed, step, (uint)a, Rs.Strike) >= p)
         {
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + K.PAIN_HIT);
@@ -571,6 +606,7 @@ public static class Resolve
             {
                 float hurt = K.C_RETAL * (back - power);
                 w.Energy[a] -= hurt;
+                if (dg != null) { dg.RetalN[dgG]++; dg.RetalE[dgG] += hurt; dg.RetalBmr[dgG] += hurt / (K.C_BASAL * MathK.Pow(ma, K.EXP_BASAL)); }
                 rew -= K.R_PAIN * hurt / emax;
             }
             w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], Telemetry.F_MISS, w.Step, w.Serial[a], w.Serial[v]);
@@ -578,16 +614,22 @@ public static class Resolve
         }
         float space = MathF.Max(0f, gutCap - w.Gut[a]);
         bool drainHit = w.PDrain[a] > 0f && Rng.U(seed, step, (uint)a, Rs.Strike + 5u) < w.PDrain[a];
+        float e0 = w.Energy[v];
         if (!drainHit)
         {
-            // a hit wounds in proportion to the weapon's force; the victim dies when its reserve runs out
-            float dmg = K.C_DAMAGE * power;
+            // a hit wounds in proportion to the weapon's force against the body that resists it (its defence: size, armour,
+            // a juvenile's softness), as a share of a full reserve (WOUND); the victim dies when its reserve runs out.
+            // (2026-11-01) It took C_DAMAGE x power whatever the victim, so a matched predator needed ~4 landed hits to kill
+            // a fed prey of its own size, the prey's fat standing for its life (measured: 3.9 hits a kill, ~40 strikes)
+            float dmg = MathF.Min(1f, power / (defence + 1e-6f)) * K.WOUND * w.EmaxOf(v);
             w.Energy[v] -= dmg;
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + K.PAIN_HIT);
             w.PendingR[v] -= K.R_PAIN * dmg / MathF.Max(w.EmaxOf(v), 1e-3f);
-            if (w.Energy[v] > 0) { w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], Telemetry.F_WOUND, w.Step, w.Serial[a], w.Serial[v]); return rew; }
+            if (dg != null) dg.StrHit[dgG]++;
+            if (w.Energy[v] > 0) { if (dg != null) dg.WoundOnly[dgG]++; w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], Telemetry.F_WOUND, w.Step, w.Serial[a], w.Serial[v]); return rew; }
         }
-        float ev = MathF.Max(0f, w.Energy[v]);
+        // a kill leaves the victim's reserve in its carcass (2026-11-01: the killing wound took it out of the world)
+        float ev = MathF.Max(0f, drainHit ? w.Energy[v] : e0);
         if (drainHit)
         {
             float drain = MathF.Min(K.C_DRAIN * MathK.Pow(w.PM[a], K.EXP_BASAL), ev);
@@ -601,10 +643,12 @@ public static class Resolve
             if (dead) { w.T.Kills[w.Spc[a]]++; w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
             return rew;
         }
-        // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
-        float carcass = K.C_CARC * w.MassOf(v) + ev / K.RHO_MEAT;
+        // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water). The carcass is its edible
+        // tissue at the energy of wet tissue and its reserve (CarcassKg, 2026-11-01)
+        float carcass = CarcassKg(w.MassOf(v), ev);
         float eat = MathF.Min(space, carcass);
-        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; }
+        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; if (dg != null) { dg.StrMeatKg[dgG] += eat; dg.StrMeatE[dgG] += eat * K.RHO_MEAT * dietA[(int)Pool.Meat]; } }
+        if (dg != null) dg.StrKill[dgG]++;
         w.T.Kills[w.Spc[a]]++;   // only a death counts as a kill (a blood meal is not one)
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
         w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], egg ? Telemetry.F_EGG : Telemetry.F_KILL, w.Step, w.Serial[a], w.Serial[v]);
@@ -703,14 +747,21 @@ public static class Resolve
         => w.PLitter[m] * (K.F_BIRTH * K.C_EMAX * w.PM[m] * w.PBirth[m] + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
 
     /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
-    public static float TissueCost(float birthShare, float adultMass) => K.C_CARC * adultMass * birthShare * K.RHO_MEAT / K.GROWTH_EFF;
+    /// (2026-11-01) The whole body is built, bone, gut and skin with the muscle, at the energy of wet tissue (TISSUE_E,
+    /// ~7 kJ/g; Peters 1983) over GROWTH_EFF: ~9 MJ a kilogram, as measured costs of growth are (~1.3x the energy laid
+    /// down; Brody 1945). It was C_CARC x RHO_MEAT, 24 MJ a kilogram, so growth and young cost 2.5x what they do.
+    public static float TissueCost(float birthShare, float adultMass) => adultMass * birthShare * K.TISSUE_E / K.GROWTH_EFF;
+
+    /// <summary>The food a body is when it dies, in kg of meat (RHO_MEAT): its edible tissue (C_CARC x mass at TISSUE_E)
+    /// and its reserve (2026-11-01: the tissue was C_CARC x mass kg of meat, 5x its energy).</summary>
+    public static float CarcassKg(float mass, float reserve) => (K.C_CARC * mass * K.TISSUE_E + MathF.Max(0f, reserve)) / K.RHO_MEAT;
 
     /// <summary>Death with a body left behind (carrion on land, detritus in water).</summary>
     public static void Die(World w, int i, int cause, int killer)
     {
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
-        float body = K.C_CARC * w.MassOf(i) + MathF.Max(0f, w.Energy[i]) / K.RHO_MEAT;
+        float body = CarcassKg(w.MassOf(i), w.Energy[i]);
         { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += body / Pools.Kg[dp]; }   // kg into the pool's units
         DieNoBody(w, i, cause, killer);
     }
@@ -718,6 +769,17 @@ public static class Resolve
     public static void DieNoBody(World w, int i, int cause, int killer)
     {
         int s = w.Spc[i];
+        if (Diag.D is { } dg && w.StageOf[i] >= St.Juvenile)
+        {
+            int g = Diag.Group(w, i);
+            dg.Deaths[g * Cause.N + cause]++;
+            if (cause == Cause.Starve)
+            {
+                if (w.IFoodHere[i] > 0.5f) dg.StarveFood[g]++;
+                dg.StarveGut[g] += w.Gut[i] / MathF.Max(w.PGut[i] * w.MassOf(i) / w.PM[i], 1e-9f);
+                if (w.StageOf[i] == St.Juvenile) dg.StarveJuv[g]++; else if (w.Age[i] < 2f * w.PMature[i]) dg.StarveYoungAdult[g]++;
+            }
+        }
         w.T.Deaths[s * Cause.N + cause]++;
         byte st = w.StageOf[i];
         int cls = st <= St.Embryo ? 0 : st == St.Juvenile ? 1 : w.Age[i] < 2f * w.PMature[i] ? 2 : 3;

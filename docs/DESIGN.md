@@ -821,6 +821,42 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   range can feed FOUND_MIN founders and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
   digestion rate, must give FORAGE_MARGIN days' need (a Holling type II limit). Nothing chooses a diet or a size: a
   20-unit nectar eater, a water animal with a grass diet or a meat-eater with nothing to eat is simply never an ancestor.
+- *Founding on the food animals make (2026-11-01).* Only growing plant food was counted, and no animal existed when an
+  ancestor was tested, so a body that eats mostly meat, carrion or dung could never be founded. Now:
+  - *Order, not quota.* The ancestors are tested in turn as before. If a draw gets the most energy per kilogram from
+    animal food (meat, blood, carrion or dung: Simulation.EatsAnimalFood) and cannot be fed yet, that ancestor waits;
+    once every other ancestor is founded it is tested again, the same draws in the same order, on the animals now living
+    in its range. Prey before predators, as food webs are built from the bottom. Nothing forces a diet, a draw or a
+    carnivore clade; if the test feeds none, none is founded.
+  - *What the animals make* (Life.AnimalFood, over the animals of other clades in its range, in cells it can live and
+    breathe in). Each animal's production is the body it makes from its own life history (Life.BodyMade): a juvenile
+    grows the rest of its adult mass over its maturation, an adult that bears young makes a litter of its birth share
+    of its mass each breeding cycle (gestation plus cooldown), at TISSUE_E a kilogram. Live prey count only if the
+    eater strikes and digests meat, and only while its strike power (strike·M) is not less than the prey's counterblow:
+    all of a weaker prey's production, of a stronger one the share it makes while still small enough (power over the
+    adult's counterblow). It eats, at its meat efficiency, the intake that would turn TROPHIC_EFF (10%: Lindeman 1942;
+    Pauly & Christensen 1995) of that production into its own production at its own production efficiency (the young a
+    population of adults like it bears, against that plus its day's need; 1-5% for the founders' bodies, as mammals'
+    1-3%), and never more than that production's edible tissue (CarcassKg). For a warm-blooded predator this bound is
+    the edible tissue itself: it can eat all the production of what it can catch, as vertebrate predators take 50-100% of
+    vertebrate prey production (Begon, Townsend & Harper). Carrion: in a steady population as much dies as is made
+    (Allen 1971), so the edible tissue of that production falls as carrion on land, detritus in water, counted at its
+    inflow as plant litter is. Dung: what each animal's gut leaves of the food that pays its day (FIELD_METAB × basal at
+    its best food), dung on land, detritus in water.
+  - *Each kind of food counts only if it could live on it.* The gut-rate test (FORAGE_MARGIN days' need a step) is made
+    for plant food, prey (a kill goes into the gut whole: digestion rate, gut and carcass bound it), carrion and dung
+    (bites of their steady stock, inflow over rot) separately, and only the kinds that pass are counted. Before, the
+    energy of every food was counted once any one passed, so a meat-eater could have been founded on plants it cannot
+    eat fast enough to live on.
+  - *A range that feeds none is widened too* (Life.RangeFor, up to HOME_R_MAX): homes are placed far apart, so a
+    meat-eater's prey live in the other lineages' ranges.
+  Measured (valley map, seeds 3, 5, 7, 2,000 steps): two ancestors waited in each world; none of them was founded as a
+  meat-, carrion- or dung-eater: each was retested and its first viable draw was again a plant eater. The plant yield
+  of a range is thousands of times a plant eater's founders, so the gut-rate test decides; the prey present at
+  founding are the other lineages' founders (at most Founders each, far below their capacity, in their own parts of the
+  map), and their production (P/B ~0.3 a year from their genes, about what Carbone &amp; Gittleman 2002's ~1 kg of
+  predator per 111 kg of prey implies) feeds a founding group of FOUND_MIN only for meat-eaters of about a kilogram or
+  less, with a gut that passes meat at three days' need a step. No such draw came up first on these seeds.
 - *Food sensed as worth to the eater.* FOOD_HERE (and the food gradient) was the cell's food against the best food the
   diet could ever give, so a nectar eater in a meadow sensed ~0.02 and its eating instinct hardly fired: hungry
   founders stood on food and starved. It is now one bite's energy against a step's need, 1 - exp(-bite/need).
@@ -887,6 +923,24 @@ to MASS_HI. The class gene is copied exactly (founder variation and ordinary mut
 one class with probability FLOOR_MUT = 5e-5 per birth. Ancestors are spread over the classes (ancestor a gets class a mod 4),
 their mass log-uniform from the floor up to max(4 x floor, 20 on land or 5 in water). The console's AGENTS record carries
 the body's actual size; the split test compares actual sizes.
+
+**Body sizes are a world setting** (2026-11-01, the owner: "we want more customizability on the size floors - why not be
+able to do a world of giants on purpose"): the setup screen's Bodies group (and --bodies, --body-min, --body-max,
+--body-floors) chooses the mass gene's range, 0.001 to 50,000 kg (BodySize; presets Normal 0.1-40 kg, Giants 100 kg-20 t,
+Tiny 1 g-1 kg), and the size classes' floors: by default the same log proportions of the range as 0.1, 1, 3 and 10 are of
+0.1-40, or set one by one. The mass gene maps on a log scale onto the range, so a mutation changes a body by a share of its
+size. The smallest newborn is a tenth of the smallest body (NEWBORN_MIN at the default). What depended on the largest body
+is the world's own: the farthest eye (BodySize.MaxSight, x (Max/40)^0.2), the farthest call (MaxHear, x (Max/40)^(1/3)) and
+the spatial-hash cells (Map.HCell, Map.HCellCall: the smallest divisors of the map side that hold a step's largest
+perception and the loudest call; a grid narrower than its neighbourhood searches each cell once). Every other law of a body
+is its own physics of its mass: flight stops near 16 kg whatever the range, giants overheat and hold their breath longer,
+walk the day ranges of their size (M^0.25) and live longer. Saved in checkpoints and world saves from format 23; older
+saves load with the default. With the default range a run is bit for bit what it was. Real densities fall with size
+(Damuth 1981: log10 D/km2 = 1.30 - 0.66 log10 M), so the setup screen shows what the chosen map would hold of real animals
+of these sizes and warns that giants need a much bigger map; the map is never resized for you. One law had to be mended
+for giants: the leg-load term of walking speed (LOAD_DRAG x M^(1/3) x ...) is negative for bodies whose legs share the
+load better than the reference, and above ~14 t with three or four leg pairs made the speed negative or infinite; the
+gain is now at most twice the plain body's speed (it never binds up to 1.7 t).
 
 **Big brains fixed** (2026-10-30, found after the user saw the big-brained founders kill each other at once): the
 brain size was stored in a byte, so a 256-unit brain ran with 0 memory units while paying for 256; it is now a ushort.
@@ -1101,7 +1155,9 @@ reviewed by the ecologist)
 - The strength of nature is a setting (Nature: plants, seasons, season length, droughts, fire, disease,
   thirst, water, ponds), multipliers on the documented constants; 1 = the law. Saved in every checkpoint.
 - Hunger senses prey: an animal that can digest meat or blood sees the value of the animal in reach as food
-  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants.
+  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants. (2026-11-01:
+  prey and plants are compared by the energy a bite of each gives, not by their worths, which saturate at ~1 for
+  any food; the way to food leads to prey only for what it would give beyond the food underfoot.)
 - Ancestors' diet preferences are sparse and random: good at 1-3 of all 15 foods, poor at the rest. Revision P: a
   guaranteed staple (grass on land, plankton in water) was tried and removed, as it put every ancestor in the same
   niche; an ancestor is instead a body its home range can feed. Drain or kill is a share (PDrain), not a switch.
@@ -1211,7 +1267,7 @@ Kleiber's energy scale, a strike's reach the body plus a 15 s sprint at Garland'
 home range of its body (HR_KM2 x M, Jetz et al. 2004). A step is hours, so what an animal perceives is what lay within
 sight of the way it travelled (Decide.Perceive: the disc of the band's area, Gerritsen & Strickler 1977), and a strike or
 a mating reaches along that way (Resolve.AlongWay). The bodies' hash cell (HCELL = 8, 7x7 cells) is sized from the
-largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call. docs/CONSTANTS.md group Units has every
+largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call (both wider in a world of bigger bodies: Map.HCell, Map.HCellCall). docs/CONSTANTS.md group Units has every
 value and its source; docs/ICD.md §2.1 what the console gets.
 
 ## 1. The idea in one page
@@ -1477,7 +1533,7 @@ Functional traits have physical costs:
 
 | Trait | Gene → value | Cost / effect |
 |---|---|---|
-| mass | log range MASS_LO..MASS_HI | all of allometry (§9.1) |
+| mass | log range of the world's body sizes (BodySize; MASS_LO..MASS_HI by default) | all of allometry (§9.1) |
 | legs, fins, wings | organ size 0..1 | speed in each medium follows smoothly from the organs (Revision G): land v·(CRAWL + (1 − CRAWL)·legs), water v·SWIM_SPEED·(0.1 + 0.9·fins), air only if wings·WING_LIFT ≥ M^(1/3) (wing loading). Any organism may enter land and shallows; deep water needs 0.1 + 0.9·fins ≥ DEEP_SWIM. Settled only with almost no organ at all. Half a fin is half a fin. COST_LIMB·(legs·legPairs + fins·finPairs)/2 and COST_WING·wings·M^(1/3) basal |
 | leg, fin, eye pairs | 1..4 | more leg pairs spread an armoured body's drag (÷√pairs); more fin pairs turn faster (FIN_TURN); more eye pairs widen the field of view (EYE_FOV); COST_EYE per eye pair |
 | lifespan | ×/÷ LIFE_RANGE | COST_LONGEVITY·(k − 1) basal (body repair) |
@@ -1788,7 +1844,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | movement cost | on the ground C_MOVE·C_SPEED·M^EXP_MOVE·speed·(1 − LEG_SWING + LEG_SWING·legs·pairs/LEG_PAIRS_REF·speed/vmax) (cost of transport ~M^0.7 × speed, Taylor et al. 1982; leg swing, Marsh et al. 2004; no swing swimming); airborne FlightPowerMin(M)·(3/u + u³)/4 − basal, u = speed/v_mp ≥ FLY_U_MIN (§9.2b); all × (1 + INS_MOVE·fur) |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
-| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
+| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, M·(1 − Birth)/A_m·TISSUE_E/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15). Since 2026-11-01 the whole body is built at the energy of wet tissue (TISSUE_E = 7 MJ/kg), ~9 MJ per kg with GROWTH_EFF; it was C_CARC·M·ρ_meat (18 MJ/kg), 2.5x the cost of real growth |
 | reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
 
 ### 9.2 Movement and realm
@@ -1866,9 +1922,9 @@ A body's own mass is its first defence: a small striker rarely hurts a large ani
 
 | Case | Result |
 |---|---|
-| Hit | The victim loses C_DAMAGE·power energy and feels pain. It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space; the rest becomes CARRION (DETRITUS in water). |
+| Hit | The victim loses min(1, power/defence)·WOUND·Emax_v energy and feels pain (2026-11-01: the wound grows with the weapon's force against the body resisting it, so a predator matched to its prey kills what it catches; it was C_DAMAGE·power, ~4 landed hits for a fed prey of the striker's size). It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space, the carcass: the energy of C_CARC·M_v of wet tissue (TISSUE_E, 7 MJ/kg; it was C_CARC·M_v kg of meat at RHO_MEAT, 5x that) and the victim's reserve before the hit, in kg of meat at RHO_MEAT; the rest becomes CARRION (DETRITUS in water). |
 | Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy). The host dies only if its energy reaches 0 (cause: parasitism). |
-| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. |
+| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. An attacker this leaves without reserve is killed by the victim's clade (2026-11-01: it was counted as starved). |
 
 ### 9.6 Disease (Revision C, NR-329; Revision G)
 
