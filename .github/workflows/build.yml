@@ -4,9 +4,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Build the exe without running the test suite (quick download)'
+        type: boolean
+        default: false
 
 jobs:
   test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_tests) }}
     strategy:
       fail-fast: false
       matrix:
@@ -22,6 +28,7 @@ jobs:
 
   publish:
     needs: test
+    if: ${{ !cancelled() && (needs.test.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.skip_tests)) }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
