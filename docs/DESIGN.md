@@ -3,6 +3,89 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
+Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and
+mtn_after_*: _shade top-down, _view the highest peak, _view2 the highest below 45° latitude, both at true scale). The
+owner: "there are no jagged high mountains". Diagnosis (1024 map, seeds 3, 7, 11):
+- *The cap.* Deep time made 7-8 km of relief on the coarse grid (Crust.Scale 0.37-0.40 for seeds 3 and 11), and Refine
+  scaled it down to H_RELIEF = 3,000 m; the game read at most 2.8-3.0 km above the lakes.
+- *One critical slope.* Every rock failed at GEO_SC (31°): no land was steeper than 33°, p99 31° on every rock. Mountains
+  were pyramids of 31° facets with rounded crests: crest sharpness (a ridge cell above the mean of its 8 neighbours) 30-34 m.
+- *Soft rock everywhere.* Sediment over 20 m thick made a cell "sedimentary" and fail at 31° all the way down, and creep
+  and diffusion laid such mantles on half the cells of every mountainside, in a salt-and-pepper mosaic; the fine passes
+  then shaved up to 1.5 km off summits whose surface was a 25 m mantle on granite.
+- *No glaciers.* Nothing cut the land above the snowline.
+Now:
+- *Rock strength sets the critical slope* (Rock.Sc; Schmidt & Montgomery 1995): crystalline 54.5° (GEO_SC_CRYST 1.4),
+  limestone 50° (1.2), volcanic 45° (1.0), soft strata, regolith, talus and alluvium 31° (GEO_SC). Loose cover fails at
+  GEO_SC only down to the rock beneath it, which then stands at its own (Geology.Fail's cover). Nonlinear diffusion takes
+  the critical slope of the higher cell's rock; the fine passes' creep runs at kRock of the higher cell (soil production
+  on hard rock is slow) and they know the rock beneath the cover (Crust.FineBed, FineSed; Geology.Cover, Expose: where
+  they strip the cover the rock below becomes the surface).
+- *Talus* (GEO_TALUS, GEO_REPOSE): half of what falls from a crag in a step comes to rest on its lowest neighbour, up to
+  35° from the crag; it is loose (sedimentary) cover. None lands on a glacier or a lake.
+- *Glaciers* (Geology.Glaciate, each step on both grids): the deep-time snowline (ELA) is where the Earth-like annual mean
+  T_EQ - DT_EP sin² lat - LAPSE z reaches GEO_T_ELA = -2 °C (whatever the climate setting, so a seed makes one land:
+  4.5 km at the equator, 1.4 km at 45°, the lakes' level from 61°). Mass balance GEO_ICE_BETA 7 m/yr per km, at most
+  GEO_ICE_BMAX 1.5 m/yr x the rain; the balance flux runs down the drainage until melt takes it. Plastic ice
+  (tau 100 kPa) of width 0.5 km x (Q / 5e6 m3/yr)^0.4 slides at Q S rho g / (W tau) and erodes E = 1e-4 u_s (Humphrey &
+  Raymond 1994), implicitly like stream power with n = 1; it slides fully with its bed at the melting point and not at
+  all at GEO_T_COLD = -10 °C (the bed is the air's mean + 29 K per km of ice). Ground steeper than 45° holds no ice: its
+  snow avalanches on and the glacier cuts its foot (headwalls, arêtes, horns). Cells abreast of the bed within the
+  glacier's half-width and under its surface are pulled toward a parabolic cross-section (U troughs, where the glacier is
+  more than two cells wide). A glacier carries its load to its snout. Crust.Ice / FineIce keep the last step's ice.
+- *Relief from uplift against erosion*, no longer scaled to 3 km. **H_RELIEF is now 8,000 m and means the vertical
+  scale**: a cell stands (Elev - SeaLevel) / (1 - SeaLevel) x H_RELIEF m above the lakes, as before; the highest ground
+  stands at most that high (deep time's relief is scaled down only above it: the 2048 map reaches 7.5 km, scale 0.99).
+  On the 1024 map the top is 3.1-5.2 km, so Elev of the highest land is ~0.4-0.65, not 1.
+- *Climate stays consistent*: Climate.Build and Hydrology read metres through H_RELIEF as before; Rainfall's orographic
+  lift is now per km (RAIN_OROG 40/3 per km, the same per metre as 40 per 3,000 m) and the coarse rain of deep time sees
+  the relief at the game's vertical scale. The channel-head threshold Q S^2 >= CHANNEL_C now takes S in m/m (CHANNEL_C
+  2.4, the old 0.01 in elev per cell at 3,000 m): in elev units it had cut the channels from 2.1% to 0.2% of the map.
+- *Limestone* (Rock.Limestone = 3, for the caves): a young platform's cover is GEO_LIME = 0.8 km of limestone under
+  0.7 km of clastic strata (Crust.Lime); erosion strips clastics, then limestone, then bedrock (Crust.Strip). K 3, Sc 50°,
+  fertility 0.65. Land limestone 1.3-12.8%.
+Measured (1024 map, seeds 3, 7, 11; before -> after):
+- Max relief above the lakes 2,963 / 2,832 / 2,947 m -> 5,170 / 3,134 / 4,714 m. Geology's own top is 6.2 / 3.3 /
+  5.4 km; Hydrology.Erode's 20 fine passes then lower the upper half of the relief by 444 / 93 / 390 m on average
+  (p99 1.0 / 0.3 / 0.9 km). That is worth a look: they are not deep time, and their stream power is in elevation units.
+  Land over 1,500 m 8.5 / 9.8 / 7.6% -> 28.4 / 9.7 / 21.8%; over 3,000 m 0 -> 3.7 / 0 / 4.0%; median land
+  460 / 582 / 388 -> 805 / 498 / 699 m.
+- Slope by rock (steepest drop to a neighbour, p50/p90/p99, before -> after): crystalline 15-23 / 28-31 / 31° ->
+  25-31 / 50-53 / 54.6°, 26-35% of it steeper than 40° and 11-18% steeper than 50° (0 before); volcanic p99 28-31 ->
+  45°; sedimentary p99 31 -> 31-32° (under 0.2% of it over 40°); limestone p99 29-37°.
+- Snowline: land above the ELA 42.5 / 45.1 / 38.1% -> 46.8 / 43.0 / 41.9%, most of it in the polar rows, where the ELA
+  is at the lakes. At latitudes under 45° it went from 0.9 to 8.3 / 1.5 / 4.8%. The buzzsaw (same seeds, glaciers off
+  -> on, latitudes whose ELA is 0.3-3.5 km): land above the ELA 32 / 16 / 23% -> 26 / 9 / 18%; p99 height above it
+  2.6 / 1.8 / 2.5 -> 2.1 / 1.3 / 1.8 km. Glaciers run on the routed steps (every GEO_ROUTE_EVERY) for those steps
+  together. Steady state: residual 0.04-0.06 before, 0.07-0.09 after (0.11-0.13 without glaciers).
+- Jaggedness (land above half the top): crest sharpness 30 / 34 / 30 m -> 103 / 100 / 88 m; mean |Laplacian| 48 / 53 / 48
+  -> 204 / 219 / 179 m per cell²; steeper than 40° 0 -> 70 / 76 / 57%.
+- Land rock: crystalline 65-76%, volcanic 5%, sedimentary 17-19% (24-35% before: thin mantles on crags are shed),
+  limestone 1-13%.
+- Generation: Terrain.Build 2.9 s at 1024 and ~12.5 s at 2048 on 4 shared cores at load ~5 (it was 2.4 and 9.7). At
+  load 14-18, back to back with HEAD, the 2048 map took 14-21 s against HEAD's 17.6-17.8 s, so the budget test fails
+  for both under that load.
+Tests: GeologyTests CragsStandOnHardRock, GlaciersCutTheLandAboveTheSnowline ([BigWorld]; Geology.Form(w, glaciers:
+false) is the control) and ReliefScalesWithUplift (coarse land by tercile of rock uplift stands higher, the top third
+over 1.5 x the bottom); SlopeDistributionIsBounded became SlopeDistributionIsBoundedByRock (each rock by its own Sc,
+soft rock p99 under 35°); arcs are volcanic bedrock (talus now mantles 57% of their surface); the highest tenth of the
+land is over 60% (was 70%) on convergent belts (79 / 62 / 83%: the buzzsaw lowers glaciated belts); limestone joins the
+erodibility order and the fertility test. HydrologyTests' channel threshold check takes S in m/m. ClimateTests' no-climate
+hash is re-pinned (0x106402C035234308).
+For the renderer and the 3D view (not changed here; wwwroot is theirs):
+- world3d.js draws (e - sea) / (1 - sea) x RELIEF with RELIEF = 55 units for 3,000 m. At true scale (a 218 m cell is 4
+  units) **RELIEF must be 8000 x 4 / 218 = 146.8 units** (H_RELIEF x FCELL / GEO_CELL_M).
+- Its "rock on the highest ground" tint (ea > 0.78) assumed the land fills 0..1 above the lakes; the top is now at
+  0.4-0.6 of the scale on the 1024 map, so tint by slope and rock instead (World.Rock: 3 = limestone).
+- Wire.EncodeWorld sends Elev as one byte: at 8,000 m that is ~35 m a step (it was ~13 m), which terraces 218 m cells
+  by ~9°; the elevation needs 16 bits (as Surface already is).
+Not done:
+- Elevation-unit constants (SHALLOW, RIVER_BANK, FLOOD_HAND, ALLUV_D, BASIN_MIN) now mean ~2.7 x as many metres. The
+  hydrology tests still pass, but the hydrologist may want them in metres.
+- Fault scarps along plate boundaries.
+- The parallel gully comb on uniform slopes may come from Refine's roughness: Fbm with its base lattice on the coarse
+  grid, upsampled by exactly 2. Not yet tried.
 **Rivers that run along their own lines** (2026-11-01; Hydrology.Route and Waters, Channels.cs, RiverStats.cs, Wire
 RIVERS; images docs/art/terrain2/riv_before_*.png and riv_after_*.png, tools/RiverProbe). The owner: "the rivers are
 weird". Measured before (1024 map, seeds 3, 7, 11; RiverStats):

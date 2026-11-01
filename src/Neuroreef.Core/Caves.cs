@@ -202,13 +202,13 @@ public static class Caves
 
     // ---- the rock
 
-    /// <summary>Carbonate share of each cell's rock (World.Carb): sedimentary rock far from clastic sources, in the formations a
-    /// regional draw makes carbonate; CARB_SHARE of sedimentary land is carbonate.</summary>
+    /// <summary>Carbonate share of each cell's rock (World.Carb): Geology's limestone (Rock.Limestone) is wholly carbonate; of the
+    /// other sedimentary rock, that far from clastic sources in the formations a regional draw makes carbonate, CARB_SHARE of it.</summary>
     static void Carbonate(World w)
     {
         int FW = Map.FW, n = FW * FW;
         var src = new byte[n]; var dist = new float[n];
-        for (int i = 0; i < n; i++) src[i] = (byte)(w.Rock[i] != Rock.Sedimentary && w.Elev[i] >= w.SeaLevel ? 1 : 0);
+        for (int i = 0; i < n; i++) src[i] = (byte)(w.Rock[i] != Rock.Sedimentary && w.Rock[i] != Rock.Limestone && w.Elev[i] >= w.SeaLevel ? 1 : 0);
         Terrain.Distance(src, 1, dist);
         var r = new Rng.Seq(w.TerrainSeed * 40503u + 0x4B41u);
         var formation = Terrain.Fbm(ref r, 4, 3);
@@ -229,7 +229,8 @@ public static class Caves
         float span = MathF.Max(1e-6f, hi - lo);
         // the carbonate share climbs from CARB_MIN at the threshold to 1 halfway through the carbonate's scores
         for (int i = 0; i < n; i++)
-            if (score[i] >= lo) w.Carb[i] = MathF.Min(1f, K.CARB_MIN + (1f - K.CARB_MIN) * (score[i] - lo) / span);
+            if (w.Rock[i] == Rock.Limestone) w.Carb[i] = 1f;   // Geology's own limestone platforms are carbonate through and through
+            else if (score[i] >= lo) w.Carb[i] = MathF.Min(1f, K.CARB_MIN + (1f - K.CARB_MIN) * (score[i] - lo) / span);
             else if (score[i] > float.MinValue) w.Carb[i] = MathF.Max(0f, K.CARB_MIN * (1f - (lo - score[i]) / span));
     }
 

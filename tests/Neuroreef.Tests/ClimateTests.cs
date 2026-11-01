@@ -67,7 +67,10 @@ public class ClimateTests
         // same seed, map and steps.
         // Re-pinned for MathK everywhere (NR-104; Windows and Linux had differed) and for evolving plants (fields are now
         // grown by plant genotypes). It was 0xD1A92250AB690304 with MathK before plants.
-        Assert.Equal(0x753FBC092B902E01UL, h);
+        // Mountains (2026-11-01) re-pinned it: each rock fails at its own critical slope, talus, glaciers above the snowline,
+        // the relief no longer scaled down to 3,000 m (H_RELIEF 8,000 m, the game's vertical scale) and limestone, so the same
+        // seed has other land, water and plants. Also the D-infinity rivers and karst caves. It was 0x753FBC092B902E01 before the mountains.
+        Assert.Equal(0xC7DCAB9771F0850DUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
