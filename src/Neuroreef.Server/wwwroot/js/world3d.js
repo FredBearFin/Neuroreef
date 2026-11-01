@@ -76,6 +76,10 @@ export class World3D {
     this.controls.zoomToCursor = true; this.controls.zoomSpeed = 3;   // x0.86 a notch: the whole map to a few metres in ~60
     this._fly = null;
     canvas.addEventListener('dblclick', (e) => { if (this.mode === 'overview') this.diveAt(e.clientX, e.clientY); });
+    // the wheel zooms about the ground under the cursor (OrbitControls' zoomToCursor uses a flat plane at the view
+    // centre's depth: over the relief the point under the cursor drifted ~650 m in 30 notches). Caught on the parent
+    // ahead of OrbitControls; a pinch on a touch screen still zooms through OrbitControls.
+    if (canvas.parentElement) canvas.parentElement.addEventListener('wheel', (e) => this._wheel(e), { capture: true, passive: false });
 
     // [look] sky, aerial perspective, sun and sky light, shadows, plants and the finish: js/look/
     this.look = new Look(this, (m) => wrapPatch(m, this.wrapU));
@@ -309,6 +313,33 @@ export class World3D {
     off.multiplyScalar(nd / d);
     const g = this.heightAt(x, z), c1 = new THREE.Vector3(x, g, z);
     this._flyTo(c1, c1.clone().add(off), 700);
+  }
+
+  /** A wheel notch in the overview: camera and view centre scaled about the ground point under the cursor, which so
+   *  stays exactly under it (x0.83 a notch in, as OrbitControls' zoomSpeed 3), within the controls' distance limits. */
+  _wheel(e) {
+    if (this.mode !== 'overview' || e.target !== this.canvas || !this.world || !this.controls.enabled) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const dy = e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1);
+    if (!dy) return;
+    this._fly = null;
+    const c = this.controls.target, cam = this.camera.position, d = cam.distanceTo(c);
+    const s = Math.pow(0.95, this.controls.zoomSpeed * Math.min(3, Math.abs(dy) * 0.01));
+    const nd = Math.max(this.controls.minDistance, Math.min(this.controls.maxDistance, dy < 0 ? d * s : d / s)), k = nd / Math.max(1e-9, d);
+    const hit = this.groundAt(e.clientX, e.clientY, true);
+    const P = hit ? new THREE.Vector3(hit[0], this.heightAt(hit[0], hit[1]), hit[1]) : c.clone();
+    cam.sub(P).multiplyScalar(k).add(P); c.sub(P).multiplyScalar(k).add(P);
+  }
+
+  /** The least camera height at (cam.x, cam.z) from which the line to the view centre c clears the ground. */
+  _sightY(c, cam) {
+    const hd = Math.hypot(cam.x - c.x, cam.z - c.z), m = 0.03 * Math.max(hd, Math.abs(cam.y - c.y));
+    let y = -Infinity;
+    for (let i = 1; i <= 10; i++) {
+      const f = i / 10, g = this.heightAt(c.x + (cam.x - c.x) * f, c.z + (cam.z - c.z) * f);
+      y = Math.max(y, c.y + (g + m * f - c.y) / f);
+    }
+    return y;
   }
 
   /** The mean height of the land (where the whole map's view looks). */
@@ -749,7 +780,7 @@ export class World3D {
   setMode(m) {
     this.mode = m;
     this.controls.enabled = m === 'overview';
-    this._fly = null;
+    this._fly = null; this._camT = 0;
     this.scale.trueSize = m === 'explore';   // Explore: everything at true size (x1)
     if (m === 'explore') { this.explore?.setView(); this._plants(true); return; }   // EXPLORE hook: js/explore/ sets the lens and fog
     this.camera.fov = m === 'ride' ? 78 : 55; if (m !== 'overview') this.camera.near = 0.005; this.camera.updateProjectionMatrix();
@@ -854,18 +885,24 @@ export class World3D {
       const sz = this._size(sel);
       const gh = this._height(sel, selP[0], selP[1]);
       const fx = Math.cos(selP[2]), fz = Math.sin(selP[2]);
-      this._camH = this._camH === undefined ? selP[2] : lerpAngle(this._camH, selP[2], 0.08);
+      // the camera's easing per frame as at 60 frames a second, whatever the frame rate (a slow machine's camera kept up)
+      const fdt = Math.min(0.5, Math.max(0, (now - (this._camT || now)) / 1000)); this._camT = now;
+      const ease = (k) => 1 - Math.pow(1 - k, fdt * 60);
+      this._camH = this._camH === undefined ? selP[2] : lerpAngle(this._camH, selP[2], ease(0.08));
       const hx = Math.cos(this._camH), hz = Math.sin(this._camH);
       // (distances in the animal's own drawn lengths: the view keeps its framing at any magnification)
       if (this.mode === 'follow') {
         const dist = sz * 9, up = sz * 4;
         const want = new THREE.Vector3(selP[0] - hx * dist, gh + up, selP[1] - hz * dist);
         want.y = Math.max(want.y, this.heightAt(want.x, want.z) + sz * 0.8);
-        this.camera.position.lerp(want, 0.12);
+        this.camera.position.lerp(want, ease(0.12));
+        // on its way there (from the overview, or round a hill the animal walked past) the camera never goes into the ground
+        const cp = this.camera.position, floor = this.heightAt(cp.x, cp.z) + sz * 0.5;
+        if (cp.y < floor) cp.y = floor;
         this.camera.lookAt(selP[0], gh + sz * 0.6, selP[1]);
       } else {
         const eye = new THREE.Vector3(selP[0] + fx * sz * 0.6, gh + sz * 0.9, selP[1] + fz * sz * 0.6);
-        this.camera.position.lerp(eye, 0.35);
+        this.camera.position.lerp(eye, ease(0.35));
         this.camera.lookAt(eye.x + hx * sz * 20, eye.y - sz * 1.5, eye.z + hz * sz * 20);
       }
       const nr = Math.max(0.001, sz * 0.05);
@@ -896,6 +933,10 @@ export class World3D {
         c.y += dy; this.camera.position.y += dy;
         const cam = this.camera.position, clear = this.heightAt(cam.x, cam.z) + Math.max(0.006, 0.08 * cam.distanceTo(c));
         if (cam.y < clear) cam.y = clear;
+        // and the view centre is in sight: no ridge between them (leaving Explore on a slope, or orbiting low across
+        // the hills, put the camera inside a hillside looking at the inside of the ground). The line from the centre to
+        // the camera must clear the ground by a share of the distance at each point along it.
+        cam.y = Math.max(cam.y, this._sightY(c, cam));
       }
       // fog and the terrain tiles follow the zoom, so zooming out never blanks the ground
       const camD = this.camera.position.distanceTo(c);

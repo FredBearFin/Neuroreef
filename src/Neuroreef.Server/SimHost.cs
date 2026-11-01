@@ -116,6 +116,13 @@ public sealed class SimHost : IDisposable
     public void Start() { Pre?.Start(); _thread.Start(); }
 
     public void Post(Action<Simulation> cmd) => _cmds.Enqueue(cmd);
+    /// <summary>EXPLORE (2026-11-01): run cmd on the thread that steps the simulation on view: the live world's (Post), or
+    /// during the prehistory the watched branch's own thread (Prehistory.Post), so the person can explore a branch.</summary>
+    public void PostView(Action<Simulation> cmd)
+    {
+        var pre = Pre;
+        if (IsPrehistory && pre != null) pre.Post(ViewBranch, cmd); else Post(cmd);
+    }
     public void StepOnce() => Interlocked.Exchange(ref _stepOnce, 1);
     public void BeginWorld(int branch = -1) { _beginBranch = branch; _begin = true; }
 
@@ -161,7 +168,10 @@ public sealed class SimHost : IDisposable
     public void View(int branch)
     {
         if (Pre == null) return;
+        int was = ViewBranch;
         ViewBranch = Math.Clamp(branch, 0, Pre.B.Length - 1);
+        // EXPLORE: the person leaves the branch it was in (it explores the one on view)
+        if (was != ViewBranch) Pre.Post(was, s => { if (s.W.Player != null) s.W.Player.Present = false; });
         Interlocked.Increment(ref PhaseVersion);
     }
 
@@ -173,7 +183,11 @@ public sealed class SimHost : IDisposable
         {
             while (_cmds.TryDequeue(out var c)) { try { c(Sim); } catch (Exception e) { Console.Error.WriteLine("command failed: " + e.Message); } }
             // EXPLORE: a person no console has placed for a while has left the world
-            if (_live?.W.Player is { Present: true } pl && (DateTime.UtcNow - PlayerSeen).TotalSeconds > 5) pl.Present = false;
+            if ((DateTime.UtcNow - PlayerSeen).TotalSeconds > 5)
+            {
+                if (_live?.W.Player is { Present: true } pl) pl.Present = false;
+                else if (IsPrehistory && Sim.W.Player is { Present: true }) PostView(s => { if (s.W.Player != null && (DateTime.UtcNow - PlayerSeen).TotalSeconds > 5) s.W.Player.Present = false; });
+            }
 
             if (IsPrehistory)
             {

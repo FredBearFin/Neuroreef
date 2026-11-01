@@ -5,6 +5,7 @@
 // taken from the branch where it did best.
 
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
 
@@ -21,6 +22,9 @@ public sealed class Prehistory : IDisposable
     bool _pendingDirty;
     readonly Thread[] _threads;
     readonly Barrier _barrier;
+    // commands for one branch (the console's Explore mode: the person, its hits and blasts), run on that branch's own
+    // thread between its steps (2026-11-01), so the person can explore the branch being watched
+    ConcurrentQueue<Action<Simulation>>[] _cmds = Array.Empty<ConcurrentQueue<Action<Simulation>>>();
     volatile bool _stop, _paused;
     public volatile bool Finished;
     public ulong Step => B[0].W.Step;
@@ -67,6 +71,8 @@ public sealed class Prehistory : IDisposable
         WorldLand = B[0].StartLand;
         _barrier = new Barrier(n, _ => AtBarrier());
         _threads = new Thread[n];
+        _cmds = new ConcurrentQueue<Action<Simulation>>[n];
+        for (int b = 0; b < n; b++) _cmds[b] = new ConcurrentQueue<Action<Simulation>>();
         for (int b = 0; b < n; b++)
         {
             int id = b;
@@ -75,6 +81,14 @@ public sealed class Prehistory : IDisposable
     }
 
     public void Start() { foreach (var t in _threads) t.Start(); }
+
+    /// <summary>Run cmd on branch b's thread before its next step (or while it is paused).</summary>
+    public void Post(int b, Action<Simulation> cmd) { if (b >= 0 && b < _cmds.Length) _cmds[b].Enqueue(cmd); }
+
+    void Drain(int b)
+    {
+        while (_cmds[b].TryDequeue(out var c)) { try { c(B[b]); } catch (Exception e) { Console.Error.WriteLine("branch command failed: " + e.Message); } }
+    }
 
     public bool Paused { get => _paused; set => _paused = value; }
 
@@ -107,7 +121,8 @@ public sealed class Prehistory : IDisposable
                 {
                     if (sim.W.Step >= (ulong)sim.W.Evo.TotalSteps) break;
                     // pause and speed act at once, not only at the next barrier
-                    while (_paused && !_stop) { Thread.Sleep(20); due = clock.Elapsed.TotalSeconds; }
+                    while (_paused && !_stop) { Drain(b); Thread.Sleep(20); due = clock.Elapsed.TotalSeconds; }
+                    Drain(b);
                     float rate = RateLimit;
                     if (rate > 0)
                     {
