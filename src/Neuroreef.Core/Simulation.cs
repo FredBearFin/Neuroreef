@@ -271,6 +271,7 @@ public sealed class Simulation : IDisposable
         var w = W;
         _t = System.Diagnostics.Stopwatch.GetTimestamp();
         if (w.Step != _seenStep || w.NextSerial != _seenSerial || w.FreeTop != _seenFree) w.D.Refresh(w);
+        w.Player?.BeforeStep(w);   // EXPLORE: the person's speed and scent (nothing when no one explores)
         Build();
         UpdateProbe();
         Lap(0);

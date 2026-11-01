@@ -22,7 +22,7 @@ import { splitChunks, copyColors } from './terrain/chunks.js';
 // 8000 m are RELIEF = 8000 x 4 / 218 = 146.8 units (no exaggeration). The 1024 map's land reaches 0.4-0.65 of it (3-5 km),
 // the 2048 map's ~7.5 km; crags stand at up to 45-55 degrees by rock kind, as Geology made them. (55 units drew the 3000 m
 // before; elevation comes as 16 bits when the WORLD frame has the plane, as the 8 bits' 31-m steps would terrace them.)
-const RELIEF = 8000 * 4 / 218;   // 146.8 units
+export const RELIEF = 8000 * 4 / 218;   // 146.8 units (exported for Explore mode, js/explore/: its metres per unit)
 const SHADE_Z = 1;           // lighting normals are computed with the relief x this (a hillshade z-factor; the geometry is not)
 const LAND_LIFT = 0.06;      // land sits this far above the level of the water beside it, so the water's flat surface never shows through it
 const CHUNKS = 8;             // river ribbons and karst rocks are cut into CHUNKS x CHUNKS squares of the map ...
@@ -635,6 +635,7 @@ export class World3D {
   setMode(m) {
     this.mode = m;
     this.controls.enabled = m === 'overview';
+    if (m === 'explore') { this.explore?.setView(); this._plants(true); return; }   // EXPLORE hook: js/explore/ sets the lens and fog
     this.camera.fov = m === 'ride' ? 78 : 55; if (m !== 'overview') this.camera.near = 0.3; this.camera.updateProjectionMatrix();
     this.scene.fog.near = m === 'ride' ? 60 : 250; this.scene.fog.far = m === 'ride' ? 380 : 900;
     if (m === 'overview' && this._selPos) this.controls.target.set(this._selPos[0], 0, this._selPos[1]);
@@ -729,7 +730,9 @@ export class World3D {
     if (sel) selP = this._pos(sel, alpha, c.x, c.z);
     this._selPos = selP;
 
-    if (this.mode !== 'overview' && selP) {
+    if (this.mode === 'explore' && this.explore) {
+      this.explore.drive(now, c);   // EXPLORE hook: the person moves the camera and the view centre (js/explore/)
+    } else if (this.mode !== 'overview' && selP) {
       const sz = this._size(sel);
       const gh = this._height(sel, selP[0], selP[1]);
       const fx = Math.cos(selP[2]), fz = Math.sin(selP[2]);
@@ -913,6 +916,20 @@ export class World3D {
     if (this.shake > 0.01) { sx = (Math.random() - 0.5) * this.shake; sy = (Math.random() - 0.5) * this.shake; this.camera.position.x += sx; this.camera.position.y += sy; this.shake *= 0.86; }
     this.look.update(); this.look.render();   // [look] light, sky and fog for this view, then the finish (js/look/post.js)
     this.camera.position.x -= sx; this.camera.position.y -= sy;
+  }
+
+  // ---- EXPLORE hooks (js/explore/): the ground and water under the person, and where a creature is drawn now
+  /** Drawn ground height and standing/running water surface (NaN: none) at a world position. */
+  groundWater(x, y) { if (!this.world) return [0, NaN]; return [this._ground(x, y), this.surfH[this._cellOf(x, y)]]; }
+  /** Where organism e is drawn this frame (the copy nearest the view centre): x, z, ground y, centre y, radius. */
+  creatureNow(serial, e, out) {
+    const c = this.controls.target, now = performance.now(), P3 = this._p3 ||= [0, 0, 0];
+    const [x, y] = this._pos(e, Math.min(1, (now - this.frameT) / this.frameDt), c.x, c.z, P3);
+    const sc = e.stage === 0 ? 0.6 : (e.size || 1.5) * (e.stage === 1 ? 0.55 : 1);
+    let gy = e.stage === 0 ? this.heightAt(x, y) : this._height(e, x, y);
+    if (e.stage !== 0 && e.fly && !e.rest) gy += 3.5 + Math.sin(now / 1000 * 3 + serial) * 0.6;
+    out.x = x; out.z = y; out.gy = gy; out.cy = gy + 0.45 * sc; out.r = 0.55 * sc;
+    return out;
   }
 
   _height(e, x, y) { return this.heightAt(x, y, e.swim); }

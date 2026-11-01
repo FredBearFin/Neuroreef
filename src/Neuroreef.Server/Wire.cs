@@ -310,6 +310,8 @@ public static class Wire
         return b;
     }
 
+    static object ModeJson(WeaponMode m) => new { id = m.Id, name = m.Name, kind = m.Kind, rangeM = m.RangeM, damage = m.Damage, speedMps = m.SpeedMps, cooldown = m.Cooldown, ammo = m.Ammo };
+
     /// <summary>Metadata for the console: species, senses, primitives, pools, causes, telemetry layout, frame layouts.</summary>
     public static string Meta(SimHost h)
     {
@@ -330,6 +332,12 @@ public static class Wire
             probe = new { feat = PR_FEAT, hid = PR_HID, z = PR_Z, gain = PR_GAIN, learn = PR_LEARN, scal = PR_SCAL, scalars = ProbeScalars, phen = PR_PHEN,
                 phenotype = ProbePhenotype, diet = PR_DIET, w1 = PR_W1, w2 = PR_W2, end = PR_END, nh = G.NH, nin = G.NIN },
             landCells = Enumerable.Range(0, Map.FW * Map.FW).Count(i => w.Cell[i] == (byte)Realm.Land),
+            // EXPLORE: the weapons (the server's table is the authority on range and damage) and the person's body
+            explore = new
+            {
+                metresPerUnit = Player.M_PER_UNIT, geoCellM = K.GEO_CELL_M, hRelief = K.H_RELIEF, playerMass = Player.MASS, maxHp = Player.MAX_HP,
+                weapons = Weapons.All.Select(x => new { id = x.Id, name = x.Name, key = x.Key, primary = ModeJson(x.Primary), secondary = x.Secondary == null ? null : ModeJson(x.Secondary) }),
+            },
         };
         return JsonSerializer.Serialize(o);
     }

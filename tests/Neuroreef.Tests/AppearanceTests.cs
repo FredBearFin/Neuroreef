@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(20, Checkpoint.Version);   // 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
+            Assert.Equal(21, Checkpoint.Version);   // 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Assert.True(w.GenomeOf(i).SequenceEqual(restored.GenomeOf(i)), $"genome of slot {i}");
