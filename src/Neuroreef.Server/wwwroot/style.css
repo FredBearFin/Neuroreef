@@ -11,7 +11,25 @@ button.on { background: #12353a; border-color: var(--accent); color: #fff; }
 .hidden { display: none !important; }
 button:disabled { opacity: .35; cursor: default; }
 
-#bar { height: 46px; display: flex; align-items: center; gap: 18px; padding: 0 14px; background: linear-gradient(#0d141d, #0a1018); border-bottom: 1px solid var(--line); }
+#bar { height: 46px; display: flex; align-items: center; gap: 18px; padding: 0 14px; background: linear-gradient(#0d141d, #0a1018); border-bottom: 1px solid var(--line); white-space: nowrap; }
+#bar > * { flex-shrink: 0; }
+#bar .grow { flex-shrink: 1; min-width: 0; }
+#bar label.btn { display: inline-flex; align-items: center; gap: 5px; }
+#bar .btn { font-size: 12px; padding: 4px 9px; }
+#bar label.btn, #bar a.btn { border: 1px solid var(--line2); border-radius: 6px; cursor: pointer; }
+#quality { font-size: 12px; padding: 0 2px; border: 0; background: transparent; color: var(--fg); font-family: var(--mono); }
+#quality:hover { color: #fff; }
+#quality option { background: var(--bg2); }
+/* the bar at laptop widths (1366, 1440): shorter labels, the brand as its logo, tighter gaps */
+@media (max-width: 1700px) {
+  #bar { gap: 11px; padding: 0 10px; }
+  .badge .long { display: none; }
+}
+@media (max-width: 1500px) {
+  .brand .name { display: none; }
+  #bar .group button { padding: 4px 7px; }
+  #bar .btn .long { display: none; }
+}
 .brand { font-weight: 700; letter-spacing: .22em; font-size: 14px; display: flex; align-items: center; gap: 10px; }
 .logo { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #8ff5e9, #1f8f86 60%, #0b3b38); box-shadow: 0 0 12px #2fd8c955; }
 .stat { display: flex; flex-direction: column; line-height: 1.1; }
@@ -77,7 +95,20 @@ button:disabled { opacity: .35; cursor: default; }
 #legend span { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 #legend span.off { opacity: .35; }
 #legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-#hint { right: 10px; bottom: 10px; font-size: 11px; color: var(--faint); }
+/* the hint sits at the bottom right, wrapping within the space the legend (bottom left, at most 56%) leaves it */
+#hint { right: 10px; bottom: 10px; max-width: calc(44% - 30px); text-align: right; font-size: 11px; color: var(--dim); text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
+#legend { max-width: 56%; }
+/* narrow views (a small window): the Experience menu drops below the camera buttons it would cover */
+@media (max-width: 760px) {
+  #experience { top: 96px; left: 10px; right: auto; }
+  #scalebox { top: 136px; }
+  #fights { display: none; }
+}
+#toast { left: 50%; top: 34%; transform: translateX(-50%); max-width: min(520px, 80%); background: #070b10e8; border: 1px solid var(--line2); border-radius: 8px; padding: 9px 14px; font-size: 13px; color: var(--fg); box-shadow: 0 4px 18px #0008; z-index: 4; text-align: center; }
+#panel-show { right: 10px; bottom: 10px; z-index: 2; font-size: 12px; padding: 4px 10px; }
+#panel-show:not(.hidden) ~ #hint { bottom: 44px; }
+#tabs .panel-toggle { order: 99; margin-left: auto; padding: 4px 8px; }
+body.nopanel #panel { display: none; }
 
 #hud { position: absolute; top: 54px; left: 10px; width: 290px; background: #070b10d0; border: 1px solid var(--line2); border-radius: 8px; padding: 10px; backdrop-filter: blur(4px); }
 .hud-title { display: flex; flex-direction: column; margin-bottom: 6px; }
