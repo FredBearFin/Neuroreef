@@ -84,16 +84,22 @@ public static class Hydrology
     /// do not change). alluv receives the depth of sediment left on each cell. kRock (Revision R, optional): each cell's
     /// erodibility against soft sedimentary rock (Geology.Erodibility); hard rock cuts slower. sc (optional): the critical
     /// slope, as the most elevation a land cell may stand above a neighbour (x sqrt 2 on diagonals); steeper ground fails
-    /// and the rivers carry what slid (Geology.Fail). Returns the mass budget.
+    /// and the rivers carry what slid (Geology.Fail). scRock (optional, 2026-11-01): each cell's own critical slope, of its
+    /// rock beneath its loose cover (Geology.CriticalDrops); the cover, alluvium plus cover (optional, elevation; Geology.Cover,
+    /// used up in place as it is cut), slides at sc down to that rock at most. Returns the mass budget.
+    /// Creep (2026-11-01) moves regolith, and hard rock makes it slowly (soil production; Heimsath et al. 1997): each link
+    /// creeps at kCreep x the kRock of its higher cell (1 under alluvium), so crags of hard rock stay sharp.
     /// </summary>
     public static Budget Erode(float[] h, float sea, float[] rain, float[] alluv, int iters,
         float kErode = K.ERODE_K, float kCarry = K.CARRY_K, float drop = K.DEPOSIT_FRAC, float kCreep = K.CREEP_K, float[]? kRock = null,
-        float sc = 0f)
+        float sc = 0f, float[]? scRock = null, float[]? cover = null)
     {
         int FW = Map.FW, n = FW * FW;
         var net = new Net(n);
         var cut = new float[n]; var load = new float[n]; var h0 = new float[n];
         var slid = sc > 0f ? new float[n] : null;
+        var dropAt = sc > 0f ? new float[n] : null; var cov = sc > 0f ? new float[n] : null;
+        var kc = kRock != null && kCreep > 0f ? new float[n] : null;
         var b = new Budget();
         Array.Clear(alluv);
         for (int it = 0; it < iters; it++)
@@ -103,20 +109,27 @@ public static class Hydrology
             if (kCreep > 0f)
             {
                 Array.Copy(h, h0, n);
+                if (kc != null) for (int i = 0; i < n; i++) kc[i] = kCreep * (alluv[i] > 0f ? 1f : kRock![i]);
                 for (int i = 0; i < n; i++)
                 {
                     if (h0[i] < sea) continue;
                     int x = i % FW, y = i / FW;
                     int l = y * FW + (x == 0 ? FW - 1 : x - 1), r = y * FW + (x == FW - 1 ? 0 : x + 1);
                     int u = World.WrapI(y - 1, FW) * FW + x, d = World.WrapI(y + 1, FW) * FW + x;
-                    float dh = Creep(h0, i, l, sea, kCreep, ref b) + Creep(h0, i, r, sea, kCreep, ref b)
-                             + Creep(h0, i, u, sea, kCreep, ref b) + Creep(h0, i, d, sea, kCreep, ref b);
+                    float dh = Creep(h0, i, l, sea, kCreep, kc, ref b) + Creep(h0, i, r, sea, kCreep, kc, ref b)
+                             + Creep(h0, i, u, sea, kCreep, kc, ref b) + Creep(h0, i, d, sea, kCreep, kc, ref b);
                     h[i] = h0[i] + dh;
                 }
             }
-            // critical-slope failure (geomorphology, 2026-10-31): ground steeper than sc slides until it stands at sc (Geology.Fail);
-            // before the routing, so the drainage is that of the ground after the slides, and the rivers carry what slid
-            if (slid != null) { Array.Clear(slid); Geology.Fail(h, slid, sea, sc, FW); }
+            // critical-slope failure (geomorphology, 2026-10-31): ground steeper than its critical slope slides until it stands
+            // at it (Geology.Fail); before the routing, so the drainage is that of the ground after the slides, and the rivers
+            // carry what slid
+            if (slid != null)
+            {
+                // alluvium is loose cover: it slides at sc, down to the rock beneath at most
+                for (int i = 0; i < n; i++) { dropAt![i] = scRock == null ? sc : scRock[i]; cov![i] = alluv[i] + (cover == null ? 0f : cover[i]); }
+                Array.Clear(slid); Geology.Fail(h, slid, sea, dropAt!, FW, sc, scRock == null ? null : cov);
+            }
             Route(h, sea, rain, net);
             int[] recv = net.Recv, order = net.Order; float[] flow = net.Flow, fill = net.Fill;
             // incision, outlets first: h' = (h + F h'_r) / (1 + F), F = K A^m / dx (implicit for n = 1)
@@ -141,7 +154,8 @@ public static class Hydrology
                 int c = order[q], r = recv[c];
                 float s = load[c] + cut[c];
                 b.Eroded += cut[c];
-                alluv[c] = MathF.Max(0f, alluv[c] - cut[c]);
+                float a0 = alluv[c]; alluv[c] = MathF.Max(0f, a0 - cut[c]);
+                if (cover != null && cut[c] > a0) cover[c] = MathF.Max(0f, cover[c] - (cut[c] - a0));   // then the cover beneath
                 if (r < 0) { b.ToLakes += s; continue; }
                 float slope = (h[c] - h[r]) / Dist(c, r, FW);
                 float dep;
@@ -159,9 +173,11 @@ public static class Hydrology
     }
 
     // creep between land cell i and neighbour j; a lake (below sea) keeps its bed, so what goes into it is lost to it
-    static float Creep(float[] h0, int i, int j, float sea, float k, ref Budget b)
+    static float Creep(float[] h0, int i, int j, float sea, float k, float[]? kc, ref Budget b)
     {
-        float f = k * (MathF.Max(h0[j], sea) - h0[i]);   // down to the lake's level, not its bed
+        float dz = MathF.Max(h0[j], sea) - h0[i];   // down to the lake's level, not its bed
+        if (kc != null) k = dz > 0f && h0[j] >= sea ? kc[j] : kc[i];   // at the rate of the higher cell's rock
+        float f = k * dz;
         if (h0[j] < sea) b.ToLakes -= f;   // land is above every lake, so this only ever flows into it
         return f;
     }
@@ -419,7 +435,8 @@ public static class Hydrology
             if (!chan[c] && qin >= aMin)
             {
                 float down = lake[r] >= 0 ? level[lake[r]] : h[r];
-                float s = MathF.Max(0f, h[c] - down) / Dist(c, r, FW);
+                // m/m (2026-11-01: the vertical scale H_RELIEF is no longer 3,000 m, so the slope is metric, not elev per cell)
+                float s = MathF.Max(0f, h[c] - down) / Dist(c, r, FW) * (K.H_RELIEF / MathF.Max(1e-6f, 1f - w.SeaLevel) / K.GEO_CELL_M);
                 if (qin >= aBig || qin * s * s >= K.CHANNEL_C) chan[c] = true;
             }
             if (chan[c] && lake[r] < 0) chan[r] = true;

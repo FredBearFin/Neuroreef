@@ -106,7 +106,7 @@ public class HydrologyTests
             float q = qin[i] * 0.999f;
             float down = w.LakeOf[r] >= 0 ? w.Elev[r] + w.Depth[r] : w.Elev[r];
             float dist = (i % Map.FW != r % Map.FW && i / Map.FW != r / Map.FW) ? 1.4142135f : 1f;
-            float s = MathF.Max(0f, w.Elev[i] - down) / dist;
+            float s = MathF.Max(0f, w.Elev[i] - down) / dist * (K.H_RELIEF / (1f - w.SeaLevel) / K.GEO_CELL_M);   // m/m (2026-11-01)
             Assert.False(q >= K.CHANNEL_A_MIN * scale && (q >= K.RIVER_ACC * scale || q * s * s >= K.CHANNEL_C),
                 $"cell {i}: inflow {q:F0} and slope {s:F4} pass the channel threshold, but it is no river");
         }

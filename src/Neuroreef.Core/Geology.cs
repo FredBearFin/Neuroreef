@@ -35,6 +35,16 @@
 // with it, scaled down to stand at most H_RELIEF above the lakes; and the last GEO_FINE_ITERS steps of deep time are run
 // again there, resolving valleys and the ridges between them. Terrain.Build finishes it with the fine passes of
 // Hydrology.Erode (hard rock cuts slower; the same critical slope).
+// Mountains (2026-11-01): the strength of the rock, not of soil, bounds how steep it stands (Schmidt & Montgomery
+// 1995): each rock fails at its own critical slope (Rock.Sc: crystalline 54°, limestone 50°, volcanic 45°, soft strata,
+// regolith and debris 31°), and loose cover on a crag slides off at 31° down to the rock beneath at most. Half of what
+// falls stays at the crag's foot as talus (up to the angle of repose). Hillslope creep moves regolith, so it runs at the
+// critical slope of the higher cell's rock. Glaciers form above the snowline (ELA) the Earth-like climate puts at each
+// latitude, run down the drainage as a balance flux, slide where their bed is not frozen, and abrade and quarry their
+// beds (E = K u_s) to troughs graded near the ELA, as wide as the ice; ground too steep to hold ice stands above them as
+// headwalls, arêtes and horns (the glacial buzzsaw: Brozović, Burbank & Meigs 1997; Egholm et al. 2009). A glacier
+// carries its load to its snout. The relief is no longer scaled down to 3 km: it stands as high as uplift against all
+// this leaves it, up to H_RELIEF (the game's vertical scale).
 // Simplifications: plate boundaries are held fixed over the deep time (a kinematic steady state, not plate motion);
 // the scales of this world (the plates' GEO_KM, the land surface's GEO_CELL_M, the climate's pole-to-pole rows, the
 // animals' walking distances) are not one; the field grid's flexural rebound is the coarse grid's, as rock uplift.
@@ -46,16 +56,23 @@ using System.Threading.Tasks;
 
 namespace Neuroreef;
 
-/// <summary>Kinds of surface rock (World.Rock, Revision R).</summary>
+/// <summary>Kinds of surface rock (World.Rock, Revision R; limestone 2026-11-01). This is the one list of them: every
+/// table below is indexed by it.</summary>
 public static class Rock
 {
-    public const byte Crystalline = 0, Volcanic = 1, Sedimentary = 2, N = 3;
-    public static readonly string[] Names = { "crystalline", "volcanic", "sedimentary" };
+    /// <summary>Crystalline basement (granite, gneiss); volcanic rock (arcs, fast rift axes); sedimentary: clastic strata,
+    /// regolith, talus and every deposit; limestone: the carbonate base of a young platform's cover (GEO_LIME), exposed
+    /// where erosion has stripped the clastic strata above it (soluble: caves and karst).</summary>
+    public const byte Crystalline = 0, Volcanic = 1, Sedimentary = 2, Limestone = 3, N = 4;
+    public static readonly string[] Names = { "crystalline", "volcanic", "sedimentary", "limestone" };
 
     /// <summary>Stream-power erodibility of each kind: E = K A^(n/2) S^n, km/Myr with A in km2 (GEO_N).</summary>
-    public static readonly float[] Erod = { K.GEO_K_CRYST, K.GEO_K_VOLC, K.GEO_K_SED };
+    public static readonly float[] Erod = { K.GEO_K_CRYST, K.GEO_K_VOLC, K.GEO_K_SED, K.GEO_K_LIME };
     /// <summary>Base fertility of the soil each kind weathers into (its parent material).</summary>
-    public static readonly float[] Fert = { K.FERT_CRYST, K.FERT_VOLC, K.FERT_SED };
+    public static readonly float[] Fert = { K.FERT_CRYST, K.FERT_VOLC, K.FERT_SED, K.FERT_LIME };
+    /// <summary>Critical slope (m/m): the steepest each kind stands before it fails (rock-mass strength; Schmidt and
+    /// Montgomery 1995). Strong rock stands in crags, soft rock and debris at ~31°.</summary>
+    public static readonly float[] Sc = { K.GEO_SC_CRYST, K.GEO_SC_VOLC, K.GEO_SC, K.GEO_SC_LIME };
 }
 
 public static class Geology
@@ -74,6 +91,8 @@ public static class Geology
         public readonly byte[] Plate, Bound, Bed;        // nearest plate, boundary kind within its belt, bedrock kind
         public readonly bool[] Arc, Collision;           // convergent cells on an arc (over a sinking plate) or in a collision belt
         public readonly float[] H, Sed, Uplift, Thick;   // km: relief, sedimentary cover; km/Myr: rock uplift; km: crust as the plates thickened or thinned it (not counting erosion)
+        public readonly float[] Lime;                    // km: limestone under the sedimentary cover (the carbonate base of a platform's cover)
+        public readonly float[] Ice;                     // km: glacier ice at the last step of deep time (0: none, or frozen to its bed)
         public readonly float[] Conv, Rel;               // km/Myr at the nearest boundary: closing speed (< 0: opening), relative speed
         public readonly float[] Rebound;                 // km/Myr: flexural rock uplift (isostatic rebound) over the last tenth of deep time
         public float Sea;                                // km: lake level on the coarse relief
@@ -82,14 +101,26 @@ public static class Geology
             Spin = Array.Empty<float>(), PT = Array.Empty<float>(), PW = Array.Empty<float>();
         /// <summary>Over the last tenth of the run: mean |dh/dt| / mean U in the uplifting belts (0 = steady state).</summary>
         public float Residual;
+        /// <summary>The field grid's glacier ice at the last step of deep time (km; Refine), for diagnostics and tests.</summary>
+        public float[] FineIce = Array.Empty<float>();
+        /// <summary>The field grid's loose sedimentary cover (km) and the rock beneath it (limestone or bedrock) at the end
+        /// of deep time (Refine): the fine passes shed the cover at GEO_SC and the rock below stands at its own.</summary>
+        public float[] FineSed = Array.Empty<float>();
+        public byte[] FineBed = Array.Empty<byte>();
         public Crust(int cw)
         {
             CW = cw; Km = K.GEO_KM / cw; int n = cw * cw;
             Plate = new byte[n]; Bound = new byte[n]; Bed = new byte[n]; Arc = new bool[n]; Collision = new bool[n];
             H = new float[n]; Sed = new float[n]; Uplift = new float[n]; Thick = new float[n]; Conv = new float[n]; Rel = new float[n];
-            Rebound = new float[n];
+            Rebound = new float[n]; Lime = new float[n]; Ice = new float[n];
         }
-        public byte Surface(int i) => Sed[i] > K.GEO_SED_MIN ? Rock.Sedimentary : Bed[i];
+        public byte Surface(int i) => Sed[i] > K.GEO_SED_MIN ? Rock.Sedimentary : Lime[i] > K.GEO_SED_MIN ? Rock.Limestone : Bed[i];
+        /// <summary>Erosion of depth d off cell i strips it top down: clastic strata, then limestone, then bedrock.</summary>
+        public void Strip(int i, float d)
+        {
+            float s = MathF.Min(Sed[i], d); Sed[i] -= s; d -= s;
+            if (d > 0f) Lime[i] = MathF.Max(0f, Lime[i] - d);
+        }
     }
 
     /// <summary>Coarse grid side for the field grid: half of it, at least 64 cells (or the whole of a smaller grid).</summary>
@@ -99,7 +130,10 @@ public static class Geology
     /// The deep-time genesis of world w: sets Elev (0..1), SeaLevel (the Nature.Water quantile) and Rock at the field grid,
     /// before the fine passes of Hydrology.Erode. Deterministic in w.TerrainSeed. Returns the coarse state.
     /// </summary>
-    public static Crust Form(World w)
+    public static Crust Form(World w) => Form(w, true);
+
+    /// <summary>Form with or without glacial erosion (glaciers false: for tests that measure what glaciers do).</summary>
+    internal static Crust Form(World w, bool glaciers)
     {
         int FW = Map.FW, CW = CoarseSide(FW);
         var c = new Crust(CW) { Dx = K.GEO_CELL_M * 1e-3f * FW / CW };
@@ -108,8 +142,8 @@ public static class Geology
         var rw = new Rng.Seq(seed + 1u);
         var warpX = Terrain.Fbm(ref rw, 3, 3); var warpY = Terrain.Fbm(ref rw, 3, 3);
         Tectonics(c, warpX, warpY);
-        Erode(w, c, K.GEO_ITERS, false);
-        Refine(w, c, seed + 2u);
+        Erode(w, c, K.GEO_ITERS, false, glaciers);
+        Refine(w, c, seed + 2u, glaciers);
         return c;
     }
 
@@ -215,7 +249,9 @@ public static class Geology
                 c.Uplift[i] = K.GEO_AIRY * rate; c.Conv[i] = conv; c.Rel[i] = rel;
                 c.Thick[i] = Ta;
                 c.H[i] = K.GEO_AIRY * (Ta - tRef);                                  // Airy height of the plate's crust
-                c.Sed[i] = Ta < K.GEO_T_CRATON && !volc ? K.GEO_COVER : 0f;         // young platforms carry cover, shields and lavas do not
+                // young platforms carry cover (carbonate below, clastic strata above); shields and lavas do not
+                bool cover = Ta < K.GEO_T_CRATON && !volc;
+                c.Sed[i] = cover ? K.GEO_COVER - K.GEO_LIME : 0f; c.Lime[i] = cover ? K.GEO_LIME : 0f;
             }
         });
     }
@@ -225,7 +261,7 @@ public static class Geology
     // ---- deep-time erosion against uplift, on the coarse grid
     // Lengths of the land surface (slopes, drainage areas, hillslope fluxes) are in the relief's own scale (c.Dx: a coarse
     // cell is FW / CW field cells of GEO_CELL_M); the plates' lengths (belts, the flexural wavelength) are in GEO_KM.
-    static void Erode(World w, Crust c, int iters, bool regional)
+    internal static void Erode(World w, Crust c, int iters, bool regional, bool glaciers = true)
     {
         int CW = c.CW, n = CW * CW;
         float dt = K.GEO_MYR / K.GEO_ITERS, dx = c.Dx, cellA = dx * dx;   // the same step on either grid
@@ -233,6 +269,9 @@ public static class Geology
         var seen = new bool[n]; var pq = new PriorityQueue<int, float>(n);
         var rain = new float[n]; var cut = new float[n]; var load = new float[n]; var h0 = new float[n]; var hMark = new float[n];
         var sorted = new float[n]; var hStep = new float[n]; var tmp = new float[n]; var low = new float[n]; var slid = new float[n];
+        var drop = new float[n]; var cov = new float[n]; var isc = new float[n]; var iceQ = new float[n]; var lat = new float[n];
+        var ela = new float[CW]; var tSea = new float[CW];
+        Snowline(CW, ela, tSea);
         int flexR = Math.Max(1, (int)MathF.Round(K.GEO_FLEX / c.Km));
         float carry = K.CARRY_K / K.ERODE_K;   // capacity against erodibility, as at the fine passes
         // hillslope diffusion, explicit: sub-stepped so the steepest (most nonlinear) link stays stable
@@ -254,11 +293,15 @@ public static class Geology
                 c.H[i] += u; c.Thick[i] += u / K.GEO_AIRY;
             }
             Array.Copy(c.H, hStep, n);
-            // critical-slope failure: where uplift or incision has steepened a slope past GEO_SC the ground slides until it
-            // stands at GEO_SC, and the rivers carry what slid (threshold hillslopes: Burbank et al. 1996; Roering et al.
-            // 1999). Before the routing, so the drainage is that of the ground as it stands after the slides
+            // critical-slope failure: where uplift or incision has steepened a slope past its rock's critical slope the
+            // ground slides or falls until it stands at it (threshold hillslopes: Burbank et al. 1996; Roering et al. 1999):
+            // soft rock and debris at GEO_SC, strong rock in crags (rock-mass strength; Schmidt & Montgomery 1995). Part of
+            // what falls stays at the crag's foot as talus; the rivers carry the rest. Before the routing, so the drainage
+            // is that of the ground as it stands after the slides
             Array.Clear(slid);
-            Fail(c.H, slid, c.Sea, K.GEO_SC * dx, CW);
+            for (int i = 0; i < n; i++) { drop[i] = Rock.Sc[c.Lime[i] > K.GEO_SED_MIN ? Rock.Limestone : c.Bed[i]] * dx; cov[i] = c.Sed[i]; }
+            Fail(c.H, slid, c.Sea, drop, CW, K.GEO_SC * dx, cov);
+            Talus(c, slid, dx, iceQ);
 
             // the drainage changes slowly against a step: it is routed again every GEO_ROUTE_EVERY steps (a cell whose
             // receiver has risen above it in between cuts nothing until then)
@@ -295,6 +338,11 @@ public static class Geology
                 if (hn >= h) continue;
                 cut[i] = h - hn; c.H[i] = hn;
             }
+            // glaciers above the snowline (2026-11-01): they cut their valleys to troughs near the snowline, and the crags
+            // above them stand. On the steps the drainage is routed, for those steps together (implicit, so stable at
+            // any step; ice changes slowly against 0.6 Myr)
+            if (glaciers && it % K.GEO_ROUTE_EVERY == 0)
+                Glaciate(c, net, rain, ela, tSea, cut, iceQ, lat, dt * K.GEO_ROUTE_EVERY, it + K.GEO_ROUTE_EVERY >= iters);
             for (int i = 0; i < n; i++) cut[i] += slid[i];   // what slid this step is carried with what was cut
             // transport, sources first: cover goes before bedrock; a surplus over capacity is partly dropped; a basin or a
             // lake keeps what it can hold up to its rim (the lake to its level); what is left over leaves the land
@@ -303,7 +351,7 @@ public static class Geology
             {
                 int i = order[q], r = recv[i];
                 float s = load[i] + cut[i];
-                c.Sed[i] = MathF.Max(0f, c.Sed[i] - cut[i]);
+                c.Strip(i, cut[i]);
                 float dep;
                 // a deposit cannot raise a cell above the lowest cell that drains into it (the channel would go round it)
                 float room = low[i] == float.MaxValue ? 0f : MathF.Max(0f, low[i] - c.H[i]);
@@ -319,6 +367,7 @@ public static class Geology
                     }
                 }
                 dep = MathF.Min(dep, room);
+                if (iceQ[i] > 0f && r >= 0) dep = 0f;   // a glacier carries its load to its snout (moraines), not onto its bed
                 // on the field grid a lake floor sinks under what is laid on it (the coarse grid's flexure does this), so
                 // a subsiding basin stays a lake instead of filling to its brim
                 c.H[i] += regional && r < 0 ? (1f - K.GEO_REBOUND) * dep : dep; c.Sed[i] += dep;
@@ -326,8 +375,10 @@ public static class Geology
             }
             // hillslope transport, nonlinear (Roering, Kirchner & Dietrich 1999): flux D S / (1 - (S / Sc)^2), growing
             // without bound as the slope nears Sc (here bounded at GEO_NL_MAX x D; failure takes the rest). Explicit,
-            // sub-stepped; pairwise, so it conserves mass. What moves is regolith, so it joins the cover
-            float isc = 1f / (K.GEO_SC * dx);
+            // sub-stepped; pairwise, so it conserves mass. What moves is regolith, so it joins the cover. Sc is that of the
+            // higher cell's rock (2026-11-01): a crag of strong rock sheds little regolith until it nears its own critical
+            // slope (bare rock is lowered by failure, not creep)
+            for (int i = 0; i < n; i++) isc[i] = 1f / (Rock.Sc[c.Surface(i)] * dx);
             for (int k = 0; k < sub; k++)
             {
                 Array.Copy(c.H, h0, n);
@@ -339,9 +390,9 @@ public static class Geology
                     {
                         int i = yr + x, xm = x == 0 ? CW - 1 : x - 1, xp = x == CW - 1 ? 0 : x + 1;
                         float hi = h0[i];
-                        float dh = dk * (Nl(h0[yr + xm] - hi, isc) + Nl(h0[yr + xp] - hi, isc) + Nl(h0[ym + x] - hi, isc) + Nl(h0[yp + x] - hi, isc));
+                        float dh = dk * (Nl(h0, isc, i, yr + xm) + Nl(h0, isc, i, yr + xp) + Nl(h0, isc, i, ym + x) + Nl(h0, isc, i, yp + x));
                         c.H[i] = hi + dh;
-                        if (dh > 0f) c.Sed[i] += dh; else c.Sed[i] = MathF.Max(0f, c.Sed[i] + dh);
+                        if (dh > 0f) c.Sed[i] += dh; else c.Strip(i, -dh);
                     }
                 });
             }
@@ -377,17 +428,145 @@ public static class Geology
         return d * (f > 1f / GEO_NL_MAX ? 1f / f : GEO_NL_MAX);
     }
 
+    // the same along the link from cell i to j, at the critical slope of the higher of the two (so both cells see one flux)
+    static float Nl(float[] h, float[] isc, int i, int j)
+    {
+        float d = h[j] - h[i];
+        return Nl(d, d > 0f ? isc[j] : isc[i]);
+    }
+
+    /// <summary>Talus (2026-11-01): GEO_TALUS of what fell off each crag this step comes to rest on its lowest neighbour,
+    /// up to the angle of repose GEO_REPOSE from the crag; it is loose debris (sedimentary cover). The rest stays in
+    /// slid for the rivers to carry. Into a lake it all goes to the load.</summary>
+    static void Talus(Crust c, float[] slid, float dx, float[] ice)
+    {
+        int W = c.CW, n = W * W;
+        float rep = K.GEO_REPOSE * dx;
+        for (int i = 0; i < n; i++)
+        {
+            float s = slid[i];
+            if (s <= 0f) continue;
+            int x = i % W, y = i / W, lo = -1; float hl = float.MaxValue, dl = 1f;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx2 = -1; dx2 <= 1; dx2++)
+                {
+                    if (dx2 == 0 && dy == 0) continue;
+                    int j = World.WrapI(y + dy, W) * W + World.WrapI(x + dx2, W);
+                    if (c.H[j] < hl) { hl = c.H[j]; lo = j; dl = dx2 != 0 && dy != 0 ? 1.4142135f : 1f; }
+                }
+            if (lo < 0 || hl < c.Sea || ice[lo] > 0f) continue;   // onto a lake or a glacier: carried off
+            float d = MathF.Min(K.GEO_TALUS * s, c.H[i] - rep * dl - hl);
+            if (d <= 0f) continue;
+            c.H[lo] += d; c.Sed[lo] += d; c.Strip(i, d); slid[i] -= d;
+        }
+    }
+
+    /// <summary>The deep-time snowline (ELA, km above the lakes) and the Earth-like sea-level annual mean temperature (°C)
+    /// of each row of a grid of side W: T_EQ - DT_EP sin² latitude falls by LAPSE per km and reaches GEO_T_ELA at the
+    /// ELA (the latitude of a row as Climate has it on the field grid). Climate-setting free, so a seed makes one land.</summary>
+    internal static void Snowline(int W, float[] ela, float[] tSea)
+    {
+        int FW = Map.FW;
+        for (int y = 0; y < W; y++)
+        {
+            float s = MathK.Sin(2f * MathF.PI * ((y + 0.5f) * FW / W - 0.5f) / FW);
+            tSea[y] = K.T_EQ - K.DT_EP * s * s;
+            ela[y] = MathF.Max(0f, (tSea[y] - K.GEO_T_ELA) / K.LAPSE);
+        }
+    }
+
+    /// <summary>
+    /// Glacial erosion for one step (2026-11-01). Ice accumulates above the snowline, at GEO_ICE_BETA per km of height
+    /// above it up to GEO_ICE_BMAX x the rain there, and melts below it at the same gradient; its balance flux runs down the
+    /// drainage (as Anderson, Molnar &amp; Kessler 2006 do along a valley) until the melt has taken it all. A glacier of
+    /// flux Q is GEO_ICE_W (Q / GEO_ICE_Q)^0.4 wide and tau / (rho_ice g S) thick (plastic ice; Nye 1952), so it slides at
+    /// u = Q S rho_ice g / (W tau), and abrades and quarries its bed at E = GEO_ICE_K u (Humphrey &amp; Raymond 1994):
+    /// implicitly, outlets first, as stream power with n = 1 (never below the cell it flows to). It slides fully where
+    /// its bed is at GEO_T_ELA or warmer, not at all at GEO_T_COLD or colder (frozen to its bed: Sugden 1978). Ground
+    /// steeper than GEO_ICE_SMAX holds no ice: its snow avalanches on and its foot is cut (headwalls, arêtes, horns).
+    /// Across its width the glacier pulls the cells beside its bed, and below its surface, toward a parabolic cross-section
+    /// as deep as the ice (U-shaped troughs; Harbor 1992), at the same implicit rate. What it cuts is added to cut.
+    /// last: keep the ice thickness in c.Ice.
+    /// </summary>
+    static void Glaciate(Crust c, Hydrology.Net net, float[] rain, float[] ela, float[] tSea, float[] cut, float[] q, float[] lat, float dt, bool last)
+    {
+        int W = c.CW, n = W * W;
+        float dx = c.Dx, cellA = dx * dx;
+        int[] recv = net.Recv, order = net.Order;
+        float beta = K.GEO_ICE_BETA * 1000f, bmax = K.GEO_ICE_BMAX * 1000f;     // m/yr -> km/Myr
+        float hTau = K.GEO_ICE_TAU / (917f * 9.81f);                            // km: tau (kPa) / (rho_ice g)
+        float q0 = K.GEO_ICE_Q * 1e-3f;                                          // m3/yr -> km3/Myr
+        if (last) Array.Clear(c.Ice);
+        Array.Clear(q);
+        bool any = false;
+        for (int k = n - 1; k >= 0; k--)   // sources first: the balance flux
+        {
+            int i = order[k];
+            if (c.H[i] < c.Sea) { q[i] = 0f; continue; }   // a glacier that reaches a lake calves into it
+            float b = beta * (c.H[i] - c.Sea - ela[i / W]);
+            if (b > 0f) b = MathF.Min(b, bmax * rain[i]);
+            float f = MathF.Max(0f, q[i] + b * cellA);
+            q[i] = f;
+            if (f > 0f) { any = true; int r = recv[i]; if (r >= 0) q[r] += f; }
+        }
+        if (!any) return;
+        Array.Clear(lat);
+        for (int k = 0; k < n; k++)   // outlets first: the bed
+        {
+            int i = order[k], r = recv[i];
+            if (r < 0 || q[i] <= 0f) continue;
+            float h = c.H[i], hr = MathF.Max(c.H[r], c.Sea);
+            if (h <= hr) continue;
+            float L = Dist(i, r, W) * dx;
+            if (h - hr > K.GEO_ICE_SMAX * L) continue;   // too steep to hold ice
+            int x = i % W, y = i / W;
+            // the bed's temperature: the air's annual mean, warmed through the ice by the geothermal flux
+            float tb = tSea[y] - K.LAPSE * (h - c.Sea) + K.GEO_ICE_GEO * hTau / MathF.Max((h - hr) / L, K.GEO_ICE_SMIN);
+            float warm = Math.Clamp(1f - tb / K.GEO_T_COLD, 0f, 1f);
+            float wd = MathF.Max(dx, K.GEO_ICE_W * MathK.Pow(q[i] / q0, 0.4f));
+            float F = warm * K.GEO_ICE_K * dt * q[i] / (L * wd * hTau);
+            float hn = (h + F * hr) / (1f + F);
+            float thick = hTau / MathF.Max((hn - hr) / L, K.GEO_ICE_SMIN);
+            if (last) c.Ice[i] = thick;
+            if (F <= 0f) continue;
+            cut[i] += h - hn; c.H[i] = hn;
+            // the trough: cells abreast of the bed, within the glacier's half-width and below its surface
+            float R = 0.5f * wd / dx;
+            if (R < 1f) continue;
+            int Ri = (int)MathF.Ceiling(R);
+            float fx = World.WrapI(r % W - x + W / 2, W) - W / 2, fy = World.WrapI(r / W - y + W / 2, W) - W / 2;
+            float fl = 1f / MathF.Sqrt(fx * fx + fy * fy); fx *= fl; fy *= fl;
+            float zs = hn + thick, g = F / (1f + F);
+            for (int oy = -Ri; oy <= Ri; oy++)
+                for (int ox = -Ri; ox <= Ri; ox++)
+                {
+                    float along = ox * fx + oy * fy, across = MathF.Abs(ox * fy - oy * fx);
+                    if (MathF.Abs(along) > 0.5f || across < 0.5f || across > R) continue;
+                    int j = World.WrapI(y + oy, W) * W + World.WrapI(x + ox, W);
+                    float hj = c.H[j];
+                    if (hj < c.Sea || hj >= zs) continue;
+                    float u = across / R, target = hn + thick * u * u;
+                    if (hj > target) lat[j] = MathF.Max(lat[j], g * (hj - target));
+                }
+        }
+        for (int i = 0; i < n; i++)
+            if (lat[i] > 0f) { c.H[i] -= lat[i]; cut[i] += lat[i]; }
+    }
+
     /// <summary>
     /// Critical-slope failure on a torus of side W: every cell at or above sea is lowered until no slope from it to a
-    /// neighbour (a lake counted at its level) is steeper than drop per cell (x sqrt 2 on diagonals); what comes off is
-    /// added to cut[i]. The lowest such surface: h' = min over cells k of (h_k + drop x distance), found by two raster
-    /// passes each way (a chamfer distance transform; Danielsson 1980), twice for the wrap. Lakes keep their beds.
+    /// neighbour (a lake counted at its level) is steeper than its own drop[i] per cell (x sqrt 2 on diagonals; the drop is
+    /// its rock's critical slope, 2026-11-01); what comes off is added to cut[i]. The lowest such surface: h' = min over
+    /// cells k of (h_k + drop x distance), found by two raster passes each way (a chamfer distance transform; Danielsson
+    /// 1980), twice for the wrap. Lakes keep their beds.
     /// </summary>
-    internal static void Fail(float[] h, float[] cut, float sea, float drop, int W)
+    /// Cover (2026-11-01, optional): loose cover of thickness cover[i] (scratch: it is used up as it slides) fails at the
+    /// gentler soft drop; it slides down to its bedrock at most, and the bedrock below stands at its own drop[i]. So a thin
+    /// mantle on a crag is shed, and the crag stands.
+    internal static void Fail(float[] h, float[] cut, float sea, float[] dropAt, int W, float soft = 0f, float[]? cover = null)
     {
-        int n = W * W;
-        float dd = drop * 1.4142135f;
         float Ref(int j) => h[j] < sea ? sea : h[j];
+        void Settle(int i, float hi, float mo, float md) => SettleCell(h, cut, dropAt, soft, cover, i, hi, mo, md);
         for (int pass = 0; pass < 2; pass++)
         {
             for (int y = 0; y < W; y++)
@@ -398,8 +577,7 @@ public static class Geology
                     int i = yr + x; float hi = h[i];
                     if (hi < sea) continue;
                     int xm = x == 0 ? W - 1 : x - 1, xp = x == W - 1 ? 0 : x + 1;
-                    float m = MathF.Min(MathF.Min(Ref(yr + xm) + drop, Ref(ym + x) + drop), MathF.Min(Ref(ym + xm) + dd, Ref(ym + xp) + dd));
-                    if (m < hi) { cut[i] += hi - m; h[i] = m; }
+                    Settle(i, hi, MathF.Min(Ref(yr + xm), Ref(ym + x)), MathF.Min(Ref(ym + xm), Ref(ym + xp)));
                 }
             }
             for (int y = W - 1; y >= 0; y--)
@@ -410,11 +588,24 @@ public static class Geology
                     int i = yr + x; float hi = h[i];
                     if (hi < sea) continue;
                     int xm = x == 0 ? W - 1 : x - 1, xp = x == W - 1 ? 0 : x + 1;
-                    float m = MathF.Min(MathF.Min(Ref(yr + xp) + drop, Ref(yp + x) + drop), MathF.Min(Ref(yp + xm) + dd, Ref(yp + xp) + dd));
-                    if (m < hi) { cut[i] += hi - m; h[i] = m; }
+                    Settle(i, hi, MathF.Min(Ref(yr + xp), Ref(yp + x)), MathF.Min(Ref(yp + xm), Ref(yp + xp)));
                 }
             }
         }
+    }
+
+    // one cell of Fail: mo, md the lowest orthogonal and diagonal neighbours already seen in this pass
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    static void SettleCell(float[] h, float[] cut, float[] dropAt, float soft, float[]? cover, int i, float hi, float mo, float md)
+    {
+        float drop = dropAt[i], mr = MathF.Min(mo + drop, md + drop * 1.4142135f), hn = MathF.Min(hi, mr);
+        if (cover != null && cover[i] > 0f && soft < drop)
+        {
+            float ms = MathF.Min(mo + soft, md + soft * 1.4142135f);
+            if (hi > ms) { float h1 = MathF.Max(ms, hi - cover[i]); hn = h1 > mr ? mr : h1; }
+            cover[i] = MathF.Max(0f, cover[i] - (hi - hn));
+        }
+        if (hn < hi) { cut[i] += hi - hn; h[i] = hn; }
     }
 
     /// <summary>Scale relief h (and its rock uplift u) down about the lake level so the highest ground stands at most
@@ -459,7 +650,8 @@ public static class Geology
     {
         int FW = Map.FW, CW = c.CW, f = FW / CW;
         MinMax(c.H, out float mn, out float mx);
-        float sc = 1f / MathF.Max(1e-6f, mx - mn);
+        // at the game's vertical scale (H_RELIEF above the lakes, as Refine puts it), so Rainfall reads heights in metres
+        float sc = 1f / MathF.Max(1e-6f, (c.Sea - mn) + MathF.Max(mx - c.Sea, K.H_RELIEF * 1e-3f));
         Sample(c.H, CW, w.Elev, FW, false);
         for (int i = 0; i < FW * FW; i++) w.Elev[i] = (w.Elev[i] - mn) * sc;
         w.SeaLevel = (c.Sea - mn) * sc;
@@ -515,12 +707,13 @@ public static class Geology
     }
 
     // ---- onto the field grid: the worked relief, sub-grid roughness, rock; then the last of deep time at full resolution
-    static void Refine(World w, Crust c, uint seed)
+    static void Refine(World w, Crust c, uint seed, bool glaciers)
     {
         int FW = Map.FW, n = FW * FW, CW = c.CW, f = Math.Max(1, FW / CW);
         var g = new Crust(FW) { Dx = K.GEO_CELL_M * 1e-3f, Sea = c.Sea, Plates = c.Plates };
         Sample(c.H, CW, g.H, FW, true);
-        Sample(c.Sed, CW, g.Sed, FW, false); Sample(c.Uplift, CW, g.Uplift, FW, false); Sample(c.Thick, CW, g.Thick, FW, false);
+        Sample(c.Sed, CW, g.Sed, FW, false); Sample(c.Lime, CW, g.Lime, FW, false);
+        Sample(c.Uplift, CW, g.Uplift, FW, false); Sample(c.Thick, CW, g.Thick, FW, false);
         // the rock uplift of the last steps: the plates' and the flexural rebound under the erosion as the coarse grid
         // left them (at the end of deep time erosion nearly balances both)
         var reb = new float[n];
@@ -552,13 +745,14 @@ public static class Geology
                 int i = y * FW + x;
                 g.H[i] += amp[i] * 2f * (rough(x / (float)FW, y / (float)FW) - 0.5f);
                 int ci = Math.Min(CW - 1, y / f) * CW + Math.Min(CW - 1, x / f);
-                g.Bed[i] = c.Bed[ci]; g.Sed[i] = MathF.Max(0f, g.Sed[i]);
+                g.Bed[i] = c.Bed[ci]; g.Sed[i] = MathF.Max(0f, g.Sed[i]); g.Lime[i] = MathF.Max(0f, g.Lime[i]);
             }
         });
         // the last GEO_FINE_ITERS steps of deep time on the field grid: the same uplift, rivers and hillslopes, now
         // resolving the valleys and ridges the coarse grid could not
-        Erode(w, g, K.GEO_FINE_ITERS, true);
-        c.Scale = g.Scale;
+        Erode(w, g, K.GEO_FINE_ITERS, true, glaciers);
+        c.Scale = g.Scale; c.FineIce = g.Ice; c.FineSed = g.Sed; c.FineBed = new byte[n];
+        for (int i = 0; i < n; i++) c.FineBed[i] = g.Lime[i] > K.GEO_SED_MIN ? Rock.Limestone : g.Bed[i];
         // onto 0..1 at the game's vertical scale: H_RELIEF above the lakes is 1 - SeaLevel, so heights and slopes are as
         // the deep time made them (the highest ground stands at most H_RELIEF above the lakes; on a small map, less)
         float mn = float.MaxValue, top = float.MinValue;
@@ -575,6 +769,36 @@ public static class Geology
     /// <summary>The critical hillslope gradient GEO_SC as elevation (0..1) per field cell, at the game's vertical scale
     /// (H_RELIEF above the lakes) and the land surface's horizontal one (GEO_CELL_M): for Hydrology.Erode's failure.</summary>
     public static float CriticalDrop(World w) => K.GEO_SC * K.GEO_CELL_M * (1f - w.SeaLevel) / K.H_RELIEF;
+
+    /// <summary>Each field cell's critical slope as elevation (0..1) per field cell (2026-11-01): of the rock beneath its
+    /// loose cover (c.FineBed, Rock.Sc); the cover itself (Cover) fails at CriticalDrop.</summary>
+    public static float[] CriticalDrops(World w, Crust c)
+    {
+        int n = Map.FW * Map.FW;
+        var d = new float[n];
+        float k = K.GEO_CELL_M * (1f - w.SeaLevel) / K.H_RELIEF;
+        for (int i = 0; i < n; i++) d[i] = Rock.Sc[c.FineBed[i]] * k;
+        return d;
+    }
+
+    /// <summary>Each field cell's loose sedimentary cover at the end of deep time, as elevation (0..1).</summary>
+    public static float[] Cover(World w, Crust c)
+    {
+        int n = Map.FW * Map.FW;
+        var d = new float[n];
+        float k = 1000f * (1f - w.SeaLevel) / K.H_RELIEF;
+        for (int i = 0; i < n; i++) d[i] = c.FineSed[i] * k;
+        return d;
+    }
+
+    /// <summary>After the fine passes: where they have stripped a cell's cover (what is left of Cover, under GEO_SED_MIN),
+    /// the rock beneath is its surface.</summary>
+    public static void Expose(World w, Crust c, float[] cover)
+    {
+        float min = K.GEO_SED_MIN * 1000f * (1f - w.SeaLevel) / K.H_RELIEF;
+        for (int i = 0; i < cover.Length; i++)
+            if (w.Rock[i] == Rock.Sedimentary && cover[i] <= min) w.Rock[i] = c.FineBed[i];
+    }
 
     /// <summary>Each field cell's erodibility against soft sedimentary rock (for Hydrology.Erode).</summary>
     public static float[] Erodibility(World w)

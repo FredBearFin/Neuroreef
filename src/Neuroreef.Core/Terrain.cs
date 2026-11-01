@@ -65,13 +65,18 @@ public static class Terrain
     public static float[] Shape(World w)
     {
         // Geology (Revision R): plates, uplift and tens of millions of years of erosion make the relief and its rock
-        Geology.Form(w);
+        var crust = Geology.Form(w);
 
         // Hydrology (Revision Q): rain falls on the land as it lies with its lakes, runs downhill (Priority-Flood
         // routing), cuts the ground and lays down what it carries (Hydrology.Erode). Rivers are the cells that gather
-        // the most rain; nothing else decides where they are. Revision R: hard rock cuts slower.
+        // the most rain; nothing else decides where they are. Revision R: hard rock cuts slower. 2026-11-01: and stands
         var rain0 = RunoffRain(w);
-        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w), sc: Geology.CriticalDrop(w));
+        // steeper (the rock beneath a cell's loose cover fails at its own critical slope) and creeps slower; where the
+        // passes strip the cover, the rock beneath becomes the surface
+        var cover = Geology.Cover(w, crust);
+        Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w), sc: Geology.CriticalDrop(w),
+            scRock: Geology.CriticalDrops(w, crust), cover: cover);
+        Geology.Expose(w, crust, cover);
         return rain0;
     }
 

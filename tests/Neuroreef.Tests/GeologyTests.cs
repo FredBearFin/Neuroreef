@@ -51,7 +51,10 @@ public class GeologyTests
             }
             hConv /= nConv; hIn /= nIn;
             Assert.True(conv < 0.35 * n, $"seed {seed}: convergent belts are {conv / (double)n:P0} of the map");
-            Assert.True(topConv > 0.7 * topN, $"seed {seed}: {topConv / (double)topN:P0} of the highest tenth of the land is on convergent belts");
+            // mountains (2026-11-01): it was over 0.7. Glaciers now cut the belts that rise above the snowline down toward it
+            // (the buzzsaw) and crags of hard rock stand in plate interiors too, so the highest tenth is less wholly on the
+            // belts: measured 79%, 62%, 83% (seeds 1, 2, 3); the belts still stand twice as high as the interiors
+            Assert.True(topConv > 0.6 * topN, $"seed {seed}: {topConv / (double)topN:P0} of the highest tenth of the land is on convergent belts");
             Assert.True(hConv > 1.5 * hIn, $"seed {seed}: convergent belts stand {hConv:F0} m, plate interiors {hIn:F0} m");
             // uplift: collision belts and arcs rise; the coarse relief is near a steady state of uplift against erosion
             Assert.True(c.Residual < 0.2f, $"seed {seed}: dh/dt is {c.Residual:P0} of the uplift at the end of deep time");
@@ -100,15 +103,20 @@ public class GeologyTests
     public void RockFollowsTectonicHistoryAndHardRockErodesLess()
     {
         var (w, c) = Built(2);
-        int n = c.CW * c.CW, arc = 0, arcVolc = 0, rift = 0, riftSed = 0;
+        int n = c.CW * c.CW, arc = 0, arcBed = 0, arcVolc = 0, rift = 0, riftSed = 0, rest = 0, restVolc = 0;
         for (int i = 0; i < n; i++)
         {
-            if (c.Arc[i] && c.Uplift[i] > 0.1f * K.GEO_AIRY) { arc++; if (c.Surface(i) == Rock.Volcanic) arcVolc++; }
+            if (c.Arc[i] && c.Uplift[i] > 0.1f * K.GEO_AIRY) { arc++; if (c.Bed[i] == Rock.Volcanic) arcBed++; if (c.Surface(i) == Rock.Volcanic) arcVolc++; }
+            else if (c.H[i] >= c.Sea) { rest++; if (c.Surface(i) == Rock.Volcanic) restVolc++; }
             if (c.Bound[i] == Geology.Divergent && c.H[i] < c.Sea) { rift++; if (c.Surface(i) == Rock.Sedimentary) riftSed++; }
         }
-        Assert.True(arc > 0 && arcVolc > 0.5 * arc, $"{arcVolc} of {arc} rising arc cells are volcanic");
+        // mountains (2026-11-01): the arcs' crags now shed talus, which mantles their lower slopes as loose (sedimentary)
+        // cover, so the volcanic rock shows at the surface on 43% of the rising arc (it was over half); it lies beneath
+        // more than half of it, and shows there far more often than on the rest of the land
+        Assert.True(arc > 0 && arcBed > 0.5 * arc, $"{arcBed} of {arc} rising arc cells are volcanic bedrock");
+        Assert.True(arcVolc / (double)arc > 5.0 * restVolc / Math.Max(1, rest), $"{arcVolc} of {arc} rising arc cells are volcanic at the surface, {restVolc} of {rest} elsewhere");
         Assert.True(rift > 0 && riftSed > 0.8 * rift, $"{riftSed} of {rift} rift-lake floors are sediment");
-        Assert.Equal(new[] { Rock.Crystalline, Rock.Volcanic, Rock.Sedimentary },
+        Assert.Equal(new[] { Rock.Crystalline, Rock.Limestone, Rock.Volcanic, Rock.Sedimentary },
             Enumerable.Range(0, Rock.N).Select(k => (byte)k).OrderBy(k => Rock.Erod[k]).ToArray());
 
         // the same relief and rain, all crystalline against all sedimentary: the hard rock loses far less
@@ -138,9 +146,16 @@ public class GeologyTests
             sum[w.Rock[i]] += w.Fert[i]; cnt[w.Rock[i]]++;
             Assert.InRange(w.Fert[i], Rock.Fert[w.Rock[i]] - K.FERT_VAR - 1e-4f, Rock.Fert[w.Rock[i]] + K.FERT_VAR + 1e-4f);
         }
-        for (int k = 0; k < Rock.N; k++) Assert.True(cnt[k] > 100, $"{cnt[k]} {Rock.Names[k]} cells");
+        // limestone (2026-11-01) shows only where erosion has stripped a young platform's clastic strata: 63 cells on this
+        // small map, so it is checked when there are enough of it
+        for (int k = 0; k < Rock.N; k++) if (k != Rock.Limestone) Assert.True(cnt[k] > 100, $"{cnt[k]} {Rock.Names[k]} cells");
         double cr = sum[Rock.Crystalline] / cnt[Rock.Crystalline], vo = sum[Rock.Volcanic] / cnt[Rock.Volcanic], se = sum[Rock.Sedimentary] / cnt[Rock.Sedimentary];
         Assert.True(vo > se && se > cr, $"fertility: volcanic {vo:F2}, sedimentary {se:F2}, crystalline {cr:F2}");
+        if (cnt[Rock.Limestone] > 30)
+        {
+            double li = sum[Rock.Limestone] / cnt[Rock.Limestone];
+            Assert.True(li > cr, $"fertility: limestone {li:F2}, crystalline {cr:F2}");
+        }
     }
 
     // ---- geomorphology (2026-10-31): the relief is what uplift and erosion leave, with no cap, no cliffs and no repeats
@@ -193,26 +208,139 @@ public class GeologyTests
         }
     }
 
-    [Fact] // slopes are bounded by the critical slope of threshold hillslopes (30-35°): no cliffs; lowlands are gentler than uplands
-    public void SlopeDistributionIsBounded()
+    /// <summary>The steepest drop from each field cell to one of its 8 neighbours (m/m, a lake at its level), as the game
+    /// shows it: what Geology.Fail bounds by the rock's critical slope.</summary>
+    static float[] Steepest(World w)
     {
-        // before: 13-18% of the land (1024 map) and 41% (256) was steeper than 45° as the 3D view drew it; p99 66-77°
+        int FW = Map.FW, n = FW * FW;
+        var s = new float[n];
+        float k = K.H_RELIEF / (1f - w.SeaLevel) / K.GEO_CELL_M;
+        for (int y = 0; y < FW; y++)
+            for (int x = 0; x < FW; x++)
+            {
+                int i = y * FW + x; float best = 0f;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        float e = MathF.Max(w.Elev[World.WrapI(y + dy, FW) * FW + World.WrapI(x + dx, FW)], w.SeaLevel);
+                        best = MathF.Max(best, (w.Elev[i] - e) / (dx != 0 && dy != 0 ? 1.4142135f : 1f));
+                    }
+                s[i] = best * k;
+            }
+        return s;
+    }
+
+    static float Deg(float s) => MathF.Atan(s) * 180f / MathF.PI;
+
+    [Fact] // slopes are bounded by each rock's critical slope: soft rock and debris at 30-35°, no rock beyond its own; lowlands are gentler than uplands
+    public void SlopeDistributionIsBoundedByRock()
+    {
+        // before (geomorphology, 2026-10-31): 13-18% of the land (1024 map) and 41% (256) was steeper than 45° as the 3D
+        // view drew it; p99 66-77°. Then every rock failed at GEO_SC (31°). Mountains (2026-11-01): each rock at its own
+        // critical slope (Rock.Sc), so this bounds each rock by its own; the crags are CragsStandOnHardRock
         foreach (var seed in Seeds)
         {
             var (w, _) = Built(seed);
             int n = Map.FW * Map.FW;
-            var slope = Slopes(w);
+            var slope = Slopes(w); var st = Steepest(w);
             var land = Enumerable.Range(0, n).Where(i => w.Elev[i] >= w.SeaLevel).ToArray();
             var ls = land.Select(i => slope[i]).ToArray();
-            float tan35 = MathF.Tan(35f * MathF.PI / 180f), tan40 = MathF.Tan(40f * MathF.PI / 180f);
-            Assert.True(Pct(ls, 0.99) < tan35, $"seed {seed}: p99 land slope {Pct(ls, 0.99):F2} m/m");
-            Assert.True(ls.Max() < tan40, $"seed {seed}: steepest land slope {ls.Max():F2} m/m");
+            float tan35 = MathF.Tan(35f * MathF.PI / 180f);
+            var soft = land.Where(i => w.Rock[i] == Rock.Sedimentary).Select(i => st[i]).ToArray();
+            Assert.True(Pct(soft, 0.99) < tan35, $"seed {seed}: p99 slope on soft rock {Deg(Pct(soft, 0.99)):F1}°");
+            foreach (var i in land)   // a cell's steepest drop is at most its rock's critical slope (+3° of what the fine passes leave)
+                Assert.True(Deg(st[i]) < Deg(Rock.Sc[w.Rock[i]]) + 3f || w.Rock[i] == Rock.Sedimentary,
+                    $"seed {seed}: {Rock.Names[w.Rock[i]]} cell at {Deg(st[i]):F1}°, its critical slope {Deg(Rock.Sc[w.Rock[i]]):F1}°");
+            float scMax = Rock.Sc.Max();
+            Assert.True(Deg(st.Max()) < Deg(scMax) + 5f, $"seed {seed}: steepest land {Deg(st.Max()):F1}°");
             Assert.True(Pct(ls, 0.9) > 0.3f * K.GEO_SC, $"seed {seed}: the land is all but flat (p90 {Pct(ls, 0.9):F2})");
             // lowlands (the lowest quarter of the land) are gentler than uplands (the highest quarter)
             var byH = land.OrderBy(i => w.Elev[i]).ToArray();
             float lo = Pct(byH.Take(byH.Length / 4).Select(i => slope[i]).ToArray(), 0.5);
             float hi = Pct(byH.Skip(3 * byH.Length / 4).Select(i => slope[i]).ToArray(), 0.5);
             Assert.True(lo < 0.75f * hi, $"seed {seed}: median slope {lo:F2} in the lowlands, {hi:F2} in the uplands");
+        }
+    }
+
+    // ---- mountains (2026-11-01): strong rock stands in crags, glaciers cut the land above the snowline, relief follows uplift
+
+    [Fact] // hard crystalline and volcanic rock stands in steep crags and cliffs; soft sediment does not
+    public void CragsStandOnHardRock()
+    {
+        // before: every rock failed at GEO_SC; no land was steeper than 33° (1024 map, seeds 3, 7, 11). Measured after
+        // (1024 map): 26-35% of crystalline land is steeper than 40° and 11-18% steeper than 50°; volcanic p99 45°;
+        // sedimentary p99 31°
+        foreach (var seed in Seeds)
+        {
+            var (w, _) = Built(seed);
+            int n = Map.FW * Map.FW;
+            var st = Steepest(w);
+            float[] Of(byte k) => Enumerable.Range(0, n).Where(i => w.Elev[i] >= w.SeaLevel && w.Rock[i] == k).Select(i => st[i]).ToArray();
+            var cr = Of(Rock.Crystalline); var vo = Of(Rock.Volcanic); var se = Of(Rock.Sedimentary);
+            float tan40 = MathF.Tan(40f * MathF.PI / 180f);
+            double crSteep = cr.Count(s => s > tan40) / (double)cr.Length, seSteep = se.Count(s => s > tan40) / (double)se.Length;
+            Assert.True(crSteep > 0.08, $"seed {seed}: {crSteep:P1} of the crystalline land is steeper than 40°");
+            Assert.True(Deg(Pct(cr, 0.99)) > 45f, $"seed {seed}: p99 slope on crystalline rock {Deg(Pct(cr, 0.99)):F1}°");
+            Assert.True(seSteep < 0.01, $"seed {seed}: {seSteep:P1} of the sedimentary land is steeper than 40°");
+            if (vo.Length > 50) Assert.True(Pct(vo, 0.99) > Pct(se, 0.99) + 0.1f, $"seed {seed}: p99 slope volcanic {Deg(Pct(vo, 0.99)):F1}°, sedimentary {Deg(Pct(se, 0.99)):F1}°");
+        }
+    }
+
+    [Fact] // glaciers above the snowline (ELA) cut the mountains toward it (the glacial buzzsaw); they form above it
+    [BigWorld]
+    public void GlaciersCutTheLandAboveTheSnowline()
+    {
+        // measured (1024 map, latitudes whose ELA is 0.3-3.5 km; seeds 3, 7, 11): land above the ELA 32/16/23% without
+        // glaciers, 26/9/18% with them; p99 height above the ELA 2.6/1.8/2.5 km against 2.1/1.3/1.8 km
+        int FW = Map.FW, n = FW * FW;
+        var ela = new float[FW]; var tSea = new float[FW];
+        Geology.Snowline(FW, ela, tSea);
+        foreach (var seed in new uint[] { 3, 11 })
+        {
+            (double above, float p99, Geology.Crust c, World w) Run(bool glaciers)
+            {
+                var w = new World(16, seed);
+                var c = Geology.Form(w, glaciers);
+                var rel = new System.Collections.Generic.List<float>();
+                for (int i = 0; i < n; i++)
+                {
+                    float e = ela[i / FW];
+                    if (w.Elev[i] < w.SeaLevel || e < 0.3f || e > 3.5f) continue;
+                    rel.Add(Metres(w, i) - 1000f * e);
+                }
+                var a = rel.ToArray();
+                return (a.Count(v => v > 0f) / (double)a.Length, Pct(a, 0.99), c, w);
+            }
+            var (a0, p0, _, _) = Run(false);
+            var (a1, p1, c1, w1) = Run(true);
+            Assert.True(a1 < 0.85 * a0, $"seed {seed}: land above the ELA {a0:P1} without glaciers, {a1:P1} with them");
+            Assert.True(p1 < p0 - 200f, $"seed {seed}: p99 height above the ELA {p0:F0} m without glaciers, {p1:F0} m with them");
+            // the glaciers of the last step lie above the snowline, or not far below it (their tongues melt within ~1 km)
+            int ice = 0, iceHigh = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (c1.FineIce[i] <= 0f || w1.Elev[i] < w1.SeaLevel) continue;
+                ice++; if (Metres(w1, i) > 1000f * ela[i / FW] - 1000f) iceHigh++;
+            }
+            Assert.True(ice > 0.02 * n && iceHigh > 0.95 * ice, $"seed {seed}: {ice} glacier cells, {iceHigh} of them above ELA - 1 km");
+        }
+    }
+
+    [Fact] // relief grows with the rate of rock uplift: belts that rise faster stand higher (until crags and glaciers bound them)
+    public void ReliefScalesWithUplift()
+    {
+        foreach (var seed in Seeds)
+        {
+            var (_, c) = Built(seed);
+            // coarse land cells by their rock uplift (the plates'): terciles of the rising ones, and the plate interiors
+            var up = Enumerable.Range(0, c.CW * c.CW).Where(i => c.H[i] >= c.Sea && c.Uplift[i] > 0.02f * K.GEO_AIRY).OrderBy(i => c.Uplift[i]).ToArray();
+            double H(System.Collections.Generic.IEnumerable<int> s) => s.Average(i => c.H[i] - c.Sea);
+            int t = up.Length / 3;
+            double lo = H(up.Take(t)), mid = H(up.Skip(t).Take(t)), hi = H(up.Skip(2 * t));
+            double still = H(Enumerable.Range(0, c.CW * c.CW).Where(i => c.H[i] >= c.Sea && MathF.Abs(c.Uplift[i]) < 0.005f * K.GEO_AIRY));
+            Assert.True(still < lo && lo < mid && mid < hi, $"seed {seed}: mean height {still:F2} km where nothing rises, {lo:F2} / {mid:F2} / {hi:F2} km by tercile of uplift");
+            Assert.True(hi > 1.5 * lo, $"seed {seed}: the fastest-rising third stands {hi:F2} km, the slowest {lo:F2} km");
         }
     }
 
