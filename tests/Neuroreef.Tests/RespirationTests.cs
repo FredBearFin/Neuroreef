@@ -153,6 +153,73 @@ public class RespirationTests
         Assert.True(w.PBasal[i] > b0, "an amphibious body's basal cost is not above a gill-breather's");
     }
 
+    [Fact] // a gill-breather that keeps a lung it never uses pays for it, in water as anywhere
+    public void AGillBreatherPaysUpkeepForUnusedLungs()
+    {
+        // a pure gill-breather and one with a fifth of its breathing organ as lung, in water (where the lung draws nothing
+        // a gill could not), same body otherwise
+        var (w, i) = One(true, 20f, -127, 127, -127);
+        Assert.Equal(0f, w.PLungs[i], 5);
+        float pure = w.PBasal[i];
+        w.Genome[(long)i * G.LEN + G.B_LUNGS] = -76; Body.Express(w, i);   // Organ(-76) = 51/254, ~0.2
+        float L = w.PLungs[i];
+        Assert.InRange(L, 0.19f, 0.21f);
+        // its basal cost carries the organs' upkeep: COST_LUNG L^ORGAN_EXP + COST_GILL (1-L)^ORGAN_EXP of C_BASAL M^EXP_BASAL
+        float mPow = MathK.Pow(w.PM[i], K.EXP_BASAL);
+        float extra = K.C_BASAL * mPow * (Respiration.OrganUpkeep(L) - Respiration.OrganUpkeep(0f));
+        Assert.True(extra > 0f, "a lung added to gills costs nothing extra");
+        Assert.Equal(pure + extra, w.PBasal[i], 4);
+        // with an organ's fixed overhead (ORGAN_EXP < 1) the small lung costs more than the gill tissue it replaced saves
+        Assert.True(K.COST_LUNG * MathK.Pow(L, K.ORGAN_EXP) > K.COST_GILL * (1f - MathK.Pow(1f - L, K.ORGAN_EXP)));
+        // and the pure gill-breather lives a day for less in the same water: its resting cost there is lower
+        int cell = World.FIdx(w.X[i], w.Y[i]);
+        Assert.True(Respiration.Breathable(w, i, cell));
+        float need = K.FIELD_METAB * Respiration.OrganBase(w, i) * Respiration.Pace(w, i, cell, false);
+        w.Genome[(long)i * G.LEN + G.B_LUNGS] = -127; Body.Express(w, i);
+        float needPure = K.FIELD_METAB * Respiration.OrganBase(w, i) * Respiration.Pace(w, i, cell, false);
+        Assert.True(needPure < need, $"a gill-breather's day costs {needPure} without the lung and {need} with it");
+    }
+
+    [Fact] // need and running costs follow the metabolic pace of the core: Boltzmann-Arrhenius, a Q10 of ~2.5
+    public void ColdCoreRunsItsCostsAtTheArrheniusPace()
+    {
+        Assert.True(Climate.On);
+        const float kB = 8.617e-5f;   // Boltzmann's constant, eV/K
+        // a cold-blooded gill-breather in water: its core takes the water's temperature
+        var (w, i) = One(true, 20f, -127, 127, -127);
+        SetEndo(w, i, -127);
+        int cell = World.FIdx(w.X[i], w.Y[i]);
+        (float core, float osmo, float pace) At(World v, int j, float t)
+        {
+            Array.Fill(v.Temp, t);
+            float top = Heat.Operative(v, cell, v.PInsul[j], true);
+            float c = Heat.Core(top, v.PEndo[j]);
+            return (c, Respiration.Uptake(v, j, cell, false, 0f, out _, out _).Extra, Respiration.Pace(v, j, cell, false));
+        }
+        var cool = At(w, i, 12f); var warm = At(w, i, 22f);
+        Assert.True(warm.core > cool.core + 5f, $"its core did not follow the water ({cool.core} -> {warm.core} °C)");
+        // the osmoregulation it pays is GILL_OSMO x its resting cost at its pace
+        Assert.Equal(K.GILL_OSMO * Respiration.OrganBase(w, i) * warm.pace, warm.osmo, 5);
+        // and that pace follows exp(E/k (1/T1 - 1/T2)) between its two core temperatures (Gillooly et al. 2001)
+        float t1 = cool.core + 273.15f, t2 = warm.core + 273.15f;
+        float arrhenius = MathK.Exp(K.E_ACT / kB * (1f / t1 - 1f / t2));
+        Assert.Equal(arrhenius, warm.osmo / cool.osmo, 3);
+        Assert.Equal(arrhenius, warm.pace / cool.pace, 3);
+        // as a Q10 (the factor per 10 K): ~2.5 at 0.65 eV, in the 2-3 that animals show
+        float q10 = MathK.Exp(MathK.Log(warm.pace / cool.pace) * 10f / (t2 - t1));
+        Assert.InRange(q10, 2f, 3f);
+        // its day's oxygen need (the founding test, Breathable) scales the same way
+        float needCool = K.FIELD_METAB * Respiration.OrganBase(w, i) * cool.pace, needWarm = K.FIELD_METAB * Respiration.OrganBase(w, i) * warm.pace;
+        Assert.Equal(arrhenius, needWarm / needCool, 3);
+        // a warm-blooded body keeps its core at T_BODY in either water: its costs do not change, and are the most
+        var (v, j) = One(true, 20f, -127, 127, -127);
+        var vc = At(v, j, 12f); var vw = At(v, j, 22f);
+        Assert.Equal(K.T_BODY, vc.core, 3); Assert.Equal(K.T_BODY, vw.core, 3);
+        Assert.Equal(vc.osmo, vw.osmo, 5);
+        Assert.Equal(K.GILL_OSMO * Respiration.OrganBase(v, j), vw.osmo, 5);
+        Assert.True(warm.osmo < vw.osmo * K.ECTO_LEVEL);
+    }
+
     [Fact]
     public void GillsOsmoregulateInWaterAndLungsFloat()
     {
