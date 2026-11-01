@@ -342,6 +342,31 @@ public static class Wire
         return o.ToArray();
     }
 
+    /// <summary>
+    /// What the console needs to draw each living organism's body that its AGENTS record does not carry (2026-11-01; ICD
+    /// §2 status: bodyLook), as a flat array [serial, endothermy, fibre, ...], each 0..1 to the hundredth: endothermy is
+    /// the B_ENDO organ size (fur shows on a warm body, a warm body stands upright); fibre is the share of its digestive
+    /// budget on fibrous plant food (grass, browse, wood, litter: a grazer's deep, long muzzle). Display only; read on the
+    /// network thread as BodyLengths is.
+    /// </summary>
+    public static double[] BodyLooks(World w)
+    {
+        var st = w.StageOf; var ser = w.Serial; var endo = w.PEndo; var diet = w.PDiet;
+        int n = Math.Min(Math.Min(st.Length, ser.Length), Math.Min(endo.Length, diet.Length / Pools.N));
+        var o = new List<double>(3 * w.AliveCount + 16);
+        for (int i = 0; i < n; i++)
+        {
+            byte s = st[i];
+            if (s == St.Dead || s == St.Embryo) continue;
+            int d = i * Pools.N;
+            float all = 0f;
+            for (int p = 0; p < Pools.N; p++) all += MathF.Max(0f, diet[d + p]);
+            float fib = MathF.Max(0f, diet[d + (int)Pool.Grass]) + MathF.Max(0f, diet[d + (int)Pool.Browse]) + MathF.Max(0f, diet[d + (int)Pool.Wood]) + MathF.Max(0f, diet[d + (int)Pool.Litter]);
+            o.Add(ser[i]); o.Add(Math.Round(Math.Clamp(endo[i], 0f, 1f), 2)); o.Add(Math.Round(all > 0f ? fib / all : 0f, 2));
+        }
+        return o.ToArray();
+    }
+
     static object ModeJson(WeaponMode m) => new { id = m.Id, name = m.Name, kind = m.Kind, rangeM = m.RangeM, damage = m.Damage, speedMps = m.SpeedMps, cooldown = m.Cooldown, ammo = m.Ammo,
         vehicle = m.Vehicle, radiusM = m.RadiusM, rounds = m.Rounds, heatPerShot = m.HeatPerShot, maxTimeS = m.MaxTimeS, depthMinM = m.DepthMinM, depthMaxM = m.DepthMaxM,
         area = m.Area, underwater = m.Underwater, ignites = m.Ignites };

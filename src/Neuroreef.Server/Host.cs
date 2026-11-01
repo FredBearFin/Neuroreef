@@ -339,6 +339,7 @@ public static class Host
             double nextPre = 0, nextFights = 0, nextLex = 0; int cladesSent = int.MinValue; long fightSeen = -1;
             var sw = Stopwatch.StartNew();
             double nextAgents = 0, nextFields = 0, nextTele = 0, nextAnalysis = 0, nextStatus = 0, nextProbe = 0;
+            int statusN = 0;
             while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
             {
                 double t = sw.Elapsed.TotalMilliseconds;
@@ -421,6 +422,7 @@ public static class Host
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                         player = PlayerState(h),
                         units = Wire.Units(), bodyLenM = Wire.BodyLengths(w),   // 2026-11-01: metres per unit, step length; each organism's body length (m)
+                        bodyLook = (statusN++ & 3) == 0 ? Wire.BodyLooks(w) : null,   // 2026-11-01: endothermy and fibrous diet for drawing (every 2 s)
                     }), ct);
                 }
                 if (t >= nextAnalysis)

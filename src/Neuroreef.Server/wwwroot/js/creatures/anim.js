@@ -1,7 +1,7 @@
 // The body material: a Lambert material whose vertex shader builds each organism's body from its genes and
 // animates it. The geometry (body.js) holds only surface coordinates; per instance the shader reads
-//   aGeneA = (legs, fins, wings, sight)        organ sizes 0..1
-//   aGeneB = (armour, strike, fur, appendages) organ sizes 0..1
+//   aGeneA = (legs, fins, wings, sight x 256 + fibrous diet: 8 bits each)
+//   aGeneB = (armour, strike, fur x 256 + appendages x 16 + lungs: 4 bits each, endothermy)   all 0..1
 //   aMorphA/B/C/D = the sixteen normalized, inherited appearance genes in wire order
 //   aAnim  = (gait 0..1, phase 0..1, action bits, resting)
 //   aClade = (clade colour as linear RGB, packed counts): w = meat * 512 + loco * 64 + (fin pairs - 1) * 16
@@ -36,7 +36,7 @@ uniform float uBodyK;   // world units per view-size unit (js/scale.js): the tru
 attribute vec3 aAux;
 attribute vec4 aAnim; attribute vec4 aGeneA; attribute vec4 aGeneB; attribute vec4 aClade;
 attribute vec4 aMorphA; attribute vec4 aMorphB; attribute vec4 aMorphC; attribute vec4 aMorphD;
-varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying float vUnder;
+varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying vec4 vInteg; varying float vUnder;
 
 vec3 pigment(float h, float s, float l) {
   vec3 rgb = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
@@ -48,9 +48,12 @@ vec3 rotA(vec3 p, vec3 c, vec3 ax, float a) { p -= c; float s = sin(a), k = cos(
 
 // ---- per-instance state, set once at the top of main and read by the part surfaces below
 float bT, bPh, bGait, bRest, bAir, bFish, bWalk, bSwim, bSess, bEat, bStrikeA, bBiped, bPant, bCall;
-float gLegs, gFins, gWings, gSight, gArmour, gStrike, gFur, gAppend, gMeat;
+float gLegs, gFins, gWings, gSight, gArmour, gStrike, gFur, gAppend, gMeat, gEndo, gLungs, gFibre;
+// the integument and body plan the genes add up to (0..1 each, blended, never a type): fur (insulation shown by a warm
+// body), feathers (an insulated warm flier), moist skin (gills), scales (the rest), many-legged small cold bodies
+float furA, featherA, moistA, scaleA, arthroA, gWarm;
 float nLegPairs, nFinPairs, nEyePairs;
-float rX, rY, rZ, hR, furV, cY;
+float rX, rY, rZ, hR, furV, cY, tailThin;
 vec3 kT, kH, kS, kO, kN, dT, dH, dS, dO, dN;
 float lT, lB, lK, lF;
 float legLen, legR, legE, sprawl, footAng, footLen, legExt, hipDrop, stride, liftH, gaitW;
@@ -98,8 +101,8 @@ vec3 section(float g) {
   vec2 r; float dy = 0.0;
   if (seg < 0.5) {
     // tail, tip (u = 0) to rump: tapering, bushy with fur, flattened sideways into a swimmer's tail stalk
-    r = hip * pow(u, mix(0.5, 0.8, smoothstep(0.3, 1.2, lT / rX)));
-    r *= 1.0 + 1.4 * gFur * smoothstep(0.0, 0.45, u) * (1.0 - smoothstep(0.45, 1.0, u));
+    r = hip * pow(u, mix(0.5, 0.8, smoothstep(0.3, 1.2, lT / rX))) * mix(1.0, mix(0.35, 0.9, u * u), tailThin);
+    r *= 1.0 + 1.4 * furA * smoothstep(0.0, 0.45, u) * (1.0 - smoothstep(0.45, 1.0, u));
     r.x *= mix(1.0, 0.55, bFish * (1.0 - u));
   } else if (seg < 1.5) {
     // rump to shoulders: a full belly between narrower hips and chest, hanging below the back on legs
@@ -110,12 +113,14 @@ vec3 section(float g) {
   } else if (seg < 2.5) {
     // the neck narrows from the shoulders to the skull; a short one is just the body flowing into the head
     r = mix(sh, occ, smoothstep(0.0, 0.8, u));
-    r *= 1.0 + 0.18 * gFur * exp(-u * u * 6.0);      // a ruff where fur is thick
+    r *= 1.0 + 0.18 * furA * exp(-u * u * 6.0);      // a ruff where fur is thick
   } else {
     // the head: occiput, a cranium (wider over a meat-eater's jaw muscles), the muzzle, a rounded nose
     float cr = smoothstep(0.0, 0.26, u), mz = smoothstep(0.32, 0.74, u);
-    vec2 cran = vec2(hR * (0.9 + 0.28 * gMeat), hR * 0.9);
-    vec2 muz = vec2(hR * mix(0.52, 0.36, gMeat), hR * mix(0.62, 0.4, gMeat));
+    // a warm body's braincase is rounder; a grazer's muzzle deep (grinding teeth), a beak narrow and pointed
+    vec2 cran = vec2(hR * (0.9 + 0.28 * gMeat + 0.12 * gEndo), hR * (0.9 + 0.14 * gEndo));
+    vec2 muz = vec2(hR * mix(0.52, 0.36, gMeat) * mix(1.0, 0.5, featherA) * mix(1.0, 0.75, arthroA),
+                    hR * mix(0.62, 0.4, gMeat) * (1.0 + 0.3 * gFibre * (1.0 - gMeat)) * mix(1.0, 0.55, featherA));
     r = mix(mix(occ, cran, cr), muz, mz);
     r *= sqrt(clamp((1.0 - u) / 0.15, 0.0, 1.0));
     dy = -hR * 0.16 * mz;
@@ -140,7 +145,7 @@ vec3 skin(float g, float th, out vec3 hint, out vec3 T, out vec3 N, out vec3 B) 
   rh *= 1.0 + 0.34 * shell * smoothstep(-0.2, 0.8, c);
   rw *= 1.0 + 0.18 * shell * smoothstep(-0.75, -0.05, c);
   // fur: a shaggy outline
-  float shag = 1.0 + 0.07 * gFur * sin(g * 23.0 + th * 3.0) * sin(g * 14.0 - th * 5.0) * step(seg, 2.5);
+  float shag = 1.0 + (0.12 * furA + 0.02 * scaleA * gArmour) * sin(g * 23.0 + th * 3.0) * sin(g * 14.0 - th * 5.0) * step(seg, 2.5);
   rw *= shag; rh *= shag;
   hint = normalize(N * c / max(rh, 1e-4) + B * s / max(rw, 1e-4));
   if (g < 0.004) hint = -T; else if (g > 3.996) hint = T;
@@ -154,7 +159,7 @@ vec3 trunk(vec3 L, out vec3 hint) {
   float th = L.y * 6.28318;
   vec3 p = skin(L.x, th, hint, T, N, B);
   float r = section(L.x).x;
-  oSkin = vec4(alongOf(L.x), acos(clamp(cos(th), -1.0, 1.0)) * (r + section(L.x).y) * 0.5, cos(th), 0.0);
+  oSkin = vec4(alongOf(L.x), acos(clamp(cos(th), -1.0, 1.0)) * (r + section(L.x).y) * 0.5, cos(th), L.x > 3.5 && featherA > 0.5 ? 7.0 : 0.0);
   return p;
 }
 
@@ -201,7 +206,7 @@ vec3 leg(vec3 L, out vec3 hint) {
   float thigh = mix(haunch, 1.6, 0.5);
   float r = c < 0.45 ? mix(haunch, thigh, c / 0.45) : c < 1.0 ? mix(thigh, 0.8, (c - 0.45) / 0.55)
           : c < 2.0 ? mix(0.8, 0.5, c - 1.0) : mix(0.5, 0.68, c - 2.0);
-  r *= legR * has * mix(1.0, 1.25, gFur * step(c, 1.2));
+  r *= legR * has * mix(1.0, 1.25, furA * step(c, 1.2));
   vec3 Pn = normalize(cross(dir, bend));
   vec3 Nl = normalize(cross(Pn, Tl)), Bl = cross(Tl, Nl);
   float th = L.y * 6.28318, cs = cos(th), sn = sin(th);
@@ -242,7 +247,7 @@ vec3 jaw(vec3 L, out vec3 hint) {
   float th = L.y * 6.28318;
   vec3 p = cen + N * cos(th) * rh + B * sin(th) * rw;
   hint = normalize(N * cos(th) / rh + B * sin(th) / max(rw, 1e-4));
-  oSkin = vec4(alongOf(3.0 + u), acos(clamp(cos(th), -1.0, 1.0)) * rw, -0.4 - 0.5 * max(0.0, -cos(th)), 0.0);
+  oSkin = vec4(alongOf(3.0 + u), acos(clamp(cos(th), -1.0, 1.0)) * rw, -0.4 - 0.5 * max(0.0, -cos(th)), featherA > 0.5 && u > 0.5 ? 7.0 : 0.0);
   p = rotA(p, hinge, B, -jawOpen); hint = rotA(hint, vec3(0.0), B, -jawOpen);
   return p;
 }
@@ -250,7 +255,7 @@ vec3 jaw(vec3 L, out vec3 hint) {
 /** Teeth along the upper jaw (k = 0 the canine), as long as the strike gene, pointing down. */
 vec3 tooth(vec3 L, out vec3 hint) {
   float k = bIdx;
-  float tl = smoothstep(0.2, 0.55, gStrike) * hR * (0.34 - 0.08 * k) * mix(0.7, 1.15, gMeat);
+  float tl = smoothstep(0.2, 0.55, gStrike) * hR * (0.34 - 0.08 * k) * mix(0.7, 1.15, gMeat) * (1.0 - featherA);
   float u = 0.88 - 0.12 * k;
   vec3 h0, T, N, B; vec3 base = skin(3.0 + u, bSide * 2.05, h0, T, N, B);
   vec3 dir = normalize(-N + T * 0.15);
@@ -266,7 +271,7 @@ vec3 wingAt(float s, float t, float bone, float th, out vec3 hint) {
   float fold = 1.0 - bAir;
   float span = (0.25 + 1.55 * gWings) * wingE * mix(0.55, 1.75, aMorphC.y);
   span = mix(span, min(span * 0.8, rX * 3.2), fold);       // folded, each bone lies within the trunk's length
-  float chord = (0.3 + 0.55 * gWings) * wingE * mix(1.45, 0.5, aMorphC.y);
+  float chord = (0.3 + 0.55 * gWings) * wingE * mix(1.45, 0.5, aMorphC.y) * mix(1.0, 1.3, featherA);   // feathers: a broad vane
   float tt = 0.64 + 0.18 * (aMorphB.z - 0.5);
   vec3 h0, T, N, B; vec3 sh = skin(1.0 + tt, bSide * 0.75, h0, T, N, B);
   sh -= h0 * rZ * 0.08;
@@ -278,7 +283,8 @@ vec3 wingAt(float s, float t, float bone, float th, out vec3 hint) {
   else if (s < l0 + l1) { q = J1 + e1 * (s - l0) * span; e = e1; }
   else { q = J2 + e2 * (s - l0 - l1) * span; e = e2; }
   vec2 cd = normalize(mix(vec2(-e.y, e.x), vec2(-0.3, -1.0), fold));   // backward across the bone; tucked in, folded
-  float c = chord * (1.0 - 0.85 * pow(s, 1.3)) * (1.0 - 0.28 * abs(sin(s * 3.14159 * 2.0))) * mix(1.0, 0.3, fold);
+  // a membrane is scalloped between the fingers; a feathered wing has a straight trailing edge of flight feathers
+  float c = chord * (1.0 - mix(0.85, 0.55, featherA) * pow(s, 1.3)) * (1.0 - 0.28 * (1.0 - featherA) * abs(sin(s * 3.14159 * 2.0))) * mix(1.0, 0.3, fold);
   vec3 w = vec3(q.x + cd.x * c * t, c * t * (1.0 - t) * 0.45 * (1.0 - fold), q.y + cd.y * c * t);
   vec3 wn = vec3(0.0, 1.0, 0.0);
   if (bone > 0.5) {
@@ -342,22 +348,32 @@ vec3 dorsal(vec3 L, out vec3 hint) {
 vec3 tailFin(vec3 L, out vec3 hint) {
   float fsh = aMorphC.x;
   float tfs = (0.1 + 0.6 * gFins) * finE * mix(1.0, 0.55, finFold) * mix(0.8, 1.3, rY / 0.3);
+  // a feathered body's tail is a fan of feathers, flat (spread in flight), where a fish's caudal fin stands upright
+  float fan = featherA * (1.0 - finE * (1.0 - finFold));
+  tfs = max(tfs, fan * (0.3 + 0.35 * gWings) * mix(0.7, 1.0, bAir));
   vec3 P, T; spine(0.08, P, T);
-  vec3 N = normalize(cross(vec3(0.0, 0.0, 1.0), T));
+  vec3 N = normalize(cross(vec3(0.0, 0.0, 1.0), T)), Bn = cross(T, N);
   float t = L.y * 2.0 - 1.0;
-  float psi = t * mix(0.95, 0.7, fsh);
-  float ell = tfs * mix(1.0 - 0.3 * t * t, 0.5 + 0.65 * pow(abs(t), 0.8), fsh);
-  vec3 d = -T * cos(psi) + N * sin(psi);
-  hint = normalize(cross(T, N));
+  float psi = t * mix(mix(0.95, 0.7, fsh), mix(0.35, 0.8, bAir), fan);
+  float ell = tfs * mix(mix(1.0 - 0.3 * t * t, 0.5 + 0.65 * pow(abs(t), 0.8), fsh), 1.0 - 0.15 * t * t, fan);
+  vec3 up = normalize(mix(N, Bn, fan));
+  vec3 d = -T * cos(psi) + up * sin(psi);
+  hint = normalize(cross(T, up));
   oSkin = vec4(L.x, L.y * 2.0, 0.0, 2.0);
   return P + d * ell * L.x;
 }
 
 /** An ear (appendages: a radiator), cupped, up and back from the skull; a swimmer's are gill frills. */
 vec3 ear(vec3 L, out vec3 hint) {
-  float eL = hR * gAppend * (0.45 + 1.6 * gAppend), eW = hR * (0.22 + 0.4 * gAppend) * smoothstep(0.0, 0.12, gAppend);
-  vec3 h0, T, N, B; vec3 base = skin(3.0 + 0.14 - 0.12 * bFish, bSide * mix(0.85, 1.5, bFish), h0, T, N, B);
-  vec3 dir = normalize(mix(N * 0.8 - T * 0.45 + B * bSide * 0.42, -T * 0.7 + B * bSide * 0.6 + N * 0.15, bFish));
+  // a warm body's ears are pinnae as big as its appendages gene (radiators); a cold body's appendages are small crests,
+  // gills (lungs gene low) frills behind the head; a many-legged small body carries them as antennae
+  float gill = max(bFish, moistA);
+  float amt = max(gAppend * mix(0.3, 1.0, max(gWarm, bFish)), 0.6 * moistA);
+  float eL = hR * amt * (0.45 + 1.6 * amt), eW = hR * (0.22 + 0.4 * amt) * smoothstep(0.0, 0.12, amt);
+  eL = mix(eL, hR * (1.4 + 2.0 * gAppend), arthroA); eW = mix(eW, hR * 0.07, arthroA);
+  vec3 h0, T, N, B; vec3 base = skin(3.0 + mix(0.14 - 0.12 * gill, 0.62, arthroA), bSide * mix(mix(0.85, 1.5, gill), 0.5, arthroA), h0, T, N, B);
+  vec3 dir = normalize(mix(mix(N * 0.8 - T * 0.45 + B * bSide * 0.42, -T * 0.7 + B * bSide * 0.6 + N * 0.15, gill),
+                           T * 0.75 + N * 0.55 + B * bSide * 0.35, arthroA));
   float tw = 0.12 * pow(max(0.0, sin(bT * 0.7 + bPh * 3.0)), 12.0);
   dir = normalize(rotA(dir, vec3(0.0), B, tw));
   vec3 acr = normalize(T - dir * dot(T, dir));
@@ -414,8 +430,11 @@ float noseReach(float pitch, float neckUp, float headA) {
 
 const GLSL_BODY = `
 {
-  gLegs = aGeneA.x; gFins = aGeneA.y; gWings = aGeneA.z; gSight = aGeneA.w;
-  gArmour = aGeneB.x; gStrike = aGeneB.y; gFur = aGeneB.z; gAppend = aGeneB.w;
+  gLegs = aGeneA.x; gFins = aGeneA.y; gWings = aGeneA.z;
+  gSight = floor(aGeneA.w / 256.0) / 255.0; gFibre = mod(aGeneA.w, 256.0) / 255.0;
+  gArmour = aGeneB.x; gStrike = aGeneB.y;
+  gFur = floor(aGeneB.z / 256.0) / 15.0; gAppend = mod(floor(aGeneB.z / 16.0), 16.0) / 15.0; gLungs = mod(aGeneB.z, 16.0) / 15.0;
+  gEndo = aGeneB.w;
   bT = uTime; bGait = aAnim.x; bPh = aAnim.y * 6.28318; bRest = aAnim.w;
   float acts = aAnim.z;
   bEat = max(bit(acts, 1.0), bit(acts, 4.0)); bStrikeA = bit(acts, 2.0);
@@ -441,12 +460,24 @@ const GLSL_BODY = `
   float massI = pow(max(sx / (corpse > 0.5 ? 1.725 : 1.5), 0.05), 3.0);
   float big = clamp(log(massI) / 5.99 + 0.38, 0.0, 1.0);    // 0 at M = 0.1 .. 1 at M = 40
 
+  // ---- integument: what covers the body follows from its physiology, blended (a body can be between any of them)
+  // fur: insulation that a warm body keeps (a cold body's insulation genes show only as a little bristle);
+  // feathers: an insulated, warm body with real wings and light enough to fly well on them (heavier fliers keep a
+  // membrane); moist skin: gills (lungs gene low) without fur; scales: whatever is left, more with armour;
+  // a many-legged, small, cold body reads as segmented (arthropod-like): no type, only where those genes meet
+  gWarm = smoothstep(0.2, 0.75, gEndo);
+  featherA = smoothstep(0.3, 0.7, gWings) * smoothstep(0.35, 0.75, 0.55 * gFur + 0.55 * gEndo) * (1.0 - smoothstep(4.0, 16.0, massI));
+  furA = gFur * mix(0.15, 1.0, gWarm) * (1.0 - featherA);
+  moistA = (1.0 - smoothstep(0.3, 0.75, gLungs)) * (1.0 - furA) * (1.0 - featherA);
+  arthroA = smoothstep(2.5, 3.5, nLegPairs) * (1.0 - gWarm) * (1.0 - smoothstep(0.2, 0.6, big)) * (1.0 - furA);
+  scaleA = (1.0 - furA) * (1.0 - featherA) * (1.0 - moistA) * (1.0 - 0.6 * arthroA);
+
   // ---- proportions: each axis 0.5..2 before volume normalization; mass remains the world-space scale
   vec3 axes = exp(0.69314718 * (2.0 * aMorphA.xyz - 1.0));
   axes /= pow(axes.x * axes.y * axes.z, 1.0 / 3.0);
   rX = 0.5 * axes.x; rY = 0.28 * axes.z; rZ = 0.27 * axes.y;
   hR = 0.16 * mix(0.55, 1.9, aMorphA.w);
-  furV = 1.0 + 0.2 * gFur;
+  furV = 1.0 + 0.24 * furA + 0.08 * featherA;
   float neckG = aMorphB.x, tailG = aMorphB.y, limbShape = aMorphB.w;
   shellE = smoothstep(0.35, 0.85, gArmour); plateE = smoothstep(0.5, 0.85, gArmour);
   finE = smoothstep(0.06, 0.3, gFins); wingE = smoothstep(0.06, 0.3, gWings);
@@ -457,10 +488,15 @@ const GLSL_BODY = `
   // longer with appendages (Allen's rule). Small bodies crouch, big ones stand on near-columnar legs (Biewener)
   legE = smoothstep(0.05, 0.3, gLegs);
   bBiped = step(nLegPairs, 1.5);
-  legLen = (0.18 + 0.66 * gLegs) * legE * mix(0.7, 1.3, limbShape) * pow(massI, -1.0 / 12.0) * (1.0 + 0.2 * gAppend);
-  legR = (0.034 + 0.04 * gLegs + 0.028 * gArmour) * legE * mix(1.45, 0.7, limbShape) * pow(massI, 1.0 / 8.0) * sqrt(2.0 / nLegPairs);
-  sprawl = smoothstep(0.2, 0.9, aMorphB.z) * mix(1.0, 0.25, bBiped);
-  float crouch = mix(0.55, 0.12, big) * mix(1.3, 0.6, limbShape);
+  // posture: the limb-position gene sets the sprawl, but a warm, active body and a big one (Biewener 1989) bring the
+  // legs under the body; a many-legged small body sprawls like a spider; warm bodies stand taller
+  float upright = clamp(0.6 * gWarm + 0.5 * big, 0.0, 1.0);
+  legLen = (0.18 + 0.66 * gLegs) * legE * mix(0.7, 1.3, limbShape) * pow(massI, -1.0 / 12.0) * (1.0 + 0.2 * gAppend)
+         * mix(0.9, 1.2, gWarm * (1.0 - bBiped * featherA * 0.5)) * mix(1.0, 1.25, arthroA);
+  legR = (0.034 + 0.04 * gLegs + 0.028 * gArmour) * legE * mix(1.45, 0.7, limbShape) * pow(massI, 1.0 / 8.0) * sqrt(2.0 / nLegPairs)
+       * mix(1.0, 0.5, arthroA) * mix(1.0, 0.6, featherA * bBiped);
+  sprawl = clamp(smoothstep(0.05, 0.95, aMorphB.z) * (1.0 - 0.85 * upright) + 0.45 * arthroA, 0.0, 1.0) * mix(1.0, 0.25, bBiped);
+  float crouch = mix(0.55, 0.12, big) * mix(1.3, 0.6, limbShape) * mix(1.0, 0.55, gWarm);
   legExt = clamp(1.0 - crouch * 0.6, 0.5, 0.97);
   footAng = mix(0.3, 1.2, limbShape);
   footLen = legLen * mix(0.17, 0.28, limbShape);
@@ -485,12 +521,17 @@ const GLSL_BODY = `
   neckUp += (0.25 * bCall + 0.12 * bPant) * (1.0 - bFish) * (1.0 - bEat);   // the head up to call, or to gasp for air
   float headA = mix(pitch * 0.4 - 0.12, -0.35, smoothstep(0.2, 1.0, neckUp - pitch * 0.5)) - bEat * 0.7;
   float tailDroop = mix(mix(0.15, 0.95, tailG), 0.25 * tailG, bBiped) * (1.0 - bFish) * (1.0 - 0.7 * bAir);
-  tailDroop -= 0.35 * gFur * (1.0 - tailG);           // a short furry tail is carried up
+  tailDroop -= 0.35 * furA * (1.0 - tailG);           // a short furry tail is carried up
   lB = 1.7 * rX;
   lK = rX * mix(0.15, 1.9, pow(neckG, 1.3));
-  float sn = mix(0.75, 0.45 + 1.15 * gStrike, gMeat);  // muzzle length: diet and strike
+  // muzzle length: diet and strike (a grazer's long face, a seed- or fruit-eater's short one, a hunter's by its weapon);
+  // a beak (feathers) and a many-legged body's mouthparts are short
+  float sn = mix(mix(0.45, 1.3, gFibre), 0.45 + 1.15 * gStrike, gMeat) * mix(1.0, 0.8, featherA) * mix(1.0, 0.45, arthroA);
   lF = hR * (1.3 + 1.25 * sn);
-  lT = max(rX * mix(0.08, 2.5, tailG) * (1.0 + 0.5 * gAppend), rY * 0.8 * furV);   // no tail still has a rounded rump
+  // a warm body's tail is a slim appendage, a cold one's a heavy tapering continuation of the trunk (thick at the
+  // root with fins); a feathered body's bony tail is short (its tail is a fan of feathers)
+  tailThin = (0.75 * gWarm + 0.3 * arthroA) * (1.0 - bFish) * (1.0 - 0.6 * finE);
+  lT = max(rX * mix(0.08, 2.5, tailG) * (1.0 + 0.5 * gAppend) * (1.0 - 0.8 * featherA), rY * 0.8 * furV);   // no tail still has a rounded rump
   // true length: the whole body is scaled so its snout-to-rump length standing (or swimming) is the sim's, MODEL_LEN
   // (js/scale.js) x its length gene's share of the volume; the head and neck genes no longer make it longer than that
   float pitch0 = pitchW * (1.0 - bFish);
@@ -566,6 +607,10 @@ const GLSL_BODY = `
 
   // ---- pigment: hue, saturation (muted unless the gene is high), lightness; the pattern's second colour
   float hue = aMorphC.z, sat = 0.04 + 0.78 * pow(aMorphC.w, 1.4), light = 0.12 + 0.62 * aMorphD.x;
+  // hair is coloured by melanin alone: a furred coat keeps its genes' lightness but its hue falls toward the browns,
+  // tans and greys (scales, feathers and moist skin keep the full gamut of their pigment cells)
+  hue += (fract(0.075 - hue + 0.5) - 0.5) * 0.9 * furA;
+  sat *= mix(1.0, 0.38, furA);
   float contrast = smoothstep(0.0, 0.2, aMorphD.y);
   vec3 col = pigment(hue, sat, light);
   // the markings' hue: within a third of the wheel of the ground colour (natural pairs, not complements)
@@ -573,12 +618,13 @@ const GLSL_BODY = `
   vCol = mix(col, aClade.rgb, uSpeciesOverlay) * mix(1.0, 0.45, corpse);
   vMark = mix(mk, aClade.rgb * 0.6, uSpeciesOverlay) * mix(1.0, 0.45, corpse);
   vSkin = skinC;
-  vPattern = vec4(aMorphD.y, aMorphD.z, gFur, gArmour);
+  vPattern = vec4(aMorphD.y, aMorphD.z, furA, gArmour);
+  vInteg = vec4(scaleA, moistA, featherA, arthroA);
 }
 `;
 
 const GLSL_FRAG_COMMON = `
-varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying float vUnder;
+varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying vec4 vInteg; varying float vUnder;
 uniform vec3 uWaterCol;
 vec2 nrHash(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
 /** Distances to the nearest and second nearest cell point (Worley). */
@@ -598,27 +644,30 @@ const GLSL_COLOR = `
   float up = vSkin.z;
   // markings in coordinates that follow the body: q.x along the spine, q.y from the dorsal line down the flank
   vec2 q = vSkin.xy * mix(3.0, 14.0, vPattern.y);
-  float kind = vPattern.x, present = smoothstep(0.03, 0.16, kind);
+  // the pattern gene chooses the kind of coat, by bands: plain (no countershading), countershaded, stripes, spots
+  // (some open into rosettes), reticulated patches
+  float kind = vPattern.x, present = smoothstep(0.38, 0.44, kind);
   float wave = q.x + 1.3 * sin(q.y * 0.9 + q.x * 0.3);
   float st = sin(wave * 1.6);
-  float wS = fwidth(st) + 0.02;
+  float wS = fwidth(st) + 0.02 + 0.3 * vPattern.z;
   float stripes = smoothstep(0.25 - wS, 0.25 + wS, st);
   vec2 qw = q * 0.55 + 0.35 * sin(q.yx * vec2(0.9, 1.3) + vec2(1.7, 0.4));   // warped, so cells are not tiles
   vec2 cel = nrCells(qw);
-  float wc = fwidth(cel.x) + 0.02;
+  float wc = fwidth(cel.x) + 0.02 + 0.09 * vPattern.z;   // markings on fur have soft edges
   float spots = 1.0 - smoothstep(0.36 - wc, 0.36 + wc, cel.x);
   float rosy = step(0.75, fract(kind * 5.0));                // a few lineages' spots open into rosettes
   spots = mix(spots, spots * smoothstep(0.14 - wc, 0.14 + wc, cel.x), rosy);
   float edge = cel.y - cel.x, we = fwidth(edge) + 0.02;
   float patches = smoothstep(0.16 - we, 0.22 + we, edge);
-  float wStripe = 1.0 - smoothstep(0.38, 0.44, kind), wPatch = smoothstep(0.68, 0.74, kind);
+  float wStripe = 1.0 - smoothstep(0.58, 0.64, kind), wPatch = smoothstep(0.8, 0.86, kind);
   float mark = mix(mix(stripes, spots, 1.0 - wStripe), patches, wPatch) * present;
   // countershading: a darker back, a paler, less saturated belly; markings fade toward the belly
   vec3 base = vCol;
   float lum = dot(base, vec3(0.3, 0.59, 0.11));
   vec3 belly = mix(base * 1.15, vec3(lum) * 1.2 + vec3(0.03, 0.025, 0.015), 0.3);
-  vec3 skinColor = mix(belly, base, smoothstep(-0.85, -0.25, up));
-  skinColor = mix(skinColor, base * 0.62, smoothstep(0.45, 1.0, up));
+  float counter = mix(0.15, 1.0, smoothstep(0.16, 0.24, kind));   // a plain coat is barely countershaded
+  vec3 skinColor = mix(mix(base, belly, counter), base, smoothstep(-0.85, -0.25, up));
+  skinColor = mix(skinColor, base * mix(1.0, 0.62, counter), smoothstep(0.45, 1.0, up));
   mark *= smoothstep(-0.8, -0.2, up);
   skinColor = mix(skinColor, vMark * mix(0.8, 1.0, smoothstep(0.0, 1.0, up)), mark);
   if (cls == 1.0) {
@@ -637,6 +686,10 @@ const GLSL_COLOR = `
     float fw = 0.012 + fwidth(s);
     skinColor = mix(base * 0.62, base * 0.85, smoothstep(0.0, 0.8, t)) * mix(1.0, 0.6, (1.0 - smoothstep(0.0, fw, fd)) * step(0.6, s + 0.0 * t));
     skinColor = mix(skinColor, vMark * 0.8, mark * 0.3);
+    // feathers: flight feathers fanning back across the vane, coverts nearer the leading edge
+    float fv = abs(sin((s * 22.0 + t * 3.0) * 3.14159)), cov = smoothstep(0.45, 0.25, t);
+    vec3 fcol = mix(base * mix(0.7, 1.0, t), vMark * 0.9, mark * 0.4 + cov * 0.2) * mix(1.0, 0.85, smoothstep(0.85, 1.0, fv) * (1.0 - cov));
+    skinColor = mix(skinColor, fcol, vInteg.z);
   } else if (cls == 3.0) {
     // eyes: a dark pupil in an amber to dark iris
     vec3 iris = mix(vec3(0.5, 0.33, 0.05), vec3(0.06, 0.05, 0.03), step(0.5, fract(vPattern.x * 3.0 + vPattern.y)));
@@ -647,15 +700,33 @@ const GLSL_COLOR = `
   } else if (cls == 5.0) {
     skinColor = mix(base * 0.55, vMark * 0.5, 0.3) * mix(0.8, 1.15, vSkin.x);
   }
+  // the integument's texture (body and head): scales (small cells, by armour bigger), moist skin (smooth, mottled),
+  // feathers (overlapping rows), segments on a many-legged body
+  if (cls == 0.0) {
+    vec2 sq = nrCells(vSkin.xy * mix(55.0, 26.0, vPattern.w));
+    float sw = fwidth(sq.y - sq.x) + 0.02;
+    skinColor *= 1.0 - 0.28 * vInteg.x * (1.0 - smoothstep(0.02, 0.06 + sw, sq.y - sq.x)) * (1.0 - smoothstep(0.5, 1.5, fwidth(vSkin.x * 50.0)));
+    vec2 mt = nrCells(vSkin.xy * 9.0 + 3.1);
+    skinColor *= 1.0 - 0.18 * vInteg.y * smoothstep(0.25, 0.05, mt.x);
+    float fr = fract(vSkin.x * 30.0 + 0.6 * abs(sin(vSkin.y * 18.0)));
+    skinColor *= 1.0 - 0.16 * vInteg.z * smoothstep(0.7, 0.95, fr) * (1.0 - smoothstep(0.5, 1.5, fwidth(vSkin.x * 30.0)));
+    float seg = fract(vSkin.x * 7.0);
+    skinColor *= 1.0 - 0.35 * vInteg.w * (smoothstep(0.82, 0.95, seg) - smoothstep(0.95, 1.0, seg));
+  } else if (cls == 7.0) {
+    skinColor = mix(vec3(0.62, 0.5, 0.22), vec3(0.12, 0.1, 0.08), step(0.5, fract(vPattern.y * 7.0)));   // a beak, horn or dark
+  }
   // armour: scutes over the carapace (grooves between domed cells)
   float arm = smoothstep(0.3, 0.7, vPattern.w) * step(cls, 0.5) * smoothstep(-0.45, 0.1, up);
   vec2 sc = nrCells(vSkin.xy * 7.0);
   float groove = 1.0 - smoothstep(0.03, 0.09 + fwidth(sc.y - sc.x), sc.y - sc.x);
   skinColor *= 1.0 - 0.35 * arm * groove;
   // fur: fine strands along the body
+  // fur: fine strands along the body, in clumps (lighter tips, darker roots between them)
   float strands = sin(vSkin.x * 160.0 + sin(vSkin.y * 90.0) * 2.0);
+  float clump = nrCells(vSkin.xy * vec2(34.0, 22.0)).x;
   float fs = vPattern.z * (1.0 - smoothstep(0.3, 1.5, fwidth(vSkin.x * 160.0))) * step(cls, 1.5);
-  skinColor *= 1.0 - 0.12 * fs * (0.5 + 0.5 * strands);
+  float fc = vPattern.z * (1.0 - smoothstep(0.4, 1.6, fwidth(vSkin.x * 34.0))) * step(cls, 1.5);
+  skinColor *= (1.0 - 0.2 * fs * (0.5 + 0.5 * strands)) * (1.0 + 0.22 * fc * (0.6 - smoothstep(0.1, 0.6, clump)));
   diffuseColor.rgb *= skinColor;
 `;
 
@@ -679,6 +750,8 @@ const GLSL_EMISSIVE = `
   // a little light of its own (no black sides), a soft sheen on fur at the outline, a catchlight in the eye
   float rim = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 3.0);
   totalEmissiveRadiance += skinColor * (0.07 + rim * (0.05 + 0.3 * vPattern.z) * step(cls, 1.5));
+  // moist skin glistens: a sharp sheen toward the light
+  totalEmissiveRadiance += vec3(0.35) * vInteg.y * step(cls, 0.5) * pow(max(dot(normal, normalize(vec3(0.35, 0.55, 1.0))), 0.0), 18.0);
   if (cls == 2.0 || cls == 6.0) totalEmissiveRadiance += skinColor * 0.22;   // thin skin lets light through
   if (cls == 3.0) totalEmissiveRadiance += vec3(0.9) * pow(max(dot(normal, normalize(vec3(0.35, 0.55, 1.0))), 0.0), 28.0);
 `;
@@ -702,6 +775,6 @@ export function bodyMaterial() {
       // a swimmer under the surface: lost into the water's colour with its depth (and the water's murk)
       .replace('#include <fog_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uWaterCol, vUnder);\n#include <fog_fragment>');
   };
-  mat.customProgramCacheKey = () => 'neuroreef-body-v3';
+  mat.customProgramCacheKey = () => 'neuroreef-body-v4';
   return mat;
 }

@@ -65,7 +65,7 @@ if (view !== 'grid' && !side) {
   });
   x0 = 62;
 }
-const randomBody = () => ({ legs: organ(), fins: organ(), wings: organ(), sight: organ(), armour: organ(), strike: organ(), meat: Math.min(0.95, organ()), m01: organ(), legPairs: 1 + Math.floor(rnd() * 4), finPairs: 1 + Math.floor(rnd() * 4), eyePairs: 1 + Math.floor(rnd() * 4), fur: organ(), append: organ(), appearance: Float32Array.from({ length: 16 }, organ) });
+const randomBody = () => ({ legs: organ(), fins: organ(), wings: organ(), sight: organ(), armour: organ(), strike: organ(), meat: Math.min(0.95, organ()), m01: organ(), legPairs: 1 + Math.floor(rnd() * 4), finPairs: 1 + Math.floor(rnd() * 4), eyePairs: 1 + Math.floor(rnd() * 4), fur: organ(), append: organ(), appearance: Float32Array.from({ length: 16 }, organ), endo: organ(), lungs: organ(), fibre: organ() });
 if (side) {
   const n = +(q.get('n') || 8), cols = +(q.get('cols') || 4), want = q.get('loco');
   // ?set=wings:0.7,legPairs:2,a3:0.9 fixes genes on every body (aN = appearance gene N)

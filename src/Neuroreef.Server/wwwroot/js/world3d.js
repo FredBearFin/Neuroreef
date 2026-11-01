@@ -1154,6 +1154,17 @@ export class World3D {
     for (let i = 0; i + 1 < list.length; i += 2) m.set(list[i], list[i + 1]);
   }
 
+  /** status.bodyLook: [serial, endothermy, fibre, ...] (0..1 each) for the body shader; a body whose values change
+   *  has its genes written again (e.gv, body.js placeBody). */
+  setBodyLooks(list) {
+    for (let i = 0; i + 2 < list.length; i += 3) {
+      const e = this.agents.get(list[i]); if (!e) continue;
+      // (fibre: its share of a budget spread over fifteen food pools; a third or more on fibrous food is a grazer)
+      const fib = Math.min(1, Math.max(0, (list[i + 2] - 0.12) / 0.3));
+      if (e.endo !== list[i + 1] || e.fibre !== fib) { e.endo = list[i + 1]; e.fibre = fib; e.gv = (e.gv | 0) + 1; }
+    }
+  }
+
   /** Body mass of an organism (juveniles about half). */
   _mass(e) { return (e.mass || 1) * (e.stage === 1 ? 0.5 : 1); }
 
