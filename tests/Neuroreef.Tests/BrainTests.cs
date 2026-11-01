@@ -169,4 +169,39 @@ public class BrainTests
             if (delay == 6) Assert.True(big >= small, $"at delay 6 a 256-unit brain scored {big:F2}, a 12-unit one {small:F2}");
         }
     }
+
+    [Fact] // 2026-11-01: a brain costs the same per unit whatever the body (Herculano-Houzel 2011), so its share of basal
+           // metabolism falls as M^-0.75 at a fixed size, and a body pays for a brain up to the largest share measured in
+           // a vertebrate: ~60% in the elephantnose fish (Nilsson 1996), not the adult human's ~20% (BRAIN_SHARE_MAX was 0.25)
+    public void BrainCostIsPerUnitAndItsShareIsBoundedByTheMeasuredMaximum()
+    {
+        var w = new World(16, 1);
+        float Share(float kg, int units)
+        {
+            var g = w.GenomeOf(0);
+            g.Clear();
+            g[G.B_MASS] = G.ToGeneLog(kg, BodySize.Min, BodySize.Max);
+            g[G.B_BRAIN] = Body.UnitsGene(units);
+            Body.Express(w, 0);
+            Assert.Equal(units, w.PBrain[0]);
+            return K.COST_BRAIN * K.C_BASAL * w.PBrain[0] / K.BRAIN_REF / w.PBasal[0];
+        }
+        // the 256-unit brain is ~0.25 x Kleiber's basal at 1 kg (~0.85 W): about the brain of a ~8 kg mammal (brain ~M^0.75,
+        // Martin 1981), which takes the usual 2-8% of its basal metabolism (Mink et al. 1981)
+        Assert.InRange(Share(8f, K.BIG_BRAIN_UNITS), 0.02f, 0.08f);
+        // the same brain on a smaller body takes a larger share, as M^-0.75 for the body's own part
+        float s1 = Share(1f, K.BIG_BRAIN_UNITS), m1 = w.PM[0], s8 = Share(8f, K.BIG_BRAIN_UNITS), m8 = w.PM[0];
+        Assert.True(s1 > s8);
+        Assert.Equal(MathK.Pow(m8 / m1, K.EXP_BASAL), (1f / s8 - 1f) / (1f / s1 - 1f), 3);   // body over brain, as M^0.75
+        // the most units a body surely pays for (cheapest basal factor 0.5) take exactly the ceiling, and the ceiling is the
+        // measured vertebrate maximum: a 0.5 kg body may carry the 256-unit brain (~46% with the cheapest body; it was
+        // rejected at 25%), a 0.1 kg one may not (~79%)
+        Assert.Equal(0.6f, K.BRAIN_SHARE_MAX);
+        float cost(float u) => K.COST_BRAIN * K.C_BASAL * u / K.BRAIN_REF;
+        float cheapest(float kg) => 0.5f * K.C_BASAL * MathK.Pow(kg, K.EXP_BASAL);
+        float ua = Body.UnitsAffordable(0.2f);
+        Assert.Equal(K.BRAIN_SHARE_MAX, cost(ua) / (cheapest(0.2f) + cost(ua)), 4);
+        Assert.True(cost(256) <= K.BRAIN_SHARE_MAX * (cheapest(0.5f) + cost(256)));
+        Assert.True(cost(256) > K.BRAIN_SHARE_MAX * (cheapest(0.1f) + cost(256)));
+    }
 }

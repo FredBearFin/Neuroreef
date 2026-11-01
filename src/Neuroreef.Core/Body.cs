@@ -60,8 +60,8 @@ public static class Body
     /// <summary>
     /// The most memory units a body of m kg can surely pay for: its brain at most BRAIN_SHARE_MAX of its basal cost (the
     /// founding test, Life.RangeCapacity), with the cheapest body of that mass (basal factor 0.5, Express). A unit costs the
-    /// same whatever the body (energy per neuron is about constant, Herculano-Houzel 2011), so it falls as M^0.75: ~30 units
-    /// at 0.1 kg, ~170 at 1 kg, ~5 at 10 g, 1 at 1 g. Clades.AncestorBody draws a random ancestor's brain within it.
+    /// same whatever the body (energy per neuron is about constant, Herculano-Houzel 2011), so it falls as M^0.75: ~140 units
+    /// at 0.1 kg, ~770 at 1 kg (capped at G.NH by Units), ~24 at 10 g, 4 at 1 g (BRAIN_SHARE_MAX 0.6 since 2026-11-01; 0.25 before). Clades.AncestorBody draws a random ancestor's brain within it.
     /// </summary>
     public static float UnitsAffordable(float m) =>
         K.BRAIN_SHARE_MAX / (1f - K.BRAIN_SHARE_MAX) * 0.5f * MathK.Pow(m, K.EXP_BASAL) * K.BRAIN_REF / K.COST_BRAIN;
