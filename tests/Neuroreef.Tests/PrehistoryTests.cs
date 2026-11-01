@@ -51,13 +51,26 @@ public class PrehistoryTests
     [Fact] // DESIGN §7.6: a prehistory saved and resumed continues exactly as one that never stopped
     public void CheckpointResumesExactly()
     {
+        // 60 founders per ancestor (2026-11-01): since plant food is kg per m2 (Pools.Kg) every clade founds at its limit
+        // (600), and the branches grew far past their 4,096 slots (a world of 8,192 reached 27,648 slots by step 200,
+        // CheckpointTests) at ~210 KB each, until the machine's memory stopped them (World.Grow: as many
+        // slots as memory holds, against what the process holds, garbage of the run before included, with both branches
+        // growing at once). Where memory ends depends on the machine and the moment, so the births refused there differed
+        // between the straight run and the resumed one. A world held at a fixed limit (maxCapacity) resumes exactly; the
+        // checkpoint is the point, so the branches here stay under their 4,096 slots and never reach a limit
+        var evo = new EvoSettings { Founders = 60 };
         byte[] straight;
-        using (var a = new Prehistory(2, 4096, 81, 2)) { RunTo(a, 1500); straight = State(a); }
+        using (var a = new Prehistory(2, 4096, 81, 2, evo))
+        {
+            RunTo(a, 1500);
+            foreach (var s in a.B) Assert.Equal(0L, s.W.T.FullSteps);   // no birth was refused for want of a slot
+            straight = State(a);
+        }
         string path = System.IO.Path.GetTempFileName();
         try
         {
-            using (var b = new Prehistory(2, 4096, 81, 2)) { RunTo(b, 1000); Checkpoint.Save(b, path); }
-            using var c = new Prehistory(2, 4096, 81, 2, restore: true);
+            using (var b = new Prehistory(2, 4096, 81, 2, evo)) { RunTo(b, 1000); Checkpoint.Save(b, path); }
+            using var c = new Prehistory(2, 4096, 81, 2, evo, restore: true);
             c.LoadCheckpoint(path);
             Assert.Equal(1000UL, c.Step);
             RunTo(c, 1500);

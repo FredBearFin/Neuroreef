@@ -1,7 +1,8 @@
 // Founding on the food that exists (2026-11-01): an ancestor that eats what animals make (meat, carrion, dung) is
 // tested on the animals living in its home range, as a plant eater is on the plants. A meat-eater beside enough
 // catchable prey can be founded; the same body with no prey cannot. Nothing is forced: the test is Life.RangeFor's
-// capacity against FOUND_MIN at FOUND_FILL, the same for every ancestor (Simulation.FoundAncestor).
+// capacity at FOUND_FILL against the smallest group that can breed (Life.BreedingGroup), the same for every ancestor
+// (Simulation.FoundAncestor, FoundersFed), and it starts with as many founders as that food feeds.
 
 using System;
 using Xunit;
@@ -24,6 +25,7 @@ public class FoundingTests
         for (int p = 0; p < Pools.N; p++) w.Genome[g + G.B_DIET + p] = -127;
         w.Genome[g + G.B_DIET + (int)food] = 127;
         w.Genome[g + G.B_STRIKE] = strike; w.Genome[g + G.B_ARMOUR] = -127;
+        w.Genome[g + G.B_SEX] = 40;                                                                    // sexual
         w.Genome[g + G.B_HERM] = (sbyte)(food == Pool.Grass ? 40 : -40);                              // every grazer bears young
         w.Genome[g + G.B_SPEED] = 0; w.Genome[g + G.B_SIGHT] = 0; w.Genome[g + G.B_EYEN] = -127; w.Genome[g + G.B_LIFE] = 0;
         w.Genome[g + G.B_IMMUNE] = -127; w.Genome[g + G.B_WATER] = -127; w.Genome[g + G.B_VOICE] = -127; w.Genome[g + G.B_INSUL] = -127; w.Genome[g + G.B_APPEND] = -127;
@@ -83,7 +85,7 @@ public class FoundingTests
             w.X[a] = hx; w.Y[a] = hy;
             Assert.True(Simulation.EatsAnimalFood(w, a));
             Life.RangeFor(w, a, hx, hy, out float cap);
-            Assert.True(K.FOUND_FILL * cap >= K.FOUND_MIN, $"capacity {cap} for a {w.PM[a]:F2} kg meat-eater beside 3000 prey");
+            Assert.True(Simulation.FoundersFed(cap, Life.BreedingGroup(w, a), w.Evo.Founders) >= Life.BreedingGroup(w, a), $"capacity {cap} for a {w.PM[a]:F2} kg meat-eater beside 3000 prey");
             // and its food is the prey: the same range with the prey gone feeds none
             for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == 1) Life.FreeSlot(w, i);
             Life.RangeFor(w, a, hx, hy, out float none);
@@ -92,7 +94,7 @@ public class FoundingTests
         finally { Nature.Climate = climate; }
     }
 
-    [Fact] // the same meat-eater alone, or among prey whose counterblow outweighs its own strike, is not founded
+    [Fact] // the same meat-eater alone is not founded; among prey whose counterblow outweighs its strike only their young feed it
     public void AMeatEaterWithNoPreyIsNotFounded()
     {
         float climate = Nature.Climate; Nature.Climate = 0f;
@@ -104,13 +106,17 @@ public class FoundingTests
             w.X[a] = hx; w.Y[a] = hy;
             Life.RangeFor(w, a, hx, hy, out float cap);
             Assert.Equal(0f, cap);
-            // prey it cannot handle: big-weaponed bodies whose blow back outweighs its strike, so only their young are its
-            // food (and too few of them are small enough)
+            // prey it cannot handle as adults: big-weaponed bodies whose blow back outweighs its strike, so only their
+            // young (and the carrion they leave) are its food
             Prey(w, 3000, hx, hy, strike: 127);
             int v = FirstOf(w, 1);
             Assert.True(w.PStrike[a] * w.PM[a] < w.PStrike[v] * w.PM[v]);
             Life.RangeFor(w, a, hx, hy, out float armed);
-            Assert.True(K.FOUND_FILL * armed < K.FOUND_MIN, $"capacity {armed} among prey that out-strike it");
+            // the same number of prey that cannot strike back feed it more
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == 1) Life.FreeSlot(w, i);
+            Prey(w, 3000, hx, hy, strike: -127);
+            Life.RangeFor(w, a, hx, hy, out float unarmed);
+            Assert.True(armed < 0.75f * unarmed, $"capacity {armed} among prey that out-strike it, {unarmed} among prey that do not");
         }
         finally { Nature.Climate = climate; }
     }
@@ -138,6 +144,49 @@ public class FoundingTests
             Assert.True(dung.Dung > 0.0 && dung.DungKg > 0.0, "the dung of 3000 plant eaters is not counted");
         }
         finally { Nature.Climate = climate; }
+    }
+
+    [Fact] // no fixed founding minimum (2026-11-01): a meat-eater whose prey feed about ten of it starts with about ten,
+           // and with fewer prey, too few to feed a breeding pair, it is not founded
+    public void AMeatEaterStartsWithAsManyFoundersAsItsPreyFeed()
+    {
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try
+        {
+            var w = Bare(53, 2048);
+            var (hx, hy) = LandHome(w);
+            int a = Animal(w, 0, 1, Pool.Meat, -40, 0, 0);
+            w.X[a] = hx; w.Y[a] = hy;
+            Assert.Equal(2, Life.BreedingGroup(w, a));   // separate sexes: a pair
+            Prey(w, PreyForTen, hx, hy, strike: -127);
+            int n = Simulation.FedFounders(w, a, hx, hy, w.Evo.Founders, out _);
+            Assert.InRange(n, 6, 15);
+            // take prey away until its range feeds less than a pair at FOUND_FILL: it is not founded
+            int left = PreyForTen;
+            for (int i = 0; i < w.Cap && left > PreyForTen / 10; i++)
+                if (w.StageOf[i] != St.Dead && w.Spc[i] == 1) { Life.FreeSlot(w, i); left--; }
+            Life.RangeFor(w, a, hx, hy, out float cap);
+            Assert.True(cap > 0f && K.FOUND_FILL * cap < 1.5f, $"capacity {cap} with {left} prey");
+            Assert.Equal(0, Simulation.FedFounders(w, a, hx, hy, w.Evo.Founders, out _));
+        }
+        finally { Nature.Climate = climate; }
+    }
+
+    const int PreyForTen = 600;
+
+    [Fact] // the smallest breeding group follows the sex system: one for a body that reproduces alone, two otherwise
+    public void TheSmallestFoundingGroupIsABreedingGroup()
+    {
+        var w = Bare(59, 1024);
+        int a = Animal(w, 0, 1, Pool.Grass, 0, 1, -127);
+        w.Genome[a * G.LEN + G.B_SEX] = -40; Body.Express(w, a);
+        Assert.Equal(0, w.PSexual[a]);
+        Assert.Equal(1, Life.BreedingGroup(w, a));
+        w.Genome[a * G.LEN + G.B_SEX] = 40; Body.Express(w, a);
+        Assert.Equal(2, Life.BreedingGroup(w, a));
+        Assert.Equal(0, Simulation.FoundersFed(4f, 2, 600));   // a quarter of 4 is one: no pair
+        Assert.Equal(1, Simulation.FoundersFed(4f, 1, 600));   // one that breeds alone can start a lineage
+        Assert.Equal(600, Simulation.FoundersFed(1e6f, 2, 600));
     }
 
     static int FirstOf(World w, int clade)

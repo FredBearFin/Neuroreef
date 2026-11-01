@@ -157,8 +157,10 @@ public sealed class Simulation : IDisposable
 
     /// <summary>
     /// Draw ancestor a's body and found its lineage around (hx, hy). An ancestor is a lineage that can live where it
-    /// lives: of up to ANCESTOR_TRIES random bodies, the first whose home range can feed a founding group (FOUND_MIN) at
-    /// its size, brain and diet, on the food that is there when it is tested (Life.RangeCapacity), else the best fed.
+    /// lives: of up to ANCESTOR_TRIES random bodies, the first whose home range can feed, at FOUND_FILL, the smallest group
+    /// that can breed (Life.BreedingGroup) at its size, brain and diet, on the food that is there when it is tested
+    /// (Life.RangeCapacity); none if no draw can. It starts with as many founders as that food feeds, up to Founders:
+    /// a small group may die out by chance, as small founding populations do.
     /// Nothing says which diet or size: a water animal that eats grass, or a meat-eater with nothing to eat, is simply not
     /// among the ancestors (2026-10-30: such ancestors starved in the first few hundred steps). With mayWait, a body that
     /// gets most from what animals make (meat, blood, carrion, dung) and cannot yet be fed stops the draws and returns
@@ -176,22 +178,26 @@ public sealed class Simulation : IDisposable
         // the ancestor's one brain and body (Revision H: unrelated random brains per founder made crossover
         // scramble networks, a hidden cost only sex paid); each founder varies around it
         var anc = new sbyte[G.LEN];
-        int bestT = -1; float bestCap = 0f;
+        int bestT = -1;
         for (int t = 0; t < K.ANCESTOR_TRIES; t++)
         {
             Ancestor(anc, seed, a, t, land, big);
-            float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)t, out _, out bool animalFood);
-            if (mayWait && animalFood && cap < K.FOUND_MIN) return false;
-            if (cap > bestCap) { bestCap = cap; bestT = t; }
-            if (cap >= K.FOUND_MIN) break;
+            float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)t, out _, out bool animalFood, out int group);
+            // (2026-11-01) viable when its range feeds the smallest group that can breed (Life.BreedingGroup: a pair, or
+            // one if it breeds alone), not a fixed FOUND_MIN = 50; the first viable draw is the ancestor
+            bool viable = FoundersFed(cap / K.FOUND_FILL, group, w.Evo.Founders) > 0;
+            if (mayWait && animalFood && !viable) return false;
+            if (viable) { bestT = t; break; }
         }
-        if (bestT < 0) return true;   // no viable draw: never fall back to an incompatible or unfed body
+        // no draw its range can feed a breeding group of: no lineage (before 2026-11-01 the best fed was founded with at
+        // least GROUP_SIZE founders, however little fed them)
+        if (bestT < 0) return true;
         Ancestor(anc, seed, a, bestT, land, big);
         int units = Body.Units(anc[G.B_BRAIN]);
-        // founders: FOUND_FILL of what its home range (widened for a big body, Life.RangeFor) can feed at this
-        // body's size, brain and diet, at least one group and at most Founders, spread over that range
-        float cap0 = ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)bestT, out float range, out _);
-        int founders = Math.Min(w.Evo.Founders, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap0)));
+        // founders: FOUND_FILL of what its home range (widened until it feeds Founders, Life.RangeFor) can feed at this
+        // body's size, brain and diet, at most Founders, spread over that range in groups of up to GROUP_SIZE
+        float cap0 = ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)bestT, out float range, out _, out int group0);
+        int founders = FoundersFed(cap0, group0, w.Evo.Founders);
         w.Sp[clade].HomeX = hx; w.Sp[clade].HomeY = hy; w.Sp[clade].HomeR = range;
         for (int k = 0; k < founders; k++, key++)
         {
@@ -229,13 +235,13 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>What a home range can feed of animals with this genome, and the range's radius: one is made, measured and removed again.</summary>
-    static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range, out bool animalFood)
+    static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range, out bool animalFood, out int group)
     {
-        range = K.HOME_R * Map.W; animalFood = false;
+        range = K.HOME_R * Map.W; animalFood = false; group = 2;
         if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
         int c = Life.Found(w, clade, genome, true, key, gx, gy, realm);
         if (c < 0) return 0f;
-        animalFood = EatsAnimalFood(w, c);
+        animalFood = EatsAnimalFood(w, c); group = Life.BreedingGroup(w, c);
         // it must breathe where its founders are put, in the realm it is founded in (2026-11-01: a gill-breather founded
         // on land, or an air-breather that cannot keep its head up in the water it is founded in, would not live a step)
         if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.FreeSlot(w, c); w.T.Created[clade]--; return 0f; }
@@ -246,14 +252,22 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>
-    /// How many founders a lineage starts with: FOUND_FILL of what its home range can feed (Life.RangeCapacity), at
-    /// least one group and at most the given limit. A large body or a costly brain starts with fewer, a small one with
+    /// How many founders a lineage starts with: FOUND_FILL of what its home range can feed (Life.RangeCapacity), at most
+    /// the given limit; none if that is fewer than a breeding group (Life.BreedingGroup, 2026-11-01). A large body or a costly brain starts with fewer, a small one with
     /// more, as populations are set by food (Damuth 1981: density falls as M^-3/4).
     /// </summary>
-    static int FedFounders(World w, int c, float hx, float hy, int limit, out float range)
+    public static int FedFounders(World w, int c, float hx, float hy, int limit, out float range)
     {
-        range = Life.RangeFor(w, c, hx, hy, out float cap);
-        return Math.Min(limit, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap)));   // a clade with fewer than a group keeps them all
+        range = Life.RangeFor(w, c, hx, hy, out float cap, limit);
+        return FoundersFed(cap, Life.BreedingGroup(w, c), limit);
+    }
+
+    /// <summary>Founders for a home range that can feed cap animals: FOUND_FILL of them, at most limit, and none if that
+    /// is fewer than a breeding group (2026-11-01; replaces the fixed FOUND_MIN = 50 and the GROUP_SIZE floor).</summary>
+    public static int FoundersFed(float cap, int group, int limit)
+    {
+        int n = Math.Min(limit, (int)MathF.Round(K.FOUND_FILL * cap));
+        return n >= group ? n : 0;
     }
 
     /// <summary>The clades of a gene bank, each founded with as many organisms as it had (up to ANCESTOR_COUNT x 2), in groups.</summary>
@@ -288,7 +302,11 @@ public sealed class Simulation : IDisposable
                     if (!Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
                 }
                 int f = Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
-                if (k == 0 && f >= 0) { n = FedFounders(w, f, hx, hy, n, out range); s.HomeX = hx; s.HomeY = hy; s.HomeR = range; }   // no more than its home range can feed
+                if (k == 0 && f >= 0)
+                {
+                    n = FedFounders(w, f, hx, hy, n, out range); s.HomeX = hx; s.HomeY = hy; s.HomeR = range;   // no more than its home range can feed
+                    if (n == 0) { Life.FreeSlot(w, f); w.T.Created[c.Slot]--; }   // not even a breeding group (2026-11-01)
+                }
             }
         }
         w.CladeScratch.Version++;

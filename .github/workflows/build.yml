@@ -4,9 +4,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Build the exe without running the test suite (quick download)'
+        type: boolean
+        default: false
 
 jobs:
   test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_tests) }}
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +27,8 @@ jobs:
         run: dotnet test tests/Neuroreef.Tests -c Release
 
   publish:
-    needs: test
+    # runs alongside the tests, not after them, so a download is ready in ~15 minutes; check the test jobs' result
+    # before trusting a build (the owner, 2026-11-01: "I want a download as soon as possible")
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

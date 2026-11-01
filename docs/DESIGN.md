@@ -815,10 +815,10 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   brain and diet: the range's sustained plant yield (Fields.Yield: each pool's growth at the stock where it grows
   fastest, seasonal pools at their yearly mean) over a day of living, FIELD_METAB = 1.5 x basal (measured in this world:
   basal 0.92, moving 0.12, growth 0.16, breeding 0.15, heat 0.10). The setup's "founders" is now only an upper limit.
-  A large body's home range widens (up to HOME_R_MAX) until it can feed FOUND_MIN founders, as home ranges grow with
-  body mass.
+  A home range widens (up to HOME_R_MAX) until it can feed that limit (until 2026-11-01: FOUND_MIN = 50 founders), as
+  home ranges grow with body mass.
 - *Ancestors that can live where they live.* Of up to ANCESTOR_TRIES random bodies, an ancestor is the first whose home
-  range can feed FOUND_MIN founders and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
+  range can feed a breeding group (below) and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
   digestion rate, must give FORAGE_MARGIN days' need (a Holling type II limit). Nothing chooses a diet or a size: a
   20-unit nectar eater, a water animal with a grass diet or a meat-eater with nothing to eat is simply never an ancestor.
 - *Founding on the food animals make (2026-11-01).* Only growing plant food was counted, and no animal existed when an
@@ -857,6 +857,15 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   map), and their production (P/B ~0.3 a year from their genes, about what Carbone &amp; Gittleman 2002's ~1 kg of
   predator per 111 kg of prey implies) feeds a founding group of FOUND_MIN only for meat-eaters of about a kilogram or
   less, with a gut that passes meat at three days' need a step. No such draw came up first on these seeds.
+- *No fixed founding minimum (2026-11-01, the owner's choice).* FOUND_MIN = 50 (the 50 of the 50/500 rule) is gone. A
+  draw is viable when FOUND_FILL of its range's capacity is at least the smallest group that can breed (Life.BreedingGroup):
+  one for a body that reproduces alone, a pair otherwise (hermaphrodites here still mate with a partner). Single pairs
+  and single gravid females do found island lineages (Darwin's finches' "Big Bird" lineage on Daphne Major from one
+  immigrant male; Lamichhaney et al. 2018), though most such groups die out by chance (Allee effects; Courchamp et al.
+  1999); nothing here rescues them, and with separate sexes a pair's sexes are drawn at random. A lineage starts with as
+  many founders as its food feeds, up to Founders (Simulation.FoundersFed); the old floor of GROUP_SIZE founders for the
+  best-fed draw when none was viable is gone too (no viable draw, no lineage), and a gene-bank clade its new range cannot
+  feed a breeding group of is not founded. Founders are placed in groups of up to GROUP_SIZE.
 - *Food sensed as worth to the eater.* FOOD_HERE (and the food gradient) was the cell's food against the best food the
   diet could ever give, so a nectar eater in a meadow sensed ~0.02 and its eating instinct hardly fired: hungry
   founders stood on food and starved. It is now one bite's energy against a step's need, 1 - exp(-bite/need).
@@ -1671,7 +1680,8 @@ no hand wiring, and tests assert that founder genomes depend only on the RNG and
 start low.
 
 **Groups.** Real populations are clustered, and a lone animal cannot find a mate (the Allee effect).
-Founders therefore start in groups of GROUP_SIZE = 8 within GROUP_SPREAD = 10 units of one site.
+Founders therefore start in groups of GROUP_SIZE = 8 within GROUP_SPREAD = 10 units of one site (a lineage its food
+feeds fewer starts as one smaller group, down to a breeding pair; 2026-11-01).
 
 **Elite archive.** Each species keeps a record of the ARCHIVE = 64 best genomes of its dead. A genome
 enters it when its owner dies, if it beats the weakest. The score counts offspring that grew up most:
