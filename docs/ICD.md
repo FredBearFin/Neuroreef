@@ -81,7 +81,7 @@ The first 26 record bytes retain their format-5 meaning.
 |---|---|---|
 | 8 | u16 | side D = FW / 2 (2×2 cells averaged) |
 | 10 | u16 | layer count L |
-| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood |
+| 12 | u8[D²] × L | layers, in the order of `meta.fieldLayers`: grass, shrub, tree, browse, fruit, seed, nectar, root, carrion, dung+litter, wood, algae, phyto, detritus, fire, scent, moisture, nutrient, pollination, pond, temp, frozen, plant height, toxin, thorns, drought tolerance, fleshy fruit, leaf-on, flora, flood, snow, volcanic, sedimentary, alluvium |
 
 Layer values are 0..255 for 0..1. Pools that can exceed 1 are sent as tanh(amount) (carrion,
 dung+litter, wood, detritus) or scaled (fruit, seed ×4; nectar ×8; scent tanh(4·s)). `pond` is 1 where a seasonal
@@ -91,6 +91,10 @@ cover above 0.02 on the height trait's log scale (5 cm..40 m); `toxin`, `thorns`
 cover-weighted trait levels /15 of the cell's slots; `fleshy fruit` is the FRUIT level /15 of the fruit there; `leaf-on`
 is the leafy share of the cover; `flora` is (founding lineage + 1) / 129 of the plant with most cover (0 = none). `flood` (2026-10-31) is 1 where a
 river has flooded its floodplain (Wet = 3); clients look layers up by name, so one that predates it ignores it.
+The terrain-material layers (2026-11-01, display only): `snow` is the snowpack's cover, 1 − e^(−SWE / 30 mm) (0 on water,
+and everywhere when the water cycle is off: the client then falls back on `temp`); `volcanic` and `sedimentary` are the
+share of the 2×2 cells whose surface rock (World.Rock) is of that kind (the rest is crystalline); `alluvium` is the
+alluvium's depth as 1 − e^(−depth / ALLUV_D).
 
 ### 0x04 TELEMETRY (when a new sample exists, checked every 0.5 s)
 
