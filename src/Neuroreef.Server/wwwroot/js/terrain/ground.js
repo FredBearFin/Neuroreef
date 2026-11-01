@@ -18,7 +18,8 @@
 // Materials (fragment shader), all from the data:
 // - cover: the FIELDS colour of soil, grass, shrubs, trees, flowers, ponds, floods, fire (world3d.js _paint);
 // - rock where the drawn slope is steep (above ~35 degrees) or the cell is rocky, unless plants cover it; coloured by its
-//   kind (FIELDS 'volcanic' and 'sedimentary', the rest crystalline): pale speckled granite, dark basalt, banded beds;
+//   kind (FIELDS 'volcanic', 'sedimentary' and 'limestone', the rest crystalline): speckled granite, dark basalt, banded
+//   beds, pale limestone;
 //   triplanar procedural grain and a bump, faceted (crisp) normals on rock;
 // - scree: rubble on the moderate slopes around rock;
 // - snow from the snowpack (FIELDS 'snow'; without it, where the air is below freezing), not on cliffs;
@@ -94,7 +95,7 @@ const VERT_MAIN = /* glsl */`
 `;
 
 const FRAG_DECL = /* glsl */`
-uniform sampler2D tCover, tMat, tNrm, tChan, tFeat;
+uniform sampler2D tCover, tMat, tMat2, tNrm, tChan, tFeat;
 uniform float uPlain;
 varying vec3 vWP;
 varying float vDetail, vDist;
@@ -113,7 +114,7 @@ vec3 riverWater(float flow) { return mix(vec3(0.07, 0.24, 0.30), vec3(0.03, 0.10
 const FRAG_MAIN = /* glsl */`
   vec2 uvC = (vWP.xz / uS + 0.5) / uFw;
   vec2 uvK = (vWP.xz / uS * uCR + 0.5) / (uFw * uCR);
-  vec4 cov = texture(tCover, uvC), mat = texture(tMat, uvC), nr = texture(tNrm, uvC), ch = texture(tChan, uvK), ft = texture(tFeat, uvK);
+  vec4 cov = texture(tCover, uvC), mat = texture(tMat, uvC), mat2 = texture(tMat2, uvC), nr = texture(tNrm, uvC), ch = texture(tChan, uvK), ft = texture(tFeat, uvK);
   vec2 nxz = nr.rg * 2.0 - 1.0;
   vec3 nS = normalize(vec3(nxz.x, sqrt(max(0.02, 1.0 - dot(nxz, nxz))), nxz.y));
   vec3 dpx = dFdx(vWP), dpy = dFdy(vWP);
@@ -129,15 +130,17 @@ const FRAG_MAIN = /* glsl */`
   vec3 col = cov.rgb;
   if (uPlain < 0.5) {
     // rock: steep drawn slopes, or rocky cells that are not flat; plants hide it
-    float rockF = max(smoothstep(0.16, 0.30, sl + (nMid - 0.5) * 0.12), nr.b * smoothstep(0.02, 0.10, sl + 0.06 * (nBig - 0.5)));
+    float rockF = max(smoothstep(0.19, 0.30, sl + (nMid - 0.5) * 0.10), nr.b * smoothstep(0.02, 0.10, sl + 0.06 * (nBig - 0.5)));
     rockF = clamp(rockF * (1.0 - 0.8 * smoothstep(0.35, 0.9, plants)), 0.0, 1.0);
-    float scree = nr.a * smoothstep(0.05, 0.12, sl) * (1.0 - rockF) * (1.0 - 0.85 * plants);
-    float vol = mat.g, sed = mat.b, cry = max(0.0, 1.0 - vol - sed);
+    float scree = nr.a * smoothstep(0.10, 0.15, sl) * (1.0 - rockF) * (1.0 - 0.85 * plants);   // talus: 30-37 degrees below the crags
+    float vol = mat.g, sed = mat.b, lim = mat2.r, cry = max(0.0, 1.0 - vol - sed - lim);
     float band = mix(0.5, sin(vWP.y * 2.4 + (nMid - 0.5) * 6.0) * 0.5 + 0.5, 1.0 - smoothstep(0.4, 1.2, fwidth(vWP.y * 2.4)));
     vec3 cC = mix(vec3(0.1643, 0.1562, 0.1483), vec3(0.3619, 0.3371, 0.3017), nMid) * (0.80 + 0.40 * nFine);
     vec3 cV = mix(vec3(0.035, 0.032, 0.032), vec3(0.11, 0.075, 0.06), nMid) * (0.80 + 0.40 * nFine);
     vec3 cS = mix(vec3(0.2684, 0.1899, 0.1122), vec3(0.5004, 0.4143, 0.2793), band) * (0.85 + 0.30 * nFine);
-    vec3 rockC = cC * cry + cV * vol + cS * sed;
+    // limestone: pale grey
+    vec3 cL = mix(vec3(0.3494, 0.3371, 0.2904), vec3(0.6121, 0.5954, 0.5156), nMid) * (0.82 + 0.36 * nFine);
+    vec3 rockC = cC * cry + cV * vol + cS * sed + cL * lim;
     // ledges: rock weathers into steps along its beds and joints (dark lines where a warped height crosses a step)
     float ledgeArg = vWP.y * 0.9 + (nMid - 0.5) * 2.5 + (nBig - 0.5) * 4.0;
     float ledge = fract(ledgeArg);
@@ -228,19 +231,20 @@ export class Ground {
       nrm[i * 4] = Math.round((d.nx[i] * 0.5 + 0.5) * 255); nrm[i * 4 + 1] = Math.round((d.nz[i] * 0.5 + 0.5) * 255);
       nrm[i * 4 + 2] = Math.round(d.rock[i] * 255); nrm[i * 4 + 3] = Math.round(d.halo[i] * 255);
     }
-    this.cover = new Uint8Array(n * 4); this.mat = new Uint8Array(n * 4);
+    this.cover = new Uint8Array(n * 4); this.mat = new Uint8Array(n * 4); this.mat2 = new Uint8Array(n * 4);
     const T = this.tex = {
       tH: dataTex(h4, fw, fw, THREE.RGBAFormat, THREE.FloatType, false),
       tCarve: dataTex(d.carve, K, K, THREE.RedFormat, THREE.FloatType, false),
       tNrm: dataTex(nrm, fw, fw, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
       tCover: dataTex(this.cover, fw, fw, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
       tMat: dataTex(this.mat, fw, fw, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
+      tMat2: dataTex(this.mat2, fw, fw, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
       tChan: dataTex(d.chan, K, K, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
       tFeat: dataTex(d.feat, K, K, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
     };
     const U = this.uniforms = {
       tH: { value: T.tH }, tCarve: { value: T.tCarve }, tNoise: { value: noiseTexture() }, tNrm: { value: T.tNrm },
-      tCover: { value: T.tCover }, tMat: { value: T.tMat }, tChan: { value: T.tChan }, tFeat: { value: T.tFeat },
+      tCover: { value: T.tCover }, tMat: { value: T.tMat }, tMat2: { value: T.tMat2 }, tChan: { value: T.tChan }, tFeat: { value: T.tFeat },
       uFw: { value: fw }, uS: { value: d.S }, uCR: { value: CR }, uSplit: { value: SPLIT }, uGrid: { value: GRID },
       uDisp: { value: DISP_MAX }, uDispNear: { value: DISP_NEAR }, uDispFar: { value: DISP_FAR }, uRidgeMean: { value: RIDGE_MEAN },
       uCam: { value: new THREE.Vector3() }, uPlain: { value: 0 },
@@ -335,7 +339,7 @@ export class Ground {
   /** The cover colours (rgb) and plant density (a), RGBA bytes per cell. */
   coverUpdated() { this.tex.tCover.needsUpdate = true; }
   /** Snow cover (r), volcanic (g) and sedimentary (b) shares, alluvium (a), RGBA bytes per cell. */
-  matUpdated() { this.tex.tMat.needsUpdate = true; }
+  matUpdated() { this.tex.tMat.needsUpdate = true; this.tex.tMat2.needsUpdate = true; }
 
   /** The drawn ground's height at a world position (x, z), the camera at cam: as the vertex shader computes it. */
   heightAt(x, z, cam) {

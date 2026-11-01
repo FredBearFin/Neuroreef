@@ -40,7 +40,10 @@ export class Link {
         const caveCourse = buf.byteLength >= 16 + 8 * n ? new Uint8Array(buf, 16 + 7 * n, n) : null;
         // the rivers as lines (2026-11-01; null from a server without the section: world3d.js draws them from the river plane)
         let riverPaths = null;
-        const ro = 16 + 8 * n;
+        // elevation as 16 bits (2026-11-01; null from an older server: the u8 plane then)
+        let elev16 = null;
+        if (buf.byteLength >= 16 + 10 * n) { elev16 = new Uint16Array(n); for (let i = 0, o = 16 + 8 * n; i < n; i++, o += 2) elev16[i] = dv.getUint16(o, true); }
+        const ro = 16 + 10 * n;
         if (buf.byteLength >= ro + 8) {
           const R = dv.getUint32(ro, true), V = dv.getUint32(ro + 4, true), po = ro + 8 + 16 * R;
           if (buf.byteLength >= po + 16 * V) {
@@ -58,7 +61,7 @@ export class Link {
             }
           }
         }
-        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse, riverPaths });
+        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse, riverPaths, elev16 });
         break;
       }
       case T_AGENTS: {

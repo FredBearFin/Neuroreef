@@ -131,7 +131,7 @@ export class World3D {
       broad[i] = c >= 4 && !w.riverPaths ? 1 : 0;   // (the hydrology's lines draw wide rivers at their own width)
     }
     for (let i = 0; i < n; i++) {
-      const h = (w.elev[i] / 255 - sea) * U;
+      const h = (elevOf(w, i) - sea) * U;
       if (w.cell[i] === 1) H[i] = Math.max(0, h) + LAND_LIFT;   // land is never below the sea level (elevation is sent in 1/255 steps)
       else if (riv[i]) {                                          // a river: its surface at the cell's level (its channel is carved below)
         const top = Math.max(0, h) + LAND_LIFT;
@@ -173,7 +173,7 @@ export class World3D {
       const l = Math.hypot(hx, 1, hz); nx[i] = -hx / l; nz[i] = -hz / l;
       const slope = Math.hypot(hx, hz), ea = h / RELIEF;
       const lap = (H[at(x + 1, y)] + H[at(x - 1, y)] + H[at(x, y + 1)] + H[at(x, y - 1)] - 4 * h) / (S * S);
-      const r = Math.max(smooth(0.42, 0.85, slope), smooth(0.7, 0.95, ea) * smooth(0.1, 0.3, slope), smooth(0.04, 0.12, -lap) * smooth(0.2, 0.45, slope));
+      const r = Math.max(smooth(0.6, 1.0, slope), smooth(0.7, 0.95, ea) * smooth(0.1, 0.3, slope), smooth(0.04, 0.12, -lap) * smooth(0.2, 0.45, slope));
       rock[i] = nearWater[i] ? 0 : r;
       let s = -1e4;
       for (let k = 0; k < 8; k++) { const j = at(x + DIRX[k], y + DIRY[k]); if (lake[j] && SF[j] > s) s = SF[j]; }
@@ -294,19 +294,19 @@ export class World3D {
    *  lakes' and the rivers' colours. Rock, scree, snow and the rest are laid over the cover in the ground's shader. */
   _paint(f) {
     const w = this.world; if (!w || !this.tiles || !this.ground) return;
-    const fw = w.fw, C = this.ground.cover, M = this.ground.mat;
+    const fw = w.fw, C = this.ground.cover, M = this.ground.mat, M2 = this.ground.mat2;
     const d = f ? f.d : 0, L = f ? (n) => { const k = this._layer(n); return k >= 0 ? f.data.subarray(k * d * d, (k + 1) * d * d) : null; } : () => null;
     const grass = L('grass'), shrub = L('shrub'), tree = L('tree'), fire = L('fire'), moist = L('moisture'),
           carrion = L('carrion'), algae = L('algae'), phyto = L('phyto'), nectar = L('nectar'), pond = L('pond'),
           frozen = L('frozen'), temp = L('temp'), flood = L('flood'),
-          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), allu = L('alluvium');
+          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), lime = L('limestone'), allu = L('alluvium');
     // the sim's snowpack when it sends one (the water cycle on); else snow where the air is below freezing
     let hasSnow = false; if (snow) for (let k = 0; k < snow.length; k++) if (snow[k]) { hasSnow = true; break; }
     const sea = w.sea, b8 = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
     for (let i = 0; i < fw * fw; i++) {
       const cx = i % fw, cy = (i / fw) | 0;
       const fi = f ? Math.min(d - 1, cy >> 1) * d + Math.min(d - 1, cx >> 1) : 0;
-      const e = w.elev[i] / 255, ea = Math.max(0, (e - sea) / (1 - sea));   // height above the lakes, 0..1
+      const e = elevOf(w, i), ea = Math.max(0, (e - sea) / (1 - sea));   // height above the lakes, 0..1
       let r, g, b, plants = 0;
       if (!f) { r = 0.35 + ea * 0.2; g = 0.33 + ea * 0.15; b = 0.25; }
       else {
@@ -341,6 +341,7 @@ export class World3D {
         else if (temp) sn = Math.min(1, Math.max(0, (-(temp[fi] / 255 * 90 - 40) - 0.5) / 5));
       }
       M[i * 4] = b8(sn); M[i * 4 + 1] = volc ? volc[fi] : 0; M[i * 4 + 2] = sedi ? sedi[fi] : 0; M[i * 4 + 3] = allu ? allu[fi] : 0;
+      M2[i * 4] = lime ? lime[fi] : 0;
     }
     this.ground.coverUpdated(); this.ground.matUpdated();
     this.ground.uniforms.uPlain.value = this.tempOverlay ? 1 : 0;
@@ -1051,6 +1052,9 @@ function farTreeGeometry() {
   const crown = new THREE.ConeGeometry(0.85, 3.6, 6); crown.translate(0, 2.3, 0);
   return merge([[crown, 0x245f2c]]);
 }
+
+/** A cell's elevation, 0..1: from the 16-bit plane when the WORLD frame has it, else the 8-bit one. */
+function elevOf(w, i) { return w.elev16 ? w.elev16[i] / 65535 : w.elev[i] / 255; }
 
 function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 

@@ -38,14 +38,15 @@ public static class Wire
     }
 
     /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River),
-    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit), then
-    /// the rivers as lines (2026-11-01, Rivers).</summary>
+    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit),
+    /// u16[FW²] elevation x 65535 (2026-11-01: the u8 plane's ~35 m steps terrace high mountains; it stays for older clients),
+    /// then the rivers as lines (2026-11-01, Rivers).</summary>
     public static byte[] EncodeWorld(World w)
     {
         int n = Map.FW * Map.FW;
         var lines = Hydrology.Lines(w);
         int nv = 0; foreach (var l in lines) nv += l.Points.Count;
-        var b = new byte[16 + 8 * n + RiversSize(lines.Count, nv)];
+        var b = new byte[16 + 10 * n + RiversSize(lines.Count, nv)];
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -58,8 +59,9 @@ public static class Wire
             BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 4 * n + 2 * i), Surface(w, i));
             b[16 + 6 * n + i] = w.CaveKind[i];
             b[16 + 7 * n + i] = Conduit(w, i);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 8 * n + 2 * i), (ushort)Math.Clamp((int)MathF.Round(w.Elev[i] * 65535f), 0, 65535));
         }
-        Rivers(b.AsSpan(16 + 8 * n), lines, nv);
+        Rivers(b.AsSpan(16 + 10 * n), lines, nv);
         return b;
     }
 

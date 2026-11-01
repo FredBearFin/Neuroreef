@@ -94,7 +94,7 @@ public class WireTests
         var w = new World(16, 3);
         Terrain.Build(w);
         var b = Neuroreef.Server.Wire.EncodeWorld(w);
-        int n = Map.FW * Map.FW, o = 16 + 8 * n;
+        int n = Map.FW * Map.FW, o = 16 + 10 * n;
         int R = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o)), V = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o + 4));
         Assert.Equal(o + 8 + 16 * R + 16 * V, b.Length);
         var lines = Hydrology.Lines(w);
@@ -122,5 +122,20 @@ public class WireTests
             Assert.True(RiverStats.IsChannel(w, c), $"river {k} starts off its channel");
         }
         Assert.Equal(V, total);
+    }
+
+    [Fact] // 2026-11-01: elevation also as 16 bits (the u8 plane's steps terrace high mountains), the u8 plane kept for older clients
+    public void WorldFrameCarriesFineElevation()
+    {
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        var b = Neuroreef.Server.Wire.EncodeWorld(w);
+        int n = Map.FW * Map.FW;
+        for (int i = 0; i < n; i += 7)
+        {
+            float e = BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(16 + 8 * n + 2 * i)) / 65535f;
+            Assert.True(MathF.Abs(e - w.Elev[i]) <= 1f / 65535f, $"cell {i}: {e} against {w.Elev[i]}");
+            Assert.Equal((byte)Math.Clamp((int)(w.Elev[i] * 255f), 0, 255), b[16 + i]);
+        }
     }
 }
