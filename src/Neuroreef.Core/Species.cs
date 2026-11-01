@@ -38,6 +38,36 @@ public static class Pools
     public static bool Fibrous(int p) => p == (int)Pool.Grass || p == (int)Pool.Browse || p == (int)Pool.Root || p == (int)Pool.Dung || p == (int)Pool.Litter || p == (int)Pool.Wood;
     public static bool IsDead(int p) => p >= (int)Pool.Carrion && p <= (int)Pool.Detritus;
     public static bool IsWaterPool(int p) => p == (int)Pool.Algae || p == (int)Pool.Phyto || p == (int)Pool.Detritus;
+
+    // ---- what a unit of a pool is in kilograms (2026-11-01)
+    /// <summary>Area of a field cell (m2), from the land surface's cell side GEO_CELL_M.</summary>
+    public const float CellM2 = K.GEO_CELL_M * K.GEO_CELL_M;
+    /// <summary>One energy unit in joules (Kleiber's metabolism over a step: BMR_W x STEP_S / C_BASAL, ~8.9 MJ).</summary>
+    public const float EnergyJ = K.BMR_W * K.STEP_S / K.C_BASAL;
+    /// <summary>Food (kg at the pool's RHO) that a unit of a producer pool holds per m2: dry matter per m2 x its energy
+    /// (PLANT_KJ_G) over RHO_PLANT, the energy of a unit of production (the same for every producer pool, so what
+    /// reproduction and decay pass between pools keeps its energy).</summary>
+    public const float LandKgM2 = K.PLANT_KG_M2 * K.PLANT_KJ_G * 1e6f / (K.RHO_PLANT * EnergyJ);
+    public const float WaterKgM2 = K.WATER_KG_M2 * K.PLANT_KJ_G * 1e6f / (K.RHO_PLANT * EnergyJ);
+    /// <summary>
+    /// Kilograms of food per unit of each pool in a field cell. The plants and the water producers keep their state in
+    /// cover (a share of the cell, so per m2 and independent of the cell's size); a unit of their pools is
+    /// LandKgM2 (WaterKgM2) x CellM2 kg. Carrion and dung (what animals leave) and the bodies are in kg (1). Animals bite,
+    /// sense and count food in kg: w.Pool[p][cell] x Kg[p]. Before 2026-11-01 every unit was read as 1 kg per cell, so a
+    /// full meadow on a 4.75 ha cell held 1 kg of grass.
+    /// </summary>
+    public static readonly float[] Kg =
+    {
+        LandKgM2 * CellM2, LandKgM2 * CellM2, LandKgM2 * CellM2, LandKgM2 * CellM2, LandKgM2 * CellM2, LandKgM2 * CellM2,   // grass browse fruit seed nectar root
+        WaterKgM2 * CellM2, WaterKgM2 * CellM2,                                                                          // algae phyto
+        1f, 1f,                                                                                                          // carrion dung
+        LandKgM2 * CellM2, LandKgM2 * CellM2,                                                                            // litter wood
+        WaterKgM2 * CellM2,                                                                                              // detritus
+        1f, 1f,                                                                                                          // meat blood
+    };
+    /// <summary>Energy (E) of a unit of each pool in a field cell: Rho x Kg.</summary>
+    public static readonly float[] ECell = MakeECell();
+    static float[] MakeECell() { var e = new float[N]; for (int p = 0; p < N; p++) e[p] = Rho[p] * Kg[p]; return e; }
 }
 
 public static class Locomotion

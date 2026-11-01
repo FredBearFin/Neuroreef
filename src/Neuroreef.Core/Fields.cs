@@ -52,7 +52,9 @@ public static class Fields
             w.ScentN[i] = MathF.Max(0f, (sc + 0.1f * (sb - sc)) * (1f - K.D_SCENT));
 
             // decomposition by bacteria: every dead pool rots into nutrient
-            float rot = Ca[i] * rC + Du[i] * rD + Li[i] * rL + Wo[i] * rW + De[i] * rT;
+            // carrion and dung are kg; the nutrient is in units of plant growth (cover), so they count as kg over a unit's
+            // (Pools.Kg, 2026-11-01: before, a kg of dung fed the soil of a 4.75 ha cell as much as a meadow's whole litter)
+            float rot = (Ca[i] * rC + Du[i] * rD) * InvKgLand + Li[i] * rL + Wo[i] * rW + De[i] * rT;
             Ca[i] -= Ca[i] * rC; Du[i] -= Du[i] * rD; Li[i] -= Li[i] * rL; Wo[i] -= Wo[i] * rW; De[i] -= De[i] * rT;
             // peat: litter and wood humify where the ground is waterlogged, and the peat decays slowly (Wetlands.Peat)
             if (landCell && (w.WetDur[i] > 0f || w.Peat[i] > 0f)) rot += Wetlands.Peat(w, i, Li, Wo, qrot);
@@ -92,6 +94,7 @@ public static class Fields
     /// maximum sustained yield of logistic growth, Schaefer 1954), seasonal pools at their yearly mean (1/pi of the
     /// peak), litter and detritus at their inflow; times the pool's energy and the diet's efficiency. Carrion, dung and
     /// meat come from animals and are not counted. Used to found each lineage with what its home range can feed.
+    /// Energy per step in the cell: a unit of a pool is Pools.Kg kg there (2026-11-01; Pools.ECell = Rho x Kg).
     /// </summary>
     public static float Yield(World w, int i, ReadOnlySpan<float> diet)
     {
@@ -111,13 +114,15 @@ public static class Fields
             float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
             float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / w.ShallowE);
             float ph = K.R_PH * plants * lim * 0.25f * fe;
-            y += diet[(int)Pool.Algae] * Pools.Rho[(int)Pool.Algae] * al;
-            y += diet[(int)Pool.Phyto] * Pools.Rho[(int)Pool.Phyto] * ph;
-            y += diet[(int)Pool.Detritus] * Pools.Rho[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + K.M_PH * Pl[(int)Pool.Phyto][i]);
+            y += diet[(int)Pool.Algae] * Pools.ECell[(int)Pool.Algae] * al;
+            y += diet[(int)Pool.Phyto] * Pools.ECell[(int)Pool.Phyto] * ph;
+            y += diet[(int)Pool.Detritus] * Pools.ECell[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + K.M_PH * Pl[(int)Pool.Phyto][i]);
             return y;
         }
         return Plants.Yield(w, i, diet);
     }
+
+    static readonly float InvKgLand = 1f / Pools.Kg[(int)Pool.Litter];
 
     /// <summary>Is this a pool that Yield counts (it grows from plants, or from their fall)?</summary>
     public static bool Grows(int p) => p <= (int)Pool.Phyto || p == (int)Pool.Litter || p == (int)Pool.Detritus;

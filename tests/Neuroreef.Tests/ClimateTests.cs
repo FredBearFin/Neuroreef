@@ -77,7 +77,11 @@ public class ClimateTests
         // 2026-11-01: water depths in metres (rivers 0.3 m by discharge, standing water on a shoreface profile with its bed
         // raised to it), SHALLOW 2 m, wetlands and peat, and a 21st plant trait (flood tolerance) re-pinned it from 0xA072ED289084F27E.
         // (2026-11-01: re-pinned after the wetlands merge (peat and waterlogging change the fields) and the creature-variety merge)
-        Assert.Equal(0xCDEE23A10F68B3AAUL, h);
+        // 2026-11-01: plant production per m2 (REPRO_RATE from NPP_MAX over PLANT_KG_M2, 0.0021 for 0.01, so reproduction
+        // is ~1/4 of production, not ~2/3) and seed drift over the field cell's own side (CELL_M = GEO_CELL_M, 218 m for a
+        // literal 25 m) re-pinned it from 0xA6028B8F1955E0F1: the same seed grows other plants. (No animals here: the
+        // food pools' kg, Pools.Kg, do not enter this hash.)
+        Assert.Equal(0xF898BD7EC229FF9FUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

@@ -180,7 +180,7 @@ public static class Life
                 if (!Respiration.Breathable(w, c, cell, out float z, out float share)) continue;
                 for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share);
                 y += Fields.Yield(w, cell, reached); n++;
-                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Respiration.Access(w, cell, p, z, share);
+                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share);   // kg
                 if (Climate.On) heatNeed += DayNeed(w, c, cell);
             }
         if (n == 0) return 0f;

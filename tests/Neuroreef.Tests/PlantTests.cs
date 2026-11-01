@@ -236,7 +236,8 @@ public class PlantTests
         int n = Map.FW * Map.FW, d = LandWithHerb(w) + 1; while (w.Cell[d] != (byte)Realm.Land) d++;
         float bank0 = w.BankM[2 * n + d];
         Plants.Deposit(w, d, w.GutSeedG[0], w.GutSeedDad[0], w.GutSeedy[0], 0);
-        Assert.Equal(bank0 + w.GutSeedy[0], w.BankM[2 * n + d], 5);
+        // the gut holds kg, the banks cover units: a unit is Pools.Kg kg in a cell (2026-11-01)
+        Assert.Equal(bank0 + w.GutSeedy[0] / Pools.Kg[(int)Pool.Seed], w.BankM[2 * n + d], 5);
         Assert.True(w.Flora.GutSeed > 0);
     }
 
@@ -313,7 +314,9 @@ public class PlantTests
     [Fact] // a world saved and loaded has the same plants: table, phenotypes, slots and banks
     public void CheckpointKeepsThePlants()
     {
-        using var sim = new Simulation(1024, 8, 2);
+        // 60 founders per ancestor (2026-11-01): with plant food in kg per m2 every clade founds at its limit (600), the
+        // world grew to ~10,000 slots and its checkpoint to 2 GB, more than the test machine's free disk; the plants are the point
+        using var sim = new Simulation(1024, 8, 2, evo: new EvoSettings { Founders = 60 });
         for (int k = 0; k < 20; k++) sim.Step();
         var w = sim.W;
         string path = Path.Combine(Directory.GetCurrentDirectory(), ".plants-" + Guid.NewGuid().ToString("N"));

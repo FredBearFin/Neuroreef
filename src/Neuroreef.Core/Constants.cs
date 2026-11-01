@@ -11,7 +11,9 @@
 //
 // One step = one tick = STEP_H (2.9 h; T_SEASON steps are a year). Distances are world units of M_PER_UNIT (54.5 m),
 // set in metres from allometries (section 1b). Masses are kg. Energy is arbitrary units (1 unit of body mass stores
-// C_EMAX units; C_BASAL is Kleiber's metabolism, so 1 unit is 8.9 MJ). Field amounts are mass per 4x4 cell.
+// C_EMAX units; C_BASAL is Kleiber's metabolism, so 1 unit is 8.9 MJ). The plant and water-producer fields are cover, a
+// share of the field cell (PLANT_KG_M2 or WATER_KG_M2 of dry matter per m2 at 1; Pools.Kg turns a unit into kg in a
+// cell of GEO_CELL_M); carrion and dung are kg per field cell (2026-11-01).
 
 using System;
 
@@ -445,7 +447,8 @@ public static class K
     [K("Plants", "reproductive allocation at REPRO level 0", "-", "ECO: r/K allocation (Grime 1977; Abrahamson 1980)")] public const float AR_LO = 0.05f;
     [K("Plants", "span of reproductive allocation over the trait", "-", "ECO: annuals put up to half their production into seed")] public const float AR_SPAN = 0.45f;
     [K("Plants", "peak of the flowering pulse PHEN_PEAK ((1 + cos)/2)^4, so its yearly mean is 1", "-", "-")] public const float PHEN_PEAK = 3.657f;
-    [K("Plants", "production per unit leafy cover per step that reproduction draws on", "/step", "ECO: production per unit leaf area is similar across growth forms (trees grow slowly as cover because most goes into wood); R_G of the old grass, so a mid tree fruits about as the old trees did")] public const float REPRO_RATE = 0.01f;
+    [K("Plants", "production per unit leafy cover per step that reproduction draws on: NPP_MAX over the dry matter of a unit of cover (PLANT_KG_M2), per step of a year", "/step", "ECO: production per unit leaf area is similar across growth forms (trees grow slowly as cover because most goes into wood). Derived (2026-11-01): 0.0021; was 0.01 (R_G of the old grass), i.e. 30 units of cover a year per unit of leafy cover, 12 kg dry/m2/yr at PLANT_KG_M2, five times the most productive canopies, so reproduction alone made ~2/3 of all production")] public const float REPRO_RATE = NPP_MAX / PLANT_KG_M2 / T_SEASON;
+    [K("Plants", "net primary production of a closed canopy at full water, light, nutrient and temperature (environment factor 1): what reproduction draws on (REPRO_RATE)", "kg/m2/yr", "ECO: dry matter, Whittaker & Likens 1975 (Lieth & Whittaker 1975): tropical rain forest 2.2, swamp and marsh 2.5 (mean), temperate forest 1.2-1.3, temperate grassland 0.6; the most productive stands reach ~3")] public const float NPP_MAX = 2.5f;
     [K("Plants", "seed mass (cover units) at the middle of the SEED trait", "cover", "HT")] public const float SEED_REF = 1e-4f;
     [K("Plants", "orders of magnitude of seed mass over the trait", "log10", "ECO: seed mass spans 10^3 in a flora (Moles & Westoby 2004)")] public const float SEED_SPAN = 3f;
     [K("Plants", "establishment per seed rises as (m_s/ref)^EST_EXP", "-", "ECO: the seed size-number trade-off (Smith & Fretwell 1974; Moles & Westoby 2004)")] public const float EST_EXP = 0.4f;
@@ -456,7 +459,16 @@ public static class K
     [K("Plants", "terminal velocity of an unwinged reference seed", "m/s", "ECO: Greene & Johnson 1993")] public const float V_T0 = 2f;
     [K("Plants", "wings cut terminal velocity by 1 + WING_K x", "-", "ECO: winged seeds fall at 0.5-1 m/s")] public const float WING_K = 3f;
     [K("Plants", "mean wind at release height", "m/s", "ECO: the ballistic model D = U H / v_t (Nathan et al. 2002)")] public const float U_WIND = 3f;
-    [K("Plants", "a field cell's side in metres, for dispersal distances", "m", "HT")] public const float CELL_M = 25f;
+    [K("Plants", "a field cell's side in metres, for dispersal distances", "m", "derived (2026-11-01): GEO_CELL_M, the land surface's cell; was a literal 25 m (HT) when the cell had become 218 m, so seed that drifted 50 m left a 218 m cell as if it were 25 m across")] public const float CELL_M = GEO_CELL_M;
+    // 2026-11-01: what a unit of the plant pools is in kilograms on the ground. Plant state is cover: the share of a field
+    // cell a stratum's canopy fills (0..1), so growth per unit cover is growth per square metre whatever the cell's size.
+    // Until now the animals read a unit of a food pool as 1 kg per cell, so a full meadow on a 218 m cell (4.75 ha) held
+    // 1 kg of grass (21 mg/m2) and net primary production read 3-5 kJ/m2/yr against 5,000-20,000 on real land. Now a
+    // unit of cover is PLANT_KG_M2 of dry matter on each square metre of the cell (Pools.Kg: x GEO_CELL_M^2), and the
+    // animals bite kilograms of it.
+    [K("Plants", "dry matter of the leafy, edible tissue per square metre at full cover (a unit of the grass, browse, root, fruit, seed, nectar, litter and wood pools on each m2 of a field cell)", "kg/m2", "ECO: a closed canopy holds a leaf area index of 3-6 at a leaf mass per area of 50-120 g/m2 (Wright et al. 2004; Asner, Scurlock & Hicke 2003), 0.2-0.6 kg/m2 of leaves in any growth form; grassland peak standing crop 0.2-0.6 kg/m2 above ground (Sala & Austin 2000; Scurlock, Johnson & Olson 2002). Production per unit cover is leafy production, as REPRO_RATE assumes")] public const float PLANT_KG_M2 = 0.4f;
+    [K("Plants", "energy of plant dry matter", "kJ/g", "ECO: 17-20 kJ/g for leaves, stems and roots, ~18 on average (Golley 1961; Chapin, Matson & Mooney 2011). The food pools keep their energy densities (RHO_*, E per kg): a unit of cover holds PLANT_KG_M2 x PLANT_KJ_G of energy per m2, so it is PLANT_KG_M2 x PLANT_KJ_G / (RHO_PLANT x one energy unit) kg of food (0.63 kg per dry kg: RHO_PLANT is 28.5 MJ/kg, above dry matter's 18)")] public const float PLANT_KJ_G = 18f;
+    [K("Plants", "dry matter per square metre at a unit of the water pools (algae, phytoplankton, detritus)", "kg/m2", "ECO: littoral algae and macrophytes 0.01-0.5 kg/m2, phytoplankton 1-20 g/m2 over the water column (Wetzel 2001); at the pools' growth rates (R_A, R_PH) this gives aquatic production of ~0.05-0.3 kg/m2/yr, as lakes (Wetzel 2001)")] public const float WATER_KG_M2 = 0.05f;
     [K("Plants", "least share of dry seed that leaves its cell (secondary dispersal by rain wash, ants, rolling)", "-", "ECO: secondary dispersal (Vander Wall & Longland 2004)")] public const float NB_MIN = 0.02f;
     [K("Plants", "side of a block of long-distance seed (it lands spread over the 3x3 blocks around)", "cells", "HT: a simple fat tail, deterministic and mass-conserving")] public const int WIND_BLOCK = 16;
     [K("Plants", "seed set from wind pollen per unit leafy cover of the same stratum next door", "-", "ECO: pollen limitation (Baker 1955; Knight et al. 2005)")] public const float WIND_POLL = 0.4f;

@@ -162,24 +162,26 @@ public static class Resolve
                 float em = 1f, bm = 1f;
                 if (p <= (int)Pool.Root && !waterCell) { Plants.Taste(w, p, cell, bite0, out em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
                 // in water, what it reaches at its depth: plankton by the light, algae and detritus on the bottom (Respiration.Access)
-                float here = waterCell ? w.Pool[p][cell] * Respiration.Access(w, i, cell, p) : w.Pool[p][cell];
+                // food in kg (Pools.Kg, 2026-11-01: a unit of a plant pool is its dry matter per m2 over the cell)
+                float here = (waterCell ? w.Pool[p][cell] * Respiration.Access(w, i, cell, p) : w.Pool[p][cell]) * Pools.Kg[p];
                 float v = MathF.Min(absorb, e * Pools.Rho[p] * MathF.Min(pass * bm, here));
                 if (v > bv || (v == bv && v > 0f && e * Pools.Rho[p] > bestRho)) { bv = v; best = p; bestEff = e; bestBM = bm; bestRho = e * Pools.Rho[p]; }
             }
             if (best >= 0)
             {
-                float reach = waterCell ? w.Pool[best][cell] * Respiration.Access(w, i, cell, best) : w.Pool[best][cell];
+                float reach = (waterCell ? w.Pool[best][cell] * Respiration.Access(w, i, cell, best) : w.Pool[best][cell]) * Pools.Kg[best];
                 float bite = MathF.Min(MathF.Min(bite0 * bestBM, reach), gutCap - w.Gut[i]);
                 if (bite > 0)
                 {
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
-                    w.Pool[best][cell] -= bite;
+                    float units = bite / Pools.Kg[best];   // the bite in the pool's units (cover for plants)
+                    w.Pool[best][cell] = MathF.Max(0f, w.Pool[best][cell] - units);
                     T.EatenMass[best] += bite;
                     // roots are the herbs' and shrubs' own mass (2026-11-01): a bite of them takes its energy's worth of their cover
                     // (it was 0.3 of the bite from the herbs whatever its energy, so roots, regrowing toward their own capacity, fed
                     // diggers ~4x what the plants lost)
-                    if (best == (int)Pool.Root) Plants.RootEaten(w, cell, bite * K.RHO_ROOT / K.RHO_PLANT);
-                    else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * bite);
+                    if (best == (int)Pool.Root) Plants.RootEaten(w, cell, units * K.RHO_ROOT / K.RHO_PLANT);
+                    else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * units);
                     if (!waterCell) Plants.Eaten(w, i, cell, best, bite, bestEff);   // what it took from the plants, and the seed and pollen it carries
                     r += Ingest(w, i, best, bite, bestEff, emax, cell);
                     Pathogens.Ate(w, i, cell);   // what lies on the food is swallowed with it: the faecal-oral route (Revision R)
@@ -327,7 +329,7 @@ public static class Resolve
             float de = w.GutEnergy[i] * frac, dung = w.GutWaste[i] * frac, seedy = w.GutSeedy[i] * frac;
             w.Energy[i] += de;
             w.Gut[i] -= d; w.GutEnergy[i] -= de; w.GutWaste[i] -= dung; w.GutSeedy[i] -= seedy;
-            if (waterCell) w.Pool[(int)Pool.Detritus][cell] += dung;
+            if (waterCell) w.Pool[(int)Pool.Detritus][cell] += dung / Pools.Kg[(int)Pool.Detritus];   // kg into the pool's units
             else w.Pool[(int)Pool.Dung][cell] += dung;
             // the seed that passed the gut whole lands in its dung, with its parents (Revision S)
             Plants.Deposit(w, cell, w.GutSeedG[i], w.GutSeedDad[i], seedy, 0);
@@ -607,7 +609,7 @@ public static class Resolve
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
         w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], egg ? Telemetry.F_EGG : Telemetry.F_KILL, w.Step, w.Serial[a], w.Serial[v]);
         DieNoBody(w, v, Cause.Killed, w.Spc[a]);
-        w.Pool[water ? (int)Pool.Detritus : (int)Pool.Carrion][cell] += carcass;
+        { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += carcass / Pools.Kg[dp]; }   // kg into the pool's units
         w.T.KillFlash(cell);
         return rew;
     }
@@ -709,7 +711,7 @@ public static class Resolve
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
         float body = K.C_CARC * w.MassOf(i) + MathF.Max(0f, w.Energy[i]) / K.RHO_MEAT;
-        w.Pool[water ? (int)Pool.Detritus : (int)Pool.Carrion][cell] += body;
+        { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += body / Pools.Kg[dp]; }   // kg into the pool's units
         DieNoBody(w, i, cause, killer);
     }
 

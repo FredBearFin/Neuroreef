@@ -115,8 +115,13 @@ public class EngineeringTests
     [Fact] // a world that starts small grows past its start as births need slots, and runs exactly as one built big
     public void GrowingWorldRunsAsOneBuiltBig()
     {
-        using var small = new Simulation(1024, 11, 2);
-        using var big = new Simulation(4096, 11, 1);   // and on another number of threads (NR-105)
+        // 60 founders per ancestor (2026-11-01): since plant food is kg per m2 (Pools.Kg) every clade's range feeds its
+        // founding limit, so the default 600 per ancestor founded ~9,600 animals in each world and the pair reached the
+        // test machine's memory limit (18,432 slots, 8.7 GB) before step 400. With 60 the small world still starts under
+        // its 1,024 slots and must grow by births.
+        var evo = new EvoSettings { Founders = 60 };
+        using var small = new Simulation(1024, 11, 2, evo: evo);
+        using var big = new Simulation(4096, 11, 1, evo: evo);   // and on another number of threads (NR-105)
         Assert.Equal(RunHash(big.W), RunHash(small.W));
         int peak = 0;
         for (int k = 0; k < 400; k++)
