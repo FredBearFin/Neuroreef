@@ -910,7 +910,10 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   (water for a swimmer, land for a walker, both and shallows for a wader, anything for a flier); a day costs FIELD_METAB
   x basal at its core temperature plus the heat it must make there (Heat.Balance); and a brain may take at most
   BRAIN_SHARE_MAX = 25% of the basal cost (humans ~20%; Aiello & Wheeler 1995): the 256-unit brain drew 0.1-0.4 bodies
-  it could not pay for and died in 9 worlds of 9.
+  it could not pay for and died in 9 worlds of 9. (2026-11-01: 60%, the measured vertebrate maximum, the elephantnose
+  fish's (Nilsson 1996); the brain's energy is in the founding need in full, so a body that cannot feed its brain fails
+  on food, not on the share. On seeds 1-10 the change founded no further lineage: every big-brained draw the 25% share
+  had rejected also failed the gut's rate, its absorption C_ABSORB x M^0.75 below FORAGE_MARGIN days of its need.)
 - *The young grow continuously.* A juvenile grew only from energy above half its reserve, and the young lived near 40%
   full: at 400 steps they had built 12% of their adult tissue. It now grows at its top rate times its reserve density
   (a dynamic energy budget, Kooijman 2010), keeping GROW_RESERVE = 20% against starving.
@@ -2141,6 +2144,14 @@ from neighbouring trees and in dung.
 ALGAE += r_A·Nw/(Nw + K_N)·(depth < shallow)·(1 − ALGAE) − m_A·ALGAE    (death → DETRITUS)
 PHYTO += r_Ph·Nw/(Nw + K_N)·(1 + 0.5·SEASON)·(1 − PHYTO) − m_Ph·PHYTO
 ```
+
+The rates are measured specific rates a day over STEPS_PER_DAY (2026-11-01; they were hand-tuned per step, ~0.07, 0.012,
+0.025 and 0.012 a day): periphyton grows at 0.5 /day and sloughs at 0.1 /day (Bothwell 1989; Wetzel 2001), phytoplankton
+grows at 1 /day and sinks out at 0.05 /day (Eppley 1972; Reynolds 2006). A shallow cell ~1 m deep at nutrient K_N and
+T_REF makes ~360 gC/m2/yr of plankton and ~650 in all (PlantTests.WaterProductionIsInTheLiteratureRange; lakes 100-500,
+littoral 300-1,500, Wetzel 2001); before, ~10 and ~60. Ungrazed, the plankton stands near its room (~40 g dry/m2, the
+self-shading ceiling); grazed, it doubles in under 2 days. The founding (Fields.Yield) counts a water producer's growth at
+half its room less what dies there, as land plants count growth less respiration.
 
 ### 10.4 Decomposition and run-off (NR-310)
 
