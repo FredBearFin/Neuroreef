@@ -279,6 +279,31 @@ public static class Heat
         return MathK.Exp(K.E_ACT / kB * (1f / (K.T_BODY + 273.15f) - 1f / (MathF.Max(t, K.T_CORE_MIN) + 273.15f)));
     }
 
+    /// <summary>
+    /// Metabolic level of a body with endothermy e against a warm-blooded one at the same core temperature (2026-11-01):
+    /// ECTO_LEVEL + (1 - ECTO_LEVEL) e. Endothermy is not only a warm core: it is tissue built to burn 5-10x faster
+    /// (mitochondria, leaky membranes; Hulbert &amp; Else 2000), which costs that much at rest and gives that much aerobic
+    /// capacity, endurance and digestion. Resting cost, digestion and the respiratory organs' capacity scale with
+    /// Rate(core) x Level(e) (Activity); muscle power for a burst follows the core's temperature alone (sqrt Rate).
+    /// </summary>
+    public static float Level(float e) => K.ECTO_LEVEL + (1f - K.ECTO_LEVEL) * e;
+
+    /// <summary>The pace of a body's chemistry at core temperature t and endothermy e against a warm-blooded body at
+    /// T_BODY: Rate(t) x Level(e). 1 with no climate (no heat budget).</summary>
+    public static float Activity(float t, float e) => Climate.On ? Rate(t) * Level(e) : 1f;
+
+    /// <summary>
+    /// Heat a body would have to make to keep its core from freezing (2026-11-01): its least dry conductance x how far its
+    /// core is below T_FREEZE. A cold-blooded body cannot make it, so it is all shortfall (strain, death by cold): on land
+    /// in a frost an ectotherm freezes, in water (never below T_WATER_MIN) it does not.
+    /// </summary>
+    public static float Freeze(float mass, float ins, float app, bool immersed, float core)
+    {
+        if (core >= K.T_FREEZE) return 0f;
+        Conductance(mass, ins, app, immersed, out float cmin, out _);
+        return cmin * (K.T_FREEZE - core);
+    }
+
     /// <summary>Lower and upper critical temperatures (operative, °C) of a body making heat h: the thermoneutral zone.</summary>
     public static (float lower, float upper) Neutral(float mass, float ins, float app, bool immersed, float h)
     {

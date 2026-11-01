@@ -135,6 +135,41 @@ public class RespirationTests
     }
 
     [Fact]
+    public void OrgansCostUpkeepAndABodyWithBothPaysMore()
+    {
+        // each organ has its overhead: a half-and-half body pays more than either specialist, and more than one with
+        // a lung it never uses would save by losing it
+        float gills = Respiration.OrganUpkeep(0f), lungs = Respiration.OrganUpkeep(1f), both = Respiration.OrganUpkeep(0.5f);
+        Assert.Equal(K.COST_GILL, gills, 5); Assert.Equal(K.COST_LUNG, lungs, 5);
+        Assert.True(both > MathF.Max(gills, lungs), $"amphibious upkeep {both} against gills {gills}, lungs {lungs}");
+        Assert.True(Respiration.OrganUpkeep(0.1f) > gills, "a small unused lung costs a gill-breather");
+        // and it is in the body's basal cost
+        var (w, i) = One(false, 0f, -127, 127, 64);
+        float b0 = w.PBasal[i];
+        w.Genome[(long)i * G.LEN + G.B_LUNGS] = 0; Body.Express(w, i);
+        Assert.True(w.PBasal[i] > b0, "an amphibious body's basal cost is not above a gill-breather's");
+    }
+
+    [Fact]
+    public void GillsOsmoregulateInWaterAndLungsFloat()
+    {
+        // in water, gills pay to keep their salts; out of it they do not
+        var (w, i) = One(true, 200f, -127, 127, -127);
+        int cell = World.FIdx(w.X[i], w.Y[i]);
+        float osmo = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Extra;
+        Assert.Equal(K.GILL_OSMO * Respiration.OrganBase(w, i), osmo, 4);
+        var (v, j) = One(false, 0f, -127, 127, -127);
+        Assert.Equal(0f, Respiration.Uptake(v, j, World.FIdx(v.X[j], v.Y[j]), false, 0f, out _, out _).Extra);
+        // a diver's lungs pull it up, less as the air compresses with depth (Boyle)
+        var (u, k) = One(true, 200f, 127, 127, -127);
+        u.Genome[(long)k * G.LEN + G.B_DIVE] = 127; Body.Express(u, k);
+        int c = World.FIdx(u.X[k], u.Y[k]);
+        var b = Respiration.Uptake(u, k, c, false, 0f, out float z, out float share);
+        Assert.True(z > 0f && share > 0f);
+        Assert.Equal(K.BUOY_COST * Respiration.OrganBase(u, k) * share / (1f + z / 10f), b.Extra, 4);
+    }
+
+    [Fact]
     public void LightAndReachFallWithDepth()
     {
         var w = new World(1, 33);
@@ -169,5 +204,67 @@ public class RespirationTests
         for (int k = 0; k < 300; k++) sim.Step();
         int alive = water.Count(s => w.Sp[s].Alive);
         Assert.True(alive >= nWater / 2, $"{alive} of {nWater} water lineages alive after 300 steps");
+    }
+
+    // ---- endothermy (2026-11-01): what being warm-blooded costs and buys
+
+    static void SetEndo(World w, int i, sbyte endo) { w.Genome[(long)i * G.LEN + G.B_ENDO] = endo; Body.Express(w, i); }
+
+    [Fact]
+    public void ColdBloodedTissueRunsAtAFifthAndDrawsAFifthOfTheOxygen()
+    {
+        // at the same core temperature a cold-blooded body burns and can breathe ECTO_LEVEL of a warm-blooded one's
+        Assert.Equal(1f, Heat.Level(1f), 5);
+        Assert.Equal(K.ECTO_LEVEL, Heat.Level(0f), 5);
+        Assert.Equal(K.ECTO_LEVEL, Heat.Activity(K.T_BODY, 0f), 5);
+        // and in the cold, less again: its core follows the air, a warm one's does not
+        var (w, i) = One(false, 0f, 127, -127, 127);
+        Array.Fill(w.Temp, 5f);
+        int cell = World.FIdx(w.X[i], w.Y[i]);
+        float warm = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Air;
+        SetEndo(w, i, -127);
+        float cold = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Air;
+        Assert.True(cold < 0.1f * warm, $"a cold-blooded body's lungs drew {cold} against a warm-blooded one's {warm} at 5 °C");
+    }
+
+    [Fact]
+    public void ColdBloodedBodiesFreezeOnLandButNotInWater()
+    {
+        var (w, i) = One(false, 0f, 127, -127, 127);
+        SetEndo(w, i, -127);
+        Array.Fill(w.Temp, -15f);
+        Assert.True(Live(w, i, 60) < 60, "a cold-blooded body lived 60 steps at -15 °C on land");
+        Assert.Equal(1, Died(w, Cause.Cold));
+        // a warm-blooded one with fur keeps its core
+        var (v, j) = One(false, 0f, 127, -127, 127, fur: 127);
+        Array.Fill(v.Temp, -15f);
+        Assert.Equal(60, Live(v, j, 60));
+        // a cold-blooded gill-breather under the ice: the water stays above freezing
+        var (u, k) = One(true, 20f, -127, 127, -127);
+        SetEndo(u, k, -127);
+        Array.Fill(u.Temp, -15f);
+        Assert.Equal(60, Live(u, k, 60));
+    }
+
+    [Fact]
+    public void EggsDevelopByTheirWarmthAndABroodingWarmMotherSpeedsThem()
+    {
+        // an egg left in 10 °C air develops at Rate(10) a step; one brooded by a warm-blooded caring mother near T_BODY
+        float Left(sbyte endo, sbyte care)
+        {
+            var (w, m) = One(false, 0f, 127, -127, 127);
+            long o = (long)m * G.LEN;
+            w.Genome[o + G.B_ENDO] = endo; w.Genome[o + G.B_CARE] = care; Body.Express(w, m);
+            Array.Fill(w.Temp, 10f);
+            int e = Life.NewSlot(w);
+            Life.CopyGenome(w, m, e, false);
+            Life.Place(w, e, 0, St.Egg, w.X[m], w.Y[m], 1f, m);
+            w.Timer[e] = 100f; w.Flags[e] = 0;
+            Life.Run(w, new int[K.CLADES]);
+            return 100f - w.Timer[e];
+        }
+        float cold = Left(-127, -127), brooded = Left(127, 127);
+        Assert.Equal(Heat.Rate(10f), cold, 4);
+        Assert.True(brooded > 3f * cold, $"a brooded egg developed {brooded} against {cold} a step");
     }
 }

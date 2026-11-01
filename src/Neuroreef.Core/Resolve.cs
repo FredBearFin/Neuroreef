@@ -56,7 +56,7 @@ public static class Resolve
         var metrics = Decide.Metrics;
 
         // ---- 1. move (realm rule, DESIGN §9.2)
-        float h = w.IHeading[i], spd = w.ISpeed[i];
+        float h = w.IHeading[i], spd = w.ISpeed[i] * Respiration.Stamina(w, i);   // out of breath, it slows (2026-11-01)
         float nx = w.X[i], ny = w.Y[i];
         float x0 = nx, y0 = ny;   // where its way this step began: a strike or a mating reaches along the way (2026-11-01)
         // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
@@ -267,7 +267,7 @@ public static class Resolve
             // below the mixed layer the water is colder (Respiration.WaterT), for the share of the step it is down there
             if (immersed && w.ZShare[i] > 0f) top += w.ZShare[i] * (Respiration.WaterT(w, cell, w.Z[i]) - top);
             core = Heat.Core(top, w.PEndo[i]);
-            rateT = Heat.Rate(core);
+            rateT = Heat.Activity(core, w.PEndo[i]);   // its core's temperature and its tissues' metabolic level (2026-11-01)
         }
         float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (1f + Pathogens.Sickness(w, i));   // the pathogen's take and the immune response (Revision R)
         // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
@@ -290,6 +290,8 @@ public static class Resolve
             Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core);
             // a body kept below T_BODY that makes more heat than it loses just runs a little warmer: it need not shed it
             if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
+            // a core below freezing is a cold shortfall it cannot make up (2026-11-01: before, a cold-blooded body took any frost)
+            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core);
             w.TOp[i] = top;
             w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
             // what it cannot cover strains it; a body recovers from a little strain each step

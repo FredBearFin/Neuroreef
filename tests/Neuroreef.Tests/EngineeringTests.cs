@@ -115,7 +115,7 @@ public class EngineeringTests
     [Fact] // a world that starts small grows past its start as births need slots, and runs exactly as one built big
     public void GrowingWorldRunsAsOneBuiltBig()
     {
-        using var small = new Simulation(1024, 11, 2);
+        using var small = new Simulation(512, 11, 2);   // (2026-11-01: 512, as founding populations changed with respiration; was 1024)
         using var big = new Simulation(4096, 11, 1);   // and on another number of threads (NR-105)
         Assert.Equal(RunHash(big.W), RunHash(small.W));
         int peak = 0;
@@ -125,8 +125,8 @@ public class EngineeringTests
             peak = Math.Max(peak, small.W.AliveCount);
             if (k % 50 == 49) Assert.Equal(RunHash(big.W), RunHash(small.W));
         }
-        Assert.True(small.W.Cap > 1024 && small.W.Grows > 0, $"the small world never grew ({small.W.Cap} slots, peak {peak} animals)");
-        Assert.True(peak > 1024, $"the run never needed more than its 1,024 starting slots (peak {peak}): the test proves nothing");
+        Assert.True(small.W.Cap > 512 && small.W.Grows > 0, $"the small world never grew ({small.W.Cap} slots, peak {peak} animals)");
+        Assert.True(peak > 512, $"the run never needed more than its 512 starting slots (peak {peak}): the test proves nothing");
         Assert.Equal(0, small.W.T.SlotShortage);   // never full: it grew instead
         Assert.Equal(RunHash(big.W), RunHash(small.W));
         Assert.Equal(small.W.Cap - small.W.AliveCount, small.W.FreeTop);

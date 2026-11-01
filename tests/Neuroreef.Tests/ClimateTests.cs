@@ -228,7 +228,8 @@ public class ClimateTests
             var cold = Run(-127); var warm = Run(127);
             Assert.Equal(0.0, cold.heat);
             Assert.True(warm.heat > 0.0, "a warm-blooded body at -20 °C made no heat");
-            Assert.InRange(cold.basal / warm.basal, 0.02, 0.15);                  // ~0.05 near freezing
+            // ~0.05 near freezing by temperature, x ECTO_LEVEL for cold-blooded tissue (2026-11-01: Heat.Level)
+            Assert.InRange(cold.basal / warm.basal, 0.02 * K.ECTO_LEVEL, 0.15 * K.ECTO_LEVEL);
             Assert.True(cold.gut > warm.gut, $"the cold gut digested as fast ({cold.gut} vs {warm.gut})");
         });
     }

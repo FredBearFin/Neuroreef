@@ -28,7 +28,8 @@ public class EcologyTests
             Assert.True(land ? (w.RealmOf(i) & Realm.Land) != 0 : (w.RealmOf(i) & Realm.Water) != 0, $"clade {s} realm {w.RealmOf(i)}");
             Assert.True(w.CellAllows(i, World.FIdx(w.X[i], w.Y[i]), w.RealmOf(i) & (land ? Realm.Land : Realm.Water)));
             var c = w.Sp[s];
-            founders[s]++; if (Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR) > 0f) fed[s]++;
+            // in the realm it was founded in, as the founding judges it (2026-11-01: a water lineage on water foods)
+            founders[s]++; if (Life.RangeCapacity(w, i, c.HomeX, c.HomeY, c.HomeR, land ? Realm.Land : Realm.Water) > 0f) fed[s]++;
             Assert.True(w.PStrike[i] <= 0.65f * K.STRIKE_MAX, $"clade {s} strike {w.PStrike[i]}");   // weapons and armour start in the same range (Revision L)
         }
         // nearly every ancestor is a body its home range can feed (of ANCESTOR_TRIES random bodies; a big size class may find
@@ -459,6 +460,8 @@ public class EcologyTests
     public void SexualLiveBirthProducesEmbryosThenJuveniles()
     {
         var (w, a, b) = Pair(true, true);
+        // a warm-blooded mother: her embryos develop at T_BODY, in PGest steps (a cold-blooded one's take longer in the cold, 2026-11-01)
+        w.Genome[a * G.LEN + G.B_ENDO] = 127; Body.Express(w, a);
         Act(w, a, P.MATE, b); w.IActs[b] = 0;
         Resolve.Run(w, 1, 0);
         int embryos = Count(w, St.Embryo);
