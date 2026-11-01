@@ -199,7 +199,7 @@ export class World3D {
     const ctx = {
       S, fw, U, sea, SF, H, broad, isLake: lake, lift: LAND_LIFT, ground: groundRaw, cellOf: (x, z) => this._cellOf(x, z),
       widthOfClass: (c) => riverWidth(c, RIVER_W0, RIVER_WMAX), widthOf: (i) => riverWidth(riv[i] >> 3, RIVER_W0, RIVER_WMAX),
-      depthOf: (i) => Math.min(1.2, Math.max(0.15, (w.depth[i] / 2000) * U)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
+      depthOf: (i) => Math.min(1.2, Math.max(0.15, waterDepthU(w, i, U))), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
     };
     const paths = fromWire(w, ctx) || fromCells(w, riv, ctx);
     const feats = decodeFeatures(w, S, groundRaw);
@@ -229,6 +229,7 @@ export class World3D {
     // rivers: their ribbons in chunks of the map, drawn within RIBBON_FAR of the camera (beyond it the ground paints them)
     const rg = ribbonGeometry(paths);
     this.rivVC = rg.userData.cells; this.rivColor = rg.attributes.color.array;
+    { const A = rg.attributes.aRiv.array; this.rivSteep = new Float32Array(A.length / 3); for (let v = 0; v < this.rivSteep.length; v++) this.rivSteep[v] = A[v * 3 + 2]; }
     this.rivChunks = splitChunks(rg, this.W, CHUNKS); rg.dispose();
     const WU = this.waterU = { ...this.ground.uniforms, uTime: { value: 0 } };
     // the lake surface loses depth ties to the ground (polygon offset away from the camera): low shores just above the
@@ -362,7 +363,8 @@ export class World3D {
     const grass = L('grass'), shrub = L('shrub'), tree = L('tree'), fire = L('fire'), moist = L('moisture'),
           carrion = L('carrion'), algae = L('algae'), phyto = L('phyto'), nectar = L('nectar'), pond = L('pond'),
           frozen = L('frozen'), temp = L('temp'), flood = L('flood'),
-          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), lime = L('limestone'), allu = L('alluvium');
+          snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), lime = L('limestone'), allu = L('alluvium'),
+          wetland = L('wetland');   // marsh and swamp share (hydrology, when sent; none: no wetlands drawn)
     // the sim's snowpack when it sends one (the water cycle on); else snow where the air is below freezing
     let hasSnow = false; if (snow) for (let k = 0; k < snow.length; k++) if (snow[k]) { hasSnow = true; break; }
     const sea = w.sea, b8 = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
@@ -381,7 +383,7 @@ export class World3D {
         const gr = 0.30 + 0.30 * dryG, gg = 0.58 - 0.12 * dryG, gb = 0.18;      // green grass, yellowing when dry
         r += (gr - r) * G; g += (gg - g) * G; b += (gb - b) * G;
         r += (0.30 - r) * S; g += (0.40 - g) * S; b += (0.16 - b) * S;
-        r += (0.10 - r) * T * 0.85; g += (0.26 - g) * T * 0.85; b += (0.12 - b) * T * 0.85;
+        r += (0.17 - r) * T * 0.85; g += (0.26 - g) * T * 0.85; b += (0.13 - b) * T * 0.85;   // forest floor and canopy (sRGB, as all the cover colours)
         const nc = nectar[fi] / 255; r += nc * 0.25; b += nc * 0.18;          // flowers
         const ca = carrion[fi] / 255; r += (0.35 - r) * ca * 0.5; g *= 1 - ca * 0.4; b *= 1 - ca * 0.4;
         // a seasonal pond holding water (Wet = 2; the layer is the share of the field cell's 4 cells): open water
@@ -404,27 +406,63 @@ export class World3D {
         else if (temp) sn = Math.min(1, Math.max(0, (-(temp[fi] / 255 * 90 - 40) - 0.5) / 5));
       }
       M[i * 4] = b8(sn); M[i * 4 + 1] = volc ? volc[fi] : 0; M[i * 4 + 2] = sedi ? sedi[fi] : 0; M[i * 4 + 3] = allu ? allu[fi] : 0;
-      M2[i * 4] = lime ? lime[fi] : 0;
+      M2[i * 4] = lime ? lime[fi] : 0; M2[i * 4 + 1] = wetland && !this.isLake[i] ? wetland[fi] : 0;
+    }
+    // the FIELDS grid is half the cell grid: a [1 2 1] tent across the cells (on the torus) turns its 2x2 blocks into a
+    // smooth cover (2026-11-01 QA: once the colours had their contrast, the overview was a checkerboard of them)
+    {
+      const n4 = fw * fw * 4, tmp = this._coverTmp && this._coverTmp.length === n4 ? this._coverTmp : (this._coverTmp = new Uint8Array(n4));
+      for (let pass = 0; pass < 2; pass++) {
+        const src = pass ? tmp : C, dst = pass ? C : tmp;
+        for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) {
+          const i = (y * fw + x) * 4;
+          const a = pass ? (((y + fw - 1) % fw) * fw + x) * 4 : (y * fw + (x + fw - 1) % fw) * 4;
+          const b = pass ? (((y + 1) % fw) * fw + x) * 4 : (y * fw + (x + 1) % fw) * 4;
+          for (let c = 0; c < 4; c++) dst[i + c] = (src[a + c] + 2 * src[i + c] + src[b + c] + 2) >> 2;
+        }
+      }
     }
     this.ground.coverUpdated(); this.ground.matUpdated();
     this.ground.uniforms.uPlain.value = this.tempOverlay ? 1 : 0;
     const fieldOf = (i) => f ? Math.min(d - 1, ((i / fw) | 0) >> 1) * d + Math.min(d - 1, (i % fw) >> 1) : 0;
+    // ice (2026-11-01 QA): FIELDS 'frozen' is only the air below 0 °C now; water freezes over after a cold spell, so ice
+    // grows with the frost (the air temperature, 'temp'): a lake from about -1 °C, the sea (salt, mixed by waves) from
+    // about -4 °C, a slow river from about -3 °C, and a fast one (steep, turbulent: frazil and anchor ice, rarely a
+    // cover) not at all. Young ice is dark (black ice: the water shows through); it is white only under snow, which lies
+    // on it where the snowpack lies on the shore beside it.
+    const airC = (fi) => temp ? temp[fi] / 255 * 90 - 40 : frozen && frozen[fi] ? -8 : 5;
+    const shoreSnow = (fi) => {
+      if (!hasSnow) return 0;
+      const fx = fi % d, fy = (fi / d) | 0; let m = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) m = Math.max(m, snow[((fy + dy + d) % d) * d + ((fx + dx + d) % d)]);
+      return m / 255;
+    };
+    const ICE = [0.17, 0.23, 0.27], ICE_SNOW = [0.80, 0.85, 0.90];
+    const iceRGB = (out, o, k, sn) => { for (let c = 0; c < 3; c++) out[o + c] += (ICE[c] + (ICE_SNOW[c] - ICE[c]) * sn - out[o + c]) * k; };
+    const ramp = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
     // lakes: shallow water turquoise, deep water dark blue (depth below the water's level at each corner); algae and plankton tint it green
     const LC = this.lakeColor, LV = this.lakeVC, LL = this.lakeVL;
     for (let v = 0; v < LV.length; v++) {
       const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, LL[v] - this.cellH[i]) / 2.0);
       const al = f ? algae[fi] / 255 : 0, ph = f ? phyto[fi] / 255 : 0;
-      LC[v * 4] = 0.10 - 0.07 * dd + 0.06 * al; LC[v * 4 + 1] = 0.40 - 0.24 * dd + 0.18 * al + 0.10 * ph; LC[v * 4 + 2] = 0.48 - 0.18 * dd + 0.02 * ph;
+      // (linear light: water seen from above is dark, its bed showing through where shallow; 2026-11-01 QA, it was a bright cyan)
+      LC[v * 4] = 0.050 - 0.036 * dd + 0.03 * al; LC[v * 4 + 1] = 0.20 - 0.14 * dd + 0.09 * al + 0.05 * ph; LC[v * 4 + 2] = 0.25 - 0.14 * dd + 0.01 * ph;
       LC[v * 4 + 3] = 0.62 + 0.33 * dd;
-      if (frozen && frozen[fi] && this.isLake[i]) { LC[v * 4] = 0.80; LC[v * 4 + 1] = 0.88; LC[v * 4 + 2] = 0.94; LC[v * 4 + 3] = 0.95; }   // pale ice (Revision O)
+      if (f && this.isLake[i] && (temp || frozen)) {
+        const T = airC(fi), isSea = Math.abs(this.surfH[i]) < 0.01, ice = ramp((isSea ? -T - 4 : -T - 1) / 6);
+        if (ice > 0) { iceRGB(LC, v * 4, ice, shoreSnow(fi) * ice); LC[v * 4 + 3] += (0.96 - LC[v * 4 + 3]) * ice; }
+      }
     }
     // rivers: clear and light where small or shallow, deep green-blue where big and deep; algae tint them green
-    const RC = this.rivColor, RV = this.rivVC, U = RELIEF / (1 - sea);
+    const RC = this.rivColor, RV = this.rivVC, RS = this.rivSteep, U = RELIEF / (1 - sea);
     for (let v = 0; v < RV.length; v++) {
       const i = RV[v], fi = fieldOf(i), al = f ? algae[fi] / 255 : 0;
-      const dd = Math.min(1, Math.max((w.depth[i] / 2000) * U / 0.6, (this.riv[i] >> 3) / 24));
-      RC[v * 3] = 0.24 - 0.15 * dd + 0.05 * al; RC[v * 3 + 1] = 0.52 - 0.20 * dd + 0.12 * al; RC[v * 3 + 2] = 0.58 - 0.12 * dd;
-      if (frozen && frozen[fi]) { RC[v * 3] = 0.82; RC[v * 3 + 1] = 0.89; RC[v * 3 + 2] = 0.95; }
+      const dd = Math.min(1, Math.max(waterDepthU(w, i, U) / 0.6, (this.riv[i] >> 3) / 24));
+      RC[v * 3] = 0.08 - 0.05 * dd + 0.03 * al; RC[v * 3 + 1] = 0.22 - 0.12 * dd + 0.07 * al; RC[v * 3 + 2] = 0.25 - 0.11 * dd;
+      if (f && (temp || frozen)) {
+        const ice = ramp((-airC(fi) - 3) / 7) * (1 - ramp((RS[v] - 0.12) / 0.3));
+        if (ice > 0) iceRGB(RC, v * 3, ice, shoreSnow(fi) * ice);
+      }
     }
     this.lakeGeo.attributes.color.needsUpdate = true;
     copyColors(this.rivChunks, RC, 3);
@@ -1129,6 +1167,15 @@ function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= 2 * Math.P
 
 /** A cell's elevation, 0..1: from the 16-bit plane when the WORLD frame has it, else the 8-bit one. */
 function elevOf(w, i) { return w.elev16 ? w.elev16[i] / 65535 : w.elev[i] / 255; }
+
+/** A cell's water depth in world units (true scale: 1 unit = 54.5 m both ways). From metres when the WORLD frame gives
+ *  them (w.depthM, a per-cell array in m; or w.depthUnit === 'm' with w.depth in m), else from the ICD depth byte
+ *  (normalised elevation x 2000) through U (units per normalised elevation). */
+function waterDepthU(w, i, U) {
+  if (w.depthM) return w.depthM[i] * RELIEF / 8000;
+  if (w.depthUnit === 'm') return w.depth[i] * RELIEF / 8000;
+  return (w.depth[i] / 2000) * U;
+}
 
 function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 

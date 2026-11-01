@@ -8,7 +8,8 @@
 //   leaves, yellowing on the way), the tallest plant ('plant height', 5 cm..40 m: the trees' size), frost (snow on
 //   the crowns) and fire (charred).
 // - Bushes: round, berried (where the sim's fruit is fleshy and there is fruit) or thorny scrub (thorns).
-// - Grass tufts: only round the camera, as dense as the grass layer, yellowing as the soil dries.
+// - Grass tufts: only round the camera, as dense as the grass layer, yellowing as the soil dries; reeds instead where
+//   the hydrology's 'wetland' layer (when sent) has marsh or swamp (the ground paints its peat and pools).
 // - Rocks: on steep slopes and the high bare ground, sparse where plants cover the ground.
 // Sizes (2026-11-01): every plant at its true size in metres (the sim's plant height; a shrub at most 4 m, a grass
 // tuft half a metre, boulders a few metres) times the plants' magnification (js/scale.js: x1 in Explore, the fourth
@@ -25,6 +26,7 @@ const ROCK_M = 1.6;                         // a boulder's mean size (m); drawn 
 const ROCK_REACH = 250, FLAME_M = 2.5;
 const H_LO = -1.3, H_SPAN = 2.9;             // plant height layer: log10 m = H_LO + H_SPAN x value (Constants.cs)
 const FOUNDERS_GUESS = 16;
+const RELIEF_U = 8000 * 4 / 218;            // world3d.js RELIEF: H_RELIEF at true scale (units)
 
 // growth forms
 const SPRUCE = 0, PINE = 1, OAK = 2, POPLAR = 3, UMBRELLA = 4, BARE = 5, NFORMS = 6;
@@ -95,75 +97,82 @@ function cyl(r0, r1, h, seg, x, y, z, tiltX = 0, tiltZ = 0) {
 const BARK = 0x5b4433, BARK_GREY = 0x8a8178, BARK_BIRCH = 0xb9b2a4;
 const NEEDLE = 0x1d4a2a, NEEDLE2 = 0x27593a, PINE_G = 0x2f5a2c, LEAF = 0x376a2a, LEAF2 = 0x44782f, LEAF_DRY = 0x66733a;
 
-/** Tree models, each 1 unit tall (the base at y = 0). [near, far] per growth form. */
+/**
+ * Tree models, each 1 unit tall (the base at y = 0). [near, far] per growth form. Proportions (2026-11-01 QA) from
+ * forest-grown trees: crown width / height ~0.25-0.35 for a spruce, ~0.35-0.4 for a pine, ~0.55-0.65 for an oak or a
+ * beech, ~0.3 for a poplar, ~1-1.3 for an acacia (open grown); trunk diameter at breast height 2-3.5 % of the height
+ * (drawn a little thicker, ~4 %, to stay visible). Before, broadleaves were a ball as wide as the tree is tall on a
+ * stick 12 % of the height thick: lollipops.
+ */
 function treeModels() {
   const near = [], far = [];
-  // spruce: a narrow stack of drooping tiers
+  // spruce: a narrow stack of drooping tiers, down to near the ground
   {
-    const ps = [part(cyl(0.035, 0.02, 0.35, 5, 0, 0, 0), BARK, false)];
-    const tiers = [[0.12, 0.30, 0.40], [0.33, 0.25, 0.34], [0.52, 0.19, 0.28], [0.68, 0.13, 0.22], [0.82, 0.08, 0.18]];
+    const ps = [part(cyl(0.02, 0.008, 0.6, 5, 0, 0, 0), BARK, false)];
+    const tiers = [[0.08, 0.16, 0.34], [0.26, 0.14, 0.30], [0.44, 0.115, 0.26], [0.61, 0.085, 0.22], [0.76, 0.055, 0.24]];
     tiers.forEach(([y, r, h], k) => { const c = new THREE.ConeGeometry(r, h, 8, 1, true); c.translate(0, y + h / 2, 0); c.rotateY(k * 0.7);
       ps.push(part(c, k % 2 ? NEEDLE2 : NEEDLE, true, [0, 0.5, 0])); });
     near[SPRUCE] = mergeParts(ps);
-    const f = new THREE.ConeGeometry(0.27, 0.92, 6, 1, true); f.translate(0, 0.54, 0);
+    const f = new THREE.ConeGeometry(0.155, 0.94, 6, 1, true); f.translate(0, 0.53, 0);
     far[SPRUCE] = mergeParts([part(f, NEEDLE, true, [0, 0.45, 0])]);
   }
-  // pine: a tall bare trunk and a few flat clumps of needles at the top
+  // pine: a tall bare trunk and a few flat clumps of needles in the top third
   {
-    const ps = [part(cyl(0.04, 0.025, 0.85, 5, 0, 0, 0), 0x6b4a33, false)];
-    const R = rng(11);
-    const cl = [[0, 0.80, 0, 0.22], [0.13, 0.70, 0.05, 0.16], [-0.12, 0.68, -0.06, 0.15], [0.03, 0.62, -0.13, 0.13], [-0.05, 0.92, 0.07, 0.14]];
-    cl.forEach(([x, y, z, r], k) => { const b = blob(r, 1, 30 + k, 1.25, 0.55, 1.25, 0.25); b.translate(x, y, z); ps.push(part(b, k % 2 ? PINE_G : NEEDLE2, true, [0, 0.76, 0])); });
-    ps.push(part(cyl(0.015, 0.01, 0.2, 4, 0, 0.62, 0, 0, 1.0), 0x6b4a33, false));
-    ps.push(part(cyl(0.015, 0.01, 0.18, 4, 0, 0.6, 0, 0.9, -0.3), 0x6b4a33, false));
-    near[PINE] = mergeParts(ps); void R;
-    const f = blob(0.28, 0, 5, 1.1, 0.55, 1.1, 0.1); f.translate(0, 0.78, 0);
-    far[PINE] = mergeParts([part(cyl(0.05, 0.03, 0.7, 4, 0, 0, 0), 0x6b4a33, false), part(f, PINE_G, true, [0, 0.78, 0])]);
+    const ps = [part(cyl(0.02, 0.01, 0.86, 5, 0, 0, 0), 0x6b4a33, false)];
+    const cl = [[0, 0.86, 0, 0.13], [0.08, 0.77, 0.03, 0.10], [-0.08, 0.74, -0.04, 0.10], [0.02, 0.68, -0.08, 0.085], [-0.03, 0.94, 0.04, 0.08]];
+    cl.forEach(([x, y, z, r], k) => { const b = blob(r, 1, 30 + k, 1.3, 0.6, 1.3, 0.25); b.translate(x, y, z); ps.push(part(b, k % 2 ? PINE_G : NEEDLE2, true, [0, 0.8, 0])); });
+    ps.push(part(cyl(0.008, 0.005, 0.12, 4, 0, 0.68, 0, 0, 1.0), 0x6b4a33, false));
+    ps.push(part(cyl(0.008, 0.005, 0.11, 4, 0, 0.66, 0, 0.9, -0.3), 0x6b4a33, false));
+    near[PINE] = mergeParts(ps);
+    const f = blob(0.17, 0, 5, 1.1, 0.9, 1.1, 0.1); f.translate(0, 0.82, 0);
+    far[PINE] = mergeParts([part(cyl(0.022, 0.012, 0.72, 4, 0, 0, 0), 0x6b4a33, false), part(f, PINE_G, true, [0, 0.82, 0])]);
   }
-  // round broadleaf (an oak or a beech): a short trunk, a few limbs, a dome of leaf clumps
+  // round broadleaf (an oak or a beech): a clear bole to ~0.35 of its height, limbs, a crown of overlapping clumps
+  // ~0.6 of the height wide and ~0.65 deep
   {
-    const ps = [part(cyl(0.06, 0.04, 0.5, 6, 0, 0, 0), BARK, false),
-      part(cyl(0.035, 0.02, 0.3, 5, 0, 0.42, 0, 0.6, 0.3), BARK, false), part(cyl(0.035, 0.02, 0.3, 5, 0, 0.42, 0, -0.5, -0.4), BARK, false)];
-    const cl = [[0, 0.70, 0, 0.30], [0.22, 0.60, 0.06, 0.22], [-0.20, 0.62, -0.08, 0.23], [0.05, 0.60, 0.22, 0.21], [-0.06, 0.58, -0.22, 0.21], [0.02, 0.86, 0.02, 0.2]];
-    cl.forEach(([x, y, z, r], k) => { const b = blob(r, 1, 50 + k, 1, 0.85, 1, 0.2); b.translate(x, y, z); ps.push(part(b, k % 2 ? LEAF2 : LEAF, true, [0, 0.66, 0])); });
+    const ps = [part(cyl(0.022, 0.014, 0.5, 6, 0, 0, 0), BARK, false),
+      part(cyl(0.012, 0.007, 0.25, 5, 0, 0.36, 0, 0.55, 0.3), BARK, false), part(cyl(0.012, 0.007, 0.25, 5, 0, 0.36, 0, -0.5, -0.4), BARK, false)];
+    const cl = [[0, 0.74, 0, 0.20], [0.14, 0.62, 0.04, 0.15], [-0.13, 0.64, -0.05, 0.16], [0.03, 0.60, 0.14, 0.15], [-0.04, 0.57, -0.14, 0.14],
+                [0.08, 0.84, -0.06, 0.13], [-0.07, 0.86, 0.07, 0.12], [0.0, 0.48, 0.0, 0.13]];
+    cl.forEach(([x, y, z, r], k) => { const b = blob(r, 1, 50 + k, 1, 0.9, 1, 0.22); b.translate(x, y, z); ps.push(part(b, k % 2 ? LEAF2 : LEAF, true, [0, 0.68, 0])); });
     near[OAK] = mergeParts(ps);
-    const f = blob(0.42, 0, 7, 1, 0.75, 1, 0.12); f.translate(0, 0.66, 0);
-    far[OAK] = mergeParts([part(cyl(0.06, 0.04, 0.4, 4, 0, 0, 0), BARK, false), part(f, LEAF, true, [0, 0.66, 0])]);
+    const f = blob(0.3, 1, 7, 1, 1.08, 1, 0.16); f.translate(0, 0.67, 0);
+    far[OAK] = mergeParts([part(cyl(0.022, 0.014, 0.42, 4, 0, 0, 0), BARK, false), part(f, LEAF, true, [0, 0.67, 0])]);
   }
   // tall broadleaf (a poplar or a birch): a pale trunk and a narrow crown
   {
-    const ps = [part(cyl(0.04, 0.025, 0.45, 6, 0, 0, 0), BARK_BIRCH, false)];
-    const cl = [[0, 0.45, 0, 0.17], [0.02, 0.62, 0.03, 0.16], [-0.02, 0.78, -0.02, 0.13], [0.0, 0.91, 0.01, 0.09], [0.05, 0.53, -0.07, 0.12]];
+    const ps = [part(cyl(0.018, 0.01, 0.6, 6, 0, 0, 0), BARK_BIRCH, false)];
+    const cl = [[0, 0.42, 0, 0.13], [0.02, 0.58, 0.03, 0.13], [-0.02, 0.74, -0.02, 0.11], [0.0, 0.89, 0.01, 0.08], [0.04, 0.50, -0.06, 0.10]];
     cl.forEach(([x, y, z, r], k) => { const b = blob(r, 1, 70 + k, 1, 1.35, 1, 0.2); b.translate(x, y, z); ps.push(part(b, k % 2 ? LEAF : LEAF2, true, [0, 0.66, 0])); });
     near[POPLAR] = mergeParts(ps);
-    const f = blob(0.2, 0, 9, 1, 2.1, 1, 0.08); f.translate(0, 0.6, 0);
-    far[POPLAR] = mergeParts([part(cyl(0.04, 0.03, 0.3, 4, 0, 0, 0), BARK_BIRCH, false), part(f, LEAF, true, [0, 0.62, 0])]);
+    const f = blob(0.15, 0, 9, 1, 2.6, 1, 0.08); f.translate(0, 0.6, 0);
+    far[POPLAR] = mergeParts([part(cyl(0.018, 0.012, 0.3, 4, 0, 0, 0), BARK_BIRCH, false), part(f, LEAF, true, [0, 0.62, 0])]);
   }
   // umbrella (an acacia): a forked trunk under a flat, wide crown
   {
-    const ps = [part(cyl(0.045, 0.03, 0.45, 5, 0, 0, 0), 0x6e5641, false),
-      part(cyl(0.03, 0.02, 0.45, 5, 0, 0.4, 0, 0.0, 0.55), 0x6e5641, false), part(cyl(0.03, 0.02, 0.42, 5, 0, 0.4, 0, 0.45, -0.35), 0x6e5641, false)];
+    const ps = [part(cyl(0.03, 0.02, 0.45, 5, 0, 0, 0), 0x6e5641, false),
+      part(cyl(0.018, 0.012, 0.45, 5, 0, 0.4, 0, 0.0, 0.55), 0x6e5641, false), part(cyl(0.018, 0.012, 0.42, 5, 0, 0.4, 0, 0.45, -0.35), 0x6e5641, false)];
     const cl = [[0, 0.88, 0, 0.36], [0.28, 0.82, 0.1, 0.24], [-0.3, 0.84, -0.06, 0.25], [0.04, 0.83, 0.3, 0.22], [-0.06, 0.82, -0.3, 0.22]];
     cl.forEach(([x, y, z, r], k) => { const b = blob(r, 1, 90 + k, 1.2, 0.28, 1.2, 0.25); b.translate(x, y, z); ps.push(part(b, k % 2 ? LEAF_DRY : 0x587a2c, true, [0, 0.8, 0])); });
     near[UMBRELLA] = mergeParts(ps);
     const f = blob(0.5, 0, 13, 1, 0.22, 1, 0.1); f.translate(0, 0.86, 0);
-    far[UMBRELLA] = mergeParts([part(cyl(0.05, 0.03, 0.8, 4, 0, 0, 0), 0x6e5641, false), part(f, 0x587a2c, true, [0, 0.86, 0])]);
+    far[UMBRELLA] = mergeParts([part(cyl(0.03, 0.02, 0.8, 4, 0, 0, 0), 0x6e5641, false), part(f, 0x587a2c, true, [0, 0.86, 0])]);
   }
   // bare broadleaf (leaves dropped): trunk, limbs and twigs
   {
-    const ps = [part(cyl(0.055, 0.035, 0.5, 6, 0, 0, 0), BARK_GREY, false)];
+    const ps = [part(cyl(0.022, 0.014, 0.5, 6, 0, 0, 0), BARK_GREY, false)];
     const R = rng(21);
     for (let k = 0; k < 7; k++) {
       const a = k * 2.4, t = 0.35 + 0.35 * R(), y0 = 0.35 + 0.15 * R();
-      const g = cyl(0.028, 0.008, t, 4, 0, 0, 0, 0, 0.5 + 0.35 * R()); g.rotateY(a); g.translate(0, y0, 0);
+      const g = cyl(0.012, 0.004, t, 4, 0, 0, 0, 0, 0.5 + 0.35 * R()); g.rotateY(a); g.translate(0, y0, 0);
       ps.push(part(g, BARK_GREY, false));
-      const tw = cyl(0.012, 0.004, 0.2, 3, 0, 0, 0, 0, 0.2 + 0.4 * R()); tw.rotateY(a + 0.6); tw.translate(Math.cos(-a) * t * 0.35, y0 + t * 0.75, Math.sin(-a) * t * 0.35);
+      const tw = cyl(0.006, 0.002, 0.2, 3, 0, 0, 0, 0, 0.2 + 0.4 * R()); tw.rotateY(a + 0.6); tw.translate(Math.cos(-a) * t * 0.35, y0 + t * 0.75, Math.sin(-a) * t * 0.35);
       ps.push(part(tw, BARK_GREY, false));
     }
     near[BARE] = mergeParts(ps);
     // far: a trunk and a thin fan of limbs (a few sticks read better than a solid cone)
-    const fp = [part(cyl(0.05, 0.03, 0.45, 4, 0, 0, 0), 0x5e554d, false)];
-    for (let k = 0; k < 4; k++) { const g = cyl(0.03, 0.006, 0.5, 3, 0, 0, 0, 0, 0.55); g.rotateY(k * 1.6); g.translate(0, 0.38, 0); fp.push(part(g, 0x5e554d, false)); }
+    const fp = [part(cyl(0.022, 0.014, 0.45, 4, 0, 0, 0), 0x5e554d, false)];
+    for (let k = 0; k < 4; k++) { const g = cyl(0.012, 0.004, 0.5, 3, 0, 0, 0, 0, 0.55); g.rotateY(k * 1.6); g.translate(0, 0.38, 0); fp.push(part(g, 0x5e554d, false)); }
     far[BARE] = mergeParts(fp);
   }
   return { near, far };
@@ -341,7 +350,7 @@ export class Vegetation {
   _layers() {
     const v = this.v, f = v.fields, d = f.d, L = (n) => { const i = v._layer(n); return i >= 0 ? f.data.subarray(i * d * d, (i + 1) * d * d) : null; };
     return { d, T: L('tree'), S: L('shrub'), G: L('grass'), F: L('fire'), H: L('plant height'), LO: L('leaf-on'), DT: L('drought tolerance'),
-             FL: L('flora'), TH: L('thorns'), FF: L('fleshy fruit'), FR: L('fruit'), TP: L('temp'), FZ: L('frozen'), M: L('moisture') };
+             FL: L('flora'), TH: L('thorns'), FF: L('fleshy fruit'), FR: L('fruit'), TP: L('temp'), FZ: L('frozen'), M: L('moisture'), SN: L('snow'), WL: L('wetland') };
   }
 
   /** The trees, bushes, rocks and fires in view (as world3d.js's _plants did; the same budget and thinning). */
@@ -361,6 +370,9 @@ export class Vegetation {
     this._plantC = c.clone(); this._plantCam = cam.clone();
     const Ly = this._layers(), d = Ly.d, cs = W / d;
     const fogFar = v.scene.fog.far;
+    // pixels per unit at unit distance: a plant drawn under ~1.5 px tall is left to the ground's cover colour (2026-11-01
+    // QA: the overview's sub-pixel trees were a black speckle over the whole map, flickering as they aliased)
+    const pxU = v.renderer.domElement.height / (2 * Math.tan(v.camera.fov * Math.PI / 360)), MIN_PX = 1.5;
     const E = v._wrapS > 0.5 ? W / 2 : Math.min(fogFar, 0.8 * W);
     const r0 = Math.floor(E / cs), side = 2 * r0 + 1;
     const ccx = Math.floor(c.x / cs), ccy = Math.floor(c.z / cs);
@@ -392,14 +404,16 @@ export class Vegetation {
       let hsh = hash2(fx, fy);
       // the plants of this field cell, as the sim has them
       const tempC = Ly.TP ? Ly.TP[fi] / 255 * 90 - 40 : 15, cold = clamp01((8 - tempC) / 18);
-      const drought = Ly.DT ? Ly.DT[fi] / 255 : 0.3, leafOn = Ly.LO ? Ly.LO[fi] / 255 : 1, frost = Ly.FZ ? Ly.FZ[fi] / 255 : 0;
+      const drought = Ly.DT ? Ly.DT[fi] / 255 : 0.3, leafOn = Ly.LO ? Ly.LO[fi] / 255 : 1;
+      // snow on the crowns where the snowpack lies (FIELDS 'snow'); the air below freezing alone is only a rime of frost
+      const frost = Math.max(Ly.SN ? Ly.SN[fi] / 255 : 0, Ly.FZ ? 0.3 * Ly.FZ[fi] / 255 : 0);
       const fire = Ly.F[fi] > 0, moist = Ly.M ? Ly.M[fi] / 255 : 0.5;
       const hM = heightM(fi);
       const lineage = Ly.FL && Ly.FL[fi] ? Math.round(Ly.FL[fi] / 255 * (FOUNDERS_GUESS + 1)) : 0;
       const lh = hash1(lineage * 7919 + 13);
       // thinned with distance: fewer, a little bigger, trees far away (as many crowns' worth of cover)
       const keepT = Math.min(1, (D0t / dist) ** 2);
-      const ntree = Math.floor(PT[k] * keepT + (hsh & 255) / 256);
+      const ntree = treeU(hM) * Math.min(2, 1 / Math.sqrt(keepT)) * pxU / dist < MIN_PX ? 0 : Math.floor(PT[k] * keepT + (hsh & 255) / 256);
       if (ntree > 0) {
         const grow = Math.min(2, 1 / Math.sqrt(keepT));
         // tree size from the tallest plant, in metres (3..45 m) x the plants' magnification
@@ -420,8 +434,9 @@ export class Vegetation {
           const deciduous = form === OAK || form === POPLAR || form === UMBRELLA;
           if (deciduous && u2 > leafOn + 0.08) form = BARE;
           const hj = baseH * (0.72 + 0.5 * ((hsh >>> 24) & 15) / 16) * (form === UMBRELLA ? 0.75 : 1);
-          const wide = form === SPRUCE ? 0.95 : form === POPLAR ? 0.95 : 1.0;
-          const sh = hj * Math.sqrt(grow), sw = hj * wide * grow * (0.9 + 0.2 * u2);
+          // thinned far away, each kept tree stands for several: drawn bigger, but in its own proportions (it was
+          // widened twice as much as it was raised: far forests became squat balls)
+          const g2 = Math.sqrt(grow), sh = hj * g2, sw = hj * g2 * (0.9 + 0.2 * u2);
           p.set(x, v.heightAt(x, y) - 0.03 * sh, y); q.setFromAxisAngle(UP, (hsh & 63) / 10); s.set(sw, sh, sw);
           mat.compose(p, q, s);
           // foliage colour: the lineage's own shade, yellowing as the leaves go, snow in frost, charred in fire
@@ -432,7 +447,7 @@ export class Vegetation {
       }
       const keepS = Math.min(1, (D0s / dist) ** 2);
       hsh = hash1(hsh + 17);
-      const nsh = Math.floor(PS[k] * keepS + ((hsh >> 8) & 255) / 256);
+      const nsh = shrubU(hM) * Math.min(2, 1 / Math.sqrt(keepS)) * pxU / dist < MIN_PX ? 0 : Math.floor(PS[k] * keepS + ((hsh >> 8) & 255) / 256);
       if (nsh > 0) {
         const grow = Math.min(2, 1 / Math.sqrt(keepS)), bushH = shrubU(hM), bushNear = BUSH_NEAR * bushH;
         const thorny = Ly.TH ? Ly.TH[fi] / 255 : 0, fleshy = Ly.FF && Ly.FR ? (Ly.FF[fi] / 255) * Math.min(1, Ly.FR[fi] / 80) : 0;
@@ -458,7 +473,9 @@ export class Vegetation {
         const cx = Math.floor((gx + 0.5) * cs / S), cy = Math.floor((gy + 0.5) * cs / S);
         const at = (x, y) => H[(((y % fw) + fw) % fw) * fw + (((x % fw) + fw) % fw)];
         const sl = Math.hypot(at(cx + 1, cy) - at(cx - 1, cy), at(cx, cy + 1) - at(cx, cy - 1)) / (2 * S);
-        const hi = clamp01((at(cx, cy) / 55 - 0.62) * 3);
+        // high bare ground: the ground's own rockiness (world3d.js: steep, high or ridge cells; it was the cell's height over
+        // the 55-unit relief of before 2026-11-01, so every cell above ~1.9 km counted as the summits)
+        const hi = v.ground && v.ground.d.rock ? v.ground.d.rock[(((cy % fw) + fw) % fw) * fw + (((cx % fw) + fw) % fw)] : clamp01((at(cx, cy) / RELIEF_U - 0.62) * 3);
         const cover = Math.min(1, (Ly.T[fi] + Ly.S[fi] + 0.5 * (Ly.G ? Ly.G[fi] : 0)) / 255);
         const rocky = clamp01((sl - 0.32) * 2.2) + hi;
         let nr = Math.floor(rocky * (3.2 - 2.2 * cover) * Math.max(1, rockN) * (dist < 0.4 * rockR ? 1 : 0.5) + ((hsh >>> 9) & 255) / 256);
@@ -516,17 +533,22 @@ export class Vegetation {
       const x = (ix + (h & 255) / 256) * st, z = (iz + ((h >>> 8) & 255) / 256) * st;
       const r = Math.hypot(x - cam.x, z - cam.z); if (r > R) continue;
       const fx = ((Math.floor(x / cs) % d) + d) % d, fz = ((Math.floor(z / cs) % d) + d) % d, fi = fz * d + fx;
-      const cover = Ly.G[fi] / 255;
+      // reeds (FIELDS 'wetland', when sent): a marsh is a reed bed; they stand where its pools are not
+      const wl = Ly.WL ? Ly.WL[fi] / 255 : 0, reed = wl > 0.05 && ((h >>> 26) & 63) / 64 < Math.min(0.85, wl * 1.4);
+      const cover = reed ? Math.max(Ly.G[fi] / 255, 0.85 * wl) : Ly.G[fi] / 255;
       if (((h >>> 16) & 1023) / 1024 >= cover * 0.9) continue;
-      if (world.cell[v._cellOf(x, z)] !== 1) continue;
+      if (world.cell[v._cellOf(x, z)] !== 1 && !reed) continue;
       h = hash1(h);
       const fade = 1 - smooth(R * 0.7, R, r), sc = (0.4 + 0.4 * (h & 255) / 256) * (0.6 + 0.6 * cover) * fade * tuft;
       if (sc < 0.05 * tuft) continue;
-      p.set(x, v.heightAt(x, z) - 0.02 * sc, z); q.setFromAxisAngle(UP, ((h >>> 8) & 63) / 10); s.set(sc * 1.2, sc, sc * 1.2);
+      // a reed (Phragmites, sedges) 1.5-3 m tall and slender; a grass tuft half a metre
+      const tall = reed ? 2.8 : 1, thin = reed ? 0.55 : 1.2;
+      p.set(x, v.heightAt(x, z) - 0.02 * sc, z); q.setFromAxisAngle(UP, ((h >>> 8) & 63) / 10); s.set(sc * thin, sc * tall, sc * thin);
       g.setMatrixAt(n, mat.compose(p, q, s));
-      // as the terrain paints grass: green, yellowing where the soil is dry; frost whitens it
+      // as the terrain paints grass: green, yellowing where the soil is dry; frost whitens it; reeds straw and sage
       const dry = 1 - (Ly.M ? Ly.M[fi] / 255 : 0.5), j = 0.85 + 0.3 * ((h >>> 16) & 255) / 256;
-      col.setRGB((0.30 + 0.34 * dry) * j, (0.55 - 0.08 * dry) * j, 0.16 * j);
+      if (reed) { const lo = Ly.LO ? Ly.LO[fi] / 255 : 1; col.setRGB((0.36 + 0.28 * (1 - lo)) * j, (0.44 + 0.06 * (1 - lo)) * j, (0.24 + 0.06 * (1 - lo)) * j); }
+      else col.setRGB((0.30 + 0.34 * dry) * j, (0.55 - 0.08 * dry) * j, 0.16 * j);
       if (Ly.FZ && Ly.FZ[fi]) col.lerp(SNOW, 0.6 * Ly.FZ[fi] / 255);
       g.setColorAt(n++, col);
     }

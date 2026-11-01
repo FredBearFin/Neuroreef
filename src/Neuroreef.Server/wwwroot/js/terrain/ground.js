@@ -108,7 +108,7 @@ float shoreAt(vec2 wp) {
   vec2 g = wp / uS, c0 = floor(g), t = g - c0;
   return mix(mix(cellAt(c0).b, cellAt(c0 + vec2(1.0, 0.0)).b, t.x), mix(cellAt(c0 + vec2(0.0, 1.0)).b, cellAt(c0 + vec2(1.0, 1.0)).b, t.x), t.y);
 }
-vec3 riverWater(float flow) { return mix(vec3(0.07, 0.24, 0.30), vec3(0.03, 0.10, 0.17), flow); }
+vec3 riverWater(float flow) { return mix(vec3(0.07, 0.20, 0.23), vec3(0.03, 0.10, 0.14), flow); }   // as the ribbons' colours (world3d.js)
 `;
 
 const FRAG_MAIN = /* glsl */`
@@ -134,22 +134,36 @@ const FRAG_MAIN = /* glsl */`
     rockF = clamp(rockF * (1.0 - 0.8 * smoothstep(0.35, 0.9, plants)), 0.0, 1.0);
     float scree = nr.a * smoothstep(0.10, 0.15, sl) * (1.0 - rockF) * (1.0 - 0.85 * plants);   // talus: 30-37 degrees below the crags
     float vol = mat.g, sed = mat.b, lim = matB.r, cry = max(0.0, 1.0 - vol - sed - lim);
-    float band = mix(0.5, sin(vWP.y * 2.4 + (nMid - 0.5) * 6.0) * 0.5 + 0.5, 1.0 - smoothstep(0.4, 1.2, fwidth(vWP.y * 2.4)));
+    float band = mix(0.5, sin(vWP.y * 2.4 + (nMid - 0.5) * 6.0) * 0.5 + 0.5, 1.0 - smoothstep(0.3, 0.9, fwidth(vWP.y * 2.4)));
     vec3 cC = mix(vec3(0.1643, 0.1562, 0.1483), vec3(0.3619, 0.3371, 0.3017), nMid) * (0.80 + 0.40 * nFine);
     vec3 cV = mix(vec3(0.035, 0.032, 0.032), vec3(0.11, 0.075, 0.06), nMid) * (0.80 + 0.40 * nFine);
     vec3 cS = mix(vec3(0.2684, 0.1899, 0.1122), vec3(0.5004, 0.4143, 0.2793), band) * (0.85 + 0.30 * nFine);
     // limestone: pale grey
     vec3 cL = mix(vec3(0.3494, 0.3371, 0.2904), vec3(0.6121, 0.5954, 0.5156), nMid) * (0.82 + 0.36 * nFine);
     vec3 rockC = cC * cry + cV * vol + cS * sed + cL * lim;
-    // ledges: rock weathers into steps along its beds and joints (dark lines where a warped height crosses a step)
-    float ledgeArg = vWP.y * 0.9 + (nMid - 0.5) * 2.5 + (nBig - 0.5) * 4.0;
+    // ledges: bedded rock (sediments, limestone) weathers into steps along its beds (dark lines where a warped height
+    // crosses a bed). Granite and basalt have no beds: none there (2026-11-01 QA: on every rock they drew contour lines,
+    // terraces every 60 m up each mountain, dashed where they neared a pixel)
+    // The beds dip (~8 degrees, folded by the noise) rather than lie level, so they cross a slope instead of following
+    // its contours, and they show on cliffs (over ~40 degrees), not on every rocky slope.
+    float ledgeArg = (vWP.y + 0.12 * vWP.x + 0.06 * vWP.z) * 0.9 + (nMid - 0.5) * 3.5 + (nBig - 0.5) * 6.0;
     float ledge = fract(ledgeArg);
-    float ledgeAA = (1.0 - smoothstep(0.08, 0.2, fwidth(ledgeArg))) * smoothstep(0.5, 0.9, rockF);   // on bare rock; gone before finer than a pixel
+    float ledgeAA = (1.0 - smoothstep(0.02, 0.06, fwidth(ledgeArg))) * smoothstep(0.5, 0.9, rockF) * clamp(sed + lim, 0.0, 1.0) * smoothstep(0.22, 0.32, sl);
     float ledgeLine = smoothstep(0.82, 0.97, ledge) * ledgeAA;
     rockC *= 1.0 - 0.25 * ledgeLine;
     // alluvium: silt and sand on the flats beside rivers, under what grows there
     float allu = max(ch.a, mat.a) * (1.0 - smoothstep(0.03, 0.10, sl));
     col = mix(col, vec3(0.2793, 0.2176, 0.1332) * (0.9 + 0.2 * nFine), allu * (1.0 - plants) * 0.65);
+    // wetlands (FIELDS 'wetland', when the server sends it; tMat2.g): dark peat on the flats, and standing water in its
+    // hollows over about as much of the ground as the wetland's share, in pools among the reeds (look/vegetation.js)
+    float wetl = matB.g * (1.0 - smoothstep(0.04, 0.10, sl));
+    if (wetl > 0.004) {
+      col = mix(col, vec3(0.075, 0.058, 0.036) * (0.8 + 0.4 * nFine), smoothstep(0.0, 0.35, wetl) * (0.6 - 0.3 * plants));
+      float pn = nMid * 0.45 + texture(tNoise, vWP.xz / 7.0).r * 0.35 + nFine * 0.2;
+      float th = 0.78 - 0.45 * wetl;
+      float pool = smoothstep(th - 0.03, th + 0.03, pn) * smoothstep(0.05, 0.25, wetl);
+      col = mix(col, vec3(0.045, 0.065, 0.075), pool * 0.92);   // dark water, a little of the sky in it
+    }
     // beaches and wet ground along standing water
     float above = vWP.y - shoreAt(vWP.xz);
     float beach = (1.0 - smoothstep(0.1, 0.9, above)) * (1.0 - smoothstep(0.05, 0.15, sl)) * (1.0 - 0.7 * plants);
@@ -242,6 +256,10 @@ export class Ground {
       tChan: dataTex(d.chan, K, K, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
       tFeat: dataTex(d.feat, K, K, THREE.RGBAFormat, THREE.UnsignedByteType, true, true),
     };
+    // the cover colours are written as sRGB (as they are picked: soil, grass, forest); decoded to linear light by the GPU
+    // (2026-11-01 QA: read as linear they were a gamma too bright, dry soil at ~40 % albedo for ~15 %, and the whole
+    // map milky). The alpha (plant density) stays linear.
+    T.tCover.colorSpace = THREE.SRGBColorSpace;
     const U = this.uniforms = {
       tH: { value: T.tH }, tCarve: { value: T.tCarve }, tNoise: { value: noiseTexture() }, tNrm: { value: T.tNrm },
       tCover: { value: T.tCover }, tMat: { value: T.tMat }, tMat2: { value: T.tMat2 }, tChan: { value: T.tChan }, tFeat: { value: T.tFeat },
@@ -345,7 +363,7 @@ export class Ground {
 
   /** The cover colours (rgb) and plant density (a), RGBA bytes per cell. */
   coverUpdated() { this.tex.tCover.needsUpdate = true; }
-  /** Snow cover (r), volcanic (g) and sedimentary (b) shares, alluvium (a), RGBA bytes per cell. */
+  /** Snow cover (r), volcanic (g) and sedimentary (b) shares, alluvium (a); and (mat2) limestone (r), wetland (g). */
   matUpdated() { this.tex.tMat.needsUpdate = true; this.tex.tMat2.needsUpdate = true; }
 
   /** The drawn ground's height at a world position (x, z), the camera at cam: as the vertex shader computes it. */

@@ -219,7 +219,10 @@ export function ribbonGeometry(paths) {
     const n = p.x.length; if (n < 2) continue;
     let s = 0, prev = -1;
     for (let k = 0; k < n; k++) {
-      const a = Math.max(0, k - 1), b = Math.min(n - 1, k + 1);
+      // the direction across, from the course over about a half-width each way: a bend tighter than the strip's
+      // half-width otherwise folds its inner edge over itself (a fan of slivers, 2026-11-01 QA)
+      const win = Math.max(1, Math.min(8, Math.round(p.w[k] * 0.5 / STEP)));
+      const a = Math.max(0, k - win), b = Math.min(n - 1, k + win);
       let tx = p.x[b] - p.x[a], tz = p.z[b] - p.z[a]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
       if (k > 0) s += Math.hypot(p.x[k] - p.x[k - 1], p.z[k] - p.z[k - 1]);
       const hw = Math.max(0.45, p.w[k] * 0.625), y = p.lvl[k] + 0.03, v = P.length / 3;
@@ -259,11 +262,19 @@ export function patchRiverMaterial(m, U) {
         float a2 = texture(tNoise, vec2(vRiv.x * 0.11 - uTime * speed * 0.11, vRiv.y * 0.23 + 0.7)).r;
         float streak = a1 * 0.6 + a2 * 0.4;
         diffuseColor.rgb *= 0.9 + 0.22 * streak;
-        float foam = smoothstep(0.58, 0.78, streak + 0.3 * st) * smoothstep(0.3, 0.8, st);
-        foam = max(foam, smoothstep(0.75, 1.0, across) * smoothstep(0.4, 0.9, st) * a2);
-        foam *= 1.0 - smoothstep(0.25, 0.8, fwidth(vRiv.x));   // white water is a close-up thing: none once it is under a pixel
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.95, 0.96), foam * 0.85);
-        diffuseColor.a = (1.0 - smoothstep(0.62, 1.0, across)) * mix(0.82, 0.97, foam);
+        // white water (2026-11-01 QA): broken patches where the bed steps down (rapids, step pools), never a solid sheet:
+        // even the steepest reach is mostly dark, fast water between them (a solid white strip read as a road). A finer
+        // noise breaks each patch up; with distance the patches average to a pale tint and fade before they alias.
+        float a3 = texture(tNoise, vec2(vRiv.x * 0.37 - uTime * speed * 0.3, vRiv.y * 0.61 + 0.1)).r;
+        float rap = smoothstep(0.62, 0.80, a1 * 0.7 + a3 * 0.3 + 0.12 * st);
+        float foam = rap * smoothstep(0.45, 0.85, a3 + 0.1 * st) * smoothstep(0.3, 0.9, st);
+        foam = max(foam, smoothstep(0.8, 1.0, across) * smoothstep(0.5, 0.95, st) * smoothstep(0.55, 0.8, a2) * 0.6);
+        float px = fwidth(vRiv.x);
+        foam *= 1.0 - smoothstep(0.15, 0.5, px);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.86, 0.88), foam * 0.75 + 0.08 * st * smoothstep(0.15, 0.5, px));
+        // the water's edge is at across = 0.8 (the strip is 1.25 x its width), where the carved bank rises through the
+        // strip: faded out by then, so the depth test's cut (along two different tessellations) never shows as a comb
+        diffuseColor.a = (1.0 - smoothstep(0.5, 0.8, across)) * mix(0.82, 0.95, foam);
       }`);
   };
   m.customProgramCacheKey = () => 'nr-river-1';
