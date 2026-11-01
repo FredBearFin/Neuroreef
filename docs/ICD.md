@@ -37,6 +37,45 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | 16 + 4·FW² | u16[FW²] | standing water surface (2026-10-31, display only): for a cell of the sea or a lake, its water level (bed + depth) as normalised elevation × 65535, at least 1; 0 for land and rivers. Lakes in upland basins stand at their own levels, above or below the sea level. A client that predates it ignores the trailing plane and draws all standing water at the sea level |
 | 16 + 6·FW² | u8[FW²] | cave features (2026-11-01, Caves.cs; World.CaveKind), bits: 1 karst passage under the cell, 2 lava tube under the cell, 4 sinkhole (a doline or ponor that swallows surface water), 8 cave entrance (a resurgence, a collapse doline, a valley-wall opening or a lava-tube skylight; an animal there shelters in cave air), 16 karst spring (where a conduit discharges), 32 losing river (a river cell over karst that leaks into the conduits), 64 ponor (the sinkhole takes a stream from other rock). Bits combine (a collapse doline is 1+4+8). A client that predates it ignores the trailing planes |
 | 16 + 7·FW² | u8[FW²] | cave courses (2026-11-01, display only): 0 = none; for a cell with bit 1 or 2 above, bits 0-2 = the neighbour its conduit or tube runs to (the river direction codes; 0 also where it ends: a spring or a tube's lower end) and bits 3-7 = size class 1 + round(4·log2(conduit discharge / CAVE_Q_MIN)), 1..31 (quarter octaves; 1 for a lava tube). Following the directions from any cell with bit 1 stays on passage cells and leads to its spring |
+| 16 + 8·FW² | RIVERS | the rivers as lines (2026-11-01, display only; below). A client that predates it ignores the trailing section |
+
+**RIVERS section** (`Wire.Rivers`, built by `Hydrology.Lines`). Rivers are no longer chains of cell centres: each runs along a
+smooth line through the plane, meandering on low gradients, and its channel cells are the cells that line crosses. Draw a
+river as a curve through its points (a Catmull-Rom spline through them is smooth; straight segments are close enough at one
+point per cell) at the width each point gives, rather than from the river plane's per-cell directions.
+
+| Offset (from the section) | Type | Field |
+|---|---|---|
+| 0 | u32 | river count R |
+| 4 | u32 | point count V (all rivers) |
+| 8 | 16 B × R | river records, largest river (most discharge where it ends) first |
+| 8 + 16·R | 16 B × V | points, each river's in order from its head downstream |
+
+River record:
+
+| Offset | Type | Field |
+|---|---|---|
+| 0 | u32 | index of its first point |
+| 4 | u32 | number of points (at least 2) |
+| 8 | i32 | the river it joins (an index into the records, always smaller than its own), or −1 if it ends in a lake or the sea |
+| 12 | u8 | Strahler order where it ends |
+| 13 | u8 | how it ends: 0 joins a river, 1 a lake, 2 the sea |
+| 14 | u16 | reserved (0) |
+
+Point:
+
+| Offset | Type | Field |
+|---|---|---|
+| 0 | f32 | x in field cells: cell (i, j) spans [i, i+1) × [j, j+1), so its centre is (i + 0.5, j + 0.5) |
+| 4 | f32 | y in field cells (y is the row) |
+| 8 | f32 | the river's width there, in cells (1..RIVER_W_MAX; it never narrows downstream) |
+| 12 | f32 | its depth there, in normalised elevation (as World.Depth; the depth plane is this × 2000) |
+
+A river's points are the centreline points of its channel cells, one per cell, and a last point where it ends: on the river
+it joins (that river's point in the cell it flows into, so the two lines meet) or the centre of the lake or sea cell it
+flows into. Points are unwrapped along a river (the map is a torus): consecutive points are less than 2 cells apart, and
+x and y may fall outside [0, FW); take them modulo FW to place them. The river plane above still marks every river cell
+(channel and banks) with the neighbour it drains to, which is now the next cell along the line.
 
 ### 0x02 AGENTS (~20 Hz; `view.hz` sets the rate per client)
 

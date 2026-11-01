@@ -38,11 +38,14 @@ public static class Wire
     }
 
     /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River),
-    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit).</summary>
+    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit), then
+    /// the rivers as lines (2026-11-01, Rivers).</summary>
     public static byte[] EncodeWorld(World w)
     {
         int n = Map.FW * Map.FW;
-        var b = new byte[16 + 8 * n];
+        var lines = Hydrology.Lines(w);
+        int nv = 0; foreach (var l in lines) nv += l.Points.Count;
+        var b = new byte[16 + 8 * n + RiversSize(lines.Count, nv)];
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -56,7 +59,41 @@ public static class Wire
             b[16 + 6 * n + i] = w.CaveKind[i];
             b[16 + 7 * n + i] = Conduit(w, i);
         }
+        Rivers(b.AsSpan(16 + 8 * n), lines, nv);
         return b;
+    }
+
+    static int RiversSize(int rivers, int points) => 8 + 16 * rivers + 16 * points;
+
+    /// <summary>
+    /// The rivers as lines (2026-11-01; display only, so a river is drawn as the smooth, meandering line it runs along, not
+    /// as its cells): u32 river count R, u32 point count V; R records of u32 first point, u32 point count, i32 the river it
+    /// joins (-1: none), u8 Strahler order, u8 end (0 joins a river, 1 a lake, 2 the sea), u16 0; then V points of f32 x,
+    /// f32 y (field cells: cell (i, j) spans [i, i+1) x [j, j+1); unwrapped along a river, so take them modulo FW), f32
+    /// width (cells), f32 depth (normalised elevation, as the depth plane before x 2000). Largest river first
+    /// (Hydrology.Lines).
+    /// </summary>
+    static void Rivers(Span<byte> b, List<Hydrology.RiverLine> lines, int nv)
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(b, (uint)lines.Count);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(4), (uint)nv);
+        int o = 8, p = 8 + 16 * lines.Count, first = 0;
+        foreach (var l in lines)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(o), (uint)first);
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(o + 4), (uint)l.Points.Count);
+            BinaryPrimitives.WriteInt32LittleEndian(b.Slice(o + 8), l.Down);
+            b[o + 12] = (byte)Math.Clamp(l.Order, 0, 255); b[o + 13] = (byte)l.EndKind; b[o + 14] = 0; b[o + 15] = 0;
+            o += 16; first += l.Points.Count;
+            foreach (var (x, y, wd, d) in l.Points)
+            {
+                BinaryPrimitives.WriteSingleLittleEndian(b.Slice(p), x);
+                BinaryPrimitives.WriteSingleLittleEndian(b.Slice(p + 4), y);
+                BinaryPrimitives.WriteSingleLittleEndian(b.Slice(p + 8), wd);
+                BinaryPrimitives.WriteSingleLittleEndian(b.Slice(p + 12), d);
+                p += 16;
+            }
+        }
     }
 
     /// <summary>

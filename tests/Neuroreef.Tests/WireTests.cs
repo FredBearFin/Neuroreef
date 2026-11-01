@@ -87,4 +87,40 @@ public class WireTests
         Assert.Equal(P.EAT, snd.GetProperty("then")[0].GetProperty("p").GetInt32());
         Assert.Equal(F.N, snd.GetProperty("z").GetArrayLength());
     }
+
+    [Fact, BigWorld] // 2026-11-01: the WORLD frame ends with the rivers as lines (ICD.md, RIVERS), as Hydrology.Lines has them
+    public void WorldFrameCarriesRiverLines()
+    {
+        var w = new World(16, 3);
+        Terrain.Build(w);
+        var b = Neuroreef.Server.Wire.EncodeWorld(w);
+        int n = Map.FW * Map.FW, o = 16 + 8 * n;
+        int R = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o)), V = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o + 4));
+        Assert.Equal(o + 8 + 16 * R + 16 * V, b.Length);
+        var lines = Hydrology.Lines(w);
+        Assert.Equal(lines.Count, R);
+        Assert.True(R > 20, $"{R} rivers");
+        int pts = o + 8 + 16 * R, total = 0;
+        for (int k = 0; k < R; k++)
+        {
+            var r = b.AsSpan(o + 8 + 16 * k);
+            int first = (int)BinaryPrimitives.ReadUInt32LittleEndian(r), count = (int)BinaryPrimitives.ReadUInt32LittleEndian(r.Slice(4));
+            int down = BinaryPrimitives.ReadInt32LittleEndian(r.Slice(8));
+            Assert.Equal(total, first); total += count;
+            Assert.Equal(lines[k].Points.Count, count); Assert.Equal(lines[k].Down, down); Assert.Equal(lines[k].Order, r[12]); Assert.Equal(lines[k].EndKind, r[13]);
+            Assert.True(down < k);
+            for (int p = 0; p < count; p++)
+            {
+                var q = b.AsSpan(pts + 16 * (first + p));
+                var (x, y, wd, d) = lines[k].Points[p];
+                Assert.Equal(x, BinaryPrimitives.ReadSingleLittleEndian(q)); Assert.Equal(y, BinaryPrimitives.ReadSingleLittleEndian(q.Slice(4)));
+                Assert.Equal(wd, BinaryPrimitives.ReadSingleLittleEndian(q.Slice(8))); Assert.Equal(d, BinaryPrimitives.ReadSingleLittleEndian(q.Slice(12)));
+            }
+            // a river's first point lies in its head cell: a channel cell, at its centreline point
+            var (x0, y0, _, _) = lines[k].Points[0];
+            int c = World.WrapI((int)MathF.Floor(y0), Map.FW) * Map.FW + World.WrapI((int)MathF.Floor(x0), Map.FW);
+            Assert.True(RiverStats.IsChannel(w, c), $"river {k} starts off its channel");
+        }
+        Assert.Equal(V, total);
+    }
 }

@@ -22,7 +22,7 @@ using System.Collections.Generic;
 
 namespace Neuroreef;
 
-public static class Hydrology
+public static partial class Hydrology
 {
     /// <summary>The drainage of a heightmap: receiver (-1 at a lake), the cells in topological order (outlets first),
     /// the depression-filled surface and the rain each cell gathers.</summary>
@@ -30,7 +30,14 @@ public static class Hydrology
     {
         public readonly int[] Recv, Order;
         public readonly float[] Fill, Flow;
-        public Net(int n) { Recv = new int[n]; Order = new int[n]; Fill = new float[n]; Flow = new float[n]; }
+        /// <summary>(2026-11-01) Where flow spreads over the hillslope (D-infinity): the second receiver, and the share of
+        /// the cell's Flow it takes (Recv takes the rest); -1 and 0 where all of it goes to Recv.</summary>
+        public readonly int[] Recv2;
+        public readonly float[] Share;
+        /// <summary>Waters only (2026-11-01): what runs into each cell from above with the hillslopes' spread (cells of mean
+        /// land rain), the discharge that places the channel heads.</summary>
+        public float[]? HeadIn;
+        public Net(int n) { Recv = new int[n]; Order = new int[n]; Fill = new float[n]; Flow = new float[n]; Recv2 = new int[n]; Share = new float[n]; }
     }
 
     /// <summary>What an erosion pass did (whole-map sums, in elevation x cells).</summary>
@@ -40,7 +47,14 @@ public static class Hydrology
 
     /// <summary>
     /// Route rain over h on the torus. Cells below sea are lakes, the outlets; if there are none the lowest cell is.
-    /// Flow[i] = rain[i] + the Flow of every cell draining into i; at the lakes it sums to the whole map's rain.
+    /// Flow[i] = rain[i] + what every cell above passes to i; at the lakes it sums to the whole map's rain.
+    /// 2026-11-01: directions are not locked to the 8 neighbours. Each cell's flow direction is the steepest descent over
+    /// the 8 triangular facets around it (D-infinity: Tarboton 1997), an angle between a cardinal and a diagonal
+    /// neighbour. Below SPREAD_A of gathered rain (a hillslope) the flow is shared between the two in proportion to the
+    /// angle, so it spreads over a plane and gathers only where the ground converges (no D8 streaks). Above it the flow
+    /// is a stream and goes whole to one receiver, drawn between the two with the same odds (as Fairfield &amp; Leymarie
+    /// 1991's rho8), so a long stream runs down the true aspect on average instead of in steps of 45 degrees. The draw is
+    /// a hash of the cell and of the relief (deterministic; it changes as the relief does).
     /// </summary>
     public static void Route(float[] h, float sea, float[] rain, Net net) => Route(h, sea, rain, net, Map.FW, null, null);
 
@@ -75,8 +89,67 @@ public static class Hydrology
                     pq.Enqueue(j, fill[j]);
                 }
         }
+        // D-infinity directions on the filled surface: both facet neighbours lie strictly lower, so they came off the
+        // queue earlier and the pop order stays topological for both receivers
+        uint salt = Salt(h);
+        int[] recv2 = net.Recv2; float[] share = net.Share;
+        for (int i = 0; i < n; i++)
+        {
+            recv2[i] = -1; share[i] = 0f;
+            if (recv[i] < 0 || !Steepest(fill, i, FW, out int card, out int diag, out float frac)) continue;
+            bool toDiag = Rng.U(salt, 0, (uint)i, 0) < frac;
+            recv[i] = toDiag ? diag : card;
+            float sh = toDiag ? 1f - frac : frac;
+            if (sh > 0f) { recv2[i] = toDiag ? card : diag; share[i] = sh; }
+        }
+        float spread = K.SPREAD_A;
         for (int i = 0; i < n; i++) flow[i] = rain[i];
-        for (int q = n - 1; q >= 0; q--) { int c = order[q], r = recv[c]; if (r >= 0) flow[r] += flow[c]; }
+        for (int q = n - 1; q >= 0; q--)
+        {
+            int c = order[q], r = recv[c];
+            if (r < 0) continue;
+            float f = flow[c];
+            if (recv2[c] >= 0 && f < spread) { float s2 = share[c] * f; flow[recv2[c]] += s2; flow[r] += f - s2; }
+            else { flow[r] += f; recv2[c] = -1; share[c] = 0f; }   // a stream: all of it to its receiver
+        }
+    }
+
+    // the 8 triangular facets around a cell (Tarboton 1997): a cardinal and a diagonal neighbour each
+    static readonly int[] FcX = { 1, 0, 0, -1, -1, 0, 0, 1 }, FcY = { 0, -1, -1, 0, 0, 1, 1, 0 },
+                          FdX = { 1, 1, -1, -1, -1, -1, 1, 1 }, FdY = { -1, -1, -1, -1, 1, 1, 1, 1 };
+
+    /// <summary>
+    /// D-infinity (Tarboton 1997): the steepest downhill direction over the 8 facets around cell i of surface z, as the
+    /// facet's cardinal and diagonal neighbours and the share frac of the way from the first to the second (the angle
+    /// over 45 degrees). False if no neighbour is lower. Every neighbour it names is strictly lower than i.
+    /// </summary>
+    internal static bool Steepest(float[] z, int i, int FW, out int card, out int diag, out float frac)
+    {
+        int x = i % FW, y = i / FW;
+        float e0 = z[i], best = 0f, b1 = 0f, b2 = 0f; int bk = -1, kind = 0;
+        card = diag = -1; frac = 0f;
+        for (int k = 0; k < 8; k++)
+        {
+            int c = World.WrapI(y + FcY[k], FW) * FW + World.WrapI(x + FcX[k], FW);
+            int d = World.WrapI(y + FdY[k], FW) * FW + World.WrapI(x + FdX[k], FW);
+            float s1 = e0 - z[c], s2 = z[c] - z[d], s; int kd;
+            if (s1 > 0f && s2 >= 0f && s2 <= s1) { s = MathF.Sqrt(s1 * s1 + s2 * s2); kd = 0; }   // inside the facet
+            else if (s1 > 0f && s2 < 0f) { s = s1; kd = 1; }                                    // along its cardinal edge
+            else { s = (e0 - z[d]) * 0.70710678f; kd = 2; }                                      // along its diagonal edge
+            if (s > best) { best = s; bk = k; kind = kd; b1 = s1; b2 = s2; card = c; diag = d; }
+        }
+        if (bk < 0) return false;
+        frac = kind == 1 ? 0f : kind == 2 ? 1f : Math.Clamp(MathK.Atan2(b2, b1) * (4f / MathF.PI), 0f, 1f);
+        return true;
+    }
+
+    // a hash of the relief, so the draws between a cell's two directions change with the ground and the world
+    static uint Salt(float[] h)
+    {
+        uint s = 0x9E3779B9u;
+        int n = h.Length;
+        for (int k = 0; k < 32; k++) s = Rng.Pcg(s ^ (uint)BitConverter.SingleToInt32Bits(h[(int)(((long)k * 2 + 1) * n / 64)]));
+        return s;
     }
 
     /// <summary>
@@ -250,6 +323,21 @@ public static class Hydrology
         var recv = new int[n]; var order = new int[n]; var fill0 = new float[n]; var pos = new int[n];
         Flood(h, lake, level, recv, order, fill0);
         for (int q = 0; q < n; q++) pos[order[q]] = q;
+        // 2026-11-01: on open slopes (not inside a filled depression, whose cells keep the flood's receivers toward its
+        // spill point) each cell drains along its D-infinity direction (Tarboton 1997), as Route does: its two facet
+        // neighbours share a hillslope's water, and a stream goes whole to one of them drawn with the same odds. Both lie
+        // strictly lower on the fill, so the flood order stays topological
+        uint salt = Salt(h);
+        var recv2 = new int[n]; var share = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            recv2[i] = -1;
+            if (lake[i] >= 0 || fill0[i] > h[i] || !Steepest(fill0, i, FW, out int card, out int diag, out float frac)) continue;
+            bool toDiag = Rng.U(salt, 0, (uint)i, 0) < frac;
+            recv[i] = toDiag ? diag : card;
+            float sh = toDiag ? 1f - frac : frac;
+            if (sh > 0f) { recv2[i] = toDiag ? card : diag; share[i] = sh; }
+        }
 
         // depressions: connected cells under the same spill level
         var comp = new int[n]; Array.Fill(comp, -1);
@@ -390,23 +478,43 @@ public static class Hydrology
 
         // 6. mean discharge: the yield gathered down the drainage, and each full lake's surplus down its exit
         float[] Q = net.Flow;
-        var qd = new double[n];
-        for (int i = 0; i < n; i++) qd[i] = lake[i] >= 0 ? 0.0 : yld[i];
         int[] ord = net.Order;
-        for (int q = n - 1; q >= 0; q--) { int c = ord[q], r = rv[c]; if (r >= 0) qd[r] += qd[c]; }
-        for (int t = 0; t < nl; t++)
+        var qd = new double[n];
+        void Discharge()
         {
-            int l = w.LakeRank[t];
-            w.LakeDown[l] = -1;
-            if (l < ns) continue;
-            int c = w.LakeExit[l];
-            while (c >= 0 && lake[c] < 0) { qd[c] += lakeOut[l]; c = rv[c]; }
-            w.LakeDown[l] = c >= 0 ? lake[c] : -1;
+            for (int i = 0; i < n; i++) qd[i] = lake[i] >= 0 ? 0.0 : yld[i];
+            for (int q = n - 1; q >= 0; q--) { int c = ord[q], r = rv[c]; if (r >= 0) qd[r] += qd[c]; }
+            for (int t = 0; t < nl; t++)
+            {
+                int l = w.LakeRank[t];
+                w.LakeDown[l] = -1;
+                if (l < ns) continue;
+                int c = w.LakeExit[l];
+                while (c >= 0 && lake[c] < 0) { qd[c] += lakeOut[l]; c = rv[c]; }
+                w.LakeDown[l] = c >= 0 ? lake[c] : -1;
+            }
+            for (int i = 0; i < n; i++) Q[i] = lake[i] >= 0 ? 0f : (float)(qd[i] / K.P_MEAN);
         }
-        for (int i = 0; i < n; i++) Q[i] = lake[i] >= 0 ? 0f : (float)(qd[i] / K.P_MEAN);
-        Array.Copy(Q, w.Flow, n);
+        Discharge();
 
-        // 7. channels: heads by discharge and slope, and every cell below a head down to its lake or the sea
+        // 7. channels: heads by discharge and slope, and every cell below a head down to its lake or the sea. 2026-11-01:
+        // the discharge that places a head spreads over the hillslope as Route's does (D-infinity below SPREAD_A), so a
+        // plane gathers no streaks along the grid's lines and heads form where the ground converges (hollows)
+        var qs = new double[n];
+        for (int i = 0; i < n; i++) qs[i] = lake[i] >= 0 ? 0.0 : yld[i];
+        for (int l = ns; l < nl; l++) if (w.LakeExit[l] >= 0 && lake[w.LakeExit[l]] < 0) qs[w.LakeExit[l]] += lakeOut[l];
+        double spreadQ = K.SPREAD_A * scale * K.P_MEAN;
+        for (int q = n - 1; q >= 0; q--)
+        {
+            int c = ord[q], r = rv[c];
+            if (r < 0) continue;
+            int r2 = recv2[c];
+            if (r2 >= 0 && r == recv[c] && qs[c] < spreadQ) { double s2 = share[c] * qs[c]; qs[r2] += s2; qs[r] += qs[c] - s2; }
+            else qs[r] += qs[c];
+        }
+        var headIn = new float[n];
+        for (int i = 0; i < n; i++) headIn[i] = lake[i] >= 0 ? 0f : (float)((qs[i] - yld[i]) / K.P_MEAN);
+        net.HeadIn = headIn;
         var chan = new bool[n];
         float aMin = K.CHANNEL_A_MIN * scale, aBig = K.RIVER_ACC * scale;
         for (int q = n - 1; q >= 0; q--)
@@ -415,7 +523,7 @@ public static class Hydrology
             if (lake[c] >= 0 || r < 0) continue;
             // a head is fed from above: what runs in from upstream decides (a channel cell is water, and the rain on
             // its own ground never reaches the water cycle's streams)
-            float qin = Q[c] - (float)(yld[c] / K.P_MEAN);
+            float qin = headIn[c];
             if (!chan[c] && qin >= aMin)
             {
                 float down = lake[r] >= 0 ? level[lake[r]] : h[r];
@@ -425,8 +533,16 @@ public static class Hydrology
             if (chan[c] && lake[r] < 0) chan[r] = true;
         }
 
+        // 7b. (2026-11-01) the channels' own lines, smooth and meandering on low gradients (Channels); the drainage and
+        // the discharge then follow each river where it runs
+        Channels(w, lake, rv, ord, chan, Q, scale);
+        if (!TopoOrder(rv, ord)) throw new InvalidOperationException("Hydrology.Waters: the channels made a cycle");
+        Array.Copy(rv, w.Recv, n); Array.Copy(ord, w.DrainOrder, n);
+        Discharge();
+        Array.Copy(Q, w.Flow, n);
+
         // 8. hydraulic geometry: depth on every cell, a channel's width over its valley floor
-        Array.Clear(w.Depth);
+        Array.Clear(w.Depth); Array.Clear(w.RivW);
         var dep = w.Depth; var of = w.FloodFrom;
         Array.Fill(of, -1);
         for (int i = 0; i < n; i++)
@@ -440,6 +556,7 @@ public static class Hydrology
             // the river's half-width beyond its channel cell: every eligible cell within the whole cells of it, and the
             // lowest one of the next ring for a half cell more (a river 2 cells wide spreads to its lower side)
             float wd = MathF.Min(K.RIVER_W_MAX, MathF.Sqrt(MathF.Max(1f, qr)));
+            w.RivW[c] = wd;
             float rad = 0.5f * (wd - 1f);
             int full = (int)rad, ring = full + 1;
             bool half = rad - full >= 0.5f;

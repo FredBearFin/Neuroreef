@@ -179,6 +179,8 @@ public class WaterCycleTests
             // 2026-10-31: 60 sites (102 before): hollows big enough hold lakes now, and pond sites keep POND_GAP from the
             // denser river network
             // (with the geomorphology and the lakes together: 16 sites on seed 4; land graded by its rivers has few closed hollows)
+            // rivers along their own lines (2026-11-01): the denser channel network (CHANNEL_C 0.005) left 1 site POND_GAP
+            // from every river; pond sites may now lie POND_GAP_RIVER from a river (floodplain ponds): 36 sites on seed 4
             Assert.True(sites > 10, $"{sites} pond sites");
             int Ponded() { int c = 0; for (int i = 0; i < n; i++) if (w.PondSite[i] != 0 && w.Wet[i] == 2) c++; return c; }
             w.RainAnom = -1f;                  // a year without rain: they dry (bar those fed by groundwater)
