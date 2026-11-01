@@ -130,15 +130,140 @@ public class LocomotionTests
         finally { BodySize.Reset(); Map.Set(TestWorld.Side); }
     }
 
-    [Fact] // a flier walks slower than the same body without flight muscle (it carries it as dead load)
-    public void AWingHeavyFlierWalksSlower()
+    [Fact] // wings on the ground: one continuous function of the wing gene for flier and non-flier alike (wing-assisted
+           // running against the flight muscle's dead load), no jump at the flight threshold, and a wing-heavy flier slow
+    public void WingsOnTheGroundAreOneContinuousFunction()
     {
         var w = new World(16, 1);
         w.Genome[G.B_LEGS] = 127; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127; Body.Express(w, 0);
         float walker = w.PVLand[0];
         w.Genome[G.B_WINGS] = 127; Body.Express(w, 0);
         Assert.Equal(Loco.Fly, w.LocoOf(0));
-        Assert.Equal(walker * (1f - K.FLY_MUSCLE_MAX), w.PVLand[0], 3);
+        Assert.Equal(walker * Body.WingGroundFactor(1f), w.PVLand[0], 3);
+        Assert.True(w.PVLand[0] < 0.9f * walker);
+        // across the flight threshold the land speed changes by no more than one gene step does elsewhere
+        float prev = walker; bool crossed = false;
+        for (int g = -127; g <= 127; g++)
+        {
+            w.Genome[G.B_WINGS] = (sbyte)g; Body.Express(w, 0);
+            Assert.InRange(w.PVLand[0] / prev, 0.995f, 1.005f);
+            if (w.LocoOf(0) == Loco.Fly) crossed = true;
+            prev = w.PVLand[0];
+        }
+        Assert.True(crossed);
+    }
+
+    [Fact] // a juvenile's flight muscle grows with it: a newborn flier cannot take off, it fledges near adult size
+    public void JuvenilesFledgeWhenTheirFlightMuscleIsGrown()
+    {
+        float pm = 1f;
+        Assert.False(Body.CanTakeOff(1f, pm, 0.1f * pm, 0f, 1f));
+        Assert.False(Body.CanTakeOff(1f, pm, 0.4f * pm, 0f, 1f));
+        Assert.True(Body.CanTakeOff(1f, pm, 0.6f * pm, 0f, 1f));
+        Assert.True(Body.CanTakeOff(1f, pm, pm, 0f, 1f));
+        // smaller wings fledge later
+        Assert.False(Body.CanTakeOff(0.6f, pm, 0.7f * pm, 0f, 1f));
+        Assert.True(Body.CanTakeOff(0.6f, pm, 0.9f * pm, 0f, 1f));
+        // through Resolve: a newborn of a flying species stays on the ground however fast it wants to go
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try
+        {
+            var w = new World(16, 3);
+            Terrain.Build(w);
+            int cell = -1;
+            for (int c = 0; c < Map.FW * Map.FW; c++) if (w.Cell[c] == (byte)Realm.Land) { cell = c; break; }
+            Flier(w, 127);
+            w.StageOf[0] = St.Juvenile; w.Grown[0] = 0f;
+            Assert.True(w.MassOf(0) < 0.4f * w.PM[0]);
+            w.X[0] = (cell % Map.FW + 0.5f) * K.FCELL; w.Y[0] = (cell / Map.FW + 0.5f) * K.FCELL; w.Speed[0] = 0f;
+            w.Energy[0] = w.EmaxOf(0) * 0.9f; w.Gut[0] = 0f; w.IActs[0] = 0u; w.ISpeed[0] = w.PVAir[0]; w.ITarget[0] = -1; w.IMate[0] = -1;
+            Resolve.Run(w, 1, 0);
+            Assert.False(w.Airborne(0));
+        }
+        finally { Nature.Climate = climate; }
+    }
+
+    [Fact] // a load lowers the top air speed where power binds (Pennycuick 2008): a heavier body has less margin to spare
+    public void LoadLowersTopAirSpeed()
+    {
+        // a flier near its ceiling: margin 1.2, so power, not FLY_X_MAX, sets its top speed
+        float m = 1f, wings = 1.2f / Body.FlightMargin(1f, m), vmp = 10f;
+        float empty = Body.LoadedTopAirSpeed(vmp, m, 0f, Body.LoadedMargin(wings, m, m, 0f, 1f));
+        float fed = Body.LoadedTopAirSpeed(vmp, m, 0.1f, Body.LoadedMargin(wings, m, m, 0.1f, 1f));
+        Assert.True(fed < empty, $"empty {empty}, loaded {fed}");
+        // too heavy to hold level flight: it keeps only the speed of least power of its loaded weight
+        float heavy = Body.LoadedMargin(wings, m, m, 0.3f, 1f);
+        Assert.True(heavy < 1f);
+        Assert.Equal(vmp * MathK.Pow(1.3f, 0.5f), Body.LoadedTopAirSpeed(vmp, m, 0.3f, heavy), 3);
+    }
+
+    [Fact] // an endothermic flier pays a bird's basal metabolism: 30-50% above a mammal's of the same mass for wings that fly
+    public void FlightMuscleRaisesBasalLikeABirds()
+    {
+        var w = new World(16, 1);
+        w.Genome[G.B_LEGS] = 60; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127; Body.Express(w, 0);
+        float mammal = w.PBasal[0];
+        foreach (float organ in new[] { 0.5f, 0.6f, 0.8f })
+        {
+            w.Genome[G.B_WINGS] = (sbyte)MathF.Round(organ * 254f - 127f); Body.Express(w, 0);
+            Assert.Equal(Loco.Fly, w.LocoOf(0));
+            float ratio = (w.PBasal[0] - mammal) / (K.C_BASAL * MathK.Pow(w.PM[0], K.EXP_BASAL));   // against Kleiber's mammal
+            Assert.InRange(ratio, 0.25f, 0.55f);
+        }
+    }
+
+    [Fact] // a flier that kills ground prey from the air comes down on the kill to eat (raptors feed on the ground)
+    public void AFlierLandsOnItsKill()
+    {
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try
+        {
+            var w0 = new World(16, 3);
+            Terrain.Build(w0);
+            int cell = -1;
+            for (int c = 0; c < Map.FW * Map.FW && cell < 0; c++)
+            {
+                int cx = c % Map.FW, cy = c / Map.FW;
+                bool run = true;   // land under the predator's start and under its prey
+                for (int k = 0; k <= 2; k++) if (w0.Cell[cy * Map.FW + (cx + k) % Map.FW] != (byte)Realm.Land) run = false;
+                if (run) cell = c;
+            }
+            Assert.True(cell >= 0);
+            float x = (cell % Map.FW + 0.5f) * K.FCELL, y = (cell / Map.FW + 0.5f) * K.FCELL;
+            int landed = 0, kills = 0;
+            for (int t = 0; t < 30 && kills < 3; t++)
+            {
+                var w = new World(16, 3);
+                Terrain.Build(w);
+                w.Step = (ulong)t;
+                int a = Life.NewSlot(w), b = Life.NewSlot(w);
+                // the predator: a flier with weapons and a meat diet, travelling east at its air speed
+                var g0 = w.Genome.Slot(a);
+                g0[G.B_WINGS] = 127; g0[G.B_LEGS] = 60; g0[G.B_MASS] = 0; g0[G.B_STRIKE] = 127; g0[G.B_INSUL] = -127;
+                for (int p = 0; p < Pools.N; p++) g0[G.B_DIET + p] = -127;
+                g0[G.B_DIET + (int)Pool.Meat] = 127;
+                w.Spc[a] = 0; w.StageOf[a] = St.Adult; Body.Express(w, a);
+                w.X[a] = x; w.Y[a] = y; w.Speed[a] = w.PVAir[a]; w.Energy[a] = w.EmaxOf(a) * 0.5f; w.Gut[a] = 0f; w.GutEnergy[a] = 0f; w.Thirst[a] = 0f;
+                w.IActs[a] = 1u << (P.STRIKE - P.FIRST_ACTION); w.ISpeed[a] = w.PVAir[a]; w.IHeading[a] = 0f; w.ITarget[a] = b; w.IMate[a] = -1;
+                Assert.Equal(Loco.Fly, w.LocoOf(a));
+                // the prey: a small walker on the ground just ahead, nearly spent
+                var g1 = w.Genome.Slot(b);
+                g1[G.B_LEGS] = 60; g1[G.B_MASS] = -127; g1[G.B_WINGS] = -127; g1[G.B_STRIKE] = -127; g1[G.B_ARMOUR] = -127;
+                w.Spc[b] = 0; w.StageOf[b] = St.Adult; Body.Express(w, b);
+                float px = x + K.FCELL, py = y;
+                w.X[b] = px; w.Y[b] = py; w.Speed[b] = 0f; w.Energy[b] = 0.02f * w.EmaxOf(b); w.Thirst[b] = 0f;
+                w.IActs[b] = 0u; w.ISpeed[b] = 0f; w.ITarget[b] = -1; w.IMate[b] = -1;
+                Resolve.Run(w, 1, 0);
+                if (w.StageOf[b] == St.Dead)
+                {
+                    kills++;
+                    if (MathF.Abs(World.Delta1(w.X[a] - px)) < 1e-3f && MathF.Abs(World.Delta1(w.Y[a] - py)) < 1e-3f && !w.Airborne(a)) landed++;
+                }
+            }
+            Assert.True(kills > 0, "no kill in 30 tries");
+            Assert.Equal(kills, landed);
+        }
+        finally { Nature.Climate = climate; }
     }
 
     static void WithClimate(Action a)

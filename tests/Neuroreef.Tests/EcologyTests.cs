@@ -622,15 +622,16 @@ public class EcologyTests
         Assert.Equal(0, w.Flags[b] & Flag.Carrying);
     }
 
-    [Fact] // DESIGN §6.3: wings too small to fly still speed a runner (wing-assisted running)
-    public void PartialWingsHelpARunner()
+    [Fact] // DESIGN §6.3: wings too small to fly change a runner's speed only a little: flapping while running gives back most
+           // of what their muscle's dead load costs (wing-assisted running, Body.WingGroundFactor, 2026-11-01)
+    public void PartialWingsCostARunnerLittle()
     {
         var w = new World(16, 1);
         w.Genome[G.B_LEGS] = 100; w.Genome[G.B_FINS] = -127; w.Genome[G.B_MASS] = 60;
         w.Genome[G.B_WINGS] = -127; Body.Express(w, 0); float none = w.PVLand[0];
         w.Genome[G.B_WINGS] = -20; Body.Express(w, 0);
         Assert.NotEqual(Loco.Fly, w.LocoOf(0));
-        Assert.True(w.PVLand[0] > none);
+        Assert.InRange(w.PVLand[0] / none, 0.93f, 1f);
     }
 
     [Fact] // DESIGN §7.7 (Revision J): every founder carries the mating instinct; it is stronger in males
