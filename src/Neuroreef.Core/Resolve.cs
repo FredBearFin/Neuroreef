@@ -46,7 +46,7 @@ public static class Resolve
         var loco = w.LocoOf(i);
         int s = w.Spc[i];
         uint seed = w.Seed, step = (uint)w.Step;
-        float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
+        float mass = w.MassOf(i), emax = Body.Emax(mass), mf = mass / w.PM[i];
         var diet = w.DietOf(i);
         float r = 0f;   // what others do to it is added after all have moved (Run)
         float spent = 0f;   // energy spent this step on what it chose to do (strikes, calls, moving, keeping warm), Revision P
@@ -673,7 +673,7 @@ public static class Resolve
     static float Conceive(World w, int mother, int father, int n)
     {
         float birth = w.PBirth[mother];
-        float childE = K.F_BIRTH * K.C_EMAX * w.PM[mother] * birth;
+        float childE = K.F_BIRTH * Body.Emax(w.PM[mother] * birth);   // a share of the newborn's own reserve
         bool live = w.PLive[mother] != 0;
         float tissue = live ? 0f : TissueCost(birth, w.PM[mother]);
         int made = 0;
@@ -700,7 +700,7 @@ public static class Resolve
     }
 
     static float LitterCost(World w, int m)
-        => w.PLitter[m] * (K.F_BIRTH * K.C_EMAX * w.PM[m] * w.PBirth[m] + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
+        => w.PLitter[m] * (K.F_BIRTH * Body.Emax(w.PM[m] * w.PBirth[m]) + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
 
     /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
     public static float TissueCost(float birthShare, float adultMass) => K.C_CARC * adultMass * birthShare * K.RHO_MEAT / K.GROWTH_EFF;

@@ -480,7 +480,7 @@ public sealed class World
     /// <summary>Apparent size of one organism.</summary>
     public float ApparentMass(int i) => MassOf(i);
 
-    public float EmaxOf(int i) => K.C_EMAX * MassOf(i);
+    public float EmaxOf(int i) => Body.Emax(MassOf(i));
 
     /// <summary>Digestive efficiencies of slot i.</summary>
     public Span<float> DietOf(int i) => new Span<float>(PDiet, i * Pools.N, Pools.N);

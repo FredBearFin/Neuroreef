@@ -287,7 +287,7 @@ public static class Life
             }
         if (!ok && !RandomSite(w, c, realm, key, out x, out y)) { FreeSlot(w, c); return -1; }
         Place(w, c, clade, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
-        w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
+        w.Energy[c] = Body.Emax(w.PM[c]) * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
         if (adult) { w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9)); w.Grown[c] = 1f; }
         else { w.Age[c] = w.PMature[c] * 0.8f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9); w.Grown[c] = w.Age[c] / w.PMature[c]; }
         return c;

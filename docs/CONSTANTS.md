@@ -61,7 +61,10 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | EXP_SIGHT | 0.2 | - | sight range exponent | ECO: eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008) |
 | EXP_TURN | -0.2 | - | turn rate exponent | HT |
 | C_BASAL | 0.004 | E/step | basal cost at M=1 | ECO: Revision M, ecology review: x4, so an animal burns many times its tissue energy over a life (Rubner 1908; Speakman 2005) and fasts ~1/16 of a life, not a third (Lindstedt & Boyce 1985) |
-| C_EMAX | 2 | E/M | energy reserve per unit mass | ECO: stored reserve of the same order as tissue energy |
+| FAT_KG | 0.075 | kg | fat mass of a 1 kg body (x M^EXP_EMAX): the stored reserve (Emax) is this much lipid | ECO (2026-11-01): fat mass of mammals 0.075 M^1.19 kg (Calder 1984, after Pitts & Bullard 1968; the exponent Lindstedt & Boyce 1985 use for fasting endurance) |
+| EXP_EMAX | 1.19 | - | mass exponent of the fat store (the energy reserve): fat is a larger share of a bigger body | ECO (2026-11-01): fat ~M^1.19 (Calder 1984); with basal ~M^0.75 the fasting endurance scales as M^0.44 (Lindstedt & Boyce 1985) |
+| LIPID_KJ_G | 39.3 | kJ/g | energy of stored lipid | ECO: 39.3 kJ/g for fat (Blaxter 1989; Schmidt-Nielsen 1997) |
+| C_EMAX | 0.330622 | E | energy reserve at M=1 (Emax = C_EMAX x M^EXP_EMAX, Body.Emax): FAT_KG of lipid at LIPID_KJ_G, in energy units (one unit is BMR_W x STEP_S / C_BASAL) | derived (2026-11-01): 2.95 MJ = 0.331 E at 1 kg, so a body fasts 10 days at basal at 1 kg, 1.8 at 20 g and 37 at 20 kg (10.1 M^0.44 days; Lindstedt & Boyce 1985: fasting endurance ~M^0.44). Was 2 E per kg (17.8 MJ/kg, 45% of the body as fat at a full reserve; 61 days at 1 kg), justified only as of the order of tissue energy |
 | C_GUT | 0.3 | M/M | gut capacity per unit mass | HT |
 | C_DIGEST | 0.025 | M/step | digestion rate at M=1 | ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997) |
 | C_ABSORB | 0.028 | E/step | energy the gut can absorb per step at M=1 (x M^0.75): digestion passes rich digesta only as fast as their energy is taken up (Resolve), and the food a forager picks is worth at most this a step | ECO (2026-11-01): intestinal nutrient transport has a set capacity with modest spare (Karasov & Diamond 1983; Diamond 1991), and maximal sustained energy budgets reach ~7x basal (Hammond & Diamond 1997: lactating mice ~7, cold-exposed rodents 5-7, birds feeding young ~4). Before, mass alone bounded digestion, so seeds (7 E/M, 0.75 digestible), fruit and nectar gave 30-47x basal at 0.1 kg against 6.7x for grass |
@@ -128,11 +131,11 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | P0_STRIKE | 0.45 | - | base strike success | HT |
 | C_CONF | 0.25 | - | prey-group confusion | V1 |
 | C_STRIKE | 0.004 | E/M | cost of a strike | HT |
-| C_RETAL | 0.06 | E | retaliation per unit of excess defence | HT |
+| C_RETAL | 0.00991865 | E | retaliation per unit of excess defence: 3% of a 1 kg reserve | HT: tuned as 0.06 E against the old reserve of 2 E at 1 kg; kept as the same share of the reserve when the reserve became the fat store (2026-11-01) |
 | C_CARC | 0.5 | M/M | edible tissue (carcass) per unit body mass; also the tissue built in growth | ECO: about half of live mass is edible tissue |
 | JUV_DEFENCE | 0.25 | - | defence multiplier for juveniles | HT |
 | DEF_BASE | 0.5 | - | defence of an unarmoured body per unit mass (skin, muscle, bone) | ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999) |
-| C_DAMAGE | 0.4 | E | energy a landed hit removes per unit of strike power (strike x attacker mass) | ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H) |
+| C_DAMAGE | 0.0661243 | E | energy a landed hit removes per unit of strike power (strike x attacker mass): 20% of a 1 kg reserve | ECO: wounding scales with weapon force; an armed attacker subdues equal-sized prey in a few hits (Revision H): 5 hits of strike 1 at 1 kg. Was 0.4 E against the old reserve of 2 E at 1 kg; kept as the same share of the reserve when the reserve became the fat store (2026-11-01), so a bigger body takes a few more (x M^0.19) |
 | C_DRAIN | 0.05 | E | parasite drain per strike at M=1 | HT |
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |

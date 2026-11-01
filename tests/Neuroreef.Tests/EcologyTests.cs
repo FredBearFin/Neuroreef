@@ -809,6 +809,41 @@ public class EcologyTests
         Assert.InRange(r / fenchel, 1.0, 4.0);
     }
 
+    [Fact] // the reserve is the body's fat (2026-11-01): fat 0.075 M^1.19 kg (Calder 1984) at 39.3 kJ/g, so a body fasting at
+    // basal lasts 10.1 M^0.44 days (Lindstedt & Boyce 1985): ~3.7 days at 0.1 kg, ~10 at 1 kg, ~37 at 20 kg
+    public void FastingEnduranceAtBasalMatchesFatAllometry()
+    {
+        // the reserve holds the fat's energy, in joules, whatever the energy unit
+        foreach (float m in new[] { 0.02f, 1f, 20f, 1000f })
+            Assert.Equal(0.075 * Math.Pow(m, 1.19) * 39.3e6, Body.Emax(m) * (double)Pools.EnergyJ, 0.002 * 0.075 * Math.Pow(m, 1.19) * 39.3e6);
+        Assert.InRange(Body.Emax(1f) / K.C_BASAL / K.STEPS_PER_DAY, 9.8f, 10.3f);
+        Assert.InRange(Body.Emax(20f) / (K.C_BASAL * MathK.Pow(20f, K.EXP_BASAL)) / K.STEPS_PER_DAY, 36.5f, 38.5f);
+        // a lone adult with no food, standing still in the thermoneutral zone, paying Kleiber's basal (no brain, no extras),
+        // lives as many days as its fat pays for its metabolism
+        foreach (float m in new[] { 0.1f, 1f, 20f })
+        {
+            var w = new World(8, 1);
+            Array.Fill(w.Temp, 20f); Array.Fill(w.Moisture, 1f);
+            int i = Life.NewSlot(w);
+            Brain.RandomGenome(w.GenomeOf(i), 1, 0, 1);
+            int g = i * G.LEN;
+            w.Genome[g + G.B_LEGS] = 100; w.Genome[g + G.B_FINS] = -127; w.Genome[g + G.B_WINGS] = -127; w.Genome[g + G.B_ENDO] = 127;
+            w.Spc[i] = 0; w.StageOf[i] = St.Adult; w.Sp[0].Used = true; w.Sp[0].Alive = true;
+            Body.Express(w, i); Brain.InitLife(w, i);
+            w.PM[i] = m; w.PBrain[i] = 0; w.PBasal[i] = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+            w.X[i] = 1f; w.Y[i] = 1f; w.Energy[i] = w.EmaxOf(i); w.Age[i] = 1f; w.Gut[i] = 0f; w.GutEnergy[i] = 0f;
+            int steps = 0;
+            while (w.StageOf[i] != St.Dead && steps < 20000)
+            {
+                w.IActs[i] = 0; w.ITarget[i] = -1; w.IMate[i] = -1; w.ISpeed[i] = 0; w.Thirst[i] = 0f; w.Age[i] = 1f;
+                Resolve.Run(w, 1, 0); w.Step++; steps++;
+            }
+            Assert.Equal(1L, w.T.Deaths[Cause.Starve]);
+            double days = steps / K.STEPS_PER_DAY, expect = 0.075 * Math.Pow(m, 1.19) * 39.3e3 / (3.39 * Math.Pow(m, 0.75) * 86.4);
+            Assert.InRange(days / expect, 0.9, 1.05);
+        }
+    }
+
     [Fact] // NR-322: growth is limited by spare energy: a hungry juvenile does not grow, a fed one grows and matures at adult size
     public void GrowthIsLimitedBySpareEnergy()
     {

@@ -191,6 +191,13 @@ public static class Body
 
     /// <summary>Body length in metres (2026-11-01): the side of a cube of its volume at the density of water, BODY_L_M x
     /// M^(1/3) (M in kg), times its length gene's share of that cube (Dimensions: length x width x height = 1).</summary>
+    /// <summary>
+    /// The energy reserve of a body of mass m (kg): the energy of its fat, C_EMAX x m^EXP_EMAX (FAT_KG x m^1.19 kg of lipid
+    /// at LIPID_KJ_G; Calder 1984). Fat is a larger share of a bigger body, so fasting endurance at basal grows as m^0.44
+    /// (Lindstedt &amp; Boyce 1985): 10 days at 1 kg, 37 at 20 kg (2026-11-01; was 2 E per kg, 61 days at 1 kg).
+    /// </summary>
+    public static float Emax(float m) => K.C_EMAX * MathK.Pow(m, K.EXP_EMAX);
+
     public static float LengthM(float m, float lengthShare) => K.BODY_L_M * MathK.Cbrt(m) * lengthShare;
 
     /// <summary>Body length in metres of organism i at its present mass (a juvenile is smaller), for the console.</summary>
