@@ -113,7 +113,8 @@ public static class Body
                      + K.COST_LIMB * fins * finPairs * 0.5f + K.COST_WING * wings   // legs pay while they walk (LEG_SWING), flight while airborne
                      + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
                      + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice
-                     + K.COST_INS * ins + K.COST_APP * app;
+                     + K.COST_INS * ins + K.COST_APP * app
+                     + Respiration.OrganUpkeep(w.PLungs[i]);   // lungs and gills, with their fixed overheads (2026-11-01)
         // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
         w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;

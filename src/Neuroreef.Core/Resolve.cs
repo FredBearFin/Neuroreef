@@ -56,7 +56,7 @@ public static class Resolve
         var metrics = Decide.Metrics;
 
         // ---- 1. move (realm rule, DESIGN §9.2)
-        float h = w.IHeading[i], spd = w.ISpeed[i];
+        float h = w.IHeading[i], spd = w.ISpeed[i] * Respiration.Stamina(w, i);   // out of breath, it slows (2026-11-01)
         float nx = w.X[i], ny = w.Y[i];
         float x0 = nx, y0 = ny;   // where its way this step began: a strike or a mating reaches along the way (2026-11-01)
         // a flier lands whenever it can and is not travelling faster than it walks: resting, eating food that is here or
@@ -328,14 +328,15 @@ public static class Resolve
         // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
         // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
         bool immersed = waterCell && !airborne;
-        float top = K.T_REF, core = K.T_BODY, rateT = 1f;
+        float top = K.T_REF, core = K.T_BODY, rateT = 1f, gutT = 1f;
         if (Climate.On)
         {
             top = Heat.Operative(w, cell, w.PInsul[i], immersed);
             // below the mixed layer the water is colder (Respiration.WaterT), for the share of the step it is down there
             if (immersed && w.ZShare[i] > 0f) top += w.ZShare[i] * (Respiration.WaterT(w, cell, w.Z[i]) - top);
             core = Heat.Core(top, w.PEndo[i]);
-            rateT = Heat.Rate(core);
+            rateT = Heat.Activity(core, w.PEndo[i]);   // its core's temperature and its tissues' metabolic level (2026-11-01)
+            gutT = Heat.Rate(core);                    // its gut's enzymes follow the core's temperature alone
         }
         float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (1f + Pathogens.Sickness(w, i));   // the pathogen's take and the immune response (Revision R)
         // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
@@ -358,6 +359,8 @@ public static class Resolve
             Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core);
             // a body kept below T_BODY that makes more heat than it loses just runs a little warmer: it need not shed it
             if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
+            // a core below freezing is a cold shortfall it cannot make up (2026-11-01: before, a cold-blooded body took any frost)
+            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core);
             w.TOp[i] = top;
             w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
             // what it cannot cover strains it; a body recovers from a little strain each step
@@ -387,9 +390,9 @@ public static class Resolve
         float dgDe = 0f;   // census: energy absorbed this step
         if (w.Gut[i] > 1e-7f)
         {
-            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
+            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT);   // a cold gut digests slowly (Revision P)
             // the gut's absorptive capacity (C_ABSORB, 2026-11-01): rich digesta pass only as fast as their energy is taken up
-            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT;
             if (dg != null) { if (d >= w.Gut[i]) { } else if (w.GutEnergy[i] * d / w.Gut[i] > absorbE) dg.AbsorbCapped[dgG]++; else dg.DigCapped[dgG]++; }
             if (w.GutEnergy[i] > absorbE) d = MathF.Min(d, w.Gut[i] * absorbE / w.GutEnergy[i]);
             float frac = d / w.Gut[i];
@@ -423,7 +426,7 @@ public static class Resolve
         if (w.Energy[i] <= 0)
         {
             if (dg != null && hurt4 > 1e-6f) dg.StarveHurt[dgG]++;
-            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
+            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
             Die(w, i, Cause.Starve, -1); return;
         }
         if (w.Thirst[i] >= 1f) { Die(w, i, Cause.Thirst, -1); return; }
