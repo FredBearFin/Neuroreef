@@ -570,18 +570,19 @@ public static partial class Hydrology
         Discharge();
         Array.Copy(Q, w.Flow, n);
 
-        // 8. hydraulic geometry: depth on every cell, a channel's width over its valley floor
+        // 8. hydraulic geometry: depth on every cell, a channel's width over its valley floor. 2026-11-01: depths in metres
+        // (World.ElevPerM): standing water to its shoreface profile (Bathymetry), rivers by their discharge in m3/s
         Array.Clear(w.Depth); Array.Clear(w.RivW);
         var dep = w.Depth; var of = w.FloodFrom;
         Array.Fill(of, -1);
-        for (int i = 0; i < n; i++)
-            if (lake[i] >= 0) dep[i] = MathF.Max(level[lake[i]] - h[i], 1e-5f);
+        Bathymetry(w, lake, level);
+        float epm = w.ElevPerM;
         for (int c = 0; c < n; c++)
         {
             if (!chan[c]) continue;
             float qr = Q[c] / (K.RIVER_Q1 * scale);
-            float d = K.SHALLOW * MathF.Min(1f, K.RIVER_D * MathK.Pow(qr, K.RIVER_DEPTH_EXP));
-            dep[c] = MathF.Max(d, 1e-5f); of[c] = c;
+            float d = DepthM(Q[c]) * epm;
+            dep[c] = MathF.Max(d, 1e-5f * epm); of[c] = c;
             // the river's half-width beyond its channel cell: every eligible cell within the whole cells of it, and the
             // lowest one of the next ring for a half cell more (a river 2 cells wide spreads to its lower side)
             float wd = MathF.Min(K.RIVER_W_MAX, MathF.Sqrt(MathF.Max(1f, qr)));
@@ -610,9 +611,52 @@ public static partial class Hydrology
                 if (dj > dep[j]) { dep[j] = dj; of[j] = c; }
             }
         }
+        float shE = w.ShallowE;
         for (int i = 0; i < n; i++)
-            w.Cell[i] = (byte)(dep[i] <= 0f ? Realm.Land : dep[i] <= K.SHALLOW ? Realm.Shallow : Realm.Deep);
+            w.Cell[i] = (byte)(dep[i] <= 0f ? Realm.Land : dep[i] <= shE ? Realm.Shallow : Realm.Deep);
         return net;
+    }
+
+    /// <summary>Mean discharge in m3/s of a flow of q cells of mean land rain (Flow): q x P_MEAN over a GEO_CELL_M cell.</summary>
+    public static float M3s(float q) => MathF.Max(q, 0f) * K.P_MEAN * 1e-3f * K.GEO_CELL_M * K.GEO_CELL_M / (365.25f * 86400f);
+
+    /// <summary>A channel's mean depth (m) at a flow of q cells of mean land rain: RIVER_D Q^RIVER_DEPTH_EXP with Q in m3/s
+    /// (Leopold &amp; Maddock 1953), RIVER_D_MIN to RIVER_D_MAX. In metres whatever the cell size (2026-11-01).</summary>
+    public static float DepthM(float q) => Math.Clamp(K.RIVER_D * MathK.Pow(M3s(q), K.RIVER_DEPTH_EXP), K.RIVER_D_MIN, K.RIVER_D_MAX);
+
+    /// <summary>A channel's real width (m) at a flow of q cells of mean land rain: RIVER_W Q^0.5 with Q in m3/s (Leopold &amp;
+    /// Maddock 1953), at least RIVER_D_MIN x 4; narrower than a cell on most maps. World.RivW (cells) is how wide a river
+    /// is drawn and drunk from; this is the water itself (2026-11-01: for the renderer and a finer grid).</summary>
+    public static float WidthM(float q) => MathF.Max(4f * K.RIVER_D_MIN, K.RIVER_W * MathF.Sqrt(M3s(q)));
+
+    /// <summary>
+    /// Depth of the sea and the lakes (2026-11-01). The relief leaves basins whose floors lie as deep below their water as
+    /// the jagged ground around them stands above it (100-1,000 m on the default map). Standing water fills its basin with
+    /// sediment to a shoreface (Dean 1977, 1991: h = SHORE_A x^(2/3) at x m from the shore, the equilibrium profile that
+    /// waves build on sandy coasts and lake shores) down to its closure depth SHORE_HC, and below it to a sublittoral slope
+    /// SHORE_S: a littoral of 0-5 m, deepening offshore. Where the ground lies higher than that profile it stays as it is.
+    /// The bed (Elev) is raised to it, so the water's surface (Elev + Depth) stays at its level. The shore is the nearest
+    /// cell that is not sea or lake (land or a river mouth), x from a cell's centre to the edge of that ring.
+    /// </summary>
+    static void Bathymetry(World w, int[] lake, float[] level)
+    {
+        int n = Map.FW * Map.FW;
+        var shore = new byte[n]; var dist = new float[n];
+        for (int i = 0; i < n; i++) shore[i] = (byte)(lake[i] >= 0 ? 0 : 1);
+        Terrain.Distance(shore, 1, dist);
+        float epm = w.ElevPerM, xc = MathK.Pow(K.SHORE_HC / K.SHORE_A, 1.5f);
+        for (int i = 0; i < n; i++)
+        {
+            if (lake[i] < 0) continue;
+            float x = MathF.Max(0.5f, dist[i] - 0.5f) * K.GEO_CELL_M;
+            float prof = x <= xc ? K.SHORE_A * MathK.Pow(x, 2f / 3f) : K.SHORE_HC + K.SHORE_S * (x - xc);
+            float lv = level[lake[i]], d = MathF.Max(MathF.Min(lv - w.Elev[i], prof * epm), 1e-5f * epm);
+            w.Elev[i] = lv - d; w.Depth[i] = d;
+        }
+        // each body's deepest point (mm), for its wetted area as it falls (WaterCycle.Wetted)
+        float mm = 1000f / epm;
+        for (int l = 0; l < w.LakeCount; l++) w.LakeDepth[l] = 1f;
+        for (int i = 0; i < n; i++) if (lake[i] >= 0) w.LakeDepth[lake[i]] = MathF.Max(w.LakeDepth[lake[i]], w.Depth[i] * mm);
     }
 
     // the sea: connected regions below SeaLevel of SEA_MIN of the map or more, and the largest; returns their count

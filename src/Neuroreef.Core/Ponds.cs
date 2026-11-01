@@ -29,7 +29,8 @@ public static class Ponds
             if ((w.Cell[i] & (byte)Realm.Water) != 0) v = 1;
             else if (on && w.Temp[i] >= 0f)
             {
-                if ((w.PondSite[i] != 0 && w.PondWater[i] >= K.POND_WET) || w.Seep[i] >= springMin) v = 2;
+                // 2026-11-01: and a waterlogged wetland, whose water stands shallow among its plants (Wetlands)
+                if ((w.PondSite[i] != 0 && w.PondWater[i] >= K.POND_WET) || w.Seep[i] >= springMin || (w.Wetland[i] != 0 && (w.WetNow[i] & 1) != 0)) v = 2;
                 else if (w.FloodFrom[i] >= 0)
                 {
                     // the river's stage reaches the cell: FLOOD_MIX of the nutrient difference passes from the river cell

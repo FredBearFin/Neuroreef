@@ -88,6 +88,7 @@ public sealed class Simulation : IDisposable
         if (rain != null) Terrain.Finish(W, rain); else Terrain.Build(W);
         WaterCycle.Init(W, (job, n) => _pool.Run(job, n));   // rain, soil, groundwater, rivers, ponds and lakes in their seasonal state, before founders are fed
         SpinUp(K.PLANT_SPINUP * Nature.SeasonLength);   // the plants grow into what their genes can hold before the animals come (Revision S)
+        Wetlands.Holocene(W);   // the peat its waterlogged ground laid down since the last glaciation, and the wetlands' kinds (2026-11-01)
     }
 
     /// <summary>

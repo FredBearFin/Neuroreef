@@ -199,7 +199,7 @@ export class World3D {
     const ctx = {
       S, fw, U, sea, SF, H, broad, isLake: lake, lift: LAND_LIFT, ground: groundRaw, cellOf: (x, z) => this._cellOf(x, z),
       widthOfClass: (c) => riverWidth(c, RIVER_W0, RIVER_WMAX), widthOf: (i) => riverWidth(riv[i] >> 3, RIVER_W0, RIVER_WMAX),
-      depthOf: (i) => Math.min(1.2, Math.max(0.15, (w.depth[i] / 2000) * U)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
+      depthOf: (i) => Math.min(1.2, Math.max(0.15, depthM(w, i) * RELIEF / 8000)), flowOf: (i) => Math.min(1, (riv[i] >> 3) / 31),
     };
     const paths = fromWire(w, ctx) || fromCells(w, riv, ctx);
     const feats = decodeFeatures(w, S, groundRaw);
@@ -412,7 +412,9 @@ export class World3D {
     // lakes: shallow water turquoise, deep water dark blue (depth below the water's level at each corner); algae and plankton tint it green
     const LC = this.lakeColor, LV = this.lakeVC, LL = this.lakeVL;
     for (let v = 0; v < LV.length; v++) {
-      const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, LL[v] - this.cellH[i]) / 2.0);
+      // 2026-11-01: depths are metres now (a littoral of 0-5 m, lakes 10-40 m, the sea to ~200 m): dark from 30 m
+      // (RELIEF units are 8,000 m, whatever the cell size)
+      const i = LV[v], fi = fieldOf(i), dd = Math.min(1, Math.max(0, LL[v] - this.cellH[i]) / (30 * RELIEF / 8000));
       const al = f ? algae[fi] / 255 : 0, ph = f ? phyto[fi] / 255 : 0;
       LC[v * 4] = 0.10 - 0.07 * dd + 0.06 * al; LC[v * 4 + 1] = 0.40 - 0.24 * dd + 0.18 * al + 0.10 * ph; LC[v * 4 + 2] = 0.48 - 0.18 * dd + 0.02 * ph;
       LC[v * 4 + 3] = 0.62 + 0.33 * dd;
@@ -422,7 +424,7 @@ export class World3D {
     const RC = this.rivColor, RV = this.rivVC, U = RELIEF / (1 - sea);
     for (let v = 0; v < RV.length; v++) {
       const i = RV[v], fi = fieldOf(i), al = f ? algae[fi] / 255 : 0;
-      const dd = Math.min(1, Math.max((w.depth[i] / 2000) * U / 0.6, (this.riv[i] >> 3) / 24));
+      const dd = Math.min(1, Math.max(depthM(w, i) / 5, (this.riv[i] >> 3) / 24));   // 5 m: a deep river
       RC[v * 3] = 0.24 - 0.15 * dd + 0.05 * al; RC[v * 3 + 1] = 0.52 - 0.20 * dd + 0.12 * al; RC[v * 3 + 2] = 0.58 - 0.12 * dd;
       if (frozen && frozen[fi]) { RC[v * 3] = 0.82; RC[v * 3 + 1] = 0.89; RC[v * 3 + 2] = 0.95; }
     }
@@ -1184,8 +1186,11 @@ function wrapPatch(mat, U, key) {
   };
 }
 
+/** Water depth of cell i, m, from the WORLD frame's depth plane (2026-11-01: round(16 sqrt(m)); ICD §WORLD). */
+function depthM(w, i) { const b = w.depth[i] / 16; return b * b; }
+
 /** The river plane for a server that does not send it: open water above lake level drains to its lowest wet
- *  neighbour (else its lowest), sized from its depth (depth = SHALLOW x RIVER_D x (flow / threshold)^0.4). */
+ *  neighbour (else its lowest), sized from its depth (2026-11-01: m = RIVER_D x Q^0.4, Q in m3/s). */
 function deriveRivers(w) {
   const fw = w.fw, n = fw * fw, out = new Uint8Array(n), seaB = Math.ceil(w.sea * 255);
   for (let i = 0; i < n; i++) {
@@ -1197,7 +1202,7 @@ function deriveRivers(w) {
       if (w.cell[j] !== 1 && e <= w.elev[i] && e < be) { be = e; best = k; }
       if (e < ae) { ae = e; any = k; }
     }
-    const ratio = Math.pow(Math.max(1e-3, (w.depth[i] / 2000) / (0.035 * 0.5)), 2.5);
+    const ratio = Math.pow(Math.max(1e-3, depthM(w, i) / 0.3), 2.5);   // RIVER_D 0.3 m at 1 m3/s, depth ~ Q^0.4
     const size = Math.min(31, Math.max(1, 1 + Math.round(4 * Math.log2(Math.max(1, ratio)))));
     out[i] = (size << 3) | (best >= 0 ? best : any);
   }

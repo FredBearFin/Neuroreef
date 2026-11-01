@@ -14,11 +14,14 @@ public class RespirationTests
     {
         var w = new World(16, 31);
         Array.Fill(w.Cell, water ? (byte)Realm.Shallow : (byte)Realm.Land);
-        if (water) Array.Fill(w.Depth, depthM * w.ElevPerM);
+        if (water) Array.Fill(w.Depth, MathF.Min(depthM, K.SHALLOW) * w.ElevPerM);
         Array.Fill(w.Moisture, 0.5f);
         w.Sp[0].Used = true; w.Sp[0].Alive = true;
         int i = Life.Found(w, 0, ReadOnlySpan<sbyte>.Empty, true, 1);
         Assert.True(i >= 0);
+        // the column's depth after founding (2026-11-01: a random founder's fins reach SHALLOW x (1 + SWIM_DEPTH_RANGE x
+        // fins), 52 m at fins 0.1, and could not be founded in a 500-m column)
+        if (water) Array.Fill(w.Depth, depthM * w.ElevPerM);
         long o = (long)i * G.LEN;
         w.Genome[o + G.B_LUNGS] = lungs; w.Genome[o + G.B_FINS] = fins; w.Genome[o + G.B_LEGS] = legs; w.Genome[o + G.B_WINGS] = wings;
         w.Genome[o + G.B_INSUL] = fur; w.Genome[o + G.B_DIVE] = -127;
