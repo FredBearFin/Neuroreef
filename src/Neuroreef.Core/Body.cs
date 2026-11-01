@@ -3,7 +3,7 @@
 // threshold that decides what a body "is". Each trait has a physical cost, so evolution trades them off:
 //   mass       everything scales by allometry (Kleiber): a bigger body costs more and matures later
 //   legs, fins, wings  locomotion organs: speed on land, in water and in the air follows smoothly from their
-//              sizes; a body flies when its flight muscles' power (~wings x M^0.7) reaches the least power flight
+//              sizes; a body flies when its flight muscles' power (~wings x M^(2/3)) reaches the least power flight
 //              requires (~M^(7/6)), and stays in deep water when it swims well enough; fins and wings cost upkeep,
 //              legs cost their swing while walking and flight its power while airborne (Resolve)
 //   leg pairs, fin pairs, eye pairs   how many: more legs share the body's weight, steady a small body on rough
@@ -122,16 +122,11 @@ public static class Body
         w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * (1f + K.FIN_TURN * (finPairs - 1) * fins);
 
         // locomotion: smooth speeds in each medium from the organ sizes. On land the legs carry the body's weight and its
-        // armour: bone stress grows as M^(1/3), and more legs share it (LOAD_DRAG; an unarmoured two-pair body is the
-        // allometry's own reference). In water and air armour only adds drag
+        // armour, and the bones' safety factor limits how fast it can go (BoneLoad). In water and air armour only adds drag
         float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED);   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
         float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
-        float loadDrag = K.LOAD_DRAG * MathK.Cbrt(m) * ((1f + armour) / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1) - 0.70710678f);
-        // legs that share the weight better than the reference make the drag negative; the gain is at most twice the plain
-        // body's speed, as a speed ratio is elsewhere (ReachM). Up to 40 kg it never binds (-0.14 at most); without it a body
-        // of three or four leg pairs above ~14 t had a negative or infinite speed (2026-11-01, giants)
-        float vLand = v0 / MathF.Max(0.5f, 1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
+        float vLand = v0 * LandLoadFactor(m, armour, legs >= K.LIMB_MIN ? legPairs : 1) * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         float lengthShare = length;   // of the cube of its volume (LengthM)
@@ -144,12 +139,16 @@ public static class Body
         vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
         vWater *= streamlining * (1f - 0.2f * limbShape * legs);
         w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
-        // flight (2026-10-31): a body flies when the power its flight muscles deliver (~ wings x M^0.7) reaches the least
+        // flight (2026-10-31): a body flies when the power its flight muscles deliver (~ wings x M^(2/3)) reaches the least
         // power flight requires (~M^(7/6)) and its flight muscle can lift its weight at all (FLY_WING_MIN); the margin
         // sets how far above the speed of least power it can fly
         float margin = FlightMargin(wings, m);
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
         if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
+        // a flier on the ground carries its flight muscle (FLY_MUSCLE_MAX x wings of its mass) as dead load its legs must
+        // move: flight muscle and leg muscle trade off in the avian body plan (Heers & Dial 2015), and the leg power per
+        // unit weight falls with the share of mass that is not leg (2026-11-01; strong fliers walk badly: swifts, bats)
+        else vLand *= GroundClumsiness(wings);
         float vAir = flies ? MathF.Min(K.FLY_V_CAP, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
@@ -264,6 +263,66 @@ public static class Body
     /// <summary>The least power of flight at mass m (2026-10-31): FLIGHT_MULT x basal at FLY_M_REF, rising as M^(7/6).</summary>
     public static float FlightPowerMin(float m)
         => K.FLIGHT_MULT * K.C_BASAL * MathK.Pow(K.FLY_M_REF, K.EXP_BASAL) * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ);
+
+    /// <summary>
+    /// Speed kept on land under the load its bones carry (2026-11-01, replaces LOAD_DRAG and its 0.5 floor), against an
+    /// unarmoured two-pair body of 1 kg. Peak bone stress is weight over bone section over the limb's effective mechanical
+    /// advantage (EMA): weight ~M and section ~M^(2/3) give M^(1/3) at a fixed posture, but bigger mammals stand straighter,
+    /// EMA ~M^0.26, which holds peak stress nearly constant up to ~300 kg (Biewener 1989, 1990); a straight leg cannot
+    /// straighten further, so above that stress rises as M^(1/3) and giants move carefully (elephants do not gallop:
+    /// Hutchinson et al. 2003). The weight is shared by the legs, each with its own bone, so stress ~ (1 + armour) x
+    /// weight / (leg pairs x section). Speed is then limited twice over: by the muscles (the allometry, v0) and by the
+    /// bones, whose peak force rises with speed while the safety factor is kept at ~2-4 (Alexander 1977; Biewener 1990),
+    /// so the bone-limited speed is ~ allowed stress / static stress. Two limits on one speed add as 1/v = 1/v0 + 1/v_bone:
+    /// v = v0 (1 + B) / (1 + B s), with s the stress against the reference and B = BONE_LOAD the reference's v0 / v_bone.
+    /// Positive and finite for any mass, armour and leg count; a body with stress far above the limit walks at
+    /// ~ v0 (1 + B) / (B s): it is held to a slow walk, never to zero.
+    /// </summary>
+    public static float LandLoadFactor(float m, float armour, int legPairs)
+    {
+        float s = BoneStress(m) / BoneStress(1f) * (1f + armour) * K.LEG_PAIRS_REF / legPairs;
+        return (1f + K.BONE_LOAD) / (1f + K.BONE_LOAD * s);
+    }
+
+    /// <summary>Peak bone stress of an unarmoured body of mass m on its legs, in arbitrary units: M^(1/3) / EMA(M), the
+    /// posture (EMA) straightening as M^EXP_EMA up to POSTURE_M and fully straight above it, joined smoothly
+    /// (EMA = (1 + (POSTURE_M / M)^(EXP_EMA k))^(-1/k), k = POSTURE_K) (Biewener 1989, 1990).</summary>
+    public static float BoneStress(float m)
+    {
+        float k = K.POSTURE_K;
+        return MathK.Cbrt(m) * MathK.Pow(1f + MathK.Pow(K.POSTURE_M / m, K.EXP_EMA * k), 1f / k);
+    }
+
+    /// <summary>Walking speed a flier keeps on the ground: its legs move FLY_MUSCLE_MAX x wings of its mass that does not
+    /// help them (Heers &amp; Dial 2015), so leg power per unit weight, and the speed, fall by that share.</summary>
+    public static float GroundClumsiness(float wings) => 1f - K.FLY_MUSCLE_MAX * wings;
+
+    /// <summary>
+    /// Mass a flier must lift besides its body (2026-11-01): the food in its gut and the young it carries inside it (a
+    /// live-bearer's litter, at half its birth mass on average over the gestation). Wing loading rises with it
+    /// (Pennycuick 2008; Marden 1987); birds lay eggs rather than carry their young, bats carry a single pup.
+    /// </summary>
+    public static float FlightLoad(World w, int i)
+    {
+        float load = MathF.Max(0f, w.Gut[i]);
+        if ((w.Flags[i] & Flag.Carrying) != 0) load += 0.5f * w.PLitter[i] * w.PBirth[i] * w.PM[i];
+        return load;
+    }
+
+    /// <summary>
+    /// Can flier i take off now (2026-11-01)? Flight muscle at a core temperature below T_BODY delivers less power: maximal
+    /// muscle power has a Q10 of ~2-3 (Bennett 1984, 1985; Josephson 1981), as the body's chemistry here (Heat.Rate, Q10
+    /// ~2.3 at E_ACT): insects and birds warm their flight muscle before they take off, and a cold ectotherm cannot fly
+    /// until it is warm (Heinrich 1974, 1993). A load lowers the share of its mass that is flight muscle, which must be
+    /// FLY_WING_MIN of the body's (Marden 1987: lift per unit flight muscle is nearly constant), and raises the least power
+    /// of level flight as (total / body)^(3/2) at fixed wings (induced power ~W^2 / V, V_mp ~W^(1/2); Pennycuick 1975, 2008).
+    /// Once in the air its own muscle's heat keeps it warm (Heinrich 1993), so the test is for taking off.
+    /// </summary>
+    public static bool CanTakeOff(float wings, float pm, float mass, float load, float rateT)
+    {
+        float body = mass / (mass + load);
+        return wings * rateT * body >= K.FLY_WING_MIN && FlightMargin(wings, pm) * rateT * MathK.Pow(body, 1.5f) >= 1f;
+    }
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)
     {
