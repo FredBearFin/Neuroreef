@@ -169,32 +169,32 @@ public class ClimateTests
             // (2026-10-31: was > 15 K. The relief now stands only as high as its slopes allow: a 256 map holds ~2 km, 12.3 K here.
             // 2026-11-01, the 3.5 km world: the 256 map is 3.5 km of hills with a vertical scale of 474 m, 3.1 K here)
             Assert.True(w.TLapse[hi] > 0.5f, $"the highest ground is only {w.TLapse[hi]:F1} K cooler");   // 1 km world: 153 m, 1.0 K measured
-            // the seasons swing less by the water: in the same row, a shore cell against one far inland
-            int best = -1, bestRow = -1; float spread = 0;
-            for (int y = FW / 8; y < FW / 4; y++)
+            // the seasons swing less by the water (2026-11-01, the 1 km world: by the share of standing water within ~L_MAR,
+            // so it is shown on open water broad enough for it: half of the 2048 map, 8 km, as a sea; a shore cell against
+            // one 2 km inland, in the same row. The 1 km map's lake is too small to damp its shores much, as a real one is)
+            int side0 = Map.W; Map.Set(2048);
+            try
             {
-                float cmin = 2, cmax = -1;
-                for (int x = 0; x < FW; x++) { int i = y * FW + x; if (w.Cell[i] != (byte)Realm.Land) continue; cmin = MathF.Min(cmin, w.Cont[i]); cmax = MathF.Max(cmax, w.Cont[i]); }
-                if (cmax - cmin > spread) { spread = cmax - cmin; bestRow = y; }
+                var v = new World(16, 3); int F = Map.FW, nv = F * F;
+                Array.Fill(v.LakeOf, -1);
+                for (int i = 0; i < nv; i++)
+                {
+                    bool sea = i % F < F / 2;
+                    v.Cell[i] = (byte)(sea ? Realm.Deep : Realm.Land); v.LakeOf[i] = sea ? 0 : -1; v.Elev[i] = sea ? 0.05f : 0.2f;
+                }
+                v.SeaLevel = 0.1f;
+                Climate.Build(v);
+                int row = F / 6, near = row * F + F / 2, far = row * F + F / 2 + (int)(2000f / K.GEO_CELL_M);
+                Assert.True(v.Cont[far] - v.Cont[near] > 0.4f, $"continentality {v.Cont[near]:F2} at the shore, {v.Cont[far]:F2} 2 km inland");
+                float Swing(int i)
+                {
+                    v.Step = (ulong)(Nature.SeasonLength / 4); Climate.TempRow(v, row); float s = v.Temp[i] + v.TLapse[i];
+                    v.Step = (ulong)(3 * Nature.SeasonLength / 4); Climate.TempRow(v, row); return s - (v.Temp[i] + v.TLapse[i]);
+                }
+                float sn = Swing(near), sf = Swing(far);
+                Assert.True(sf > 0f && sn > 0f && sn < 0.7f * sf, $"summer-winter swing by the water {sn:F1} K, inland {sf:F1} K");
             }
-            // (2026-11-01, the 3.5 km world: the 256 map is 3.5 km across and the water damps over L_MAR = 1.3 km, so no cell
-            // lies far from water: measured 0.35)
-            Assert.True(spread > 0.1f, $"continentality hardly varies ({spread:F2})");   // (1 km world: the map is narrower than L_MAR, 1.3 km: 0.18)
-            int near = -1, far = -1;
-            for (int x = 0; x < FW; x++)
-            {
-                int i = bestRow * FW + x; if (w.Cell[i] != (byte)Realm.Land) continue;
-                if (near < 0 || w.Cont[i] < w.Cont[near]) near = i;
-                if (far < 0 || w.Cont[i] > w.Cont[far]) far = i;
-            }
-            float Swing(int i)
-            {
-                w.Step = (ulong)(Nature.SeasonLength / 4); Climate.TempRow(w, bestRow); float s = w.Temp[i] + w.TLapse[i];
-                w.Step = (ulong)(3 * Nature.SeasonLength / 4); Climate.TempRow(w, bestRow); return s - (w.Temp[i] + w.TLapse[i]);
-            }
-            float sn = Swing(near), sf = Swing(far);
-            Assert.True(sf > 0f && sn > 0f && sn < 0.7f * sf, $"summer-winter swing by the water {sn:F1} K, inland {sf:F1} K");
-            best = near; Assert.True(best >= 0);
+            finally { Map.Set(side0); }
         }));
     }
 

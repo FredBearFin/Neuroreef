@@ -107,13 +107,41 @@ public static class Climate
         int n = Map.FW * Map.FW;
         if (!On) { Array.Fill(w.Temp, K.T_REF); Array.Clear(w.TLapse); Array.Fill(w.Cont, 1f); w.ClimateZ = 1f; return; }
         float sea = w.SeaLevel;
+        // continentality (2026-11-01, the 1 km world): the water damps the seasons by how much of it the air has crossed,
+        // the share of standing water within ~L_MAR (a Gaussian of that width, three box blurs on the torus), so a pond or
+        // a small lake damps its shore a little and the open sea fully: WATER_DAMP x min(1, 2 x share), the share being 1/2
+        // at a straight shore of open water (oceanity indices measure the sea within a radius; a lake of a few hundred m
+        // barely shifts the air's seasons). Before, any water at all, a lake of 0.4 km2 on 16 m cells, damped its shore as
+        // the ocean does, so the valley floors had cooler summers than the hills and the treeline ran upside down
+        var share = new float[n]; var tmp = new float[n];
+        for (int i = 0; i < n; i++) share[i] = w.LakeOf[i] >= 0 ? 1f : 0f;
+        int r = Math.Clamp((int)MathF.Round(K.L_MAR), 1, Map.FW / 2);
+        for (int k = 0; k < 3; k++) BoxBlur(share, tmp, Map.FW, r);
         for (int i = 0; i < n; i++)
         {
             float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea) * Map.ReliefM;     // m above the lakes (the map's vertical scale)
             w.TLapse[i] = Nature.Climate * K.LAPSE * h * 0.001f;
-            w.Cont[i] = 1f - K.WATER_DAMP * MathK.Exp(-w.DistWater[i] / K.L_MAR);
+            w.Cont[i] = 1f - K.WATER_DAMP * MathF.Min(1f, 2f * share[i]);
         }
         for (int y = 0; y < Map.FW; y++) TempRow(w, y);
+    }
+
+    /// <summary>Box blur of radius r on a torus of side W, in place (Climate.Build's water share).</summary>
+    static void BoxBlur(float[] a, float[] tmp, int W, int r)
+    {
+        float inv = 1f / (2 * r + 1);
+        for (int y = 0; y < W; y++)
+        {
+            int row = y * W; float s = 0f;
+            for (int k = -r; k <= r; k++) s += a[row + World.WrapI(k, W)];
+            for (int x = 0; x < W; x++) { tmp[row + x] = s * inv; s += a[row + World.WrapI(x + r + 1, W)] - a[row + World.WrapI(x - r, W)]; }
+        }
+        for (int x = 0; x < W; x++)
+        {
+            float s = 0f;
+            for (int k = -r; k <= r; k++) s += tmp[World.WrapI(k, W) * W + x];
+            for (int y = 0; y < W; y++) { a[y * W + x] = s * inv; s += tmp[World.WrapI(y + r + 1, W) * W + x] - tmp[World.WrapI(y - r, W) * W + x]; }
+        }
     }
 
     /// <summary>
