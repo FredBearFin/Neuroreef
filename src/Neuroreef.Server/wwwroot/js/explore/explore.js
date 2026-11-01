@@ -322,7 +322,7 @@ export class Explore {
     if (now - this.lastSend > SEND_MS) this._send(false);
     if (now - this.targetT > 100) { this.targetT = now; this._target(); }
     // the speed the person moves at now (nothing while it stands), and how
-    const gait = s.swim ? 'swimming' : s.depth > 0.05 ? 'wading' : speed >= RUN * 0.9 ? 'running' : 'walking';
+    const gait = s.swim ? 'swimming' : s.depth > 0.05 ? 'wading' : (fast ? speed / FAST : speed) >= RUN * 0.9 ? 'running' : 'walking';
     this.hud.info(`${fwd || side ? `${gait} ${speed.toFixed(1)} m/s` : s.swim ? 'treading water' : 'standing'}${fast ? ' · <b>×10 travel</b>' : ''}<br>${this.killed} hunted · ${(this.state && this.state.deaths) || 0} deaths`);
   }
 
