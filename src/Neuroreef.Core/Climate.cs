@@ -283,8 +283,8 @@ public static class Heat
     /// Metabolic level of a body with endothermy e against a warm-blooded one at the same core temperature (2026-11-01):
     /// ECTO_LEVEL + (1 - ECTO_LEVEL) e. Endothermy is not only a warm core: it is tissue built to burn 5-10x faster
     /// (mitochondria, leaky membranes; Hulbert &amp; Else 2000), which costs that much at rest and gives that much aerobic
-    /// capacity, endurance and digestion. Resting cost, digestion and the respiratory organs' capacity scale with
-    /// Rate(core) x Level(e) (Activity); muscle power for a burst follows the core's temperature alone (sqrt Rate).
+    /// capacity and endurance. Resting cost and the respiratory organs' capacity scale with Rate(core) x Level(e)
+    /// (Activity); digestion (gut enzymes) and muscle power for a burst follow the core's temperature alone.
     /// </summary>
     public static float Level(float e) => K.ECTO_LEVEL + (1f - K.ECTO_LEVEL) * e;
 

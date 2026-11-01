@@ -267,7 +267,7 @@ public static class Resolve
         // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
         // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
         bool immersed = waterCell && !airborne;
-        float top = K.T_REF, core = K.T_BODY, rateT = 1f;
+        float top = K.T_REF, core = K.T_BODY, rateT = 1f, gutT = 1f;
         if (Climate.On)
         {
             top = Heat.Operative(w, cell, w.PInsul[i], immersed);
@@ -275,6 +275,7 @@ public static class Resolve
             if (immersed && w.ZShare[i] > 0f) top += w.ZShare[i] * (Respiration.WaterT(w, cell, w.Z[i]) - top);
             core = Heat.Core(top, w.PEndo[i]);
             rateT = Heat.Activity(core, w.PEndo[i]);   // its core's temperature and its tissues' metabolic level (2026-11-01)
+            gutT = Heat.Rate(core);                    // its gut's enzymes follow the core's temperature alone
         }
         float basal = fullBasal * rateT * (rest ? K.REST_BASAL : 1f) * (1f + Pathogens.Sickness(w, i));   // the pathogen's take and the immune response (Revision R)
         // growth: a juvenile builds tissue from its reserve (no free mass, DESIGN §9.1). It grows at most at the rate
@@ -321,9 +322,9 @@ public static class Resolve
 
         if (w.Gut[i] > 1e-7f)
         {
-            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT);   // a cold gut digests slowly (Revision P)
+            float d = MathF.Min(w.Gut[i], w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT);   // a cold gut digests slowly (Revision P)
             // the gut's absorptive capacity (C_ABSORB, 2026-11-01): rich digesta pass only as fast as their energy is taken up
-            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT;
+            float absorbE = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT;
             if (w.GutEnergy[i] > absorbE) d = MathF.Min(d, w.Gut[i] * absorbE / w.GutEnergy[i]);
             float frac = d / w.Gut[i];
             float de = w.GutEnergy[i] * frac, dung = w.GutWaste[i] * frac, seedy = w.GutSeedy[i] * frac;

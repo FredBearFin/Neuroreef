@@ -189,7 +189,7 @@ public static class Life
                 {
                     heatNeed += DayNeed(w, c, cell);
                     bool imm = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
-                    actSum += Heat.Activity(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]), w.PEndo[c]);
+                    actSum += Heat.Rate(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]));   // the gut's pace: the core's temperature
                 }
             }
         if (n == 0) return 0f;
@@ -204,7 +204,7 @@ public static class Life
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
-            // its gut passes and absorbs food at its metabolic pace (2026-11-01: a cold or cold-blooded gut digests slowly, as in RESOLVE)
+            // its gut passes and absorbs food at its core temperature's pace (2026-11-01: a cold gut digests slowly, as in RESOLVE)
             float act = Climate.On ? (float)(actSum / n) : 1f;
             float pass = MathF.Min(MathF.Min(w.PBite[c], w.PDig[c] * act), 0.5f * (float)(stock[p] / n));
             rate = MathF.Max(rate, MathF.Min(w.PAbsorb[c] * act, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
