@@ -42,9 +42,11 @@ public class EcologyTests
         Assert.True(nv >= ns - 2, $"only {nv} of {ns} ancestors can live on their home range");
         // the ancestors differ from each other: their bodies are random, not designed
         // (by their mass genes: several bodies of one size class can sit exactly at its floor)
-        var masses = new int[used];
-        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) masses[w.Spc[i]] = w.Genome[i * G.LEN + G.B_MASS] * 8 + w.Genome[i * G.LEN + G.B_SPEED];
-        Assert.True(masses.Distinct().Count() >= used - 1, $"{masses.Distinct().Count()} different of {used}");
+        // (of the founded ones: an ancestor no body of which can live where it starts is not founded, Simulation.FoundAncestors)
+        var masses = new int[used]; var hasBody = new bool[used];
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] >= St.Juvenile) { masses[w.Spc[i]] = w.Genome[i * G.LEN + G.B_MASS] * 8 + w.Genome[i * G.LEN + G.B_SPEED]; hasBody[w.Spc[i]] = true; }
+        var founded = Enumerable.Range(0, used).Where(s => hasBody[s]).Select(s => masses[s]).ToArray();
+        Assert.True(founded.Distinct().Count() >= founded.Length - 1, $"{founded.Distinct().Count()} different of {founded.Length} founded");
     }
 
     [Fact] // NR-320: founders vary around their ancestor (standing variation), as a natural population does
