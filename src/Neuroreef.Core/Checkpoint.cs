@@ -41,7 +41,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 23;   // 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 24;   // 24: live wood per cell (World.LiveWood; older saves start it from their woody cover, Plants.InitWood, and keep their land; 2026-11-01); 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     /// <summary>The oldest save format this program can read. A save is continued only if its genome length (G.LEN) is this
     /// program's, which it has not been for saves before 22 (GeneBank.Version 13 changed the genome layout): those are refused
     /// by that check.</summary>
@@ -66,7 +66,7 @@ public static class Checkpoint
     public static readonly HashSet<string> LandFields = new(StringComparer.Ordinal)
     {
         // fields and plants
-        "Pool", "Shrub", "Tree", "Sapling", "Nutrient", "Scent", "NutrientN", "ScentN",
+        "Pool", "Shrub", "Tree", "Sapling", "LiveWood", "Nutrient", "Scent", "NutrientN", "ScentN",
         "POcc", "BankMom", "BankDad", "SeedMom", "SeedDad", "FruitG", "PollenDad", "BankM", "SeedOut", "PFlags",
         "WindAcc", "WindDist", "RowFar", "RowFarBest", "WindAccMom", "WindAccDad", "WindDistMom", "WindDistDad", "RowFarMom", "RowFarDad",
         "Flora", "Moisture", "Poll", "Temp", "Fire", "FireN", "TreeMean",
@@ -84,6 +84,10 @@ public static class Checkpoint
         // the pathogen reservoir in the ground and water
         "ResLoad", "ResGene", "ResKey", "ResRecv", "ResOrder", "ResRivers", "ResNet",
     };
+
+    /// <summary>Land fields an older save may lack without its land being rebuilt: they are made from the land it holds
+    /// (AfterMigration). LiveWood (2026-11-01): from the woody cover (Plants.InitWood).</summary>
+    static readonly HashSet<string> FromCover = new(StringComparer.Ordinal) { "LiveWood" };
 
     /// <summary>Per-slot arrays written for slots in use only: each is written whole when a slot is born (the genome before
     /// Life.Place, the rest by Life.Place and Brain.InitLife), so what a dead slot holds is never read again. (The paged
@@ -332,6 +336,7 @@ public static class Checkpoint
         }
         m.Reexpressed = phenotype;
         if (Lost("SlotsUsed")) w.SlotsUsed = SlotsUsedOf(w);
+        if (Lost("LiveWood") && !m.LandRebuilt) Plants.InitWood(w);   // a rebuilt land founded its plants with their wood
         if (m.LandRebuilt)
         {
             Pathogens.Seed(w);   // the founding pathogen strains in the rebuilt ground and water, as a new world has them
@@ -612,7 +617,7 @@ public static class Checkpoint
             {
                 string p = path + f.Name;
                 m.Missing.Add(p);
-                if (land || (o is World && LandFields.Contains(f.Name))) m.LandMissingOrChanged = true;
+                if (land || (o is World && LandFields.Contains(f.Name) && !FromCover.Contains(f.Name))) m.LandMissingOrChanged = true;
             }
     }
 

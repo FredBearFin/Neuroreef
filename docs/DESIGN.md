@@ -146,6 +146,20 @@ Wetlands (Wetlands.cs; nothing places one):
   waterlogged ground a plant under tolerance 0.5 cannot grow; tolerance costs FLOOD_COST 8% of production at its most
   (Costs: a mid genome is unchanged). Founders are random in it; the wetlands' plants are what recruitment, the lottery
   and mutation leave there.
+- *Canopy production and live wood* (2026-11-01, Plants.RowA). A leafy canopy fixes REPRO_RATE (NPP_MAX of a closed
+  canopy per unit leafy cover) x its environment factor fe x the light it intercepts (Beer's law, CANOPY_KL 2: Monsi &
+  Saeki 1953), whatever room its crown has. Crown growth takes at most that (before, a sward of short-lived herbs could
+  turn its cover over ~10 times a year); a woody plant (woodiness from its height) puts what its crown and seed did not
+  take into live wood (World.LiveWood, saved; checkpoint format 24 starts an older save's wood from its woody cover,
+  WOOD_INIT 15 kg/m2 per unit, and keeps its land). Live wood dies at the woody plants' stem death rate (age and
+  drought) into dead wood (Pool.Wood); it takes WOOD_N 1/10 of leafy growth's nutrient, and the decay of dead wood
+  immobilises the difference from the soil when it dies (Laiho & Prescott 2004). Before, a closed forest's production was
+  only its leaf turnover (forest NPP 2-3x below the measured).
+- *Water-limited production* (2026-11-01). The water-limited rate is r0 x (0.5 + WUE) x W_SUP x relative soil water,
+  W_SUP = E_MAX_ROOT 5 mm/day over PET_REF a day (1.83; the supply/demand ratio of transpiration, Haxeltine & Prentice
+  1996; Sitch et al. 2003), colimited with the carbon-limited rate by a non-rectangular hyperbola of curvature
+  COLIM_THETA 0.95 (Collatz et al. 1991). Before, W_SUP 3 and a rectangular hyperbola made soil at 0.2 of capacity
+  nearly as productive as at 0.4 (desert NPP 2x the measured).
 Measured (512 map, seeds 3, 5, 7; a new world and one more year, no animals; WetProbe):
 - Wetlands 0.55 / 0.41 / 1.06% of the land (69 / 54 / 144 cells): marsh 8 / 6 / 8, swamp 16 / 5 / 30, fen 38 / 38 / 95,
   bog 7 / 5 / 11. Settings: lake and sea shores 13 / 13 / 23 cells, river banks 42 / 26 / 59, spring lines away from

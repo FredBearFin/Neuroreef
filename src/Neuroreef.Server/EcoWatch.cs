@@ -179,7 +179,7 @@ public sealed class EcoWatch
     {
         if (_cellProd0 == null || _nS == 0) return "";
         string[] name = { "polar/tundra", "boreal forest", "temperate forest", "warm forest", "desert/dry scrub", "temperate grass/shrub", "savanna/warm grass" };
-        int nb = name.Length; var cnt = new int[nb]; var npp = new double[nb]; var tt = new double[nb]; var mm = new double[nb]; var tc = new double[nb];
+        int nb = name.Length; var cnt = new int[nb]; var npp = new double[nb]; var tt = new double[nb]; var mm = new double[nb]; var tc = new double[nb]; var wd = new double[nb];
         double years = _sSteps / K.T_SEASON;
         for (int i = 0; i < Map.FW * Map.FW; i++)
         {
@@ -187,10 +187,11 @@ public sealed class EcoWatch
             double T = Climate.On ? Climate.AnnualMean(w, i) : K.T_REF, m = _moist[i] / _nS, tr = _tree[i] / _nS;
             int b = T < -5 ? 0 : tr >= 0.3 ? (T < 3 ? 1 : T < 18 ? 2 : 3) : m < 0.25 ? 4 : T < 18 ? 5 : 6;
             cnt[b]++; npp[b] += (w.Flora.CellProd[i] - _cellProd0[i]) / years * K.PLANT_KG_M2 * 1000 * 0.45; tt[b] += T; mm[b] += m; tc[b] += tr;
+            wd[b] += w.LiveWood[i] * K.PLANT_KG_M2;   // standing live wood at the end, kg dry/m2 (2026-11-01)
         }
-        var o = new StringBuilder("ECO NPP BY BIOME (after the first year; g C/m2/yr = g dry x 0.45): biome, land cells, mean NPP, mean annual T, moisture, tree cover\n");
+        var o = new StringBuilder("ECO NPP BY BIOME (after the first year; g C/m2/yr = g dry x 0.45): biome, land cells, mean NPP, mean annual T, moisture, tree cover, live wood kg dry/m2 at the end\n");
         for (int b = 0; b < nb; b++)
-            if (cnt[b] > 0) o.AppendLine($"  {name[b],-22} {cnt[b],6} {npp[b] / cnt[b],8:F0} gC  {tt[b] / cnt[b],6:F1} C  {mm[b] / cnt[b],5:F2}  {tc[b] / cnt[b],5:F2}");
+            if (cnt[b] > 0) o.AppendLine($"  {name[b],-22} {cnt[b],6} {npp[b] / cnt[b],8:F0} gC  {tt[b] / cnt[b],6:F1} C  {mm[b] / cnt[b],5:F2}  {tc[b] / cnt[b],5:F2}  {wd[b] / cnt[b],5:F1}");
         return o.ToString();
     }
 

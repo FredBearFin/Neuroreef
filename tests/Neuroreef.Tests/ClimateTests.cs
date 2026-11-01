@@ -87,6 +87,11 @@ public class ClimateTests
             for (int c = 0; c < Map.FW * Map.FW; c++) Assert.Equal(K.T_REF, sim.W.Temp[c]);
             return FieldsHash(sim.W);
         });
+        // Canopy production and live wood (2026-11-01) re-pinned it: a canopy's crown growth is bounded by what its leaves fix
+        // (REPRO_RATE x fe x Beer's-law interception), woody plants put the rest into live wood that dies into Pool.Wood and
+        // immobilises nitrogen, and water-limited growth follows the supply/demand ratio (W_SUP = E_MAX_ROOT / PET a day,
+        // colimited at COLIM_THETA 0.95), so the same seed has other plants, litter, wood and nutrient. It was
+        // 0x39C887C08E839DDF after rivers along their own lines.
         // Rivers along their own lines (2026-11-01) re-pinned it: D-infinity routing in the relief's erosion and the drainage,
         // channel heads from the hillslopes' spread discharge (CHANNEL_C 0.005), channels laid along smoothed and meandering
         // lines, and pond sites allowed POND_GAP_RIVER from a river, so the same seed has other relief, water, soil and plants.
@@ -125,7 +130,7 @@ public class ClimateTests
         // main) and the 1 km world (GEO_CELL_M 16 m, the relief, rain, channels and latitude at the map's scale; 0x39C9346B584497BC
         // before the plant merge) re-pinned it.
         // A flood before a riparian wetland's waterlogging (Ponds.Update) moved it again from 0xAD0A92D522612469.
-        Assert.Equal(0x39C887C08E839DDFUL, h);
+        Assert.Equal(0x9C04DA49A393C7B2UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

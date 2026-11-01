@@ -195,7 +195,17 @@ public static class Plants
         float les = P[o + Ph.LES];
         float gc = r0 * les * A * ft * P[o + Ph.TAMP] * fl * fn * P[o + Ph.GCF];
         float gw = r0 * les * P[o + Ph.GWF] * sw;
-        return gc + gw > 0f ? Norm * Nature.Plants * gc * gw / (gc + gw) * Waterlog(P, o, anox) : 0f;
+        return gc + gw > 0f ? Norm * Nature.Plants * Colim(gc, gw) * Waterlog(P, o, anox) : 0f;
+    }
+
+    /// <summary>Carbon- and water-limited rates colimited (2026-11-01): the smaller root of theta G^2 - (a + b) G + a b = 0
+    /// (a non-rectangular hyperbola of curvature COLIM_THETA; Collatz et al. 1991), at most the lesser of the two.</summary>
+    public static float Colim(float a, float b)
+    {
+        float s = a + b, th = K.COLIM_THETA;
+        if (s <= 0f) return 0f;
+        if (th < 1e-4f) return a * b / s;
+        return (s - MathK.Sqrt(s * s - 4f * th * a * b)) / (2f * th);
     }
 
     /// <summary>Net growth rate per unit cover (per step) of phenotype P[o..] alone in a cell at soil water W, nutrient N,
@@ -216,7 +226,7 @@ public static class Plants
         var ph = new float[Ph.NP]; Express(x, ph);
         float dT = (K.T_REF - ph[Ph.TOPT]) / K.T_WIDTH, ft = (1f - dT * dT) * ph[Ph.TAMP];
         float gc = ft * ph[Ph.GCF], gw = ph[Ph.GWF];   // at full water every plant reads 1
-        return (1f + K.RESP) * (gc + gw) / (gc * gw);
+        return (1f + K.RESP) / Colim(gc, gw);
     }
 
     /// <summary>The flowering pulse at season phase psi (cos and sin of psi given): PHEN_PEAK ((1 + cos(psi - phi_f)) / 2)^4.</summary>
@@ -357,6 +367,7 @@ public static class Plants
             w.FruitG[i] = w.POcc[i * SLOTS + TREE];
             w.PFlags[i] = 0x0F;
         }
+        InitWood(w);
     }
 
     // ------------------------------------------------------------------ the update of one stripe
@@ -447,6 +458,7 @@ public static class Plants
             float shT = onT ? B[TREE] * laT : 0f, shS = onS ? B[SHRUB] * laS : 0f;
             float lH = MathF.Max(0.02f, 1f - 0.85f * shT - 0.35f * shS), lS = MathF.Max(0.02f, 1f - 0.70f * shT), lP = lS * (1f - 0.2f * B[SHRUB]);
             float prod = 0f, fixedShare = 0f, litter = 0f, wood = 0f, fenvB = 0f, fenvBsum = 0f, fenvR = 0f, fenvRsum = 0f;
+            float woodProd = 0f, woodCover = 0f, woodDeath = 0f;
             float g0 = B[HERB], s0 = B[SHRUB], t0 = B[TREE], p0 = B[SAP];
             for (int k = 0; k < SLOTS; k++)
             {
@@ -475,7 +487,15 @@ public static class Plants
                 float les = Pe[o + Ph.LES], resp = K.RESP * r0 * les;
                 float net = on ? gA - resp : -K.LEAFOFF_RESP * resp;
                 float room = MathF.Max(0f, Room(k, B[HERB], B[SHRUB], B[TREE], B[SAP]));
-                float grow = net > 0f ? net * b * room : net * b;
+                // (2026-11-01) what a leafy canopy fixes per step: REPRO_RATE (NPP_MAX of a closed canopy per unit leafy cover)
+                // x its environment factor (fe, as reproduction draws on it: 1 for a mid plant in the best conditions) x its cover, whatever room its crown
+                // has (Monsi & Saeki 1953: production per ground area is bounded by the light the leaves intercept). Crown
+                // growth cannot take more than that; a woody plant puts what its crown does not take into wood (below).
+                // Before, crown growth was the whole production: a closed forest made only its leaf turnover and a sward of
+                // short-lived herbs turned its cover over ~10 times a year, both unbounded by what leaves can fix
+                float fe = G0 / (r0 * (1f + K.RESP));
+                float pc = on ? K.REPRO_RATE * Nature.Plants * fe * Intercept(b) : 0f;
+                float grow = net > 0f ? MathF.Min(net * b * room, pc) : net * b;
                 float lit = on ? Pe[o + Ph.CLIT] * b : 0f;
                 float wmin = Pe[o + Ph.WMIN];
                 float mdr = r0 * K.DROUGHT_M * MathF.Max(0f, wmin - wk) / MathF.Max(wmin, 0.05f) * Pe[o + Ph.DRM] * (on ? 1f : K.LEAFOFF_RESP);
@@ -488,13 +508,14 @@ public static class Plants
                 if (k == HERB) litter += dead; else wood += dead;
                 prod += MathF.Max(0f, dt * grow);
                 t.RowProd[y * 5 + k] += MathF.Max(0f, dt * grow);
-                float fe = G0 / (r0 * (1f + K.RESP));
                 if (k == SHRUB || k == TREE || k == SAP) { fenvB += fe * b; fenvBsum += b; }
                 if (k == HERB || k == SHRUB) { fenvR += fe * b; fenvRsum += b; }
                 // reproduction: a mature, leafy plant puts AR x phenology of its production into flowers, nectar and seed
+                float Rk = 0f;
                 if (k != SAP && on && b >= 0.05f + 0.25f * Pe[o + Ph.XH] && phen > 1e-3f)
                 {
                     float R = dt * Pe[o + Ph.AR] * phen * K.REPRO_RATE * Nature.Plants * fe * b;
+                    Rk = R;
                     // pollen: wind from leafy neighbours of the same stratum, and what animals carried here
                     float bn = 0f; int best = 0; float bb = 0f;
                     for (int q = 0; q < 4; q++)
@@ -547,6 +568,19 @@ public static class Plants
                     prod += R;
                     t.RowProd[y * 5 + 4] += R;
                 }
+                // wood (2026-11-01): a woody plant (woodiness from its height, as its bark and thorn costs) puts the canopy's
+                // production that neither its crown nor its seed took into live wood, which dies with its stems (below)
+                if (k != HERB)
+                {
+                    float wf = Woodiness(Pe[o + Ph.XH]);
+                    if (wf > 0f)
+                    {
+                        float wp = wf * MathF.Max(0f, dt * (pc - MathF.Max(0f, grow)) - Rk);
+                        woodProd += wp;
+                        t.RowProd[y * 5 + k] += wp;
+                        woodCover += wf * b; woodDeath += wf * b * (mdr + mbg);
+                    }
+                }
                 fixedShare += Pe[o + Ph.NFIXN] * b;
                 B[k] = MathF.Max(0f, b + dB);
             }
@@ -566,7 +600,13 @@ public static class Plants
             G[i] = B[HERB]; S[i] = B[SHRUB]; Tr[i] = B[TREE]; Sp[i] = B[SAP];
             for (int k = 0; k < SLOTS; k++) w.POcc[i * SLOTS + k] = (ushort)(B[k] > 1e-7f ? id[k] : 0);
             w.PFlags[i] = (byte)flags;
-            Li[i] += litter; Wo[i] += wood;
+            // live wood: grows by the woody plants' wood production and dies at their stems' death rate (drought and age;
+            // all of it where no woody plant is left), into dead wood; its decay immobilises the nitrogen wood lacks
+            float lw = w.LiveWood[i] + woodProd;
+            float wDie = woodCover > 1e-6f ? lw * MathF.Min(1f, dt * woodDeath / woodCover) : lw;
+            w.LiveWood[i] = lw - wDie;
+            Li[i] += litter; Wo[i] += wood + wDie;
+            prod += woodProd;
             t.CellProd[i] += prod;
 
             // the food pools the plants make: browse (leaves in reach), roots, the decay of fruit, nectar and the seed bank
@@ -600,12 +640,44 @@ public static class Plants
             // nutrient taken up by growth, less what fixation supplies
             float tot = B[HERB] + B[SHRUB] + B[TREE] + B[SAP];
             float fx = tot > 0f ? fixedShare / tot : 0f, fixS = fx / (N + fx + 1e-6f);
-            w.Nutrient[i] = Math.Clamp(N - prod * K.C_NUTUSE * (1f - fixS), 0f, K.N_MAX);
+            w.Nutrient[i] = Math.Clamp(N - ((prod - woodProd) + K.WOOD_N * woodProd) * K.C_NUTUSE * (1f - fixS) - wDie * K.C_NUTGAIN * (1f - K.WOOD_N), 0f, K.N_MAX);
         }
         t.RowStat[y * PlantTable.NSTAT + ST_WIND] += windOut;
     }
 
     static readonly float RhoMid = K.RHO_LO + 0.5f * K.RHO_SPAN;
+
+    static readonly float InterceptFull = 1f - MathK.Exp(-K.CANOPY_KL);
+
+    /// <summary>Light a canopy of leafy cover b intercepts, in closed canopies (Beer's law, CANOPY_KL; 2026-11-01): b at
+    /// small cover x 1 / (1 - exp(-CANOPY_KL)), 1 at full cover.</summary>
+    public static float Intercept(float b) => b <= 0f ? 0f : (1f - MathK.Exp(-K.CANOPY_KL * b)) / InterceptFull;
+
+    /// <summary>Woodiness of a plant of height trait xh (0 a herb, 1 a tree): the share of what its canopy fixes beyond its
+    /// crown growth that it can put into stems (the same smooth step its bark and thorn costs use).</summary>
+    public static float Woodiness(float xh) => Smooth(0.4f, 0.7f, xh);
+
+    /// <summary>The live wood of a cell that has none recorded (a new world, a save from before the stock): WOOD_INIT per
+    /// unit of woody cover, x each occupant's woodiness (2026-11-01).</summary>
+    public static float WoodFromCover(World w, int i)
+    {
+        var Pe = w.Flora.Phe; int NP = PlantTable.NP; float c = 0f;
+        for (int k = SHRUB; k < SLOTS; k++)
+        {
+            int g = w.POcc[i * SLOTS + k];
+            if (g == 0) continue;
+            float b = k == SHRUB ? w.Shrub[i] : k == TREE ? w.Tree[i] : w.Sapling[i];
+            c += b * Woodiness(Pe[g * NP + Ph.XH]);
+        }
+        return c * K.WOOD_INIT / K.PLANT_KG_M2;
+    }
+
+    /// <summary>Every land cell's live wood from its cover (Found; Checkpoint for older saves).</summary>
+    public static void InitWood(World w)
+    {
+        int n = Map.FW * Map.FW;
+        for (int i = 0; i < n; i++) w.LiveWood[i] = w.Cell[i] == (byte)Realm.Land ? WoodFromCover(w, i) : 0f;
+    }
 
     /// <summary>Browse a leafy woody plant offers per unit cover: the leaves within an animal's reach (BROWSE_H), less its root share.</summary>
     static float Reach(float[] Pe, int o, bool sapling)
@@ -846,7 +918,7 @@ public static class Plants
         float g = Pl[(int)Pool.Grass][i];
         float keep = gh != 0 ? Pe[gh * NP + Ph.RESPR] : 0f;
         burned += g * (1f - keep); Pl[(int)Pool.Grass][i] = g * keep;
-        float woodIn = 0f;
+        float woodIn = 0f, woodyBefore = 0f, woodyLost = 0f;
         for (int k = 1; k < SLOTS; k++)
         {
             int id = w.POcc[i * SLOTS + k];
@@ -858,7 +930,15 @@ public static class Plants
             float killed = b * (1f - surv), re = killed * Pe[o + Ph.RESPR], lost = killed - re;
             float nb = b - lost;
             woodIn += 0.5f * lost; burned += 0.5f * lost;
+            woodyBefore += b; woodyLost += lost;
             if (k == SHRUB) w.Shrub[i] = nb; else if (k == TREE) w.Tree[i] = nb; else w.Sapling[i] = nb;
+        }
+        // the live wood of the stems that were lost (2026-11-01): half burns, half falls as dead wood
+        float lw = w.LiveWood[i];
+        if (lw > 0f && woodyBefore > 0f)
+        {
+            float lost = lw * MathF.Min(1f, woodyLost / woodyBefore);
+            w.LiveWood[i] = lw - lost; woodIn += 0.5f * lost; burned += 0.5f * lost;
         }
         Pl[(int)Pool.Wood][i] += woodIn;
         for (int s = 0; s < 3; s++) { float b = w.BankM[s * n + i]; burned += b * (1f - K.BANK_FIRE); w.BankM[s * n + i] = b * K.BANK_FIRE; }
