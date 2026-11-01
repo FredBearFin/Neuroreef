@@ -125,7 +125,10 @@ public class ClimateTests
         // main) and the 1 km world (GEO_CELL_M 16 m, the relief, rain, channels and latitude at the map's scale; 0x39C9346B584497BC
         // before the plant merge) re-pinned it.
         // A flood before a riparian wetland's waterlogging (Ponds.Update) moved it again from 0xAD0A92D522612469.
-        Assert.Equal(0x39C887C08E839DDFUL, h);
+        // 2026-11-01: the water producers' rates measured a day (R_A, M_A, R_PH, M_PH: algae and plankton grow and die
+        // ~4-40x faster, as measured) re-pinned it: the water pools, detritus and nutrient of every water cell changed. It
+        // was 0x39C887C08E839DDF before.
+        Assert.Equal(0xD5BF33F526462038UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

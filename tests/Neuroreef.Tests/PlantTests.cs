@@ -358,4 +358,49 @@ public class PlantTests
         double wetW = Mean(cells.Skip(cells.Count - third), PT.WUE) + Mean(cells.Skip(cells.Count - third), PT.DROUGHT);
         Assert.True(dryW > wetW, $"WUE + drought tolerance of herbs: dry third {dryW:F2}, wet third {wetW:F2}");
     }
+
+    [Fact] // 2026-11-01: aquatic primary production against the measured range. A shallow cell about 1 m deep, its nutrient
+           // held at K_N (half saturation: ordinary, neither oligotrophic nor hypertrophic) and no climate (T_REF = 20 C),
+           // grows for a year and is measured over the next. Lakes make 100-500 gC/m2/yr and eutrophic lakes up to ~1,000;
+           // the littoral (periphyton, macrophytes and the plankton above them) 300-1,500 (Wetzel 2001, Limnology).
+           // Phytoplankton turns over in days: sparse, it doubles in a few days (Eppley 1972; Reynolds 2006). Before,
+           // the cell made ~100 gC/m2/yr and the plankton doubled in ~40 days.
+    public void WaterProductionIsInTheLiteratureRange()
+    {
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try
+        {
+            var w = Built(3);
+            int n = Map.FW * Map.FW, cell = -1; float bestD = float.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                if ((w.Cell[i] & (byte)Realm.Shallow) == 0) continue;
+                float d = MathF.Abs(w.Depth[i] / w.ElevPerM - 1f);   // metres from 1 m deep
+                if (d < bestD) { bestD = d; cell = i; }
+            }
+            Assert.True(cell >= 0 && bestD < 0.5f, "a shallow cell about 1 m deep");
+            int y = cell / Map.FW, year = Nature.SeasonLength;
+            float[] Al = w.Pool[(int)Pool.Algae], Ph = w.Pool[(int)Pool.Phyto];
+            double gA = 0, gP = 0;
+            for (int s = 0; s < 2 * year; s++)
+            {
+                for (int i = y * Map.FW; i < (y + 1) * Map.FW; i++) if (w.Cell[i] != (byte)Realm.Land) w.Nutrient[i] = K.K_N;
+                float a0 = Al[cell], p0 = Ph[cell];
+                Fields.Row(w, y);
+                w.Step++;
+                if (s < year) continue;
+                gA += Al[cell] - a0 + K.M_A * a0;   // growth this step: the change plus what died (Fields.Row)
+                gP += Ph[cell] - p0 + K.M_PH * p0;
+            }
+            const double gCperG = 0.45;   // carbon in algal dry matter (Wetzel 2001)
+            double toGC = K.WATER_KG_M2 * 1000.0 * gCperG;   // a unit of a water pool per m2, in gC/m2
+            double phyto = gP * toGC, littoral = (gA + gP) * toGC;
+            Assert.InRange(phyto, 100.0, 1000.0);
+            Assert.InRange(littoral, 300.0, 1500.0);
+            // turnover: a sparse plankton at this nutrient doubles in under 3 days, as grazed plankton does
+            double perDay = K.R_PH * (K.K_N / (K.K_N + K.K_N)) * K.STEPS_PER_DAY;
+            Assert.InRange(MathK.Log(2f) / perDay, 0.5, 3.0);
+        }
+        finally { Nature.Climate = climate; }
+    }
 }
