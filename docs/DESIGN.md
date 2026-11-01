@@ -61,6 +61,23 @@ Measured (256 map, seeds 3 / 5 / 7; tools/ScaleProbe):
   (HOME_R x map side = 120 m), so all lineages meet at once and one excludes the rest; killed, starved and lost dominate
   the deaths. Founding (HOME_R, HOME_R_MAX as shares of the map, FOUND_FILL) and the prehistory's branches need the
   ecologist's look at this scale (a prehistory branch on the 256 map had 12 of 16 lineages gone by step 500).
+Size sweep after the plant productivity merge (2026-11-01; random brains, 2,000 steps = 8 months, --threads 2, seeds
+3 / 5 / 7; densities against Krebs's herbivorous mammals, log10 D/km2 = 1.30 - 0.66 log10 M kg: 20 at 1 kg, 2.6 at 21 kg):
+- 2 km (512 map, 16 m cells): clades alive 16 -> 11-13 / 9-11 / 14-16 (mid/end), with 50 or more animals 6 / 4 / 12; 1,330-
+  7,183 animals; median clade density 5-26 x Krebs (best 29-83 x); herbivore offtake 7-39% of NPP (0.65-1.04 kg/m2/yr);
+  5-16 steps/s; ~2.3 GB.
+- 4 km (1024, 16 m): 9 / 7 / 12 clades of 50+ (13 / 9 / 15 alive); 4,635-10,708 animals; median 2-11 x Krebs (best 18-32 x);
+  offtake 6-17%; 5-10 steps/s; 2.9-3.6 GB.
+- 8 km (2048, 16 m): 7 / 8 / 13 clades of 50+ (12 / 10 / 16 alive); 5,774-13,838 animals (still spreading from 8,500
+  founders); median 0.4-3.9 x Krebs (best 4-9 x); offtake 1.4-5%; 4-10 steps/s; 3.5-4.1 GB; the 16,384-slot cap bound on
+  62 steps of seed 7; built in 80 s.
+- Coarser cells at the same width: 2 km on 32 m cells (256 map): 9 / 10 / 13 clades of 50+, 3,330-8,894 animals, median
+  6-20 x Krebs, 4-10 steps/s, 1.8-2.2 GB (no faster: the cost is the animals, not the cells); 4 km on 64 m cells: 15-16
+  clades but ~16,400 animals, held by the slot cap (249 / 783 steps full), 1.3-1.7 steps/s, 3.8 GB: a coarser cell feeds
+  more animals per km2 and resolves less relief and fewer streams.
+So every size from 2 km keeps 5+ lineages over the run on most seeds, but only the 8 km map comes near the Damuth density
+(30-100 km2 for 5+ lineages at it, the reference's estimate; 8 km is 67 km2). Recommended: 16 m cells; the 8 km map (2048)
+where realistic density matters, 4 km (1024) as the lighter choice (2-11 x too dense). Not equilibrium: 2,000 steps.
 Not done: a stream's inflow from beyond the map; a regional-uplift generator for small maps (the plates' pattern drawn
 small makes Y-shaped ridges); contour-parallel steps of a cell on some hillsides (from the failure passes: visible in
 docs/art/scale2/relief_256_*.png); the console's river ribbons should be drawn at the RIVERS width x FCELL.
