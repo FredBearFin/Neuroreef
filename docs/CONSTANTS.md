@@ -14,8 +14,10 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WORLD | 1024 | units | side of the toroidal world | HT |
 | FCELL | 4 | units | field cell side | V1 |
 | FW | 256 | cells | field grid side (WORLD/FCELL) | - |
-| HCELL | 16 | units | spatial-hash cell side | V1 |
-| GW | 64 | cells | spatial-hash grid side | - |
+| HCELL | 8 | units | spatial-hash cell side (bodies): the 7x7 cells around an animal hold everything it can perceive in a step, MAX_PERCEIVE = 3 x HCELL | derived (2026-11-01): from the largest perception radius of a step in real metres (MAX_SIGHT widened by the path, Decide.Perceive); was 16 when sight reached 32 units (1.7 km) |
+| GW | 128 | cells | spatial-hash grid side | - |
+| HCELL_CALL | 32 | units | spatial-hash cell side (callers): the 5x5 cells around a listener hold every caller it can hear, MAX_HEAR <= 2 x HCELL_CALL | derived (2026-11-01): from the loudest call in real metres (HEAR_R_M x MASS_HI^(1/3) = 3 km); a map side must be a multiple of it |
+| MAX_PERCEIVE | 24 | units | the farthest a step's perception reaches (sight along the way travelled, Decide.Perceive): the 7x7 hash neighbourhood | derived: 3 x HCELL (1.3 km); the largest walker's reaches ~18 units, so it binds only for the fastest fliers |
 | CAPACITY | 16384 | slots | agent slots (animals, eggs, embryos) a world starts with: it grows as births need more, limited only by memory (World.Grow) | HT: ~212 KB per slot with 256-unit brains (World.SlotBytes); not a cap since 2026-10-31: a seed gives the same run from any start |
 | LAKE_SHARE | 0.1 | fraction | share of the map below sea level (Nature.Water, the default): the sea; lakes above it come from the water balance of closed basins (2026-10-31; before, every cell below this quantile was a lake at one level) | HT |
 | SHALLOW | 0.035 | elev | depth below which water is shallow (wadeable, algae grow) | HT |
@@ -26,44 +28,65 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LONG_RING | 2048 | samples | long-history ring length (one sample in LONG_EVERY) | HT: with LONG_EVERY it covers 33 million steps |
 | LONG_EVERY | 512 | samples | samples between long-history samples | HT |
 | MAX_NEIGH | 64 | animals | max neighbours examined per animal per step | HT |
-| MAX_SIGHT | 32 | units | max sight range (bounded by the 5x5 hash neighbourhood) | HT |
+| MAX_SIGHT | 6.06592 | units | max sight range: the farthest eye (MASS_HI, sight gene x BODY_RANGE_TRAIT, the narrowest field of view FOV_LO) while scanning (SCAN_SIGHT); 2.0913 = MASS_HI^EXP_SIGHT (a test checks it) | derived (2026-11-01): 332 m; was 32 units (1.7 km) for any eye, even a mouse's |
+| SCAN_SIGHT | 1.3 | x | sight gained while scanning (standing still and looking: SCAN) | HT |
 
-## 2. Allometry
+## 2. Units
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| STEP_H | 2.922 | h | duration of one step: 365.25 days x 24 h / T_SEASON | derived: T_SEASON = 3000 steps is one year, so a step is 2.92 h (8.2 steps a day). Before 2026-11-01 the notes said ~3 h (water cycle) and ~5 h (pathogens); 5 h was wrong |
+| STEP_S | 10519.2 | s | duration of one step | derived: STEP_H x 3600 = 10,519 s |
+| STEPS_PER_DAY | 8.21355 | steps | steps in a day | derived: 24 / STEP_H = 8.21 |
+| M_PER_UNIT | 54.5 | m | metres per world unit: a field cell (FCELL units) is GEO_CELL_M | derived: 54.5 m (a 512 map is 28 km across, a 1024 map 56 km) |
+| BODY_L_M | 0.1 | m | body length at M = 1 kg: the side of a cube of the body's volume at the density of water, ~(M / 1000 kg/m3)^(1/3); a body is BODY_L_M x M^(1/3) x its length gene's share (Body.LengthM) | ECO: animal tissue is about as dense as water (~1000-1100 kg/m3; Schmidt-Nielsen 1984). A real mammal's head-body length is ~0.3 M^(1/3) m (mouse 8 cm, rabbit 40 cm, wolf 1.1 m) because it is ~5x longer than wide; the length genes here elongate a body up to 2.5x |
+| C_SIGHT_M | 60 | m | how far an eye of a 1 kg body sees another 1 kg body (the base of sight, x M^EXP_SIGHT x sight gene x (1.6 - field of view / 360)) | ECO: eye axial length ~11 mm x M^0.2 in mammals (Kiltie 2000; Howland, Merola & Basarab 2004; Burton 2008: eye size ~M^0.2); acuity ~0.2 cycles/degree per mm of eye in non-primate mammals (mouse 0.5, rat 1, rabbit 3 c/deg; Veilleux & Kirk 2014), i.e. ~2.2 c/deg at 1 kg; a 0.3 m body is detected when it spans 1-2 resolution cells: 0.3 m / (1/2.2 to 1/4.4 deg) = 40-75 m. Was 16 units (870 m) |
+| DMD_M | 1038 | m/day | how far animals travel in a day at M = 1 kg (daily movement distance, x M^EXP_SPEED) | ECO: daily movement distance of mammals 1.04 M^0.25 km (Garland 1983); day range ~M^0.25 in herbivores and steeper in carnivores (Carbone et al. 2005) |
+| TRAVEL_SHARE | 0.2 | - | share of its top speed the world's animals travel at, on average over all steps (moving, eating, resting): top speed per step = DMD_M x M^EXP_SPEED / STEPS_PER_DAY / TRAVEL_SHARE, so on average they cover the day range | measured (2026-11-01, seeds 3 and 5, 512 map, 6000 steps): animals moved 25 m and 17 m a step against a top speed of 125 m and 116 m (0.20 and 0.15) |
+| T_CHASE | 15 | s | how long a sprint at top running speed lasts when a predator closes on its prey (or prey bolts): a strike's reach in a step is its body plus the distance run in this time at Garland's top speed (Body.ReachM) | ECO: most predator chases last 10-30 s (Elliott, Cowan & Holling 1977); cheetahs average 173 m (~20 s; Hilborn et al. 2012); sprinting is anaerobic and short (Bennett & Ruben 1979) |
+| GARLAND_V1 | 30.08 | km/h | top running speed at 1 kg: log10 V(km/h) = log10 V1 + GARLAND_B log10 M + GARLAND_C (log10 M)^2 | ECO: maximal running speed of 106 mammals (Garland 1983): 30 km/h at 1 kg, 14 at 0.1 kg, 54 at 40 kg |
+| GARLAND_B | 0.25892 | - | linear term of Garland's top speed in log10 M | ECO: Garland 1983 |
+| GARLAND_C | -0.06237 | - | quadratic term of Garland's top speed in log10 M | ECO: Garland 1983 (speed peaks near 120 kg) |
+| BMR_W | 3.39 | W | resting metabolic rate of a 1 kg body (Kleiber's line): what C_BASAL stands for, so one energy unit is BMR_W x STEP_S / C_BASAL = 8.9 MJ | ECO: 70 kcal/day x M^0.75 = 3.4 W at 1 kg (Kleiber 1961) |
+| COT_J | 10.7 | J/m | net cost of transport of running at 1 kg (x M^EXP_MOVE per metre) | ECO: 10.7 M^-0.316 J/(kg m) (Taylor, Heglund & Maloiy 1982); with BMR_W it gives C_MOVE |
+| HR_KM2 | 0.03 | km2 | home range of a 1 kg body (x M): the area founders of one group share (Life.Found) | ECO: home range area ~M^1.0 across mammals (Kelt & Van Vuren 2001; Jetz et al. 2004); herbivores ~3 ha at 1 kg (rabbits 1-5 ha, roe deer 50-100 ha at 25 kg); carnivores ~10x more, from scarcer food (Jetz et al. 2004). Replaces GROUP_SPREAD = 10 units (545 m) for any body |
+
+## 3. Allometry
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | EXP_BASAL | 0.75 | - | Kleiber exponent for basal cost and digestion | ECO |
-| EXP_SPEED | 0.17 | - | max speed exponent | ECO |
+| EXP_SPEED | 0.25 | - | mass exponent of top speed per step (the day's travel) | ECO: daily movement distance ~M^0.25 (Garland 1983; Carbone et al. 2005); was 0.17 before 2026-11-01 (walking speed ~M^(1/6) at a constant Froude number; Alexander 1989) |
 | EXP_LIFE | 0.25 | - | lifespan and maturity exponent | ECO |
-| EXP_SIGHT | 0.2 | - | sight range exponent | HT |
+| EXP_SIGHT | 0.2 | - | sight range exponent | ECO: eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008) |
 | EXP_TURN | -0.2 | - | turn rate exponent | HT |
 | C_BASAL | 0.004 | E/step | basal cost at M=1 | ECO: Revision M, ecology review: x4, so an animal burns many times its tissue energy over a life (Rubner 1908; Speakman 2005) and fasts ~1/16 of a life, not a third (Lindstedt & Boyce 1985) |
 | C_EMAX | 2 | E/M | energy reserve per unit mass | ECO: stored reserve of the same order as tissue energy |
 | C_GUT | 0.3 | M/M | gut capacity per unit mass | HT |
 | C_DIGEST | 0.025 | M/step | digestion rate at M=1 | ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997) |
 | C_BITE | 0.06 | M/step | bite size at M=1 | Revision M: x5 with digestion (a bite fills the gut faster than it empties) |
-| C_SPEED | 1.2 | units/step | max speed at M=1 (walk) | V1 |
+| C_SPEED | 11.5942 | units/step | top speed per step at M=1 (walk): DMD_M / STEPS_PER_DAY / TRAVEL_SHARE / M_PER_UNIT | derived (2026-11-01): 632 m a step (11.6 units); was 1.2 units (65 m) from V1, so animals covered ~1/9 of a real day range |
 | C_TURN | 0.32 | rad/step | turn rate at M=1 | V1 |
 | C_LIFE | 3200 | steps | lifespan at M=1 | V1 |
 | C_MATURE | 250 | steps | maturity age at M=1 | V1 |
-| C_SIGHT | 16 | units | sight range at M=1 | V1 |
-| C_MOVE | 0.004 | E/(M^0.7*v*C_SPEED) | movement cost (x C_SPEED x M^EXP_MOVE x speed) | ECO: Revision M: x4 with basal |
+| C_SIGHT | 1.10092 | units | sight range at M=1: C_SIGHT_M / M_PER_UNIT | derived (2026-11-01): 1.1 units (60 m); was 16 (870 m) from V1 |
+| C_MOVE | 6.54121E-05 | E/(M^0.7*unit) | net cost of moving one unit at M=1 (x M^EXP_MOVE x distance): COT_J x M_PER_UNIT in energy units (C_BASAL is BMR_W x STEP_S) | ECO (2026-11-01): the cost of transport of Taylor, Heglund & Maloiy (1982) on the energy scale Kleiber's metabolism sets; 6.5e-5 per unit, 1.6% of a step's basal metabolism at 1 kg. Was 0.004 x C_SPEED = 0.0048 (Revision M), 73x the measured cost per metre, when a step's travel was 65 m |
 | EXP_MOVE | 0.7 | - | mass exponent of the cost of transport | ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982) |
 | GLIDE | 0.3 | - | speed gained on land per unit of wing that cannot yet lift the body (wing-assisted running, gliding) | ECO: proto-wings aid running up slopes and gliding before powered flight (Dial 2003) |
 
-## 3. Reproduction
+## 4. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | C_SIRE | 0.2 | - | cost to a hermaphrodite of siring, as a share of its own litter's cost (male function) | ECO: male function takes 10-30% of a simultaneous hermaphrodite's reproductive resources (Charnov 1982) |
 
-## 4. Clades
+## 5. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | SPLIT_GAP | 3 | - | two forms are separate clades when, along the axis between their centres (visible traits), the gap is this many pooled SDs | ECO: genotypic clusters with few intermediates (Mallet 1995) |
 
-## 5. Allometry
+## 6. Allometry
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -76,7 +99,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | GROWTH_EFF | 0.75 | - | efficiency of turning energy into new tissue (growth, offspring) | ECO: net growth efficiency 0.6-0.8 |
 | GROW_RESERVE | 0.2 | xEmax | a juvenile keeps this share of its reserve against starving; above it, it grows at its top rate times how full the reserve is | ECO: growth draws on the reserve in proportion to its density (dynamic energy budget, Kooijman 2010); hungry young grow slowly (Revision D; Revision P: was a threshold of 0.5, below which the young, living near 40% full, hardly grew) |
 
-## 6. Food
+## 7. Food
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -96,7 +119,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RHO_MEAT | 4 | E/M | energy density of body tissue (meat); also the cost of building tissue | ECO: tissue ~2-4x the stored reserve per unit mass |
 | RHO_BLOOD | 3 | E/M | energy density of blood | ECO: below tissue |
 
-## 7. Hunting
+## 8. Hunting
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -112,7 +135,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PAIN_HIT | 0.6 | - | pain added by a failed strike received | HT |
 | PAIN_DECAY | 0.03 | /step | pain decay per step | HT |
 
-## 8. Brain
+## 9. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -154,7 +177,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ARCHIVE | 16 | genomes | elite archive size per species | HT (Revision M: 64 before; a genome is now ~83 KB) |
 | SCORE_MATURED | 3 | - | archive score weight per offspring that reached maturity | HT |
 
-## 9. Prehistory
+## 10. Prehistory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -163,18 +186,17 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | YEARS_PER_STEP | 1000 | years | symbolic time shown in the console: years per step | - |
 | BRANCH_CAPACITY | 16384 | slots | agent slots a branch starts with (it grows as needed, World.Grow) | HT: Revision M; not a cap since 2026-10-31 (the report warns if a branch reaches its memory limit) |
 
-## 10. Brain
+## 11. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | GROUP_SIZE | 8 | agents | founders start in groups of this size at one site | ECO: populations are clustered; lone colonists cannot find mates (Allee effect) |
-| GROUP_SPREAD | 10 | units | radius of a founder group | HT |
 | HOME_R_MAX | 0.33 | - | largest radius of a founding lineage's home range, as a share of the map side (a big body's range widens up to this until it can feed FOUND_MIN founders) | HT: a third of the map; home ranges grow about in proportion to body mass (Kelt & Van Vuren 2001) |
 | HOME_R | 0.12 | - | radius of an ancestor's home range, as a share of the map side | Revision N (the user): each lineage starts in its own part of the map; species have homelands and meet as they spread |
 | HOME_TRIES | 24 | - | random sites tried when choosing a home range (the one farthest from the others is taken) | HT |
 | BANK_LIVING | 48 | genomes | genomes per species stored in a gene bank (living sample) | HT (Revision M: 96 before) |
 
-## 11. Body
+## 12. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -210,25 +232,27 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | VOICE_MIN | 0.25 | - | a voice organ below this makes no sound | HT: a little voice is no voice; above founder variation around a mute ancestor |
 | COST_VOICE | 0.03 | xbasal | basal cost of a full voice (larynx and its control) | ECO: small; vocal tissue and its neural control are a minor part of upkeep |
 
-## 12. Voice
+## 13. Voice
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | MAX_SYL | 3 | sounds | syllables in one utterance at most (distinct sounds, in the order of how strongly each is intended) | ECO: animal calls combine a few units into sequences, rarely more (Engesser & Townsend 2019) |
 | CALL_SYL | 0.5 | - | share of a call's cost that grows with each syllable: an utterance of n syllables costs C_CALL x basal x (1 - CALL_SYL + CALL_SYL x n) | ECO: a longer song costs more, but much of a call's cost is the start-up (Oberweger & Goller 2001; Ophir et al. 2010) |
-| HEAR_R | 16 | units | how far a full voice of a body of M=1 carries (range = HEAR_R x voice x M^(1/3), at most MAX_SIGHT) | ECO: bigger animals call louder and are heard further (Fletcher 2004; Wiley & Richards 1978); about the sight range at M=1 (C_SIGHT) |
+| HEAR_R_M | 870 | m | how far a full voice of a body of M=1 kg carries (range = HEAR_R_M x voice x M^(1/3)) | ECO: bigger animals call louder and are heard further (Fletcher 2004; Wiley & Richards 1978): a songbird of 20-60 g is heard by its kind at ~100-300 m (Brenowitz 1982), a 40 kg wolf's howl at 6-10 km (Harrington & Mech 1979); x M^(1/3) through both gives 0.5-2.3 km at 1 kg. The old 16 units (870 m) lies in that range, so hearing is kept; until 2026-11-01 calls were cut off at MAX_SIGHT (1.7 km) |
+| HEAR_R | 15.9633 | units | how far a full voice of a body of M=1 carries, in world units | derived: HEAR_R_M / M_PER_UNIT = 16 |
+| MAX_HEAR | 54.5937 | units | the farthest any call carries: HEAR_R x MASS_HI^(1/3) (3.42, a test checks it) at a full voice | derived: 3 km; the callers' hash (HCELL_CALL) is sized from it |
 | FOCAL_KEEP | 0.7 | - | a listener keeps attending to the same caller while it calls at least this share as loud as the loudest alike caller | ECO/HT: listeners stream one source among many (Bee & Micheyl 2008); hysteresis keeps attention from flickering |
 | TMPL_HALF | 1000 | steps | steps over which the counts of a remembered tutor's syllable pairs halve | ECO/HT: a template fades without new tutoring; about a third of a year (Doupe & Kuhl 1999; Tchernichovski et al. 2001); the young copy form from elders, so a language changes by iterated learning (Kirby, Cornish & Smith 2008) |
 | IMIT_RBAR | 0.05 | /step of calling | rate of the running mean of an organism's own match to its template | HT: a baseline, as RBAR_RATE is for reward |
 | IMIT_AGE_LO | 0.1 | - | shortest sensitive period for memorising tutors, as a share of lifespan (the IMIT_AGE gene spans IMIT_AGE_LO..1) | ECO: songbirds memorise early in life, some species throughout (Brainard & Doupe 2002) |
 
-## 13. Food
+## 14. Food
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | SCAVENGE | 0.8 | - | share of its meat-digesting skill a meat-eater brings to carrion | ECO: almost all carnivores scavenge; wolves feed on a kill for days (DeVault et al. 2003) |
 
-## 14. Land
+## 15. Land
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -236,7 +260,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | POND_GAP | 6 | cells | pond sites are at least this far from a lake or the sea (from a river: POND_GAP_RIVER) | HT: a pond beside a lake adds nothing |
 | POND_GAP_RIVER | 2 | cells | pond sites are at least this far from a river (2026-11-01; POND_GAP from a lake or the sea) | ECO: floodplains hold ponds and wetlands beside their rivers (oxbow lakes, backswamps; Junk et al. 1989); HT: off the river's own banks |
 
-## 15. Body
+## 16. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -257,7 +281,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | COST_BRAIN | 0.25 | xbasal | basal cost of a brain of BRAIN_REF memory units, scaled by units in use | ECO: brain tissue costs about 2-20% of basal metabolism across vertebrates (humans ~20%); the largest possible brain costs a little more (Revision M) |
 | BRAIN_REF | 256 | units | reference brain size for the brain cost: the largest brain (G.NH) | Revision M: was 12, the old limit |
 
-## 16. Brain
+## 17. Brain
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -266,7 +290,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | DRIVE_FEMALE | 0.6 | - | strength of the mating instinct in females, against males (1) | designed by the user (2026-10-28): males are the more eager sex (Bateman 1948; Trivers 1972) |
 | DRIVE_HERM | 0.8 | - | strength of the mating instinct in hermaphrodites, against males (1) | designed: between the two sexes |
 
-## 17. Body
+## 18. Body
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -276,7 +300,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_COMPAT | 0.25 | - | genetic distance at which mating succeeds with probability 1/e: p = exp(-(d/D)^4) (body genes / 127, RMS per gene) | ECO: Dobzhansky-Muller incompatibilities snowball with the square of the substitutions between lineages (Orr 1995); d^2 grows with substitutions: within a population (d ~0.13) p ~0.9, between independent ancestors (d ~0.4) p < 0.001 |
 | KIN_LOOK | 0.25 | - | others whose visible body genes are this close look like kin (body genes / 127, RMS per gene) | ECO: animals recognise their kind by appearance |
 
-## 18. Locomotion physics
+## 19. Locomotion physics
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -286,8 +310,8 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | EXP_FLY_AVAIL | 0.7 | - | mass exponent of the power a body's flight muscles can deliver | ECO: flight muscle is a fixed share of mass, and its mass-specific power falls with wingbeat frequency, so power available ~ M^0.7 (Pennycuick 1968; Ellington 1991; Marden 1994) |
 | FLY_M_MAX | 16 | M | heaviest body that can fly, with the largest wings (wing gene 1): a body flies while wings x (FLY_M_MAX / M)^(EXP_FLY_REQ - EXP_FLY_AVAIL) >= 1, power available over the least power required | ECO: power available ~M^0.7 against power required ~M^(7/6) caps flapping flight at ~12-19 kg (Pennycuick 1968, 2008; Ellington 1991): the heaviest living fliers, bustards and swans, weigh 12-18 kg. At wing gene 0.5 the ceiling is 16 x 0.5^2.14 = 3.6 |
 | FLY_WING_MIN | 0.45 | - | smallest wing gene that can take off at any size (the flight muscle needed to lift the body's own weight) | ECO: takeoff needs flight muscle of at least ~16% of body mass, nearly whatever the size, in birds, bats and insects (Marden 1987); the largest flight-muscle ratios are ~35% (hummingbirds, pigeons; Greenewalt 1962; Hartman 1961), so wing gene 1 is taken as ~35% and 16/35 = 0.45. Without it the power margin alone let a 0.1 body fly on a wing gene of 0.09 |
-| FLY_VMP | 4 | - | speed of least power (a flier's cruise) as a multiple of the walking-speed allometry C_SPEED M^EXP_SPEED x speed gene | ECO: birds cruise at ~5-15 m/s (Pennycuick 2008: V_mp ~ M^(1/6), as walking speed here, EXP_SPEED) while walkers travel at ~1-2 m/s (Alexander 2003), so a flier cruises several times faster than it walks; 4 keeps the fastest fliers under FLY_V_CAP (was FLY_SPEED = 1.4 for top speed, i.e. ~0.9 for cruise) |
-| FLY_V_CAP | 16 | units/step | fastest an animal moves in one step through the air, in world units | world cap: an animal senses others only within MAX_SIGHT = 2 spatial-hash cells (HCELL) and decides once per step; moving more than one hash cell per step would overshoot what it sensed. Real fliers would go faster still: the cost per distance (FLY_COT_RATIO) is calibrated instead of the speed |
+| FLY_VMP | 4 | - | speed of least power (a flier's cruise) as a multiple of the walking-speed allometry C_SPEED M^EXP_SPEED x speed gene | ECO: birds cruise at ~5-15 m/s (Pennycuick 2008: V_mp ~ M^(1/6), as walking speed here, EXP_SPEED) while walkers travel at ~1-2 m/s (Alexander 2003), so a flier cruises several times faster than it walks (was FLY_SPEED = 1.4 for top speed, i.e. ~0.9 for cruise). Since 2026-11-01 the walking allometry is a day's travel per step (DMD_M), so this is a flier's daily travel against a walker's |
+| FLY_V_CAP | 128 | units/step | fastest an animal moves in one step through the air, in world units | world cap (2026-11-01): 7 km a step. An animal perceives what lay within sight of the way it travelled (Decide.Perceive), out to MAX_PERCEIVE; this keeps the fastest fliers' way inside it. Real fliers could go farther still (12 m/s for a step is 126 km): the cost per distance (FLY_COT_RATIO) is calibrated instead of the speed. Was 16 units (870 m) when sight reached 32 units |
 | FLY_COT_RATIO | 0.4 | - | cost per distance of flying at the speed of least power, against walking's at the same mass (M = FLY_M_REF, full legs, two pairs) | ECO: flight's cost of transport is 1/3-1/2 of running's at equal mass (Tucker 1970; Schmidt-Nielsen 1972). It sets how long in a step a flier is really in the air: it flies at FLIGHT_MULT x basal for the share of the step its distance needs (Body.FlightFullStep), but the whole step when it cannot land |
 | FLY_X_MAX | 1.6 | - | fastest level flight as a multiple of the speed of least power, when power allows (and at most FLY_V_CAP) (power there is (3/x + x^3)/4 = 1.49 x least) | ECO: birds fly up to ~1.5-2x their minimum-power speed; the maximum-range speed is ~1.3-1.6x (Pennycuick 2008; Tobalske et al. 2003). A flier with less margin flies at most where power required meets power available |
 | FLY_U_MIN | 0.38 | - | slowest speed counted on the power curve, as a share of the speed of least power: hovering costs (3/u + u^3)/4 = 2x the least power | ECO: the power curve is U-shaped (induced power ~1/v, profile and parasite power ~v^3; Pennycuick 1968; Tucker 1973); hovering costs about twice the minimum (Norberg 1990; Ellington 1984) |
@@ -298,7 +322,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | ROUGH_SLOW | 0.5 | - | walking speed lost on fully rough ground by an M = 1 body without stabilising legs: v / (1 + ROUGH_SLOW x rough x M^(-1/3) x (1 - stability)) | ECO/HT: obstacles are bigger against a small body's legs (leg length ~ M^(1/3)), so roughness slows the small most (Kaspari & Weiser 1999: the size-grain hypothesis) |
 | LOAD_DRAG | 0.2 | - | walking speed lost per unit of bone stress above an unarmoured two-pair body's: drag = LOAD_DRAG x M^(1/3) x ((1 + armour) / sqrt(leg pairs) - 1/sqrt(2)) | ECO: weight grows as M, bone section as M^(2/3), so bone stress ~ M^(1/3) and heavier bodies must move more carefully (Biewener 1989, 1990); more legs share it. At M = 1 the armour term equals the old ARMOUR_DRAG / sqrt(pairs) |
 
-## 19. Clades
+## 20. Clades
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -317,13 +341,13 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | SPLIT_VIS | 1 | - | two forms are a new clade only if some visible trait differs by this many visible units (1 = half again the mass, 0.15 of an organ, or a pair of limbs or eyes) | designed: the user asked for subspecies that are clearly visual (Revision L); fertility then says subspecies or species |
 | CLADE_RECYCLE | 20000 | steps | an extinct clade's slot is reused only after this many steps | - |
 
-## 20. Reward
+## 21. Reward
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | R_SPEND | 1 | - | energy spent on its choices (strikes, calls, moving, heat) counts against the reward at this share of the weight energy eaten counts for it | ECO: animals learn by net energy gain (optimal foraging; Stephens & Krebs 1986); 1 = a unit spent weighs as a unit eaten. 2026-10-30: without it, calling (19-24% of basal) rose from ~38% to ~65% of steps by learning |
 
-## 21. Reproduction
+## 22. Reproduction
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -333,7 +357,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | C_MATE | 0.02 | E/M | mating cost per partner | HT |
 | REFRACT | 0.1 | - | a male's refractory period after mating, as a share of the breeding cooldown | ECO: male refractory periods are short against female breeding cycles (Bateman 1948; Trivers 1972) |
 
-## 22. Care
+## 23. Care
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -342,19 +366,19 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | WEAN | 0.4 | - | care ends (weaning) when the young has built this share of its adult tissue | ECO: mammals wean at roughly a third to a half of adult mass |
 | CARE_RESERVE | 0.4 | xEmax | a mother keeps at least this share of her energy reserve for herself | ECO: females in poor condition reduce or stop provisioning |
 
-## 23. Pathogens
+## 24. Pathogens
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| PG_REP_LO | 0.03 | /step | within-host growth rate at gene 0 (log scale to PG_REP_HI) | ECO: in vivo doubling times run from hours (Salmonella in mouse tissues, Grant et al. 2008) to about a day (M. tuberculosis): ln2/0.03 = 23 steps (~5 days) |
-| PG_REP_HI | 0.5 | /step | within-host growth rate at gene 255 | ECO: ln2/0.5 = 1.4 steps (~7 h), a fast bacterial pathogen in a host |
+| PG_REP_LO | 0.03 | /step | within-host growth rate at gene 0 (log scale to PG_REP_HI) | ECO: in vivo doubling times run from hours (Salmonella in mouse tissues, Grant et al. 2008) to about a day (M. tuberculosis): ln2/0.03 = 23 steps (~2.8 days at STEP_H) |
+| PG_REP_HI | 0.5 | /step | within-host growth rate at gene 255 | ECO: ln2/0.5 = 1.4 steps (~4 h), a fast bacterial pathogen in a host |
 | PG_QS_LO | 0.01 | load | quorum-sensing threshold at gene 0 (log scale to PG_QS_HI), in load | ECO: QS switches at a cell density set by the signal's receptor affinity, which mutates readily (Miller & Bassler 2001) |
 | PG_QS_HI | 3 | load | quorum-sensing threshold at gene 255, in load (above 1 a host never holds a quorum: always stealthy) | ECO: QS-blind (lasR) mutants are common in chronic infections (Smith et al. 2006) |
 | PG_HILL | 4 | - | steepness (Hill coefficient) of the quorum switch: on = L^n / (L^n + threshold^n) | ECO: autoinduction makes QS a switch-like positive feedback (Miller & Bassler 2001); LuxR-type responses have Hill coefficients ~2-4 |
 | PG_STEALTH | 0.1 | - | share of toxin and shedding expressed below quorum (stealth mode) | ECO: QS controls most secreted virulence factors; QS-off cells make a small fraction (Pseudomonas lasR mutants, Rumbaugh et al. 2009) |
 | PG_DETECT | 0.3 | - | immune detection below quorum, relative to a quorate population | ECO: QS-regulated exoproducts are what the immune system mostly sees; innate receptors still see the cells (PAMPs, Janeway 1989) |
-| PG_DECAY_HI | 0.3 | /step | decay rate in the environment at persistence 0 (log scale to PG_DECAY_LO) | ECO: enveloped viruses and vegetative bacteria die within hours outside a host (half-life ~2 steps, ~10 h) |
-| PG_DECAY_LO | 0.0002 | /step | decay rate in the environment at persistence 255 | ECO: spores and helminth eggs survive years (half-life ~3,500 steps); anthrax spores decades (Walther & Ewald 2004) |
+| PG_DECAY_HI | 0.3 | /step | decay rate in the environment at persistence 0 (log scale to PG_DECAY_LO) | ECO: enveloped viruses and vegetative bacteria die within hours outside a host (half-life ~2 steps, ~6 h) |
+| PG_DECAY_LO | 0.0002 | /step | decay rate in the environment at persistence 255 | ECO: spores and helminth eggs survive years (half-life ~3,500 steps, 1.2 years); anthrax spores decades (Walther & Ewald 2004) |
 | PG_DRY | 3 | x | extra decay on dry land (not water, pond or flood) over water | ECO: desiccation and UV kill enteric bacteria faster on dry surfaces than in water |
 | PG_PERS_COST | 0.5 | - | within-host growth lost at full persistence (spore coats and capsids cost replication) | ECO: survival-reproduction trade-off among phages (De Paepe & Taddei 2006); sporulation halts growth |
 | PG_BREADTH | 2 | - | host-match width gained at full host breadth (x(1 + this) of MHC_W) | ECO: multi-host pathogens are common (Woolhouse, Taylor & Haydon 2001) |
@@ -365,16 +389,16 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PG_INOC | 0.01 | load | load at infection (the founding dose) | ECO: infections start from a small bottleneck of founders (Abel et al. 2015) |
 | PG_CLEAR | 0.002 | load | load below which an infection is cleared | HT: a fifth of the founding dose |
 | PG_KILL | 0.6 | /step | killing rate per unit immune effector at full detection | ECO: with PG_RISE an adaptive response clears a fast strain in ~1-2 weeks (30-70 steps); a strain growing too slowly to stimulate expansion above PG_E_DECAY persists (chronic carriage) |
-| PG_RISE | 0.3 | /step | most a specific immune response multiplies per step (clonal expansion, x stimulation x detection x (PG_NAIVE + effector)) | ECO: within-host dynamics dX/dt = rho X P/(P + phi) (Antia, Levin & May 1994); activated T cells divide every 6-8 h (De Boer et al. 2001), ~0.4-0.6 per 5-h step |
+| PG_RISE | 0.3 | /step | most a specific immune response multiplies per step (clonal expansion, x stimulation x detection x (PG_NAIVE + effector)) | ECO: within-host dynamics dX/dt = rho X P/(P + phi) (Antia, Levin & May 1994); activated T cells divide every 6-8 h (De Boer et al. 2001), ~0.25-0.35 doublings per 2.9-h step |
 | PG_NAIVE | 0.02 | - | naive precursors a specific response expands from (in effector units) | ECO: a few hundred naive precursors per antigen, against ~10^5-fold expansion at the peak (Blattman et al. 2002) |
 | PG_HALF | 0.01 | load | load at which immune stimulation is half its maximum | ECO: small antigen doses start an adaptive response (Bachmann & Jennings 2010); here the founding dose PG_INOC, so a stealthy strain is seen less but not ignored |
 | PG_E_DECAY | 0.02 | /step | decay of the immune effector per step (contraction) | ECO: effector T cells contract within days to weeks after the peak |
 | PG_IMM_BASE | 0.5 | - | immune stimulation of a host with no immunity gene (innate); the gene adds up to 1 | ECO: innate immunity alone controls many infections (Janeway & Medzhitov 2002) |
 | PG_MHC_DIV | 0.5 | - | gain in immune stimulation at full MHC diversity (the spread of its recognition genes) | ECO: MHC heterozygote advantage: more distinct alleles present more antigens (Doherty & Zinkernagel 1975; Penn, Damjanovich & Potts 2002) |
 | PG_CROSS_W | 0.25 | - | cross-immunity width: protection by memory falls as exp(-d^2/w^2) of antigen RMS distance (/127) | ECO: titres fall with antigenic distance; drifted influenza escapes old immunity (Smith et al. 2004) |
-| PG_MEM_DECAY | 0.0003 | /step | decay of immune memory per step | ECO: antibody half-lives of 1-10+ years (Amanna, Carlson & Slifka 2007): ~2,300 steps here |
+| PG_MEM_DECAY | 0.0003 | /step | decay of immune memory per step | ECO: antibody half-lives of 1-10+ years (Amanna, Carlson & Slifka 2007): ~2,300 steps (0.8 years) here |
 | PG_RECALL | 1 | - | immune effector at once on reinfection, per unit cross-immunity (the secondary response) | ECO: memory responses are faster and larger (Ahmed & Gray 1996) |
-| PG_DMG | 0.1 | /step | tissue damage per step per unit toxin x load (1 = death by disease) | ECO: virulence is damage from pathogen load and toxins (Casadevall & Pirofski 1999); untreated cholera can kill within a day of the first symptoms (Sack et al. 2004): a full-toxin strain at full load kills in ~11 steps (~2 days) |
+| PG_DMG | 0.1 | /step | tissue damage per step per unit toxin x load (1 = death by disease) | ECO: virulence is damage from pathogen load and toxins (Casadevall & Pirofski 1999); untreated cholera can kill within a day of the first symptoms (Sack et al. 2004): a full-toxin strain at full load kills in ~11 steps (~1.3 days) |
 | PG_REPAIR | 0.01 | /step | repair of tissue damage per step at a full energy reserve (x reserve share: a starving host cannot repair) | ECO: malnutrition raises case fatality (Scrimshaw, Taylor & Gordon 1968) |
 | PG_COST_LOAD | 0.2 | xbasal | extra basal cost per unit load (what the pathogen takes) | ECO: parasites take a share of host resources |
 | PG_COST_IMM | 0.3 | xbasal | extra basal cost per unit immune effector (fever, immune response) | ECO: an immune response raises resting metabolism 10-30%; fever ~10-13% per °C (Lochmiller & Deerenberg 2000) |
@@ -386,7 +410,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PG_TOUCH | 0.02 | /step | share of a cell's reservoir picked up per step by an animal standing in it | HT |
 | PG_EAT | 0.2 | /bite | share of a cell's reservoir swallowed with a bite of food from it | HT: grazing and dung-eating are the faecal-oral route |
 | PG_DRINK | 0.2 | /drink | share of a water cell's reservoir swallowed with a drink | HT: a waterhole is where waterborne pathogens meet hosts (cholera, Ewald 1991) |
-| PG_FLOW | 0.5 | /step | share of a river cell's pathogens carried one cell downstream per step | ECO: rivers run far faster than a cell (16 m) per step (5 h); the downstream-first update moves a cell's load one cell per step at most |
+| PG_FLOW | 0.5 | /step | share of a river cell's pathogens carried one cell downstream per step | ECO: rivers run far faster than a field cell (GEO_CELL_M, 218 m) per step (STEP_H, 2.9 h); the downstream-first update moves a cell's load one cell per step at most |
 | PG_CARCASS | 1 | - | share of its load a dead host leaves in the ground where it died | ECO: carcasses are reservoirs (anthrax, Turner et al. 2014) |
 | PG_RES_MIN | 1E-05 | load | reservoir load below which a cell is clean | HT: picked up by touch it is a hazard of 2e-5 per step |
 | PG_FOUNDERS | 12 | strains | founding strains at world start, each a random genome in a few random cells | HT: replaces the old flat spillover; nothing seeds them again |
@@ -395,7 +419,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | PG_STRAIN_D | 0.1 | - | two pathogens are one strain (for telemetry) within this RMS genome distance (traits /255, antigen /127) | HT: one transmission drifts a genome ~0.03 by PG_MUT and MHC_MUT, so a strain is about a dozen transmissions of drift |
 | PG_CLUSTERS | 256 | strains | most strains telemetry tells apart | HT |
 
-## 24. Weather
+## 25. Weather
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -403,7 +427,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | RAIN_RHO | 0.4 | - | persistence of the rainfall anomaly from one year to the next (AR(1)) | ECO: droughts cluster in runs of years |
 | RAIN_MAX | 0.7 | - | limit of the rainfall anomaly | - |
 
-## 25. Vegetation
+## 26. Vegetation
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -434,7 +458,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | N_MAX | 1.5 | - | max nutrient | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
-## 26. Plants
+## 27. Plants
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -537,7 +561,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BURR_DROP | 0.03 | /step | share of seed in a coat that falls off per step | ECO: Couvreur et al. 2004 |
 | M_GAPE | 1 | M | body mass whose gape passes a reference seed whole | ECO: gape limits the seed size dispersed (Wheelwright 1985) |
 
-## 27. Fire
+## 28. Fire
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -551,7 +575,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | D_SCENT | 0.01 | /step | scent decay | HT |
 | MARK_GAIN | 4 | - | MARK multiplier on scent deposit | HT |
 
-## 28. Climate
+## 29. Climate
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -571,7 +595,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAPSE | 6.5 | K/km | lapse rate: cooling with height | ECO: ICAO standard atmosphere, 6.5 K per km |
 | H_RELIEF | 8000 | m | the vertical scale: Elev (1 - SeaLevel) above the lakes is this many metres, so a cell stands (Elev - SeaLevel) / (1 - SeaLevel) x H_RELIEF m above them (Climate, Hydrology, the 3D view). The highest ground stands at most this high: deep time's relief is scaled down only above it | GEO/HT: 3,000 m before 2026-11-01, which flattened every collision belt to rolling hills; active orogens stand 4-9 km (the Alps 4.8, the Andes 7, the Himalaya 8.8), and the relief is now what uplift against erosion leaves (4-6 km on the default map) |
 | WATER_DAMP | 0.75 | - | share of the seasonal swing that open water takes away at the shore (continentality 1 - WATER_DAMP x exp(-distance / L_MAR)) | ECO: maritime climates swing a quarter of continental ones (Conrad 1946 continentality index) |
-| L_MAR | 6 | cells | distance over which the sea's damping of the seasons fades inland | HT: ~25 units, a few hours' walk |
+| L_MAR | 6 | cells | distance over which the sea's damping of the seasons fades inland | HT: 1.3 km |
 | T_WATER_MIN | 0.5 | °C | water under ice stays at least this warm | ECO: lakes freeze from the top; the water below stays at 0-4 °C |
 | EVAP_BETA | 0.5 | - | Budyko-style exponent of how evaporation dries soil: moisture x (e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens) | ECO: evaporative demand rises with saturation vapour pressure (Budyko 1974; Tetens 1930) |
 | GRASS_TMIN | 0 | °C | grass: lowest, best and highest temperature of growth (Yan & Hunt beta curve, x 1 at T_REF, at most PLANT_CAP) | ECO: Yan & Hunt (1999); C4/C3 grasses grow from ~0 to ~45 °C |
@@ -590,7 +614,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | TT_STEP | 0.25 | K | temperature step of the response tables | - |
 | TT_N | 512 | - | entries of each response table | - |
 
-## 29. Heat
+## 30. Heat
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -618,18 +642,18 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FOUND_APP | 0.3 | 0..1 | founders' appendages (appendage gene) | HT |
 | AIR_T_SCALE | 30 | K | AIR_T sense: (operative temperature - T_BODY) / AIR_T_SCALE, clamped to -1..1 | - |
 
-## 30. Memory
+## 31. Memory
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| SENSE_WATER | 8 | cells | farthest an animal senses drinkable water or land: SEEK_WATER and SEEK_LAND point the way only within it, and WATER_CLOSE and LAND_CLOSE fade to 0 at it | HT: 8 cells = 32 units = MAX_SIGHT, the farthest any eye in this world sees, and the range WATER_CLOSE already faded over; cues of distant water (sight, humidity, odour) carry a few body-lengths to a few km, not across a landscape (Dusenbery 1992). Before 2026-10-30 the way to water was a map-wide distance field |
+| SENSE_WATER | 8 | cells | farthest an animal senses drinkable water or land: SEEK_WATER and SEEK_LAND point the way only within it, and WATER_CLOSE and LAND_CLOSE fade to 0 at it | ECO (2026-11-01, in metres): 8 cells = 1.74 km, the horizon of an eye 0.24 m above flat ground (3.57 km x sqrt(height in m)), as for a body of a few to 40 kg; a lake or pond spans hundreds of metres and is seen to the horizon, and humidity and odour carry as far downwind. Before, it was set equal to MAX_SIGHT (32 units, now 6). Cues of distant water (sight, humidity, odour) carry a few body-lengths to a few km, not across a landscape (Dusenbery 1992). Before 2026-10-30 the way to water was a map-wide distance field |
 | PI_ERR | 0.2 | - | path-integration error: each step's estimate of its own displacement is off by a random vector of SD PI_ERR x the distance moved (each axis) | ECO: (at BRAIN_START units; see PI_DIFF) odometer and compass errors of path integration add up with the way travelled, so a remembered place drifts as the square root of the distance (Mueller & Wehner 1988; Cheung et al. 2007); HT: a step is hours of travel, so one step is one leg of ~10-20% error |
-| PI_DIFF | 1 | units | path-integration drift at rest: a held place diffuses by this SD a step (each axis) in a brain of BRAIN_START units; PI_ERR and PI_DIFF both scale as sqrt(BRAIN_START / units) | ML/ECO: a neural integrator (continuous attractor) diffuses at a rate ~ 1/N neurons (Burak & Fiete 2009); HT: a 24-unit brain loses a place to about its sight range (32) in ~1000 still steps, a 256-unit one in ~10000 |
-| MEM_NEAR | 32 | units | distance of a remembered place at which its NEAR sense reads 0.5 (NEAR = 1 / (1 + d / MEM_NEAR); 0 when nothing is remembered) | -: MAX_SIGHT, so NEAR reads 0.5 at the edge of sight |
+| PI_DIFF | 1 | units | path-integration drift at rest: a held place diffuses by this SD a step (each axis) in a brain of BRAIN_START units; PI_ERR and PI_DIFF both scale as sqrt(BRAIN_START / units) | ML/ECO: a neural integrator (continuous attractor) diffuses at a rate ~ 1/N neurons (Burak & Fiete 2009); HT: 54.5 m a step; a 24-unit brain loses a place to about SENSE_WATER (32 units, 1.7 km) in ~1000 still steps, a 256-unit one in ~10000 |
+| MEM_NEAR | 32 | units | distance of a remembered place at which its NEAR sense reads 0.5 (NEAR = 1 / (1 + d / MEM_NEAR); 0 when nothing is remembered) | -: 1.74 km, SENSE_WATER in units (was MAX_SIGHT = 32 units until 2026-11-01, when sight became metres): NEAR reads 0.5 where the cues of water fade |
 | DAMP_CUE | 0.02 | - | smallest difference in soil moisture across a cell (between its two neighbours) that a thirsty animal can feel and follow toward water; below it it walks downhill | HT: about the patchiness of moisture on uniform ground; animals follow damp ground and smell water at a distance (Polansky et al. 2015), and water gathers downhill |
 | FED_WELL | 1 | steps | a meal is remembered as 'fed well' when one bite's energy is at least this many steps' need (FIELD_METAB x basal) | HT: a bite that pays for its step, FOOD_HERE 0.63; a patch richer than the cost of being there is worth coming back to (Charnov 1976) |
 
-## 31. Hydrology
+## 32. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -665,7 +689,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FLOOD_R | 3 | cells | floodplain: cells at most this many flow steps upstream of the river they drain into | HT: floodplains are a few channel widths to tens of km wide |
 | FLOOD_HAND | 75 | m | floodplain: cells at most this high above that river | HT: bounds the search; the stage decides which of them flood. Was 0.5 x SHALLOW (elevation) before 2026-11-01, ~75 m at H_RELIEF 3,000 m and 1 - SeaLevel ~0.7: now in metres, so it keeps its meaning when the vertical scale changes |
 
-## 32. Geology
+## 33. Geology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -732,17 +756,17 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | FERT_SED | 0.6 | - | base fertility of soil on sedimentary rock | ECO: shales weather to moderately rich soils, sandstones to poor ones; their mean (limestone: FERT_LIME) |
 | FERT_VAR | 0.15 | - | local variation of fertility about its parent material (±, from organic matter, drainage and soil age) | HT: was the whole fertility (noise) before Revision R |
 
-## 33. Hydrology
+## 34. Hydrology
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
 | FLOOD_MIX | 0.3 | /update | share of the difference between the flooding river's nutrient and a flooded cell's that the flood leaves on the soil, at each water-cycle update (WC_EVERY steps); taken from the river | ECO/HT: the flood pulse brings river nutrients and silt onto the floodplain each year (Junk, Bayley & Sparks 1989; the Nile's ~1 mm of silt a year, Said 1993); 0.5 per 100 steps before the water cycle, the same rate per step at 50 |
 
-## 34. Water cycle
+## 35. Water cycle
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| WC_EVERY | 50 | steps | steps between water-cycle updates (rain, snow, soil, groundwater, routing, ponds, lakes, drinkable water) | HT: 60 updates a year at T_SEASON (about 6 days each at 365 days a year); a step is ~3 hours, so the stores change little between updates |
+| WC_EVERY | 50 | steps | steps between water-cycle updates (rain, snow, soil, groundwater, routing, ponds, lakes, drinkable water) | HT: 60 updates a year at T_SEASON (about 6 days each at 365 days a year); a step is STEP_H = 2.9 hours, so the stores change little between updates |
 | P_MEAN | 800 | mm/year | mean yearly rain on the land (the rain pattern Climate.Rainfall is relative to it) | ECO: mean land precipitation ~750-800 mm a year (Trenberth et al. 2007) |
 | RAIN_LOCAL | 0.35 | - | share of the land's rain that falls as local convective rain of recycled moisture, spread evenly over the land of its latitude; the rest follows the wind-borne pattern (Climate.Rainfall) | ECO: ~40% of land rain comes from land evaporation (Trenberth 1999; van der Ent et al. 2010) and falls near where it rose; HT: without it a third of the land got under a quarter of the mean rain |
 | PET_REF | 1000 | mm/year | potential evapotranspiration at T_REF; it follows the saturation vapour pressure e_s(T) / e_s(T_REF) (Tetens), and is 0 at or below 0 °C | ECO: PET of a 20 °C climate ~1,000-1,200 mm a year (Thornthwaite 1948; Hamon 1961: PET ~ saturation vapour density) |
@@ -769,7 +793,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAKE_STAGE | 500 | mm | a lake's stage above its outlet's sill (its level at creation) when it receives its mean inflow; its outlet carries in proportion to the stage (a linear reservoir whose outlet is sized for the lake's mean flow) | ECO/HT: outlet channels are sized by the flows they carry, as river channels are (Leopold, Wolman & Miller 1964); lakes rise a few dm to m in floods; a lake below its sill does not spill |
 | WC_SPINUP | 2 | years | years of weather the water cycle runs at world creation (average years), so soil, snow, groundwater and rivers start in their seasonal state | HT: groundwater is first set to the steady state of the first year's recharge, then a second year settles the seasons and gives each river its mean discharge |
 
-## 35. Caves
+## 36. Caves
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
@@ -808,6 +832,6 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAVA_D | 8 | m | rock over a lava tube | ECO: roofs of a few m to ~15 m (Greeley 1987) |
 | LAVA_SKY | 0.1 | - | chance per cell of a lava tube that its roof has fallen in (a skylight, an entrance) | ECO: skylights every few hundred m along active tubes (Kauahikaua et al. 1998); HT |
 
-## 36. Organisms
+## 37. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

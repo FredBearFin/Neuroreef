@@ -119,7 +119,7 @@ public class ExploreTests
         Decide.Run(w, i, new Decide.ProbeBuf());
         Assert.Equal(0f, w.Feat[i * F.N + F.O1_CLOSE]);
 
-        var p = PlaceAt(w, 23f, 21f);   // in front, within sight
+        var p = PlaceAt(w, 20f + 0.8f * w.PSight[i], 20.2f);   // in front, within sight (2026-11-01: sight is metres now, ~60 m x M^0.2; was (23, 21), 3.2 units = 175 m)
         float Dist() { float dx = World.Delta1(p.X - w.X[i]), dy = World.Delta1(p.Y - w.Y[i]); return MathF.Sqrt(dx * dx + dy * dy); }
         float d0 = Dist();
         Simulation.BuildFor(w);

@@ -22,7 +22,8 @@ public static class Decide
     {
         public readonly long[] Attempts = new long[P.N], Eligible = new long[P.N], Effective = new long[P.N];
         public long Decisions, CapHits, O1Changed, O2Changed, MateChanged, StrikeChanged,
-            ScanActive, ScanBlockedEats, SprintRequested, SprintMoved;
+            ScanActive, ScanBlockedEats, SprintRequested, SprintMoved,
+            SeeOther, SeeKin, SeeMate, InReach;   // encounters (2026-11-01): decisions with another kind perceived, kin perceived, a ready partner perceived, a strike target within reach of its way
 
         internal void Attempt(int p) => Interlocked.Increment(ref Attempts[p]);
         internal void Allow(int p) => Interlocked.Increment(ref Eligible[p]);
@@ -34,12 +35,12 @@ public static class Decide
 
     struct Near { public float D, Dx, Dy; public int J; }
 
-    // Hash-cell offsets of the 5x5 neighbourhood, nearest first (own cell, ring 1, ring 2).
+    // Hash-cell offsets of the 7x7 neighbourhood, nearest first (own cell, ring 1, ring 2, ring 3): the first 9, 25 or 49
     static readonly (int dx, int dy)[] Ring = BuildRing();
     static (int, int)[] BuildRing()
     {
         var l = new System.Collections.Generic.List<(int, int)>();
-        for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) l.Add((dx, dy));
+        for (int dy = -3; dy <= 3; dy++) for (int dx = -3; dx <= 3; dx++) l.Add((dx, dy));
         l.Sort((a, b) => Math.Max(Math.Abs(a.Item1), Math.Abs(a.Item2)).CompareTo(Math.Max(Math.Abs(b.Item1), Math.Abs(b.Item2))) is int c && c != 0
             ? c : (a.Item1 * a.Item1 + a.Item2 * a.Item2).CompareTo(b.Item1 * b.Item1 + b.Item2 * b.Item2));
         return l.ToArray();
@@ -71,6 +72,44 @@ public static class Decide
     /// <summary>The worth of an energy gain against a step's need: 1 - exp(-gain / need).</summary>
     public static float Worth(float gain, float need) => 1f - MathK.Exp(-gain / need);
 
+    /// <summary>A personal space of this share of its sight: closer kin push it away (SEPARATE).</summary>
+    const float SEP_SHARE = 0.125f;
+
+    /// <summary>
+    /// How far around it an animal perceives others in a step (2026-11-01). A step is STEP_H hours: an animal that moved d
+    /// units in it saw everything within its sight R of the way it came, a band of area pi R^2 + 2 R d (the encounter
+    /// volume of Gerritsen &amp; Strickler 1977). The neighbour search keeps a disc around where it is now, so it takes the
+    /// disc of the same area, sqrt(R^2 + 2 R d / pi): the encounter rate of a searcher (new others met per step) is that
+    /// of the band, while the directions it senses are from where it stands. Scanning (SCAN) sees SCAN_SIGHT further. At
+    /// most MAX_PERCEIVE, the hash neighbourhood (only the fastest fliers reach it).
+    /// </summary>
+    public static float Perceive(float sight, bool scanning, float moved)
+    {
+        float r = MathF.Min(K.MAX_SIGHT, sight * (scanning ? K.SCAN_SIGHT : 1f));
+        return MathF.Min(K.MAX_PERCEIVE, MathF.Sqrt(r * r + 2f * r * moved * (1f / MathF.PI)));
+    }
+
+    /// <summary>The hash cells to search for a perception radius R: the 3x3, 5x5 or 7x7 around its cell.</summary>
+    public static int Offsets(float R) => R <= K.HCELL ? 9 : R <= 2 * K.HCELL ? 25 : 49;
+
+    /// <summary>How near another of this size (cube root of mass) must be for a strike to reach it: its own reach (body and
+    /// sprint, Body.ReachM), the other's body, and the way it can still go this step (vmax; 0 for the strike itself).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float StrikeReach(float reach, float vmax, float massCbrt) => reach + vmax + K.BODY_L_M * massCbrt / K.M_PER_UNIT;
+
+    /// <summary>Squared distance from a point (tx, ty) to the segment from (0, 0) to (px, py): how near a way passes it.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float PathDist2(float px, float py, float tx, float ty)
+    {
+        float l2 = px * px + py * py;
+        float t = l2 > 1e-12f ? Math.Clamp((tx * px + ty * py) / l2, 0f, 1f) : 0f;
+        float dx = tx - t * px, dy = ty - t * py;
+        return dx * dx + dy * dy;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static float Sq(float v) => v * v;
+
     static int CellAt(int c, int dx, int dy)
         => World.WrapI(c / Map.FW + dy, Map.FW) * Map.FW + World.WrapI(c % Map.FW + dx, Map.FW);
 
@@ -88,7 +127,7 @@ public static class Decide
         float fx = MathK.Cos(hd), fy = MathK.Sin(hd);
         float myMass = w.ApparentMass(i);
         bool scanning = w.IScanning[i] != 0;
-        float R = MathF.Min(K.MAX_SIGHT, w.PSight[i] * (scanning ? 1.3f : 1f));   // the neighbour search reaches MAX_SIGHT, no further
+        float R = Perceive(w.PSight[i], scanning, w.Speed[i]);   // what it saw along the way it came this step (2026-11-01)
         float R2 = R * R;
         float fovCos = scanning ? -2f : w.PFovCos[i];
         int cell = World.FIdx(x, y);
@@ -106,7 +145,7 @@ public static class Decide
         float o2Mass = -1f, strikeBigMass = -1f;
         float reach = w.PReach[i];
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
-        int nOff = R > K.HCELL ? 25 : 9;
+        int nOff = Offsets(R);
         Span<int> neighbours = stackalloc int[K.MAX_NEIGH];
         Span<uint> priorities = stackalloc uint[K.MAX_NEIGH];
         int seen = SelectNeighbours(w, i, step, hcx, hcy, nOff, neighbours, priorities, out int candidates);
@@ -136,11 +175,11 @@ public static class Decide
                 if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                 if (alike)
                 {
-                    if (d <= reach + 0.5f + 0.4f * nb->MassCbrt && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
+                    if (d <= StrikeReach(reach, vmax, nb->MassCbrt) && d < strikeKin.D) strikeKin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                     if (!active) continue;
                     kinSum += close; kinCx += ddx; kinCy += ddy;
                     kinHx += nb->HCos; kinHy += nb->HSin;
-                    if (d < 2f) { sepX -= ddx / d2; sepY -= ddy / d2; }
+                    if (d < SEP_SHARE * w.PSight[i]) { sepX -= ddx / d2; sepY -= ddy / d2; }   // personal space: an eighth of its sight (was 2 units, an eighth of the old sight)
                     if (d < kin.D) kin = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                     continue;
                 }
@@ -148,7 +187,7 @@ public static class Decide
                 float mj = nb->Mass;
                 if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                 if (mj > o2Mass) { o2Mass = mj; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
-                float reachJ = reach + 0.5f + 0.4f * nb->MassCbrt;
+                float reachJ = StrikeReach(reach, vmax, nb->MassCbrt);
                 if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                 if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
             }
@@ -156,9 +195,12 @@ public static class Decide
         // EXPLORE: the person, sensed as one more organism of another kind (Player.Slot in o1, o2 and strike)
         var pl = w.Player;
         if (pl != null && pl.Present)
-            SensePlayer(pl, x, y, fx, fy, R, R2, fovCos, reach, ref crowd, ref otherSum, ref o1, ref o2, ref o2Mass, ref strike, ref strikeBig, ref strikeBigMass);
+            SensePlayer(pl, x, y, fx, fy, R, R2, fovCos, reach, vmax, ref crowd, ref otherSum, ref o1, ref o2, ref o2Mass, ref strike, ref strikeBig, ref strikeBigMass);
         if (metrics != null)
         {
+            if (o1.J >= 0) metrics.Add(ref metrics.SeeOther);
+            if (kin.J >= 0) metrics.Add(ref metrics.SeeKin);
+            if (mate.J >= 0) metrics.Add(ref metrics.SeeMate);
             if (candidates > K.MAX_NEIGH)
                 CompareUncappedTargets(w, i, x, y, fx, fy, R, R2, fovCos, ready, reach, nOff,
                     o1, o2, mate, strike, strikeBig, strikeKin, metrics);
@@ -185,8 +227,9 @@ public static class Decide
             mdx = World.Delta1(w.X[mom] - x); mdy = World.Delta1(w.Y[mom] - y);
             float md = MathF.Sqrt(mdx * mdx + mdy * mdy);
             f[F.MOTHER_FAR] = MathF.Min(1f, md / R);
-            // it knows her by sight, sound and smell, all within MAX_SIGHT; further off it has lost her and knows no way back
-            if (md > K.MAX_SIGHT) { f[F.MOTHER_FAR] = 1f; mdx = mdy = 0f; }
+            // it knows her by sight, sound and smell: within its sight, or as far as her voice carries (2026-11-01: was
+            // MAX_SIGHT, 1.7 km for any young); further off it has lost her and knows no way back
+            if (md > MathF.Max(R, K.HEAR_R * w.PVoice[mom] * MathK.Cbrt(w.MassOf(mom)))) { f[F.MOTHER_FAR] = 1f; mdx = mdy = 0f; }
         }
         f[F.MATE_CLOSE] = mate.J >= 0 ? 1f - mate.D / R : 0f;
         if (o1.J >= 0 || o1.J == Player.Slot) Other(w, i, o1, R, vmax, fx, fy, myMass, f, F.O1_CLOSE);
@@ -243,9 +286,10 @@ public static class Decide
         int jA = -1, jB = -1; float lA = 0, lB = 0, dxA = 0, dyA = 0, dxB = 0, dyB = 0, dA = 0, dB = 0;   // loudest alike caller, loudest of any kind
         int prevF = w.IFocal[i]; float lPrev = 0, dxP = 0, dyP = 0, dP = 0; bool prevAlike = false;
         if (prevF >= 0 && w.Serial[prevF] != w.IFocalSerial[i]) prevF = -1;          // the slot holds another animal now
+        int ccx = (int)(x / K.HCELL_CALL), ccy = (int)(y / K.HCELL_CALL);           // the callers' hash (HCELL_CALL; MAX_HEAR <= 2 cells)
         for (int o = 0; o < 25; o++)
         {
-            int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
+            int hc = World.WrapI(ccy + Ring[o].dy, Map.CGW) * Map.CGW + World.WrapI(ccx + Ring[o].dx, Map.CGW);
             for (int q = w.CallStart[hc], qe = w.CallStart[hc + 1]; q < qe; q++)
             {
                 int j = w.CallSorted[q];
@@ -484,8 +528,15 @@ public static class Decide
         w.IActs[i] = acts;
         // a strike hits the nearest other in reach; a blood-drinker goes for the largest in reach
         // only when no other kind is in reach does a strike fall on kin
-        w.ITarget[i] = w.PParasite[i] != 0 ? strikeBig.J : strike.J != -1 ? strike.J : strikeKin.J;   // (Player.Slot: the person)
-        w.IMate[i] = (mate.J >= 0 && mate.D <= reach + 1f) ? mate.J : -1;
+        // (Player.Slot: the person). A step is hours (2026-11-01): it strikes what its way this step passes within reach of
+        // (StrikeReach without the step's travel), so a target out of the way it chose is not struck, and nothing is paid
+        Near tgt = w.PParasite[i] != 0 ? strikeBig : strike.J != -1 ? strike : strikeKin;
+        float px = MathK.Cos(newH) * spd, py = MathK.Sin(newH) * spd;
+        if (tgt.J != -1 && PathDist2(px, py, tgt.Dx, tgt.Dy) > Sq(StrikeReach(reach, 0f, tgt.J >= 0 ? MathK.Cbrt(w.ApparentMass(tgt.J)) : pl!.MassCbrt))) tgt.J = -1;
+        w.ITarget[i] = tgt.J;
+        if (metrics != null && tgt.J >= 0) metrics.Add(ref metrics.InReach);
+        // a partner within reach of the way it goes, both closing in (Resolve.Mate)
+        w.IMate[i] = (mate.J >= 0 && PathDist2(px, py, mate.Dx, mate.Dy) <= Sq(reach + w.PReach[mate.J])) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
         w.IInfNear[i] = (byte)Math.Min(255, infNear);
@@ -592,6 +643,7 @@ public static class Decide
             allStrikeBig = new() { D = 1e9f, J = -1 }, allStrikeKin = new() { D = 1e9f, J = -1 };
         float o2Mass = -1f, strikeBigMass = -1f;
         int hcx = (int)(x / K.HCELL), hcy = (int)(y / K.HCELL);
+        float vmax = w.Vmax(i);
         for (int o = 0; o < nOff; o++)
         {
             int hc = World.WrapI(hcy + Ring[o].dy, Map.GW) * Map.GW + World.WrapI(hcx + Ring[o].dx, Map.GW);
@@ -610,14 +662,14 @@ public static class Decide
                     allMate = new Near { D = d, Dx = dx, Dy = dy, J = j };
                 if (alike)
                 {
-                    if (d <= reach + 0.5f + 0.4f * MathK.Cbrt(w.ApparentMass(j)) && d < allStrikeKin.D)
+                    if (d <= StrikeReach(reach, vmax, MathK.Cbrt(w.ApparentMass(j))) && d < allStrikeKin.D)
                         allStrikeKin = new Near { D = d, Dx = dx, Dy = dy, J = j };
                     continue;
                 }
                 if (d < allO1.D) allO1 = new Near { D = d, Dx = dx, Dy = dy, J = j };
                 float mass = w.ApparentMass(j);
                 if (mass > o2Mass) { o2Mass = mass; allO2 = new Near { D = d, Dx = dx, Dy = dy, J = j }; }
-                float reachJ = reach + 0.5f + 0.4f * MathK.Cbrt(mass);
+                float reachJ = StrikeReach(reach, vmax, MathK.Cbrt(mass));
                 if (d <= reachJ && d < allStrike.D) allStrike = new Near { D = d, Dx = dx, Dy = dy, J = j };
                 if (d <= reachJ && mass > strikeBigMass)
                 {
@@ -630,8 +682,8 @@ public static class Decide
         metrics.Add(ref metrics.CapHits);
         if (o1.J != allO1.J) metrics.Add(ref metrics.O1Changed);
         if (o2.J != allO2.J) metrics.Add(ref metrics.O2Changed);
-        int chosenMate = mate.J >= 0 && mate.D <= reach + 1f ? mate.J : -1;
-        int fullMate = allMate.J >= 0 && allMate.D <= reach + 1f ? allMate.J : -1;
+        int chosenMate = mate.J >= 0 && mate.D <= reach + vmax + w.PReach[mate.J] ? mate.J : -1;
+        int fullMate = allMate.J >= 0 && allMate.D <= reach + vmax + w.PReach[allMate.J] ? allMate.J : -1;
         if (chosenMate != fullMate) metrics.Add(ref metrics.MateChanged);
         int chosenStrike = w.PParasite[i] != 0 ? strikeBig.J : strike.J >= 0 ? strike.J : strikeKin.J;
         int fullStrike = w.PParasite[i] != 0 ? allStrikeBig.J : allStrike.J >= 0 ? allStrike.J : allStrikeKin.J;
@@ -700,7 +752,7 @@ public static class Decide
     /// and the field of view, or within reach; it is also heard from any side within its noise (Player.NoiseR). It never
     /// looks alike, is no mate and carries no pathogen. Only runs while someone explores.
     /// </summary>
-    static void SensePlayer(Player pl, float x, float y, float fx, float fy, float R, float R2, float fovCos, float reach,
+    static void SensePlayer(Player pl, float x, float y, float fx, float fy, float R, float R2, float fovCos, float reach, float vmax,
         ref float crowd, ref float otherSum, ref Near o1, ref Near o2, ref float o2Mass, ref Near strike, ref Near strikeBig, ref float strikeBigMass)
     {
         float ddx = World.Delta1(pl.X - x), ddy = World.Delta1(pl.Y - y);
@@ -712,7 +764,7 @@ public static class Decide
         crowd += close; otherSum += close;
         if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
         if (Player.MASS > o2Mass) { o2Mass = Player.MASS; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
-        float reachJ = reach + 0.5f + 0.4f * pl.MassCbrt;
+        float reachJ = StrikeReach(reach, vmax, pl.MassCbrt);
         if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
         if (d <= reachJ && Player.MASS > strikeBigMass) { strikeBigMass = Player.MASS; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
     }

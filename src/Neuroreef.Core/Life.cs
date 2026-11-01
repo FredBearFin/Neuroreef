@@ -223,6 +223,11 @@ public static class Life
         return r;
     }
 
+    /// <summary>Radius of the home range of a body of mass m kg, in world units (2026-11-01): a circle of HR_KM2 x M km2
+    /// (home range ~M^1.0, Kelt &amp; Van Vuren 2001; Jetz et al. 2004). 1.8 units (98 m) at 1 kg, 11 units (620 m) at
+    /// 40 kg. (The founding range of a whole lineage, RangeFor, is a population's range, not this.)</summary>
+    public static float HomeRangeR(float m) => MathF.Sqrt(K.HR_KM2 * m / MathF.PI) * 1000f / K.M_PER_UNIT;
+
     public static bool RandomSite(World w, Realm realm, uint key, out float x, out float y)
     {
         for (int t = 0; t < 64; t++)
@@ -247,8 +252,8 @@ public static class Life
 
     /// <summary>
     /// Create one founder organism of a clade at step 0 (or from a gene bank). With an empty genome, a random brain
-    /// and a random land ancestor's body (tests). With a group centre (gx, gy), it is placed within GROUP_SPREAD of
-    /// it, as populations are clustered. The genome given is mutated, so founders vary.
+    /// and a random land ancestor's body (tests). With a group centre (gx, gy), it is placed within the home range of its
+    /// body around it (HomeRangeR), as a group shares a range and populations are clustered. The genome given is mutated, so founders vary.
     /// </summary>
     public static int Found(World w, int clade, ReadOnlySpan<sbyte> genome, bool adult, uint key, float gx = float.NaN, float gy = 0f, Realm habitat = Realm.Any)
     {
@@ -266,11 +271,12 @@ public static class Life
         if (realm == 0) { FreeSlot(w, c); return -1; }
         float x = 0, y = 0;
         bool ok = false;
+        float spread = HomeRangeR(w.PM[c]);
         if (!float.IsNaN(gx))
             for (int t = 0; t < 16 && !ok; t++)
             {
                 float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 200u + (uint)t * 2) * 2f * MathF.PI;
-                float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * K.GROUP_SPREAD;
+                float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * spread;
                 x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
                 ok = w.CellAllows(c, World.FIdx(x, y), realm);
             }

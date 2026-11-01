@@ -33,6 +33,7 @@ public sealed class World
     [PerSlot] public uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
     [PerSlot] public float[] PM, PBasal, PGut, PDig, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
+    [PerSlot] public float[] PLen;          // adult body length in metres (Body.LengthM, 2026-11-01); PSight, PReach, PVmax are in units of K.M_PER_UNIT m
     [PerSlot] public byte[] PLitter;
     [PerSlot] public float[] PDiet;            // Cap * Pools.N digestive efficiencies
     [PerSlot] public float[] PCare;
@@ -103,7 +104,7 @@ public sealed class World
     [PerSlot] public int[] IFocal;          // the focal caller's slot (-1 none, -2 the person), written by DECIDE (own slot)
     [PerSlot] public uint[] IFocalSerial;   // and its serial, so attention stays with the same animal
     [PerSlot] public float[] CallR;         // how far its call carries this step (BUILD; 0 = silent)
-    public readonly int[] CallStart;              // this step's callers in hash-cell order (BUILD): per hash cell, where its callers start
+    public readonly int[] CallStart;              // this step's callers in hash-cell order (BUILD): per callers' hash cell (HCELL_CALL), where its callers start
     [PerSlot] public int[] CallSorted;
     // the person speaking into the world (the console's translator): one utterance at a time, heard on the next step
     public float UserCallX, UserCallY; public ulong UserCallStep = ulong.MaxValue; public int UserCallId;
@@ -264,7 +265,7 @@ public sealed class World
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
         MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
         PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PBite = new float[c]; PLife = new float[c];
-        PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PTurn = new float[c]; PVmax = new float[c];
+        PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PLen = new float[c]; PTurn = new float[c]; PVmax = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PLitter = new byte[c];
         PDiet = new float[c * Pools.N]; PCare = new float[c];
         PBirth = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
@@ -291,7 +292,7 @@ public sealed class World
         for (int i = 0; i < c; i++) FreeStack[i] = c - 1 - i;
         FreeTop = c;
 
-        CellStart = new int[Map.GW * Map.GW + 1]; CallStart = new int[Map.GW * Map.GW + 1]; CellCount = new int[Map.GW * Map.GW]; Sorted = new int[c]; CellOf = new int[c];
+        CellStart = new int[Map.GW * Map.GW + 1]; CallStart = new int[Map.CGW * Map.CGW + 1]; CellCount = new int[Map.GW * Map.GW]; Sorted = new int[c]; CellOf = new int[c];
 
         int n = Map.FW * Map.FW;
         Pool = new float[Pools.NFIELD][];

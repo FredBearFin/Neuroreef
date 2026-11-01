@@ -1,6 +1,6 @@
 # NEUROREEF 2 — INTERFACE CONTROL DOCUMENT
 
-Document NR-ICD-001, Revision G (AGENTS format 6 adds inherited appearance genes). This is the link between the simulation server and the browser
+Document NR-ICD-001, Revision H (2026-11-01: real units, §2.1; Revision G: AGENTS format 6 adds inherited appearance genes). This is the link between the simulation server and the browser
 console. Encoders: `src/Neuroreef.Core/Snapshot.cs` (AGENTS) and `src/Neuroreef.Server/Wire.cs`
 (all others). Decoder: `src/Neuroreef.Server/wwwroot/js/net.js`. Test: `tests/Neuroreef.Tests/WireTests.cs`.
 
@@ -185,14 +185,40 @@ Every text frame has a `type`:
 
 | type | When | Content |
 |---|---|---|
-| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`) |
-| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`; null when no one has explored) |
+| `meta` | first frame | world size, prehistory flag of the simulation on view, bank source, `species` = the clade table (32 slots: id, name, color, used, alive, parent, ancestor, generation, born, extinct, serial, count, niche and trophic level described from the members' genes, mean mass, majority locomotion, sight, fov, newborn share, sexual and live-birth shares, diet), `traitNames`, feature, primitive, pool and cause names, telemetry layout, probe layout, field layer names, land cell count, `explore` (metres per unit, the person's mass and health, `weapons`: id, name, key, `primary` and `secondary` modes with id, kind melee / thrown / bow / hitscan, `rangeM`, `damage`, `speedMps`, `cooldown`, `ammo`), `units` (real units, §2.1) |
+| `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`; null when no one has explored), `units` (real units, §2.1), `bodyLenM` (every organism's body length in metres, §2.1) |
 | `clades` | when the clade table changes, and every 5 s | `step`, `splits`, `list`: the clade table of the simulation on view (as in `meta.species`) |
 | `prehistory` | every 1 s, during the prehistory | `step`, `rate` (steps/s per branch), `paused`, `finished`, `yearsPerStep`, `view`, `settings` (the EvoSettings fields), `branches`: per branch `clades` (that branch's clade table), `splits`, `step`, `alive`, `full`, and per species `standing` (0 gone, 1 dying, 2 breeding, 3 self-sustaining), `count`, `births` (last ~1,000 steps), `generation` |
 | `lexicon` | every 1.5 s | the translator (display only; Revision M, N): `step`, `minUtt`, `newSteps`, `clades`: per living clade `id`, `calls`, `utts`, `types`, `tracked`, `mute`, `bases`, `sounds` (per sound: `n`, `ctx`, `resp`, `heard`, `z` (standardised difference of every sense), `when`, `then`), `words` (the most made utterance types and every new one: `t`, `syl` (sounds 1..8 in order), `rank`, `n`, `heard`, `resp`, `first`, `last`, `born` (step it reached `minUtt`), `isNew`, `z`, `when`, `then`), `zipf` (counts of its utterance types, most made first), `dialect` (`west`, `east`, `jsd`, `chance`, or null); `user`: `id`, `sounds`, `resp` (how listeners answered the person's latest call) |
 | `explain` | every 3 s | `items`: sentences generated from the telemetry (§12.4 of DESIGN), each with `text`, `species` (−1 = none) and `kind` |
 | `fingerprints` | every 3 s | per species: sampled count and up to 3 clusters (`label`, `share`, `top`, `centroid`) |
 | `ack` / `error` | on commands | result of a command |
+
+### 2.1 Real units (2026-11-01)
+
+The world is in metres and hours: a world unit is `metresPerUnit` m (a field cell, FCELL = 4 units, is GEO_CELL_M = 218 m,
+so 54.5 m), a step is `stepHours` h (T_SEASON = 3000 steps are a year of 365.25 days, so 2.922 h), masses are kg. Every
+distance an animal senses, moves or reaches is set in metres from allometries (docs/CONSTANTS.md, group Units) and
+divided by `metresPerUnit`. `meta.units` and every `status.units` carry:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `metresPerUnit` | 54.5 | metres per world unit (positions in AGENTS are units: x · 65536 / WORLD) |
+| `stepHours`, `stepSeconds`, `stepsPerDay`, `stepsPerYear` | 2.922, 10519, 8.21, 3000 | the step's real duration |
+| `mapWidthM` | WORLD × 54.5 | the map's side in metres (28 km for a 512 map) |
+| `fieldCellM` | 218 | a field cell's side |
+| `bodyLenM1kg` | 0.1 | body length of a 1 kg body before its shape genes (a cube of water of its mass) |
+| `sightM1kg`, `maxSightM` | 60, 332 | how far a 1 kg eye sees a 1 kg body; the farthest any eye sees |
+| `hearM1kg` | 870 | how far a full voice of a 1 kg body carries (× voice × M^(1/3)) |
+| `senseWaterM` | 1744 | how far drinkable water is sensed (SENSE_WATER cells) |
+
+`status.bodyLenM` is a flat array `[serial, metres, serial, metres, …]` with one pair per living organism (not embryos),
+metres to the millimetre: Body.LengthM at its present mass, so a juvenile is shorter than its adult size. Draw each body
+this long (its width and height in the same proportion as its appearance genes give). A client can also compute it from
+the AGENTS record: length = 0.1 · M^(1/3) · ℓ / (ℓ·w·h)^(1/3) m, with M the mass (record byte 12; the adult mass, so
+for a juvenile this is its adult length) and ℓ, w, h = 2^(2a − 1) for each appearance gene a = (g + 127) / 254 of length,
+width and height (record bytes 26, 27, 28). At true size a 1 kg animal is 0.06–0.25 m long, a 40 kg one 0.2–0.85 m: a
+few thousandths of a unit, far smaller than a field cell. Explore's hit tests (Player.BodyR) use the same true body.
 
 ## 3. Commands (client → server), JSON text frames
 

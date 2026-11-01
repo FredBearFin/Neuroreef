@@ -45,8 +45,9 @@ public sealed class Player
     /// <summary>How armed it looks (the PStrike an animal would sense): a person carrying a spear, bow or rifle.</summary>
     public const float STRIKE = 1f;
     public const float MAX_HP = 100f;
-    /// <summary>Metres per world unit (a field cell of FCELL units is GEO_CELL_M m: the 3D view draws the land at this scale).</summary>
-    public const float M_PER_UNIT = K.GEO_CELL_M / K.FCELL;
+    /// <summary>Metres per world unit (K.M_PER_UNIT: a field cell of FCELL units is GEO_CELL_M m; the 3D view draws the land,
+    /// and since 2026-11-01 the animals' senses and moves, at this scale).</summary>
+    public const float M_PER_UNIT = K.M_PER_UNIT;
     /// <summary>Eye height above the ground, for line of sight (m).</summary>
     public const float EYE_M = 1.7f;
 
@@ -119,9 +120,10 @@ public sealed class Player
         return -1;
     }
 
-    /// <summary>Body radius of organism i for hit tests (units): the sphere the console aims at (0.55 of the drawn body,
-    /// which is 1.5 M^(1/3) long, of its adult mass: a juvenile is drawn smaller, so this is generous for it), and a little.</summary>
-    public static float BodyR(World w, int i) => 0.1f + 0.825f * MathK.Cbrt(w.PM[i]);
+    /// <summary>Body radius of organism i for hit tests (units): the sphere the console aims at, 0.55 of its true body length
+    /// (Body.LengthM, 2026-11-01, sent as bodyLenM: the console draws bodies at true size), and 0.1 units (5 m) for the
+    /// view's and the sim's places to differ. Was 0.55 of a drawn body 1.5 M^(1/3) units long (82 m at 1 kg).</summary>
+    public static float BodyR(World w, int i) => 0.1f + 0.55f * Body.LengthM(w, i) / K.M_PER_UNIT;
 
     /// <summary>Height of the ground (or the water surface over it) at a place, in metres above the lakes.</summary>
     public static float GroundM(World w, float x, float y)

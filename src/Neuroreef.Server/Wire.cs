@@ -310,6 +310,38 @@ public static class Wire
         return b;
     }
 
+    /// <summary>
+    /// The world's real units (2026-11-01; ICD §2 status and meta): metres per world unit, the duration of a step, the map's
+    /// width in metres, and the allometries the console needs to draw bodies at true size and senses at true range.
+    /// </summary>
+    public static object Units() => new
+    {
+        metresPerUnit = K.M_PER_UNIT, stepHours = K.STEP_H, stepSeconds = K.STEP_S, stepsPerDay = K.STEPS_PER_DAY, stepsPerYear = K.T_SEASON,
+        mapWidthM = Map.WidthM, fieldCellM = K.GEO_CELL_M, bodyLenM1kg = K.BODY_L_M, sightM1kg = K.C_SIGHT_M, hearM1kg = K.HEAR_R_M,
+        maxSightM = K.MAX_SIGHT * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
+    };
+
+    /// <summary>
+    /// Every living organism's body length in metres (2026-11-01; ICD §2 status: bodyLenM), as a flat array [serial,
+    /// metres, serial, metres, ...], metres to the millimetre: Body.LengthM at its present mass (a juvenile is smaller).
+    /// Read on the network thread while the world steps (display only): the arrays are taken once, so a world that grows
+    /// meanwhile is read as it was.
+    /// </summary>
+    public static double[] BodyLengths(World w)
+    {
+        var st = w.StageOf; var ser = w.Serial; var len = w.PLen; var pm = w.PM;
+        int n = Math.Min(Math.Min(st.Length, ser.Length), Math.Min(len.Length, pm.Length));
+        var o = new List<double>(2 * w.AliveCount + 16);
+        for (int i = 0; i < n; i++)
+        {
+            byte s = st[i];
+            if (s == St.Dead || s == St.Embryo || pm[i] <= 0f) continue;
+            float m = s == St.Adult ? 1f : MathF.Max(1e-6f, w.MassOf(i) / pm[i]);
+            o.Add(ser[i]); o.Add(Math.Round(len[i] * MathK.Cbrt(m), 3));
+        }
+        return o.ToArray();
+    }
+
     static object ModeJson(WeaponMode m) => new { id = m.Id, name = m.Name, kind = m.Kind, rangeM = m.RangeM, damage = m.Damage, speedMps = m.SpeedMps, cooldown = m.Cooldown, ammo = m.Ammo };
 
     /// <summary>Metadata for the console: species, senses, primitives, pools, causes, telemetry layout, frame layouts.</summary>
@@ -332,6 +364,7 @@ public static class Wire
             probe = new { feat = PR_FEAT, hid = PR_HID, z = PR_Z, gain = PR_GAIN, learn = PR_LEARN, scal = PR_SCAL, scalars = ProbeScalars, phen = PR_PHEN,
                 phenotype = ProbePhenotype, diet = PR_DIET, w1 = PR_W1, w2 = PR_W2, end = PR_END, nh = G.NH, nin = G.NIN },
             landCells = Enumerable.Range(0, Map.FW * Map.FW).Count(i => w.Cell[i] == (byte)Realm.Land),
+            units = Units(),   // 2026-11-01: real units (metres, hours)
             // EXPLORE: the weapons (the server's table is the authority on range and damage) and the person's body
             explore = new
             {
