@@ -69,7 +69,7 @@ public static class Checkpoint
         "Flora", "Moisture", "Poll", "Temp", "Fire", "FireN", "TreeMean",
         // terrain, hydrology, geology, climate
         "Elev", "Depth", "MoistBase", "Fert", "Cell", "DistWater", "DistLand", "PondSite", "Wet", "DistDrink",
-        "Flow", "Alluvium", "FloodWet", "FloodFrom", "Rock", "TLapse", "Cont", "ClimateZ", "SeaLevel",
+        "Flow", "Alluvium", "FloodWet", "FloodFrom", "RivX", "RivY", "RivW", "Rock", "TLapse", "Cont", "ClimateZ", "SeaLevel",
         // water cycle and weather years
         "Rain", "SoilCap", "Recv", "DrainOrder", "Outlet", "LakeOf", "LakeArea", "LakeDepth", "LakeQm", "LakeGross", "LakeCount", "LakeSill", "LakeExit", "LakeDown", "LakeRank",
         "SoilWater", "Snow", "Ground", "Deep", "PondWater", "Runoff", "Discharge", "DischargeMean", "Seep", "LakeLevel", "LakeIn",

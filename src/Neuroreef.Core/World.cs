@@ -166,6 +166,10 @@ public sealed class World
     // it gathers), the depth of alluvium left on it, and the wetness (season x year) at which its river floods it (+inf: never)
     public readonly float[] Flow, Alluvium, FloodWet;
     public readonly int[] FloodFrom;               // the river cell that floods it (-1: none); of a river cell, the channel cell of its cross-section
+    // river geometry (2026-11-01), fixed at Terrain.Build: of a channel cell (FloodFrom == itself), where its centreline
+    // crosses it, as an offset from the cell's centre (cells, -0.5..0.5, x along a row), and the river's width there (cells);
+    // 0 elsewhere. Chained along Recv, they are the smooth, meandering line the river is drawn on (Hydrology.Channels)
+    public readonly float[] RivX, RivY, RivW;
     // geology (Revision R), fixed at Terrain.Build: the kind of rock at the surface (Rock.Crystalline, Volcanic, Sedimentary)
     public readonly byte[] Rock;
     // climate (Revision O), fixed at Terrain.Build: cooling by height x climate strength (K), continentality (0..1)
@@ -293,7 +297,7 @@ public sealed class World
         Elev = new float[n]; Depth = new float[n]; MoistBase = new float[n]; Fert = new float[n]; Cell = new byte[n];
         DistWater = new float[n]; DistLand = new float[n]; PondSite = new byte[n]; Wet = new byte[n]; DistDrink = new float[n];
         ResLoad = new float[n]; ResGene = new byte[n * PG.N]; ResKey = new sbyte[n * G.NMHC]; ResRecv = new int[n]; ResOrder = new int[n];
-        Flow = new float[n]; Alluvium = new float[n]; FloodWet = new float[n]; Array.Fill(FloodWet, float.PositiveInfinity); FloodFrom = new int[n]; Array.Fill(FloodFrom, -1);
+        Flow = new float[n]; Alluvium = new float[n]; FloodWet = new float[n]; Array.Fill(FloodWet, float.PositiveInfinity); FloodFrom = new int[n]; Array.Fill(FloodFrom, -1); RivX = new float[n]; RivY = new float[n]; RivW = new float[n];
         Rock = new byte[n];
         Rain = new float[n]; SoilCap = new float[n]; Recv = new int[n]; DrainOrder = new int[n]; Outlet = new int[n]; LakeOf = new int[n];
         LakeArea = new float[n]; LakeDepth = new float[n]; LakeQm = new float[n]; LakeGross = new float[n];
