@@ -268,6 +268,7 @@ public static class WaterCycle
             if (w.LakeOf[c] >= 0) continue;
             int r = w.Recv[c];
             float qc = Q[c] + w.Runoff[c];
+            if (w.CaveSpring[c] >= 0) qc = Caves.Drain(w, c, qc);   // karst: sinkholes and losing streams swallow, conduits carry to springs (Caves.cs)
             if (w.Cell[c] == (byte)Realm.Land)
             {
                 // shallow groundwater feeds the cell's own streams (baseflow); deep groundwater flows on underground to

@@ -37,11 +37,11 @@ public static class Wire
     }
 
     /// <summary>WORLD: u16 FW, u16 0, f32 sea level, u8[FW²] elevation, u8[FW²] realm bits, u8[FW²] depth, u8[FW²] rivers (River),
-    /// u16[FW²] standing water surface (Surface).</summary>
+    /// u16[FW²] standing water surface (Surface), u8[FW²] cave features (CaveKind bits), u8[FW²] cave courses (Conduit).</summary>
     public static byte[] EncodeWorld(World w)
     {
         int n = Map.FW * Map.FW;
-        var b = new byte[16 + 6 * n];
+        var b = new byte[16 + 8 * n];
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -52,8 +52,29 @@ public static class Wire
             b[16 + 2 * n + i] = (byte)Math.Clamp((int)(w.Depth[i] * 2000f), 0, 255);
             b[16 + 3 * n + i] = River(w, i);
             BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 4 * n + 2 * i), Surface(w, i));
+            b[16 + 6 * n + i] = w.CaveKind[i];
+            b[16 + 7 * n + i] = Conduit(w, i);
         }
         return b;
+    }
+
+    /// <summary>
+    /// A cell's cave course for the console (display only; 2026-11-01, so the map can draw the karst conduits and lava tubes
+    /// under the land as lines): 0 = none. A cell over a karst passage or a lava tube (CaveKind bit Karst or Lava) has bits
+    /// 0-2 = the neighbour its conduit or tube runs to (CaveNext, the direction codes of River; 0 east when it ends here: a
+    /// spring or a tube's end) and bits 3-7 = its size class, 1 + round(4 · log2(conduit discharge / CAVE_Q_MIN)) clamped to
+    /// 1..31 (1 for a lava tube).
+    /// </summary>
+    static byte Conduit(World w, int i)
+    {
+        if ((w.CaveKind[i] & (Caves.Karst | Caves.Lava)) == 0) return 0;
+        int FW = Map.FW, x = i % FW, y = i / FW, dir = 0, nx = w.CaveNext[i];
+        if (nx >= 0)
+            for (int k = 0; k < 8; k++)
+                if (((y + DirY[k] + FW) % FW) * FW + (x + DirX[k] + FW) % FW == nx) { dir = k; break; }
+        float q1 = K.CAVE_Q_MIN * (FW * FW / 65536f);
+        int size = (w.CaveKind[i] & Caves.Karst) == 0 ? 1 : Math.Clamp(1 + (int)MathF.Round(4f * MathF.Log2(MathF.Max(1f, w.CaveFlow[i] / q1))), 1, 31);
+        return (byte)(size << 3 | dir);
     }
 
     /// <summary>

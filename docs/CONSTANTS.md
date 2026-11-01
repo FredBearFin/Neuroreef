@@ -743,6 +743,45 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | LAKE_STAGE | 500 | mm | a lake's stage above its outlet's sill (its level at creation) when it receives its mean inflow; its outlet carries in proportion to the stage (a linear reservoir whose outlet is sized for the lake's mean flow) | ECO/HT: outlet channels are sized by the flows they carry, as river channels are (Leopold, Wolman & Miller 1964); lakes rise a few dm to m in floods; a lake below its sill does not spill |
 | WC_SPINUP | 2 | years | years of weather the water cycle runs at world creation (average years), so soil, snow, groundwater and rivers start in their seasonal state | HT: groundwater is first set to the steady state of the first year's recharge, then a second year settles the seasons and gives each river its mean discharge |
 
-## 35. Organisms
+## 35. Caves
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| CARB_SHARE | 0.35 | - | share of the sedimentary land that is carbonate (limestone, dolomite): the sedimentary cells with the highest carbonate score (a regional draw of formations plus distance from clastic sources) | ECO: carbonate rocks crop out over ~10-15% of the ice-free land (Ford & Williams 2007), ~20-30% of sedimentary outcrop (Blatt & Jones 1975); HT |
+| CARB_L_CLASTIC | 12 | cells | distance from crystalline or volcanic ground (sources of sand and mud) over which clastic input dilutes carbonate: the score rises as 1 - exp(-d / CARB_L_CLASTIC) | ECO: carbonate factories need clear water away from siliciclastic input (Schlager 2005); HT |
+| CARB_FAR_W | 0.25 | - | weight of the distance from clastic sources against the regional draw (noise 0..1) in the carbonate score | HT |
+| CARB_MIN | 0.5 | - | carbonate share of the rock above which it karstifies (World.Carb) | ECO: pure limestones (> ~70-90% CaCO3) karstify; marls and sandy limestones barely (Ford & Williams 2007) |
+| CA_REF | 2 | mmol/L | calcium of water in equilibrium with calcite at pCO2 = 0.01 atm and 10 °C; [Ca]eq ~ pCO2^(1/3) | ECO: Dreybrodt 1988; White 1988 (~2 mmol/L) |
+| CA_T | 0.01 | /K | fall of [Ca]eq per K of water temperature above 10 °C | ECO: calcite and CO2 are less soluble in warm water: [Ca]eq at a fixed pCO2 falls ~15% from 10 to 25 °C (Dreybrodt 1988) |
+| CAVE_DEN_REF | 30 | mm/kyr | karst denudation at which solution dolines form at DOLINE_P per cell (runoff x [Ca]eq, White 1984) | ECO: carbonate denudation 10-100 mm/kyr, ~30 in temperate humid karst (White 1984; Ford & Williams 2007) |
+| CAVE_GRAD | 0.005 | m/m | water-table gradient of karst groundwater toward its springs: the head rises this much per length of conduit | ECO: conduit flow needs little head: karst water-table gradients 0.0005-0.01 (Worthington 1991; Ford & Williams 2007) |
+| CAVE_Q_MIN | 2 | cells | conduit discharge (cells of mean land rain, x map cells / 65,536) at which a passage forms (breakthrough), one CAVE_W1 wide | ECO: conduits need enough flow to reach breakthrough within the time available (Dreybrodt 1990; Palmer 1991); HT |
+| CAVE_W1 | 2 | m | passage width at CAVE_Q_MIN with water at CA_REF; it grows as sqrt(discharge / CAVE_Q_MIN) x [Ca]eq / CA_REF | ECO: passage size follows discharge (Palmer 1991); explorable caves start at ~1-3 m |
+| CAVE_W_MAX | 30 | m | widest passage | ECO: large trunk passages are 10-30 m across, the largest ~100 m (Palmer 2007) |
+| CAVE_VALLEY | 1 | - | how much less the head rises under ground that gathers surface water: the head's gradient is CAVE_GRAD / (1 + CAVE_VALLEY log2(1 + Flow / CAVE_Q_MIN)), so conduits follow the valleys and converge on a few springs | ECO: conduits follow the most favourable fractures and beds, often beneath the surface valleys whose pattern the karst inherits, and the water table is depressed toward them (Palmer 1991; Ford & Williams 2007); HT |
+| CAVE_WALL_S | 0.35 | m/m | least slope (m/m) from a cell over a relict passage to the next for a valley wall or cliff to open the passage (an entrance) | ECO: cave entrances open in valley walls and cliffs that cut the cave levels (Palmer 2007); HT |
+| CAVE_ENTR_GAP | 3 | cells | least distance between two valley-wall cave entrances (the one nearer the spring, on the bigger passage, is kept): one entrance stands for the caves of a stretch of wall | HT: a cell is ~220 m |
+| CAVE_RESURGE | 8 | x | conduit discharge (x CAVE_Q_MIN) of a spring that issues from an open cave (a resurgence entrance) | HT |
+| CAVE_ROOF | 3 | x | a passage whose roof is thinner than this many times its width breaks down (a collapse doline, a cave entrance) with COLLAPSE_P per cell | ECO: breakdown where the roof beam is thin against its span (White & White 1969) |
+| COLLAPSE_P | 0.3 | - | chance per cell of passage under a thin roof that it has collapsed | HT |
+| CAVE_ROOF_MIN | 5 | m | least rock over a relict passage for it to be a cave (not an unroofed trench) | HT |
+| CAVE_LEVEL_M | 40 | m | height of the relict cave level above the water table: passages formed when base level stood higher, left dry as the valleys deepened; an entrance where the ground beside it drops below it | ECO: cave levels track river incision, tens of m per few 100 kyr (Palmer 1987; Granger, Fabel & Palmer 2001) |
+| DOLINE_P | 0.02 | - | chance per karst cell, at CAVE_DEN_REF of denudation and slopes under DOLINE_S, of a solution doline big enough to show | ECO: doline densities 10-100 per km2 in doline karst (Ford & Williams 2007), most far smaller than a cell; HT |
+| DOLINE_S | 0.15 | m/m | steepest ground (m/m) with solution dolines | ECO: doline fields lie on plateaus and gentle slopes (Ford & Williams 2007) |
+| CAVE_LOSE_H | 10 | m | depth of the water table under a river bed (or a ponor) for the river to lose water to the karst | ECO: a stream loses where it stands above the water table (Ford & Williams 2007); HT |
+| CAVE_LEAK | 0.05 | - | share of a losing river's water that sinks into the conduits per cell of its course over the karst | ECO: losing reaches lose a few % of their flow per km and may sink entirely in low water (White 1988); HT |
+| CAVE_PONOR | 0.7 | - | share of a stream from other rock that sinks at its ponor where it reaches the karst | ECO: allogenic streams sink at the contact (Ford & Williams 2007); HT: floods overflow the ponor (CAVE_CAP) |
+| CAVE_CAP | 3 | x | most a sinkhole or losing reach swallows, x its mean intake (CaveSink x the cell's mean discharge): a flood beyond backs up and runs on | ECO: ponors and conduits flood and overflow in high water (White 1988); HT |
+| CAVE_TAU | 10 | days | drainage time of karst groundwater through the conduits to its spring (x the rock's carbonate share) | ECO: karst spring recession: quickflow coefficients 0.1-0.5 per day, diffuse flow 0.001-0.02 (Ford & Williams 2007; Kovacs et al. 2005) |
+| CAVE_SWING | 0.2 | - | share of the outside air's departure from the year's mean that a cave entrance keeps (deeper in, none) | ECO: cave air stays near the mean annual surface temperature (Badino 2004); entrance zones keep a damped part of the outside swing (de Freitas, Littlejohn et al. 1982) |
+| LAVA_S | 0.14 | m/m | steepest ground (m/m) under which a lava flow roofs over into a tube | ECO: tube-fed pahoehoe on slopes of ~1-8 degrees (Greeley 1987; Kauahikaua et al. 1998) |
+| LAVA_LEN | 60 | cells | longest lava tube traced from a vent | ECO: tubes run up to tens of km (Kazumura Cave, 65 km; Greeley 1987) |
+| LAVA_VENT_R | 4 | cells | radius within which a vent is the highest volcanic ground | HT |
+| LAVA_VENT_P | 0.5 | - | chance that a volcanic high is a vent whose flows made tubes | HT |
+| LAVA_W | 8 | m | lava tube width | ECO: tubes are 1-15 m wide, ~5-10 typically (Greeley 1987) |
+| LAVA_D | 8 | m | rock over a lava tube | ECO: roofs of a few m to ~15 m (Greeley 1987) |
+| LAVA_SKY | 0.1 | - | chance per cell of a lava tube that its roof has fallen in (a skylight, an entrance) | ECO: skylights every few hundred m along active tubes (Kauahikaua et al. 1998); HT |
+
+## 36. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).
