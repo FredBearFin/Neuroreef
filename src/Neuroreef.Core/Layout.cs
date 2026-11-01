@@ -155,7 +155,8 @@ public static class St
 /// <summary>Causes of death (NR-401).</summary>
 public static class Cause
 {
-    public const int Starve = 0, Thirst = 1, Killed = 2, Parasite = 3, Old = 4, Fire = 5, Orphan = 6, Disease = 7, Cold = 8, Heat = 9;
-    public const int N = 10;
-    public static readonly string[] Names = { "starvation", "thirst", "killed", "parasitism", "old age", "fire", "lost before birth", "disease", "cold", "heat" };
+    public const int Starve = 0, Thirst = 1, Killed = 2, Parasite = 3, Old = 4, Fire = 5, Orphan = 6, Disease = 7, Cold = 8, Heat = 9, Hunted = 10;
+    public const int N = 11;
+    // hunted: killed by the person in the console's Explore mode (Player.Hit)
+    public static readonly string[] Names = { "starvation", "thirst", "killed", "parasitism", "old age", "fire", "lost before birth", "disease", "cold", "heat", "hunted" };
 }

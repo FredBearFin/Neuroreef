@@ -153,6 +153,10 @@ public static class Decide
                 if (d <= reachJ && mj > strikeBigMass) { strikeBigMass = mj; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = j }; }
             }
         }
+        // EXPLORE: the person, sensed as one more organism of another kind (Player.Slot in o1, o2 and strike)
+        var pl = w.Player;
+        if (pl != null && pl.Present)
+            SensePlayer(pl, x, y, fx, fy, R, R2, fovCos, reach, ref crowd, ref otherSum, ref o1, ref o2, ref o2Mass, ref strike, ref strikeBig, ref strikeBigMass);
         if (metrics != null)
         {
             if (candidates > K.MAX_NEIGH)
@@ -185,9 +189,10 @@ public static class Decide
             if (md > K.MAX_SIGHT) { f[F.MOTHER_FAR] = 1f; mdx = mdy = 0f; }
         }
         f[F.MATE_CLOSE] = mate.J >= 0 ? 1f - mate.D / R : 0f;
-        if (o1.J >= 0) Other(w, i, o1, R, vmax, fx, fy, myMass, f, F.O1_CLOSE);
-        if (o2.J >= 0) Other(w, i, o2, R, vmax, fx, fy, myMass, f, F.O2_CLOSE);
+        if (o1.J >= 0 || o1.J == Player.Slot) Other(w, i, o1, R, vmax, fx, fy, myMass, f, F.O1_CLOSE);
+        if (o2.J >= 0 || o2.J == Player.Slot) Other(w, i, o2, R, vmax, fx, fy, myMass, f, F.O2_CLOSE);
         if (o1.J >= 0) f[F.O1_WEAK] = Weakness(w, o1.J);
+        else if (o1.J == Player.Slot) f[F.O1_WEAK] = pl!.Weakness;
         f[F.OTHERS] = MathK.Tanh(otherSum);
 
         // hunger is diet-neutral (Revision K): the food an organism senses is whatever its gut digests, plants on the
@@ -199,10 +204,10 @@ public static class Decide
         float fgx = FoodValue(w, diet, bite, need, CellAt(cell, 2, 0)) - FoodValue(w, diet, bite, need, CellAt(cell, -2, 0));
         float fgy = FoodValue(w, diet, bite, need, CellAt(cell, 0, 2)) - FoodValue(w, diet, bite, need, CellAt(cell, 0, -2));
         byte eatPrey = 0;
-        if (o1.J >= 0 && meatEff > 0)
+        if ((o1.J >= 0 || o1.J == Player.Slot) && meatEff > 0)
         {
             // value of eating it: a bite of its edible tissue, on the same scale as the plants
-            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.C_CARC * w.ApparentMass(o1.J)), need);
+            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.C_CARC * (o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS)), need);
             float close = 1f - o1.D / R;
             fgx += prey * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += prey * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
             if (o1.J == strike.J && prey > fh) { fh = prey; eatPrey = 1; }                         // in reach and worth more than the plants
@@ -404,17 +409,18 @@ public static class Decide
             float l = MathF.Sqrt(vx * vx + vy * vy);
             if (l > 1e-6f) { sx += gain * vx / l; sy += gain * vy / l; }
         }
-        if (o1.J >= 0)
+        if (o1.J >= 0 || o1.J == Player.Slot)
         {
             Add(g[P.APPROACH_1], o1.Dx, o1.Dy);
             Add(g[P.FLEE_1], -o1.Dx, -o1.Dy);
             int j = o1.J;
             float lead = o1.D / MathF.Max(vmax, 0.1f);
-            Add(g[P.INTERCEPT_1], o1.Dx + w.Speed[j] * MathK.Cos(w.Heading[j]) * lead, o1.Dy + w.Speed[j] * MathK.Sin(w.Heading[j]) * lead);
+            float sj = j >= 0 ? w.Speed[j] : pl!.Speed, hj = j >= 0 ? w.Heading[j] : pl!.Heading;
+            Add(g[P.INTERCEPT_1], o1.Dx + sj * MathK.Cos(hj) * lead, o1.Dy + sj * MathK.Sin(hj) * lead);
             float side = (kin.J >= 0 && (o1.Dx * kin.Dy - o1.Dy * kin.Dx) > 0) ? -1f : 1f;
             Add(g[P.CIRCLE_1], -o1.Dy * side, o1.Dx * side);
         }
-        if (o2.J >= 0)
+        if (o2.J >= 0 || o2.J == Player.Slot)
         {
             Add(g[P.APPROACH_2], o2.Dx, o2.Dy); Add(g[P.FLEE_2], -o2.Dx, -o2.Dy);
             if (o2.D > R * 0.5f) Add(g[P.SHADOW_2], o2.Dx, o2.Dy); else Add(g[P.SHADOW_2], -o2.Dy, o2.Dx);
@@ -478,7 +484,7 @@ public static class Decide
         w.IActs[i] = acts;
         // a strike hits the nearest other in reach; a blood-drinker goes for the largest in reach
         // only when no other kind is in reach does a strike fall on kin
-        w.ITarget[i] = w.PParasite[i] != 0 ? strikeBig.J : strike.J >= 0 ? strike.J : strikeKin.J;
+        w.ITarget[i] = w.PParasite[i] != 0 ? strikeBig.J : strike.J != -1 ? strike.J : strikeKin.J;   // (Player.Slot: the person)
         w.IMate[i] = (mate.J >= 0 && mate.D <= reach + 1f) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
@@ -665,6 +671,7 @@ public static class Decide
     /// <summary>Raw senses of another organism, written from feature index k: close, relative size, closing speed, armed, meat-eating.</summary>
     static void Other(World w, int i, Near o, float R, float vmax, float fx, float fy, float myMass, Span<float> f, int k)
     {
+        if (o.J == Player.Slot) { OtherPlayer(w, i, o, R, vmax, fx, fy, myMass, f, k); return; }
         int j = o.J;
         float mj = w.ApparentMass(j);
         f[k] = 1f - o.D / R;
@@ -674,6 +681,40 @@ public static class Decide
         bool active = w.StageOf[j] >= St.Juvenile;
         f[k + 3] = active ? MathK.Tanh(w.PStrike[j] * MathK.Cbrt(mj / MathF.Max(myMass, 1e-4f))) : 0f;
         f[k + 4] = active ? w.Carnivory(j) : 0f;
+    }
+
+    /// <summary>EXPLORE: the same raw senses of the person (Player.cs): a 70 kg, armed omnivore moving as the console moves it.</summary>
+    static void OtherPlayer(World w, int i, Near o, float R, float vmax, float fx, float fy, float myMass, Span<float> f, int k)
+    {
+        var pl = w.Player!;
+        f[k] = 1f - o.D / R;
+        f[k + 1] = MathK.Tanh(MathK.Log(Player.MASS / MathF.Max(myMass, 1e-4f)));
+        float rvx = pl.Speed * MathK.Cos(pl.Heading) - w.Speed[i] * fx, rvy = pl.Speed * MathK.Sin(pl.Heading) - w.Speed[i] * fy;
+        f[k + 2] = Math.Clamp(-(rvx * o.Dx + rvy * o.Dy) / MathF.Max(o.D, 1e-3f) / MathF.Max(vmax, 0.05f), -1f, 1f);
+        f[k + 3] = MathK.Tanh(Player.STRIKE * MathK.Cbrt(Player.MASS / MathF.Max(myMass, 1e-4f)));
+        f[k + 4] = Player.MEAT;
+    }
+
+    /// <summary>
+    /// EXPLORE: the person as a neighbour, by the rules every other organism is sensed by (the loop in Run): within sight
+    /// and the field of view, or within reach; it is also heard from any side within its noise (Player.NoiseR). It never
+    /// looks alike, is no mate and carries no pathogen. Only runs while someone explores.
+    /// </summary>
+    static void SensePlayer(Player pl, float x, float y, float fx, float fy, float R, float R2, float fovCos, float reach,
+        ref float crowd, ref float otherSum, ref Near o1, ref Near o2, ref float o2Mass, ref Near strike, ref Near strikeBig, ref float strikeBigMass)
+    {
+        float ddx = World.Delta1(pl.X - x), ddy = World.Delta1(pl.Y - y);
+        float d2 = ddx * ddx + ddy * ddy;
+        if (d2 > R2 || d2 < 1e-8f) return;
+        float d = MathF.Sqrt(d2);
+        if (d > reach && d > pl.NoiseR && (ddx * fx + ddy * fy) / d < fovCos) return;
+        float close = 1f - d / R;
+        crowd += close; otherSum += close;
+        if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
+        if (Player.MASS > o2Mass) { o2Mass = Player.MASS; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
+        float reachJ = reach + 0.5f + 0.4f * pl.MassCbrt;
+        if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
+        if (d <= reachJ && Player.MASS > strikeBigMass) { strikeBigMass = Player.MASS; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
     }
 
     public static float Weakness(World w, int j)

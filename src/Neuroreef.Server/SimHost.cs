@@ -24,6 +24,8 @@ public sealed class SimHost : IDisposable
     int _stepOnce;
     public double MeasuredRate;
     readonly ConcurrentQueue<Action<Simulation>> _cmds = new();
+    public DateTime PlayerSeen;              // EXPLORE: when a console last placed the person
+    long _pausedSnap = -1;                   // the state the last snapshot made while paused showed
 
     // ---- phases
     public Prehistory? Pre { get; private set; }
@@ -170,6 +172,8 @@ public sealed class SimHost : IDisposable
         while (!_stop)
         {
             while (_cmds.TryDequeue(out var c)) { try { c(Sim); } catch (Exception e) { Console.Error.WriteLine("command failed: " + e.Message); } }
+            // EXPLORE: a person no console has placed for a while has left the world
+            if (_live?.W.Player is { Present: true } pl && (DateTime.UtcNow - PlayerSeen).TotalSeconds > 5) pl.Present = false;
 
             if (IsPrehistory)
             {
@@ -192,7 +196,18 @@ public sealed class SimHost : IDisposable
                 run = now >= due;
                 if (run) due += 1.0 / Rate;
             }
-            if (!run) { Thread.Sleep(1); Publish(racy: false); continue; }
+            if (!run)
+            {
+                // paused: a snapshot is otherwise made only after a step, so the newest could be from steps nobody watched;
+                // make one of the world as it stands when a client wants one and it changed (a step, or a hit in Explore mode)
+                if (Paused && WantAgents)
+                {
+                    var w = _live!.W;
+                    long key = (long)w.Step * 7919 + w.T.FightSeq * 31 + w.AliveCount;
+                    if (key != _pausedSnap) { _pausedSnap = key; _live.Snap.Requested = true; _live.Snap.AfterStep(); }
+                }
+                Thread.Sleep(1); Publish(racy: false); continue;
+            }
 
             var sim = _live!;
             if (WantAgents) sim.Snap.Requested = true;

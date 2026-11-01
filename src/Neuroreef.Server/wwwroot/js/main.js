@@ -4,12 +4,14 @@ import { Link } from './net.js';
 import { World3D } from './world3d.js';
 import { Panels, bar } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
+import { Explore } from './explore/explore.js';   // EXPLORE: walk and hunt (js/explore/)
 
 const $ = (id) => document.getElementById(id);
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
 let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9;
 let clades = [], pendingClades = null;   // the live clade table (32 slots; unused ones have used = false)
+let explore = null;                      // EXPLORE: the person on foot (js/explore/explore.js)
 
 link.listen('meta', (m) => {
   meta = m;
@@ -20,6 +22,9 @@ link.listen('meta', (m) => {
     panels.onSelect = select;
     pre = new PrehistoryTab(meta, link, $('tab-prehistory'));
     panels.show('inspect');
+    // EXPLORE hook: the controller drives the camera in world3d's 'explore' mode; Esc brings back the overview
+    explore = window.neuroExplore = new Explore(world, link, meta, $('view'));
+    explore.onLeave = () => setCam('overview');
     buildControls();
     requestAnimationFrame(frame);
   }
@@ -124,6 +129,17 @@ function select(serial, follow) {
 }
 
 function setCam(m) {
+  // EXPLORE hook: the live world only (a prehistory branch runs on its own thread); leaving it takes the person out
+  if (m === 'explore' && phase !== 'live') return;
+  if (world.mode === 'explore' && m !== 'explore') explore.exit();
+  if (m === 'explore') {
+    if (world.mode === 'explore') return;
+    if (world.selected) { world.selected = 0; probe = null; link.send({ cmd: 'select', serial: 0, follow: false }); panels.renderProbe(null); }
+    world.setMode('explore'); explore.enter();
+    for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
+    hud();
+    return;
+  }
   if (m !== 'overview' && !world.selected && $('exp-species').value !== '') {
     // no animal selected: experience the chosen species
     link.send({ cmd: 'pick', species: +$('exp-species').value });
@@ -160,6 +176,7 @@ function buildControls() {
   cv.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
   cv.addEventListener('pointerup', (e) => {
     if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+    if (world.mode === 'explore') return;   // EXPLORE: the buttons are weapons
     if (speakArmed !== null) { speakAt(e.clientX, e.clientY); return; }   // the translator is waiting for a place to speak
     const s = world.pick(e.clientX, e.clientY);
     if (s) select(s);
@@ -173,7 +190,7 @@ function buildControls() {
 
 function hud() {
   const box = $('hud');
-  if (!probe || !world || world.mode === 'overview') { box.classList.add('hidden'); return; }
+  if (!probe || !world || world.mode === 'overview' || world.mode === 'explore') { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   const P = meta.probe, f = probe.f, sc = (n) => f[P.scal + P.scalars.indexOf(n)];
   const sp = cladeOf(sc('species') | 0) || { name: '?', color: '#8aa0b5', niche: '' };
@@ -229,6 +246,8 @@ function status(s) {
   extinct = s.extinct || [];
   markExtinct();
   $('s-full').classList.toggle('hidden', s.free > 0);
+  if (explore) explore.status(s.player);   // EXPLORE: health, deaths and kills from the server
+  if (world && world.mode === 'explore') return;
   if (world && s.follow && s.probe && world.selected !== s.probe && world.mode !== 'overview') world.selected = s.probe;
   if (world && world.mode !== 'overview' && !world.selected && s.probe) world.selected = s.probe;
 }
@@ -263,13 +282,14 @@ function feed(e) {
 const fightLines = []; let killsSeen = 0;
 function fightLog(list) {
   const box = $('fights'); if (!box) return;
-  const name = (id) => { const c = clades.find((q) => q && q.id === id); return c ? `<b style="color:${c.color}">${c.name}</b>` : 'something'; };
+  const name = (id) => { if (id < 0) return '<b style="color:#fff">you</b>'; const c = clades.find((q) => q && q.id === id); return c ? `<b style="color:${c.color}">${c.name}</b>` : 'something'; };   // -1: the person (Explore)
   const VERB = [null, 'wounded', 'killed', 'drank the blood of', 'bled to death', 'ate an egg of'];
   for (const f of list) {
     const [x, y, a, v, kind, step] = f;
     if (kind === 2 || kind === 4) killsSeen++;
     if (!VERB[kind]) continue;
-    const text = kind === 4 ? `${name(v)} drained to death by ${name(a)}` : `${name(a)} ${VERB[kind]} ${a === v ? 'its own kind' : (kind === 5 ? '' : 'a ') + name(v)}`;
+    const text = v < 0 ? `${name(a)} ${VERB[kind]} you`
+      : kind === 4 ? `${name(v)} drained to death by ${name(a)}` : `${name(a)} ${VERB[kind]} ${a === v ? 'its own kind' : (kind === 5 ? '' : 'a ') + name(v)}`;
     fightLines.unshift({ x, y, step, text, kill: kind === 2 || kind === 4 });
   }
   if (fightLines.length > 40) fightLines.length = 40;

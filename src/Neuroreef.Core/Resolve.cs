@@ -193,6 +193,16 @@ public static class Resolve
                     r += Strike(w, i, v, gutCap, emax);
                 }
             }
+            else if (v == Player.Slot && w.Player is { Present: true } pl)
+            {
+                // EXPLORE: a strike at the person, paid for as any strike; the person is hurt (Player.Struck)
+                w.Energy[i] -= K.C_STRIKE * mass;
+                spent += K.C_STRIKE * mass;
+                T.Strikes[s]++;
+                float dx = World.Delta1(pl.X - w.X[i]), dy = World.Delta1(pl.Y - w.Y[i]);
+                float reachAll = w.PReach[i] + 0.5f + 0.4f * pl.MassCbrt;
+                if (dx * dx + dy * dy <= reachAll * reachAll) pl.Struck(w, i);
+            }
         }
 
         // ---- 5. mate / lay (DESIGN §8)

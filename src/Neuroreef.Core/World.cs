@@ -108,6 +108,8 @@ public sealed class World
     // the person speaking into the world (the console's translator): one utterance at a time, heard on the next step
     public float UserCallX, UserCallY; public ulong UserCallStep = ulong.MaxValue; public int UserCallId;
     public readonly byte[] UserCall = new byte[F.MAX_SYL];   // its sounds (1..8, 0 = none)
+    // the person walking in the world (Explore mode, Player.cs): null until a console enters it. Not state
+    [NonSerialized] public Player? Player;
     [PerSlot] public int[] ITarget, IMate;  // target slot for STRIKE, partner slot for MATE (-1 none)
     [PerSlot] public float[] IFoodHere, IKinDensity;
     [PerSlot] public byte[] IEatPrey;       // EAT means attacking the target in reach (it is worth more than the plants here)

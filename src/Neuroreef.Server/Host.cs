@@ -303,6 +303,7 @@ public static class Host
         readonly SemaphoreSlim _send = new(1, 1);
         volatile int _agentHz = 20, _fieldsMs = 1000;
         volatile bool _history = true;
+        volatile bool _exploring;   // this console has put the person in the world (Explore mode)
 
         public Client(Shared s, WebSocket ws) { _s = s; _ws = ws; }
 
@@ -323,7 +324,11 @@ public static class Host
             catch (OperationCanceledException) { }
             catch (WebSocketException) { }
             catch (Exception e) { Console.Error.WriteLine("console connection failed: " + e.Message); }
-            finally { cts.Cancel(); }
+            finally
+            {
+                cts.Cancel();
+                if (_exploring && !_s.H.IsPrehistory) _s.H.Post(s => { if (s.W.Player != null) s.W.Player.Present = false; });   // EXPLORE: the person left with the console
+            }
         }
 
         async Task SendLoop(CancellationToken ct)
@@ -413,6 +418,7 @@ public static class Host
                         slotShortage = w.T.SlotShortage, full = w.FullNow, growLimit = w.GrowLimit, probe = h.Sim.ProbeSerial, follow = h.Sim.ProbeFollow, active = h.Sim.ActiveCount,
                         season = w.SeasonAt(Map.W * 0.5f), mapSide = Map.W, rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
+                        player = PlayerState(h),
                     }), ct);
                 }
                 if (t >= nextAnalysis)
@@ -423,6 +429,15 @@ public static class Host
                 }
                 await Task.Delay(15, ct);
             }
+        }
+
+        /// <summary>EXPLORE: the person's health and tallies for the console's HUD (read racily: display only), or null.</summary>
+        static object? PlayerState(SimHost h)
+        {
+            if (h.IsPrehistory) return null;
+            var p = h.W.Player;
+            if (p == null) return null;
+            return new { present = p.Present, hp = MathF.Round(p.Hp, 1), maxHp = Player.MAX_HP, deaths = p.Deaths, kills = p.Kills, hits = p.Hits, x = p.X, y = p.Y };
         }
 
         async Task Receive(CancellationToken ct)
@@ -500,6 +515,45 @@ public static class Host
                                 h.Post(s => { var w = s.W; w.UserCallX = World.Wrap(sx); w.UserCallY = World.Wrap(sy); utt.CopyTo(w.UserCall, 0); w.UserCallStep = w.Step - 1; /* as if made last step: heard on the step that comes next */ w.UserCallId++; });
                                 break;
                             }
+                        case "player":
+                        {
+                            // EXPLORE: the person's place and heading (a few times a second), or leaving (on: false). The live world only:
+                            // a prehistory branch steps on its own thread
+                            if (h.IsPrehistory) break;
+                            bool on = !e.TryGetProperty("on", out var po) || po.GetBoolean();
+                            if (!on) { h.Post(s => { if (s.W.Player != null) s.W.Player.Present = false; }); break; }
+                            float px = (float)e.GetProperty("x").GetDouble(), py = (float)e.GetProperty("y").GetDouble(), ph = (float)e.GetProperty("h").GetDouble();
+                            bool run = e.TryGetProperty("run", out var pr) && pr.GetBoolean();
+                            if (!float.IsFinite(px) || !float.IsFinite(py) || !float.IsFinite(ph)) break;
+                            h.PlayerSeen = DateTime.UtcNow; _exploring = true;
+                            h.Post(s => (s.W.Player ??= new Player()).Place(px, py, ph, run));
+                            break;
+                        }
+                        case "hit":
+                        {
+                            // EXPLORE: the console's aim says weapon mode M hit serial S (draw power, its damage D, where P); the server checks
+                            // and applies it (Player.Hit) and answers this console
+                            if (h.IsPrehistory) break;
+                            string mode = e.GetProperty("weapon").GetString() ?? "";
+                            uint ser = e.GetProperty("serial").GetUInt32();
+                            float pow = e.TryGetProperty("power", out var pw) ? (float)pw.GetDouble() : 1f;
+                            float dmg = e.TryGetProperty("damage", out var dm) ? (float)dm.GetDouble() : 0f;
+                            if (!float.IsFinite(pow)) pow = 1f;
+                            if (!float.IsFinite(dmg)) dmg = 0f;
+                            var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            h.Post(s =>
+                            {
+                                var p = s.W.Player;
+                                if (p == null) { tcs.SetResult(JsonSerializer.Serialize(new { type = "hit", serial = ser, ok = false, result = "NotPresent" })); return; }
+                                int pre = Player.SlotOf(s.W, ser), sp = pre >= 0 ? s.W.Spc[pre] : -1;
+                                var res = p.Hit(s.W, mode, ser, pow, dmg, out _, out float loss, out float distM, out float limitM);
+                                tcs.SetResult(JsonSerializer.Serialize(new { type = "hit", serial = ser, ok = res is Player.HitResult.Wounded or Player.HitResult.Killed,
+                                    killed = res == Player.HitResult.Killed, result = res.ToString(), clade = sp, loss, kills = p.Kills,
+                                    distM = MathF.Round(distM), limitM = MathF.Round(limitM), px = p.X, py = p.Y, speed = p.Speed }));
+                            });
+                            _ = Task.Run(async () => { try { await Txt(await tcs.Task, ct); } catch { } });
+                            break;
+                        }
                         case "history": _history = true; break;
                         case "view":
                             if (e.TryGetProperty("hz", out var hz)) _agentHz = Math.Clamp(hz.GetInt32(), 1, 30);
