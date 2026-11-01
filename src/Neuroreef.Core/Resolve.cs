@@ -201,7 +201,7 @@ public static class Resolve
         }
 
         // ---- 4. strike (DESIGN §9.4)
-        float dgE4 = w.Energy[i];   // census: what the strike section took
+        float e4 = w.Energy[i];   // what the strike section takes: its cost, and a victim striking back
         if ((acts & BIT_STRIKE) != 0 && w.PStrike[i] > 0)
         {
             int v = w.ITarget[i];
@@ -234,7 +234,10 @@ public static class Resolve
             }
         }
 
-        float dgHurt = dgE4 - w.Energy[i] - ((acts & BIT_STRIKE) != 0 && w.PStrike[i] > 0 ? K.C_STRIKE * mass : 0f);
+        float hurt4 = e4 - w.Energy[i] - ((acts & BIT_STRIKE) != 0 && w.PStrike[i] > 0 ? K.C_STRIKE * mass : 0f);
+        // a victim that struck back and took the rest of its reserve killed it (2026-11-01: it was counted as starved at
+        // the end of the step; measured: most 'starved' juveniles died so, with food in their gut)
+        if (hurt4 > 1e-6f && w.Energy[i] <= 0f) { int v = w.ITarget[i]; Die(w, i, Cause.Killed, v >= 0 ? w.Spc[v] : -1); return; }
         // ---- 5. mate / lay (DESIGN §8)
         if ((acts & BIT_MATE) != 0 && w.IMate[i] >= 0) r += Mate(w, i, w.IMate[i], cell, x0, y0);
         if ((acts & BIT_LAY) != 0 && Decide.Ready(w, i)) r += Lay(w, i, cell);
@@ -303,7 +306,7 @@ public static class Resolve
         float grow = 0;
         if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
         {
-            float tissue = K.C_CARC * w.PM[i] * (1f - w.PBirth[i]) * K.RHO_MEAT / K.GROWTH_EFF;   // energy to build all of it
+            float tissue = w.PM[i] * (1f - w.PBirth[i]) * K.TISSUE_E / K.GROWTH_EFF;   // energy to build all of it (TissueCost)
             grow = Math.Clamp(MathF.Min(tissue / w.PMature[i] * w.Energy[i] / emax, w.Energy[i] - K.GROW_RESERVE * emax), 0f, tissue / w.PMature[i]);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
         }
@@ -379,7 +382,7 @@ public static class Resolve
         // ---- 8. death
         if (w.Energy[i] <= 0)
         {
-            if (dg != null && dgHurt > 1e-6f) dg.StarveHurt[dgG]++;
+            if (dg != null && hurt4 > 1e-6f) dg.StarveHurt[dgG]++;
             if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * rateT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
             Die(w, i, Cause.Starve, -1); return;
         }
@@ -611,17 +614,22 @@ public static class Resolve
         }
         float space = MathF.Max(0f, gutCap - w.Gut[a]);
         bool drainHit = w.PDrain[a] > 0f && Rng.U(seed, step, (uint)a, Rs.Strike + 5u) < w.PDrain[a];
+        float e0 = w.Energy[v];
         if (!drainHit)
         {
-            // a hit wounds in proportion to the weapon's force; the victim dies when its reserve runs out
-            float dmg = K.C_DAMAGE * power;
+            // a hit wounds in proportion to the weapon's force against the body that resists it (its defence: size, armour,
+            // a juvenile's softness), as a share of a full reserve (WOUND); the victim dies when its reserve runs out.
+            // (2026-11-01) It took C_DAMAGE x power whatever the victim, so a matched predator needed ~4 landed hits to kill
+            // a fed prey of its own size, the prey's fat standing for its life (measured: 3.9 hits a kill, ~40 strikes)
+            float dmg = MathF.Min(1f, power / (defence + 1e-6f)) * K.WOUND * w.EmaxOf(v);
             w.Energy[v] -= dmg;
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + K.PAIN_HIT);
             w.PendingR[v] -= K.R_PAIN * dmg / MathF.Max(w.EmaxOf(v), 1e-3f);
             if (dg != null) dg.StrHit[dgG]++;
             if (w.Energy[v] > 0) { if (dg != null) dg.WoundOnly[dgG]++; w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], Telemetry.F_WOUND, w.Step, w.Serial[a], w.Serial[v]); return rew; }
         }
-        float ev = MathF.Max(0f, w.Energy[v]);
+        // a kill leaves the victim's reserve in its carcass (2026-11-01: the killing wound took it out of the world)
+        float ev = MathF.Max(0f, drainHit ? w.Energy[v] : e0);
         if (drainHit)
         {
             float drain = MathF.Min(K.C_DRAIN * MathK.Pow(w.PM[a], K.EXP_BASAL), ev);
@@ -635,8 +643,9 @@ public static class Resolve
             if (dead) { w.T.Kills[w.Spc[a]]++; w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
             return rew;
         }
-        // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water)
-        float carcass = K.C_CARC * w.MassOf(v) + ev / K.RHO_MEAT;
+        // whole-body kill: eat what fits as meat, the rest becomes carrion (or detritus in water). The carcass is its edible
+        // tissue at the energy of wet tissue and its reserve (CarcassKg, 2026-11-01)
+        float carcass = CarcassKg(w.MassOf(v), ev);
         float eat = MathF.Min(space, carcass);
         if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; if (dg != null) { dg.StrMeatKg[dgG] += eat; dg.StrMeatE[dgG] += eat * K.RHO_MEAT * dietA[(int)Pool.Meat]; } }
         if (dg != null) dg.StrKill[dgG]++;
@@ -738,14 +747,21 @@ public static class Resolve
         => w.PLitter[m] * (K.F_BIRTH * K.C_EMAX * w.PM[m] * w.PBirth[m] + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
 
     /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
-    public static float TissueCost(float birthShare, float adultMass) => K.C_CARC * adultMass * birthShare * K.RHO_MEAT / K.GROWTH_EFF;
+    /// (2026-11-01) The whole body is built, bone, gut and skin with the muscle, at the energy of wet tissue (TISSUE_E,
+    /// ~7 kJ/g; Peters 1983) over GROWTH_EFF: ~9 MJ a kilogram, as measured costs of growth are (~1.3x the energy laid
+    /// down; Brody 1945). It was C_CARC x RHO_MEAT, 24 MJ a kilogram, so growth and young cost 2.5x what they do.
+    public static float TissueCost(float birthShare, float adultMass) => adultMass * birthShare * K.TISSUE_E / K.GROWTH_EFF;
+
+    /// <summary>The food a body is when it dies, in kg of meat (RHO_MEAT): its edible tissue (C_CARC x mass at TISSUE_E)
+    /// and its reserve (2026-11-01: the tissue was C_CARC x mass kg of meat, 5x its energy).</summary>
+    public static float CarcassKg(float mass, float reserve) => (K.C_CARC * mass * K.TISSUE_E + MathF.Max(0f, reserve)) / K.RHO_MEAT;
 
     /// <summary>Death with a body left behind (carrion on land, detritus in water).</summary>
     public static void Die(World w, int i, int cause, int killer)
     {
         int cell = World.FIdx(w.X[i], w.Y[i]);
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
-        float body = K.C_CARC * w.MassOf(i) + MathF.Max(0f, w.Energy[i]) / K.RHO_MEAT;
+        float body = CarcassKg(w.MassOf(i), w.Energy[i]);
         { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += body / Pools.Kg[dp]; }   // kg into the pool's units
         DieNoBody(w, i, cause, killer);
     }

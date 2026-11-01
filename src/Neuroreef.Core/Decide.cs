@@ -55,6 +55,10 @@ public static class Decide
     /// Revision S: with taste (FOOD_HERE: food at the mouth) the plants' defences count, as when it bites; food further
     /// away (FOOD_GRAD) is judged by how much there is, as it cannot taste it.
     public static float FoodValue(World w, ReadOnlySpan<float> diet, float bite, float need, int cell, bool taste = false)
+        => Worth(FoodGain(w, diet, bite, cell, taste), need);
+
+    /// <summary>The energy of one bite of the best food in the cell it can digest (FoodValue before its worth is taken).</summary>
+    public static float FoodGain(World w, ReadOnlySpan<float> diet, float bite, int cell, bool taste = false)
     {
         float v = 0;
         bool land = w.Cell[cell] == (byte)Realm.Land;
@@ -66,7 +70,7 @@ public static class Decide
             if (taste && land && p <= (int)Pool.Root) { Plants.Taste(w, p, cell, bite, out float em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
             v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite * bm, w.Pool[p][cell] * Pools.Kg[p]));   // kg of food (Pools.Kg)
         }
-        return Worth(v, need);
+        return v;
     }
 
     /// <summary>The worth of an energy gain against a step's need: 1 - exp(-gain / need).</summary>
@@ -243,17 +247,25 @@ public static class Decide
         float meatEff = diet[(int)Pool.Meat];
         float mfp = MathK.Pow(w.MassOf(i) / w.PM[i], K.EXP_BASAL);
         float bite = w.PBite[i] * mfp, need = MathF.Max(1e-7f, K.FIELD_METAB * w.PBasal[i] * mfp);
-        float fh = FoodValue(w, diet, bite, need, cell, taste: true);
+        float plantHere = FoodGain(w, diet, bite, cell, taste: true);
+        float fh = Worth(plantHere, need);
         float fgx = FoodValue(w, diet, bite, need, CellAt(cell, 2, 0)) - FoodValue(w, diet, bite, need, CellAt(cell, -2, 0));
         float fgy = FoodValue(w, diet, bite, need, CellAt(cell, 0, 2)) - FoodValue(w, diet, bite, need, CellAt(cell, 0, -2));
         byte eatPrey = 0;
         if ((o1.J >= 0 || o1.J == Player.Slot) && meatEff > 0)
         {
             // value of eating it: a bite of its edible tissue, on the same scale as the plants
-            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.C_CARC * (o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS)), need);
+            float preyGain = meatEff * K.RHO_MEAT * MathF.Min(bite, Resolve.CarcassKg(o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS, 0f));   // its edible tissue (2026-11-01)
+            float prey = Worth(preyGain, need);
+            // (2026-11-01) prey and plants are compared by the energy a bite of each gives, and the way to food leads to
+            // prey only for what it would give beyond the food underfoot. Both were compared as worths, which saturate:
+            // a bite of either pays for 10-25 steps, so both read 1.0 and prey never beat any plant (a meat specialist on
+            // grass never hunted), while every hungry grazer's way to food led to the nearest other animal (plants are
+            // ~1.0 in every cell, so their gradient is ~0), whatever little meat its gut could take
+            float pull = Worth(MathF.Max(0f, preyGain - plantHere), need);
             float close = 1f - o1.D / R;
-            fgx += prey * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += prey * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
-            if (o1.J == strike.J && prey > fh) { fh = prey; eatPrey = 1; }                         // in reach and worth more than the plants
+            fgx += pull * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += pull * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
+            if (o1.J == strike.J && preyGain > plantHere) { fh = prey; eatPrey = 1; }              // in reach and worth more than the plants
         }
         w.IEatPrey[i] = eatPrey;
         f[F.FOOD_HERE] = fh;
