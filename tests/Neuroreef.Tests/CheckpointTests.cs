@@ -150,14 +150,14 @@ public class CheckpointTests
     [Fact] // a save of format 17 (the same land rules, the format before the kind byte): everything is kept, and it goes on exactly
     public void Format17SaveContinuesExactly()
     {
-        using var a = new Simulation(8192, 94, 2);
+        using var a = new Simulation(8192, 94, 2, maxCapacity: 8192);
         for (int k = 0; k < 200; k++) a.Step();
         string path = Path.GetTempFileName();
         try
         {
             OldSave(a.W, path, 17, p => p is "Flora.Cap" or "Flora.HCap");   // the first saves of format 17 had a fixed plant table size (a constant)
             var (cap, seed, ts) = Checkpoint.WorldHeader(path);
-            using var b = new Simulation(cap, seed, 2, restore: true, terrainSeed: ts);
+            using var b = new Simulation(cap, seed, 2, restore: true, terrainSeed: ts, maxCapacity: 8192);
             var m = Checkpoint.LoadWorld(b, path);
             Assert.True(m.Migrated);
             Assert.False(m.LandRebuilt);
