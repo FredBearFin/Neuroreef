@@ -38,7 +38,7 @@ public static class K
     [K("World", "agent slots (animals, eggs, embryos) a world starts with: it grows as births need more, limited only by memory (World.Grow)", "slots", "HT: ~212 KB per slot with 256-unit brains (World.SlotBytes); not a cap since 2026-10-31: a seed gives the same run from any start")] public const int CAPACITY = 16384;
     [K("World", "share of the map below sea level (Nature.Water, the default): the sea; lakes above it come from the water balance of closed basins (2026-10-31; before, every cell below this quantile was a lake at one level)", "fraction", "HT")] public const float LAKE_SHARE = 0.10f;
     [K("World", "depth below which water is shallow (wadeable, algae grow)", "elev", "HT")] public const float SHALLOW = 0.035f;
-    [K("World", "season period (one year), by default", "steps", "ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K)")] public const int T_SEASON = 3000;
+    [K("World", "season period (one year), by default", "steps", "ECO: about one lifespan at M=1, so seasonal life histories can evolve (ecology review; 9000 before Revision K); since 2026-11-01 a step is STEP_H and the lifespan at M=1 is 2 years (C_LIFE)")] public const int T_SEASON = 3000;
     [K("World", "season amplitude on moisture", "-", "V1")] public const float A_SEASON = 0.45f;
     [K("World", "telemetry sample interval", "steps", "HT")] public const int SAMPLE_EVERY = 32;
     [K("World", "telemetry ring length", "samples", "HT")] public const int RING = 4096;
@@ -52,9 +52,10 @@ public static class K
     // The land has always been in metres (GEO_CELL_M a field cell); the animals now are too. A step is STEP_H hours: the
     // year (T_SEASON steps) is 365.25 days. Masses are kilograms (M = 1 is 1 kg, as the flight physics assumed). Every
     // distance an animal senses or moves is set in metres from an allometry of its body mass, then divided by M_PER_UNIT.
-    // The life-history clock (C_LIFE, C_MATURE, C_GEST at M = 1: 1.07 years, 30 days, 18 days) is that of a fast-living
-    // wild mammal of ~1 kg (wild rabbits: gestation 30 days, few live past 1-2 years; Thompson & King 1994), within the
-    // spread of the allometries; a 5-hour step (an old pathogen note) would make the year 1.7 years long.
+    // The life-history clock is in days since 2026-11-01 (C_LIFE, C_MATURE, C_GEST, C_COOL at M = 1: 2 years, 120 days,
+    // 50 days, 50 days, each x M^0.25): until then it was V1's steps (1.07 years, 30 days, 18 days, 18 days), which let a
+    // 0.14 kg body reach maturity in 19 days and breed every 11, an intrinsic rate of increase ~10x Fenchel's (1974) line.
+    // A 5-hour step (an old pathogen note) would make the year 1.7 years long.
     [K("Units", "duration of one step: 365.25 days x 24 h / T_SEASON", "h", "derived: T_SEASON = 3000 steps is one year, so a step is 2.92 h (8.2 steps a day). Before 2026-11-01 the notes said ~3 h (water cycle) and ~5 h (pathogens); 5 h was wrong")] public const float STEP_H = 8766f / T_SEASON;
     [K("Units", "duration of one step", "s", "derived: STEP_H x 3600 = 10,519 s")] public const float STEP_S = STEP_H * 3600f;
     [K("Units", "steps in a day", "steps", "derived: 24 / STEP_H = 8.21")] public const float STEPS_PER_DAY = 24f / STEP_H;
@@ -81,11 +82,12 @@ public static class K
     [K("Allometry", "energy reserve per unit mass", "E/M", "ECO: stored reserve of the same order as tissue energy")] public const float C_EMAX = 2.0f;
     [K("Allometry", "gut capacity per unit mass", "M/M", "HT")] public const float C_GUT = 0.30f;
     [K("Allometry", "digestion rate at M=1", "M/step", "ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997)")] public const float C_DIGEST = 0.025f;
+    [K("Allometry", "energy the gut can absorb per step at M=1 (x M^0.75): digestion passes rich digesta only as fast as their energy is taken up (Resolve), and the food a forager picks is worth at most this a step", "E/step", "ECO (2026-11-01): intestinal nutrient transport has a set capacity with modest spare (Karasov & Diamond 1983; Diamond 1991), and maximal sustained energy budgets reach ~7x basal (Hammond & Diamond 1997: lactating mice ~7, cold-exposed rodents 5-7, birds feeding young ~4). Before, mass alone bounded digestion, so seeds (7 E/M, 0.75 digestible), fruit and nectar gave 30-47x basal at 0.1 kg against 6.7x for grass")] public const float C_ABSORB = 7f * C_BASAL;
     [K("Allometry", "bite size at M=1", "M/step", "Revision M: x5 with digestion (a bite fills the gut faster than it empties)")] public const float C_BITE = 0.06f;
     [K("Allometry", "top speed per step at M=1 (walk): DMD_M / STEPS_PER_DAY / TRAVEL_SHARE / M_PER_UNIT", "units/step", "derived (2026-11-01): 632 m a step (11.6 units); was 1.2 units (65 m) from V1, so animals covered ~1/9 of a real day range")] public const float C_SPEED = DMD_M / STEPS_PER_DAY / TRAVEL_SHARE / M_PER_UNIT;
     [K("Allometry", "turn rate at M=1", "rad/step", "V1")] public const float C_TURN = 0.32f;
-    [K("Allometry", "lifespan at M=1", "steps", "V1")] public const float C_LIFE = 3200f;
-    [K("Allometry", "maturity age at M=1", "steps", "V1")] public const float C_MATURE = 250f;
+    [K("Allometry", "lifespan at M=1 (the age at which senescence sets in): 730 days", "steps", "ECO (2026-11-01): wild mammals of ~1 kg rarely live past 2-3 years (wild rabbits, Thompson & King 1994; ~0.75 years at 20 g as wild mice, ~5 years at 40 kg); lifespan / maturity ~6, against Charnov's (1993) adult life expectancy of ~1.4 maturity ages and maximum longevities of ~10 (Prothero & Juergens 1987). Was 3200 steps (V1), set when a step had no duration")] public const float C_LIFE = 730f * STEPS_PER_DAY;
+    [K("Allometry", "maturity age at M=1 (the fastest a juvenile can grow to adult size, on a full reserve): 120 days", "steps", "ECO (2026-11-01): age at first reproduction of mammals ~M^0.25-0.3 (Millar & Zammuto 1983; Charnov 1993): house mouse 20 g 6 weeks (x 0.38 = 45 days here), rat 0.3 kg 10 weeks (89 days), rabbit 2 kg 4-5 months (143 days), roe deer 25 kg 14 months (268 days). Was 250 steps (V1: 30 days), 3-5x too fast")] public const float C_MATURE = 120f * STEPS_PER_DAY;
     [K("Allometry", "sight range at M=1: C_SIGHT_M / M_PER_UNIT", "units", "derived (2026-11-01): 1.1 units (60 m); was 16 (870 m) from V1")] public const float C_SIGHT = C_SIGHT_M / M_PER_UNIT;
     [K("Allometry", "net cost of moving one unit at M=1 (x M^EXP_MOVE x distance): COT_J x M_PER_UNIT in energy units (C_BASAL is BMR_W x STEP_S)", "E/(M^0.7*unit)", "ECO (2026-11-01): the cost of transport of Taylor, Heglund & Maloiy (1982) on the energy scale Kleiber's metabolism sets; 6.5e-5 per unit, 1.6% of a step's basal metabolism at 1 kg. Was 0.004 x C_SPEED = 0.0048 (Revision M), 73x the measured cost per metre, when a step's travel was 65 m")] public const float C_MOVE = C_BASAL * COT_J * M_PER_UNIT / (BMR_W * STEP_S);
     [K("Allometry", "mass exponent of the cost of transport", "-", "ECO: running cost per unit distance scales ~M^0.7 (Taylor, Heglund & Maloiy 1982)")] public const float EXP_MOVE = 0.7f;
@@ -104,6 +106,7 @@ public static class K
     // ---------------------------------------------------------------- 3. food (energy density)
     [K("Food", "energy density of grass", "E/M", "V1")] public const float RHO_GRASS = 3.2f;
     [K("Food", "energy density of browse (leaves)", "E/M", "HT")] public const float RHO_BROWSE = 3.6f;
+    [K("Food", "energy of a unit of plant production (cover): what reproduction turns into fruit, seed and nectar keeps it, so their mass is the production over their own density (Plants), and a bite of roots takes this much cover per unit of its energy", "E/M", "mass and energy balance (2026-11-01): the energy of herb tissue (RHO_GRASS); before, a unit of production became a unit of nectar, seed or fruit, 2.5, 2.2 and 1.9x its energy")] public const float RHO_PLANT = RHO_GRASS;
     [K("Food", "energy density of fruit", "E/M", "HT")] public const float RHO_FRUIT = 6.0f;
     [K("Food", "energy density of seeds", "E/M", "HT")] public const float RHO_SEED = 7.0f;
     [K("Food", "energy density of nectar", "E/M", "HT")] public const float RHO_NECTAR = 8.0f;
@@ -205,8 +208,8 @@ public static class K
     [K("Body", "largest newborn mass as a share of adult mass", "-", "ECO: precocial mammals")] public const float BIRTH_HI = 0.3f;
     [K("Body", "narrowest field of view a gene can give", "degrees", "ECO: forward-facing predators")] public const float FOV_LO = 120f;
     [K("Body", "widest field of view a gene can give", "degrees", "ECO: prey with lateral eyes")] public const float FOV_HI = 360f;
-    [K("Body", "gestation (or incubation) at M=1, scaling with M^0.25", "steps", "ECO: gestation scales about as M^0.25")] public const float C_GEST = 150f;
-    [K("Body", "breeding cooldown at M=1, scaling with M^0.25", "steps", "ECO: as gestation")] public const float C_COOL = 150f;
+    [K("Body", "gestation (or incubation) at M=1 for a newborn of a tenth of adult mass: 50 days, x M^0.25 x sqrt(newborn share / 0.1)", "steps", "ECO (2026-11-01): gestation ~M^0.25 (Kihlstroem 1972; Blueweiss et al. 1978), longer for precocial young (Martin & MacLarnon 1985): house mouse 19 days (14 here), rabbit 1.5 kg at 3% 31 days (30), guinea pig 0.9 kg at 10% 68 days (49), deer 50 kg at 8% 200 days (119). Was 150 steps (V1: 18 days)")] public const float C_GEST = 50f * STEPS_PER_DAY;
+    [K("Body", "breeding cooldown at M=1 from conception (the shortest interval between litters): 50 days, x M^0.25", "steps", "ECO (2026-11-01): interbirth intervals of small mammals are about a gestation plus part of a lactation, ~M^0.25 (Millar 1977): house mouse ~20-25 days (19 here), rat 24-30 (37), wild rabbits 5-7 litters in a breeding season (55 days at 1.5 kg). Was 150 steps (V1: 18 days)")] public const float C_COOL = 50f * STEPS_PER_DAY;
 
     [K("Body", "swimming power (share of the body's top speed in water) needed to stay in deep water", "-", "ECO: staying up in open water needs swimming power")] public const float DEEP_SWIM = 0.3f;
     [K("Body", "additional maximum water depth per unit fin size, in SHALLOW-depth units", "x", "HT")] public const float SWIM_DEPTH_RANGE = 14f;
@@ -487,7 +490,7 @@ public static class K
     [K("Plants", "most cover recruited from a bank per update", "cover", "HT")] public const float B_SEED0 = 0.01f;
     [K("Plants", "establishment per seed per update at full growth", "-", "HT: a bank of 0.05 cover of reference seed recruits ~90% of B_SEED0")] public const float EST0 = 0.005f;
     [K("Plants", "height an animal browses up to", "m", "ECO: browsers reach ~5-6 m (du Toit 1990)")] public const float BROWSE_H = 6f;
-    [K("Plants", "woody cover lost per unit browse eaten", "-", "HT: as the old sapling loss")] public const float BROWSE_LOSS = 0.5f;
+    [K("Plants", "woody cover lost per unit browse eaten", "-", "mass balance (2026-11-01): leaves and shoots eaten are the woody plant's own mass, so a unit of browse is a unit of its cover (RHO_BROWSE is the energy of woody tissue in reach). Was 0.5 (HT, as the old sapling loss): browse, regrowing toward its own capacity, fed browsers twice what the plants lost")] public const float BROWSE_LOSS = 1f;
     [K("Plants", "share of a bank of full hooks caught in a coat per step, x M^(2/3) x (0.3 + fur)", "/step", "ECO: epizoochory (Sorensen 1986; Couvreur et al. 2004)")] public const float BURR_PICK = 0.002f;
     [K("Plants", "share of seed in a coat that falls off per step", "/step", "ECO: Couvreur et al. 2004")] public const float BURR_DROP = 0.03f;
     [K("Plants", "body mass whose gape passes a reference seed whole", "M", "ECO: gape limits the seed size dispersed (Wheelwright 1985)")] public const float M_GAPE = 1f;

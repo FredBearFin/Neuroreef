@@ -30,10 +30,12 @@ public static class Headless
         double moved = 0, movedMax = 0; long animalSteps = 0;
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop = true; Console.WriteLine("stopping after this step (saving)..."); };
         var water = new WaterWatch();
+        var eco = Environment.GetEnvironmentVariable("NR_ECO") == "1" ? new EcoWatch(w) : null;   // ecology census (2026-11-01)
         for (long k = 0; k < o.Steps && !stop; k++)
         {
             sim.Step();
             water.Sample(w);
+            eco?.Sample(sim);
             if (units)
                 for (int i = 0; i < w.Cap; i++)
                     if (w.StageOf[i] >= St.Juvenile) { moved += w.Speed[i]; movedMax += w.Vmax(i); animalSteps++; }
@@ -46,7 +48,7 @@ public static class Headless
             if (o.SaveBank != null && w.Step % 50000 == 0) GeneBank.Save(w, o.SaveBank);
         }
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
-        string summary = Summary(sim) + Environment.NewLine + water.Report(w);
+        string summary = Summary(sim) + Environment.NewLine + water.Report(w) + (eco != null ? Environment.NewLine + eco.Report(sim) : "");
         Console.Write(summary);
         if (units)
         {

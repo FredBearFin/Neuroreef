@@ -56,6 +56,10 @@ public sealed class PlantTable
     // per-row counters of the parallel phase (summed by Commit): adoptions, crosses, mutations, failed crosses, queue full,
     // seed mass released by wind, landed in water
     public readonly double[] RowStat;
+    // net primary production (reporting only, 2026-11-01): per row and slot (herb, shrub, tree, sapling) and reproduction,
+    // in cover (food mass) units; Commit adds each row's into Production. Nothing reads it back
+    public readonly double[] RowProd;
+    public readonly double[] Production = new double[5];
     public long Created, Freed, Establish, Crosses, Mutations, FailedCross, TableFull, PendFull;
     public double WindSeed, WaterSeed, GutSeed, CacheSeed, BurrSeed, ReleasedNb, GatheredNb;
     public long CensusSteps;
@@ -70,6 +74,7 @@ public sealed class PlantTable
         PendN = new int[fw]; PendCell = new int[fw * K.PLANT_PEND]; PendSlot = new byte[fw * K.PLANT_PEND];
         PendLo = new ulong[fw * K.PLANT_PEND]; PendHi = new ushort[fw * K.PLANT_PEND]; PendParent = new ushort[fw * K.PLANT_PEND];
         RowStat = new double[fw * NSTAT];
+        RowProd = new double[fw * 5];
         for (int i = Cap - 1; i >= 1; i--) Free[FreeTop++] = i;
     }
 
@@ -464,6 +469,7 @@ public static class Plants
                 float dead = dt * (mdr + mbg) * b;
                 if (k == HERB) litter += dead; else wood += dead;
                 prod += MathF.Max(0f, dt * grow);
+                t.RowProd[y * 5 + k] += MathF.Max(0f, dt * grow);
                 float fe = G0 / (r0 * (1f + K.RESP));
                 if (k == SHRUB || k == TREE || k == SAP) { fenvB += fe * b; fenvBsum += b; }
                 if (k == HERB || k == SHRUB) { fenvR += fe * b; fenvRsum += b; }
@@ -494,11 +500,15 @@ public static class Plants
                     if (dad != g && Compat(t, g, dad) > u2) set = MathF.Min(1f, Pe[o + Ph.S0] + K.WIND_POLL * bn + K.ANIMAL_POLL * poll);
                     else { if (dad != g) t.RowStat[y * PlantTable.NSTAT + ST_FAIL]++; dad = g; set = Pe[o + Ph.S0]; }
                     float nect = Pe[o + Ph.NECT] * R;
-                    Nc[i] += nect;
+                    // (2026-11-01) what reproduction makes keeps the energy of the production it is made from (K.RHO_PLANT per
+                    // unit): richer stuff is less of it. Before, a unit of production became a unit of nectar (8 E/M), seed
+                    // (7) or fruit (6) against tissue's 3.2, so nectar-feeders ate 2.5x the energy the plants had fixed
+                    Nc[i] += nect * (K.RHO_PLANT / K.RHO_NECTAR);
                     float seedInv = (R - nect) * set;
                     dB += (R - nect) * (1f - set) * room;   // what was not set goes back into growth
                     float sm = seedInv / Pe[o + Ph.CS];
-                    float flesh = Pe[o + Ph.FLESH] * sm, dry = sm - flesh;
+                    float flesh = Pe[o + Ph.FLESH] * sm, dry = (sm - flesh) * (K.RHO_PLANT / K.RHO_SEED);
+                    flesh *= K.RHO_PLANT / K.RHO_FRUIT;
                     if (flesh > 0f)
                     {
                         float fm = flesh * (1f + Pe[o + Ph.PULP]);
@@ -517,6 +527,7 @@ public static class Plants
                         windOut += nb + far;
                     }
                     prod += R;
+                    t.RowProd[y * 5 + 4] += R;
                 }
                 fixedShare += Pe[o + Ph.NFIXN] * b;
                 B[k] = MathF.Max(0f, b + dB);
@@ -759,6 +770,7 @@ public static class Plants
             t.ReleasedNb += t.RowStat[st + ST_WIND]; t.GatheredNb += t.RowStat[st + ST_GATH]; t.WaterSeed += t.RowStat[st + ST_WATER];
             t.WindSeed += t.RowStat[st + ST_WIND];
             Array.Clear(t.RowStat, st, PlantTable.NSTAT);
+            for (int k = 0; k < 5; k++) { t.Production[k] += t.RowProd[y * 5 + k]; t.RowProd[y * 5 + k] = 0; }
             // this row's long-distance seed joins its block's accumulator (one parent pair per block: the largest share, by lottery)
             int by = y / K.WIND_BLOCK;
             for (int bx = 0; bx < nbx; bx++)
@@ -934,6 +946,16 @@ public static class Plants
         }
     }
 
+    /// <summary>A bite of roots (2026-11-01): the herbs' and then the shrubs' cover in the cell loses `cover` (the bite's
+    /// energy at RHO_PLANT per unit), so digging feeds on the plants' own production, as grazing does.</summary>
+    public static void RootEaten(World w, int cell, float cover)
+    {
+        float[] G = w.Pool[(int)Pool.Grass];
+        float fromHerb = MathF.Min(G[cell], cover);
+        G[cell] -= fromHerb;
+        w.Shrub[cell] = MathF.Max(0f, w.Shrub[cell] - (cover - fromHerb));
+    }
+
     static void GutAdd(World w, int a, int mom, int dad, float m, float u)
     {
         if (m <= 0f || mom == 0) return;
@@ -1026,9 +1048,10 @@ public static class Plants
             else { float c = b * Reach(Pe, o, false); dB += K.R_B * Nature.Plants * fe * 0.5f * c * em; fB += c; if (k == SHRUB) dR += K.R_R * Nature.Plants * fe * b * 0.25f; }
         }
         y += diet[(int)Pool.Browse] * Pools.Rho[(int)Pool.Browse] * dB;
-        y += diet[(int)Pool.Fruit] * Pools.Rho[(int)Pool.Fruit] * dF;
-        y += diet[(int)Pool.Seed] * Pools.Rho[(int)Pool.Seed] * dSd;
-        y += diet[(int)Pool.Nectar] * Pools.Rho[(int)Pool.Nectar] * dNc;
+        // fruit, seed and nectar carry the energy of the production they are made of (RHO_PLANT per unit, 2026-11-01)
+        y += diet[(int)Pool.Fruit] * K.RHO_PLANT * dF;
+        y += diet[(int)Pool.Seed] * K.RHO_PLANT * dSd;
+        y += diet[(int)Pool.Nectar] * K.RHO_PLANT * dNc;
         y += diet[(int)Pool.Root] * Pools.Rho[(int)Pool.Root] * dR;
         y += diet[(int)Pool.Litter] * Pools.Rho[(int)Pool.Litter] * dL;
         return y;

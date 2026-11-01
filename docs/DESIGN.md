@@ -3,6 +3,64 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Why the grazers boomed: free energy and a life-history clock without days** (2026-11-01; Plants.cs, Resolve.cs, Body.cs,
+Life.cs, Constants.cs; reporting: Server/EcoWatch.cs, NR_ECO=1). The owner: "why are grazers booming?" Measured with
+the new ecology census (512 map; seeds 5 and 7 to 3,000-3,600 steps, where the world reached 16,384 slots or ran out of
+memory; seed 5 had 17,306 animals at step 3,000 and was killed by the OOM killer at ~7 GB when run uncapped):
+- *Herbivores ate more than the plants made.* Offtake of live plant food was 108-231% of net primary production (NPP)
+  per 300-step sample on seed 5 and 126% pooled on seed 7, where herbivores assimilated 55% of NPP's energy and their own
+  production (growth and young) was 13-40% of it (Lindeman 1942; Pauly & Christensen 1995: 5-20% between levels;
+  Cebrian 1999: terrestrial herbivores take 5-20%, grazed grasslands up to ~60%). Three leaks: (1) reproduction turned a
+  unit of production (cover, 3.2 E/M as herb) into a unit of nectar (8), seed (7) or fruit (6), so on seed 7 the seed
+  eaten held 1,158 E/km2/yr against 554 for all reproduction; (2) a bite of browse cost the woody plants half its mass
+  (BROWSE_LOSS 0.5) and (3) a bite of roots 0.3 of its mass from the herbs, while both pools regrew toward their own
+  capacity. The booming 0.14 kg "grazer" of seed 5 (Narelax) was a nectar-feeder; seed 7's (Vitepe 0.12 kg, 11,078 at
+  step 3,600) a seed-eater.
+- *No energy ceiling on digestion.* Digestion was bounded only by mass, so rich foods gave 30-47x basal metabolism at
+  0.1 kg (grass 6.7x), against sustained budgets of ~7x (Hammond & Diamond 1997).
+- *The life-history clock was V1's steps.* C_MATURE 250, C_GEST and C_COOL 150 steps were 30 and 18 days once a step
+  became 2.92 h: a 0.14 kg body could mature in 19 days and breed every 11. Narelax grew at r = 0.034/day in its first
+  300 steps and 0.011/day over its first half year, against Fenchel's (1974) r_max = 0.025 M(g)^-0.26 = 0.0069/day.
+Now (no caps, no population terms):
+- RHO_PLANT (= RHO_GRASS): nectar, seed and fruit flesh are made at production x RHO_PLANT / their own density (fewer
+  seeds, as seed size and number trade off); Plants.Yield counts them at RHO_PLANT. BROWSE_LOSS 1 (leaves are the woody
+  plant's own mass); a bite of roots takes its energy's worth of herb, then shrub, cover (Plants.RootEaten).
+- C_ABSORB = 7 x C_BASAL (x M^0.75, PAbsorb): digestion passes rich digesta only as fast as their energy is absorbed
+  (Karasov & Diamond 1983; Diamond 1991), and the forager values a food at most at that rate (denser kept on a tie).
+  Life.RangeCapacity uses the same bound.
+- The clock in days (x M^0.25): maturity 120 days, gestation 50 days at a newborn of a tenth of adult mass (x sqrt of
+  the share, as before), cooldown 50 days, lifespan 730 days at 1 kg (sources in CONSTANTS.md). A 0.14 kg body's
+  time-limited r with a litter of 6 is 2.7x Fenchel's line (EcologyTests.LifeHistoryIsInDays); energy limits it below.
+After (seeds 5, 7, 3; 9,000 steps; pooled after the first year, before -> after where measured):
+- offtake of NPP 108-231% / 126% -> 27.6 / 54.8 / 42.8%; herbivores' assimilation 55% (seed 7) -> 12-26% of NPP;
+  herbivore production / NPP 13-40% -> 3.7 / 7.3 / 5.0%; NPP 1.3-1.5 -> 3.0-3.9 kJ/m2/yr (the plants are no longer
+  grazed below their own regrowth: herb cover 0.03 -> 0.36-0.50).
+- Seed 5: Narelax crashed (733 -> 241) once nectar carried only the energy the plants fixed; Yosupul (0.11 kg,
+  fruit and roots) then grew from 99 to 3,839 at r = 0.0043/day (Fenchel 0.0074 at 110 g), still growing at 9,000 steps.
+  Seed 7: Osnar (0.15-0.19 kg seed-eater) cycled with the seasons, 315 -> 612 -> 331 -> 880 -> 119; 763 Nipeka (21 kg).
+  Seed 3: 360-833 animals, 20-30 kg root and grass eaters most numerous.
+Still unrealistic, and why (not changed here):
+- NPP is 3-4 kJ/m2/yr, ~1,000-5,000x below real land (300-1,000 g/m2/yr, ~5-20 MJ/m2/yr): R_G and the cover units make
+  a field cell (4.75 ha) grow a few kg of food a year. Densities therefore lie 2-3 orders below Damuth's rule
+  (D = 4e4 M(g)^-0.75 /km2): Yosupul 6.1 /km2 against 1,148; 20-30 kg herbivores 0.1-1.2 /km2 against 18-23. Seed 5's
+  baseline 22/km2 for 0.14 kg was already 45x below Damuth: the boom was against the world's own food, not Damuth.
+  At these densities the density-size slope is not Damuth's (on seeds 3 and 7 the big herbivores now outnumber the small).
+- No predator level emerges in 3 years: carnivore biomass 0-1.3 kg/km2, 1 : 12-842 of herbivores (Carbone & Gittleman
+  2002: ~1 : 100), carnivores' production 0.1-1.5% of the herbivores' (5-20%). Most "killed" deaths are herbivores and
+  omnivores striking others (strike target in reach on 3-8% of decisions); regulation is by food (starvation, embryos
+  lost) and by that interference, not predation.
+- Pathogens die out on every seed, before and after: infected 18-37% at the start, 0% by step ~4,000. Contact
+  transmission caught 9 of 10,937 infections on seed 5 (nearest neighbours lie ~200 m apart at 6/km2, beyond a step's
+  reach); strains selected for persistence in the ground, replication fell to the bottom of its range (0.033/step) and
+  the immune response cleared them. That is below the threshold host density of directly transmitted disease (Anderson &
+  May 1979), so disease is not density-dependent at these densities.
+- 65-88% of the living are juveniles: the young grow to full size, which on a full reserve takes the whole maturity time;
+  mean age at death 66-300 days against lifespans of 500-2,400.
+Reporting: NR_ECO=1 prints an ECO line every 300 steps (animals and biomass by trophic group from what each clade ate,
+herb cover, NPP, offtake, production ratios, infected share, deaths by cause, the largest clade) and pooled tables at the
+end; PlantTable.Production and Telemetry.EatenMass are counters nothing reads back (no hash moved: the plants' and
+fields' state is unchanged by them). Tests: EcologyTests.AbsorptionBoundsRichFood, LifeHistoryIsInDays.
+
 **A world you see whole, and bodies at their true size** (2026-11-01; Options.cs, setup.html, js/scale.js,
 js/world3d.js, js/look/vegetation.js; images docs/art/scale/). The owner: "the worlds are too damn big now ... the world
 should be easy to see the whole thing", "we don't need worlds that reach 60k population", and animals and plants drawn
