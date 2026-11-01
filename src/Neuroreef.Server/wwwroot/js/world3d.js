@@ -36,7 +36,7 @@ const STAIN_MAX = 1024;       // blood stains on the ground
 const BLOOD_MAX = 2500;       // blood droplets in the air at once
 const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sinking for the last quarter
 const NEAR_PX = 22;          // organisms drawn longer than this on screen (pixels) get the detailed body
-const DOT_PX = 2.4;          // in the overview no organism is drawn shorter than this (a dot where it is, never a carpet)
+const DOT_PX = 1.8;          // in the overview no organism is drawn shorter than this (a dot where it is, never a carpet)
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)

@@ -21,7 +21,7 @@ should be easy to see the whole thing", "we don't need worlds that reach 60k pop
   height in metres (trees 3-45 m, shrubs up to 4 m, grass tufts 0.5 m, boulders a few metres), times the fourth root of
   the creatures' factor (x2.1 at x20), as many to a field cell as its cover fits crowns of that size. Explore is always
   x1, so its eye height (1.7 m), speeds and weapon reaches are in the same metres as the bodies. In the overview no
-  animal is drawn shorter than 2.4 px, so the whole map shows where the animals are as a sprinkling of dots, not a carpet.
+  animal is drawn shorter than 1.8 px, so the whole map shows where the animals are as a sprinkling of dots, not a carpet.
 - Swimmers are drawn under the water's surface at their depth (AGENTS format 7: depth in m, at true scale), fading
   into the water's colour with depth and its murk (algae, plankton); an air-breather that spends only part of each step
   at depth dives for that share of an 8 s cycle and is at the surface for the rest. Never below the bed.
