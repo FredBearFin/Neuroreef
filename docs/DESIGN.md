@@ -3,6 +3,38 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Caves and karst from rock and water** (2026-11-01; Caves.cs; images docs/art/terrain2/caves_*.png). The owner saw no
+caves. Now, built at Terrain.Finish from the rock, relief, rivers and the mean year's water (the terrain seed alone):
+- *Limestone.* Sedimentary rock is carbonate (World.Carb) where a regional draw of formations (fBm of the terrain seed)
+  plus distance from clastic sources (crystalline and volcanic ground; Schlager 2005) puts it in the top CARB_SHARE of
+  sedimentary land. Rock with Carb >= CARB_MIN is karst: 9.7-12.6% of the land (seeds 3, 7, 11 at the 1024 map). No new
+  rock kind: Geology and World.Rock are unchanged.
+- *Dissolution.* Soil pCO2 from actual evapotranspiration (Brook et al. 1983), [Ca]eq ~ pCO2^(1/3), less in warm water
+  (Dreybrodt 1988); denudation = runoff x [Ca]eq (White 1984). It sizes passages and sets how many solution dolines form.
+- *Conduits.* Springs are valley mouths (a stream of CHANNEL_A_MIN) where the drainage leaves the karst. A Priority-Flood
+  from them by water-table head (CAVE_GRAD, less under valleys: CAVE_VALLEY) gives each karst cell its conduit (CaveNext)
+  and spring (CaveSpring): dendritic networks converging on a few springs, the lowest capturing most (underground piracy).
+  A passage forms where the conduit gathers CAVE_Q_MIN, width ~ sqrt(Q) (CaveVoid: share of the cell over open
+  passage; CaveDepth: m below the ground). Rivers standing CAVE_LOSE_H above the water table lose CAVE_LEAK per cell.
+- *Features* (CaveKind bits): sinkholes (ponors where streams from other rock reach the karst, solution dolines, collapse
+  dolines over thin roofs), karst springs, losing river cells, and entrances (resurgences, collapses, and relict passages
+  CAVE_LEVEL_M above the water table cut by valley walls). Lava tubes on gentle volcanic ground below vents (LAVA_S),
+  with skylights; the volcanic arcs are steep (median slope 0.3-0.5), so tubes are rare (5-14 cells per map).
+- Per seed (3, 7, 11): passages 1,617 / 2,007 / 1,690 cells (23-31% of the karst), sinkholes 186 / 220 / 165 (ponors
+  135 / 103 / 72), springs 90 / 71 / 92, entrances 61 / 60 / 86, losing river cells 161 / 149 / 63, lava tube cells
+  14 / 5 / 14. After the spin-up, 33-48 karst springs per map are drinkable (Wet = 2), and karst springs carry 79-88% of
+  all emerging groundwater. Caves.Build takes 20-50 ms at the 1024 map.
+- *Water* (one call in WaterCycle.Finish, Caves.Drain): a sinkhole or losing reach swallows CaveSink of the surface water
+  reaching it (at most CAVE_CAP x its mean intake), and karst groundwater drains through the conduits (CAVE_TAU); both go
+  to the deep groundwater of the spring cell, where what the ground cannot hold emerges (Seep). Store to store: the budget
+  closes (CavesTests, WaterCycleTests).
+- *Shelter* (one line in Heat.Operative): in an entrance cell the operative temperature is the cell's annual mean plus
+  CAVE_SWING of the air's departure from it, with no sun (Badino 2004). The brain is unchanged: animals feel it through
+  the operative temperature they already sense. With no climate it is T_REF, as before.
+- New World fields (land, in Checkpoint.LandFields): Carb, CaveVoid, CaveDepth, CaveFlow, CaveSink, CaveNext,
+  CaveSpring, CaveKind. The WORLD frame gains two trailing planes (cave features, cave courses; ICD.md).
+- Not done: cave interiors as habitat beyond the entrance (no dark zone, no troglobites); sea and fluvial caves.
+
 **Water from its balance: the sea, lakes at their spill points, river channels** (2026-10-31; Hydrology.Waters,
 Terrain.BuildWater, WaterCycle.cs; images docs/art/terrain/hydro_before_*.png and hydro_after_*.png). The owner saw no
 rivers and drowned low ground. Measured before (1024 map, seeds 3, 7, 11):

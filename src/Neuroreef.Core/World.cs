@@ -198,6 +198,14 @@ public sealed class World
     // whole-run water budget of the land (every cell not a lake), mm x cells: rain in; out by evapotranspiration, by pond
     // evaporation and into the lakes. Lakes: rain, inflow, evaporation, spill. Reset at the end of Init.
     public double WbRain, WbET, WbPondEvap, WbToLakes, WbLakeRain, WbLakeEvap, WbLakeSpill;
+    // ---- caves and karst (Caves.cs, 2026-11-01), fixed at Terrain.Build: the carbonate share of the rock (0..1); the share of
+    // the cell's area over open passage, the passage's depth below the ground (m), the mean conduit discharge (cells of mean
+    // land rain), the share of the surface water a sinkhole or losing stream swallows; the next cell down the conduit or lava
+    // tube (-1 none) and the spring the karst water of a cell resurges at (-1 none: not on the karst network); feature bits
+    // (Caves.Karst, Lava, Sinkhole, Entrance, Spring, Losing, Ponor)
+    public readonly float[] Carb, CaveVoid, CaveDepth, CaveFlow, CaveSink;
+    public readonly int[] CaveNext, CaveSpring;
+    public readonly byte[] CaveKind;
     // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
     public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
     public long RainYear = -1;             // year RainAnom belongs to
@@ -305,6 +313,8 @@ public sealed class World
         SoilWater = new float[n]; Snow = new float[n]; Ground = new float[n]; Deep = new float[n]; PondWater = new float[n]; Runoff = new float[n];
         Discharge = new float[n]; DischargeMean = new float[n]; Seep = new float[n]; LakeLevel = new float[n]; LakeIn = new float[n];
         WcRow = new double[Map.FW * WaterCycle.NSUM];
+        Carb = new float[n]; CaveVoid = new float[n]; CaveDepth = new float[n]; CaveFlow = new float[n]; CaveSink = new float[n];
+        CaveNext = new int[n]; Array.Fill(CaveNext, -1); CaveSpring = new int[n]; Array.Fill(CaveSpring, -1); CaveKind = new byte[n];
 
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];

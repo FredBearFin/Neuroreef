@@ -74,6 +74,8 @@ public static class Checkpoint
         "Rain", "SoilCap", "Recv", "DrainOrder", "Outlet", "LakeOf", "LakeArea", "LakeDepth", "LakeQm", "LakeGross", "LakeCount", "LakeSill", "LakeExit", "LakeDown", "LakeRank",
         "SoilWater", "Snow", "Ground", "Deep", "PondWater", "Runoff", "Discharge", "DischargeMean", "Seep", "LakeLevel", "LakeIn",
         "WcRow", "WaterOn", "WbRain", "WbET", "WbPondEvap", "WbToLakes", "WbLakeRain", "WbLakeEvap", "WbLakeSpill", "RainAnom", "RainYear",
+        // caves and karst (Caves.cs)
+        "Carb", "CaveVoid", "CaveDepth", "CaveFlow", "CaveSink", "CaveNext", "CaveSpring", "CaveKind",
         // the pathogen reservoir in the ground and water
         "ResLoad", "ResGene", "ResKey", "ResRecv", "ResOrder", "ResRivers", "ResNet",
     };

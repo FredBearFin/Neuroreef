@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A headless probe of the caves and karst (Caves.cs): builds the land of a few worlds, prints what formed and how long it
+       took, and dumps the fields tools/CaveProbe/render.py draws over the shaded relief. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Neuroreef.Core\Neuroreef.Core.csproj" />
+  </ItemGroup>
+</Project>
