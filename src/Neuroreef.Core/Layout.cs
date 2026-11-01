@@ -35,10 +35,13 @@ public static class F
         HEAT_NEED = 64, AIR_T = 65, DEPTH = 66,
         // path integration (Revision P): the remembered way back to where it last drank and where it last fed well, each as
         // how far ahead it lies (cosine of its bearing), how far to the left (sine) and how near (0 when none is remembered)
-        DRINK_AHEAD = 67, DRINK_LEFT = 68, DRINK_NEAR = 69, FED_AHEAD = 70, FED_LEFT = 71, FED_NEAR = 72;
+        DRINK_AHEAD = 67, DRINK_LEFT = 68, DRINK_NEAR = 69, FED_AHEAD = 70, FED_LEFT = 71, FED_NEAR = 72,
+        // breath (2026-11-01, Respiration.cs): its oxygen debt against the most it can bear (0 breathing freely, 1 about
+        // to suffocate or drown): the air hunger of a body whose organs cannot draw enough oxygen where it is
+        BREATH = 73;
     public const int NSOUND = 8;
     public const int MAX_SYL = K.MAX_SYL; // syllables in one utterance at most (Revision N)
-    public const int N = FED_NEAR + 1;   // 73
+    public const int N = BREATH + 1;   // 74
     public static readonly string[] Names =
     {
         "BIAS", "HUNGER", "THIRST", "FATIGUE", "READY", "AGE", "JUVENILE", "FULL", "PAIN", "CARRYING",
@@ -50,7 +53,7 @@ public static class F
         "FOC_POS_0", "FOC_POS_1", "FOC_POS_2", "FOC_POS_3", "FOC_POS_4", "FOC_POS_5", "FOC_POS_6", "FOC_POS_7",
         "MY_POS_0", "MY_POS_1", "MY_POS_2", "MY_POS_3", "MY_POS_4", "MY_POS_5", "MY_POS_6", "MY_POS_7",
         "FOC_KIN", "FOC_MOTHER", "FOC_ELDER", "FOC_SIZE", "FOC_FACING", "FOC_LIKE_ME", "HEAT_NEED", "AIR_T", "DEPTH",
-        "DRINK_AHEAD", "DRINK_LEFT", "DRINK_NEAR", "FED_AHEAD", "FED_LEFT", "FED_NEAR",
+        "DRINK_AHEAD", "DRINK_LEFT", "DRINK_NEAR", "FED_AHEAD", "FED_LEFT", "FED_NEAR", "BREATHLESS",
     };
 }
 
@@ -120,7 +123,9 @@ public static class G
         B_ENDO = B_CARE + 24,                    // endothermy (0..1): how far it keeps its core above its surroundings (0 cold-blooded, 1 warm-blooded at T_BODY) (Revision P)
         B_BREEDE = B_CARE + 25,                  // breeding condition: the share of its reserve it needs before it breeds (READY_LO..READY_HI) (Revision P)
         B_WIRE = B_CARE + 26,                    // wiring gain: the feedback strength (spectral radius) of its memory, WIRE_LO..WIRE_HI (Revision P)
-        APPEARANCE = B_CARE + 27,
+        B_LUNGS = B_CARE + 27,                   // respiratory organ (0..1): 0 gills, 1 lungs, between both at that share (amphibious) (Respiration.cs)
+        B_DIVE = B_CARE + 28,                    // depth preference (0..1): where in the water column a swimmer holds, 0 the surface, 1 the bottom (Respiration.cs)
+        APPEARANCE = B_CARE + 29,
         B_LENGTH = APPEARANCE, B_WIDTH = APPEARANCE + 1, B_HEIGHT = APPEARANCE + 2,
         B_HEAD = APPEARANCE + 3, B_NECK = APPEARANCE + 4, B_TAIL = APPEARANCE + 5,
         B_LIMB_POS = APPEARANCE + 6, B_LIMB_SHAPE = APPEARANCE + 7,
@@ -130,11 +135,11 @@ public static class G
         B_MHC = APPEARANCE + NAPPEARANCE;         // NMHC recognition genes: a pathogen strain must match them to infect (always last)
     public const int NAPPEARANCE = 16;
     public const int NMHC = 4;
-    public const int NBODY = B_MHC + NMHC - BODY;   // 67
+    public const int NBODY = B_MHC + NMHC - BODY;   // 70
     // reflexes (DESIGN §7.7): an innate, non-plastic link from each need-and-opportunity input to each primitive
-    public const int NC = 11;                    // reflex inputs (Reflex.Inputs)
+    public const int NC = 13;                    // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;
-    public const int REFLEXN = P.N * NC;         // 462
+    public const int REFLEXN = P.N * NC;         // 546
     public const int LEN = REFLEX + REFLEXN;     
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
@@ -155,8 +160,11 @@ public static class St
 /// <summary>Causes of death (NR-401).</summary>
 public static class Cause
 {
-    public const int Starve = 0, Thirst = 1, Killed = 2, Parasite = 3, Old = 4, Fire = 5, Orphan = 6, Disease = 7, Cold = 8, Heat = 9, Hunted = 10;
-    public const int N = 11;
-    // hunted: killed by the person in the console's Explore mode (Player.Hit)
-    public static readonly string[] Names = { "starvation", "thirst", "killed", "parasitism", "old age", "fire", "lost before birth", "disease", "cold", "heat", "hunted" };
+    public const int Starve = 0, Thirst = 1, Killed = 2, Parasite = 3, Old = 4, Fire = 5, Orphan = 6, Disease = 7, Cold = 8, Heat = 9, Hunted = 10,
+        Suffocated = 11, Drowned = 12;
+    public const int N = 13;
+    // hunted: killed by the person in the console's Explore mode (Player.Hit); suffocated: an oxygen debt it could not bear
+    // out of water (a gill-breather ashore, an air-breather in thin air); drowned: the same in water (Respiration.cs)
+    public static readonly string[] Names = { "starvation", "thirst", "killed", "parasitism", "old age", "fire", "lost before birth", "disease", "cold", "heat", "hunted",
+        "suffocated", "drowned" };
 }

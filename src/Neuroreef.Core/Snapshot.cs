@@ -15,7 +15,7 @@ public sealed class Snapshot
     int _readyLen, _readLen;
     int _fresh;                 // 1 when _ready holds a frame the reader has not taken
     public volatile bool Requested;
-    public const int REC = 42;  // bytes per agent record (ICD §1, AGENTS format 6)
+    public const int REC = 46;  // bytes per agent record (ICD §1, AGENTS format 7: format 6 + depth, time at depth, breathing)
 
     public Snapshot(World w)
     {
@@ -56,7 +56,7 @@ public sealed class Snapshot
     int Encode(byte[] b)
     {
         var w = _w;
-        b[0] = 0x02; b[1] = 6; b[2] = 0; b[3] = 0;
+        b[0] = 0x02; b[1] = 7; b[2] = 0; b[3] = 0;
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(4), (uint)w.Step);
         int n = 0, o = 12;
         float sx = 65536f / Map.W;
@@ -97,6 +97,12 @@ public sealed class Snapshot
             span[24] = (byte)(w.Call[cb + 1] | (w.Call[cb + 2] << 4));  // its second and third sounds (Revision N)
             span[25] = (byte)(((int)(w.PInsul[i] * 15f + 0.5f) << 4) | (int)(w.PAppend[i] * 15f + 0.5f));   // fur (high 4 bits) and appendages (low), 0..15 (Revision O)
             for (int k = 0; k < G.NAPPEARANCE; k++) span[26 + k] = (byte)gn[G.APPEARANCE + k];
+            // the water column (format 7, Respiration.cs): its depth below the water's surface in decimetres (0 at the surface
+            // or out of water), the share of the step it spends there (the rest at the surface: a diver's breathing), its
+            // lungs (0 gills .. 15 lungs) and its oxygen debt (0 .. 15 = about to suffocate or drown)
+            BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(42), (ushort)Math.Clamp((int)MathF.Round(w.Z[i] * 10f), 0, 65535));
+            span[44] = (byte)Math.Clamp((int)MathF.Round(w.ZShare[i] * 255f), 0, 255);
+            span[45] = (byte)((int)MathF.Round(w.PLungs[i] * 15f) | ((int)MathF.Round(Respiration.Breathless(w, i) * 15f) << 4));
             o += REC; n++;
         }
         BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(8), (uint)n);

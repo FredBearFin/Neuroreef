@@ -46,5 +46,6 @@ public static class Rs
         Place = 8, Mutate = 9, Cross = 10, Founder = 11, Immigrant = 12, Spore = 13, Order = 14, Act = 15,
         Archive = 16, Bank = 17, Disease = 18, Weather = 19, Wind = 20, Compat = 21, Pond = 22,
         PathX = 23, PathY = 24,   // path-integration error (Revision P)
-        PlantMut = 25, PlantCross = 26, PlantFound = 27, PlantPick = 40;   // plants (Revision S); PlantPick + 0..15 are its draws
+        PlantMut = 25, PlantCross = 26, PlantFound = 27, PlantPick = 40,   // plants (Revision S); PlantPick + 0..15 are its draws
+        Meet = 28;                // whether two animals' depths in the water meet this step (Respiration.Overlap)
 }

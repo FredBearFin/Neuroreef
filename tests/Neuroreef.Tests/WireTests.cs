@@ -16,7 +16,7 @@ public class WireTests
         sim.Step();
         Assert.True(sim.Snap.TryTake(out var b, out int len));
         Assert.Equal(0x02, b[0]);
-        Assert.Equal(6, b[1]);
+        Assert.Equal(7, b[1]);
         Assert.Equal((uint)sim.W.Step, BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(4)));
         int n = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(8));
         Assert.Equal(12 + Snapshot.REC * n, len);
@@ -35,6 +35,10 @@ public class WireTests
             Assert.Equal(w.Spc[i], r[5] & 31);
             for (int gene = 0; gene < G.NAPPEARANCE; gene++)
                 Assert.Equal(w.Genome[i * G.LEN + G.APPEARANCE + gene], unchecked((sbyte)r[26 + gene]));
+            // format 7: depth in decimetres, time at depth, lungs and oxygen debt (Respiration.cs)
+            Assert.InRange(MathF.Abs(BinaryPrimitives.ReadUInt16LittleEndian(r.Slice(42)) / 10f - w.Z[i]), 0f, 0.051f);
+            Assert.Equal((int)MathF.Round(w.ZShare[i] * 255f), r[44]);
+            Assert.Equal((int)MathF.Round(w.PLungs[i] * 15f), r[45] & 15);
             if (++checkedN > 500) break;
         }
         int visible = 0;

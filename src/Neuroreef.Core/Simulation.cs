@@ -194,6 +194,9 @@ public sealed class Simulation : IDisposable
         if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
         int c = Life.Found(w, clade, genome, true, key, gx, gy, realm);
         if (c < 0) return 0f;
+        // it must breathe where its founders are put, in the realm it is founded in (2026-11-01: a gill-breather founded
+        // on land, or an air-breather that cannot keep its head up in the water it is founded in, would not live a step)
+        if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.FreeSlot(w, c); w.T.Created[clade]--; return 0f; }
         range = Life.RangeFor(w, c, hx, hy, out float cap);
         Life.FreeSlot(w, c);
         w.T.Created[clade]--;

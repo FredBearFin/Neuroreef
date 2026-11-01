@@ -151,6 +151,10 @@ public static class Clades
         body[G.B_BREEDE - B] = (sbyte)((U(91) * 2f - 1f) * 127f);
         // wiring gain (Revision P): how strongly its memory feeds back, anything from fading fast to the edge of chaos
         body[G.B_WIRE - B] = (sbyte)((U(94) * 2f - 1f) * 127f);
+        // breathing (2026-11-01): gills, lungs or between, and a depth preference, anything; whether it can breathe where it
+        // starts is tested by the founding (Life.RangeCapacity counts only the cells it can breathe in), not given
+        body[G.B_LUNGS - B] = (sbyte)((U(95) * 2f - 1f) * 127f);
+        body[G.B_DIVE - B] = (sbyte)((U(96) * 2f - 1f) * 127f);
         for (int k = 0; k < G.NMHC; k++) body[G.B_MHC - B + k] = (sbyte)((U(60 + k) * 2f - 1f) * 127f);   // recognition genes: anything
         // diet (Revision K: no designed diet, "just hunger"): good at 1-3 foods chosen at random from all of them, mediocre
         // at the rest. Revision P: no staple is given (a forced grass or plankton diet made every land ancestor a grazer
