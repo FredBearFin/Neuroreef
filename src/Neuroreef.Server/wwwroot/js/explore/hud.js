@@ -41,7 +41,7 @@ export class ExploreHud {
     d.innerHTML = `<div id="xp-vign"></div><div id="xp-cross"><i></i><i></i><i></i><i></i></div><div id="xp-hit"><i></i><i></i><i></i><i></i></div>
       <div id="xp-target"></div><div id="xp-draw"><b></b></div><div id="xp-msg"></div>
       <div id="xp-panel"><div id="xp-hp">health <span id="xp-hpv"></span><div class="bar"><b></b></div></div><div id="xp-weapons"></div><div id="xp-info"></div></div>
-      <div id="xp-help">WASD move · mouse look · Shift run · Space jump · Ctrl (hold) or F: ×10 travel<br>left button: use · right button: throw the spear · 1/2/3 or wheel: weapon · arrows: look · Esc: leave<br>V: place a jeep, plane or boat · E: get in or out</div>`;
+      <div id="xp-help">WASD move · mouse look · Shift run · Space jump · Ctrl (hold) or F: ×10 travel<br>left button: use · right button: throw the spear · 1/2/3 or wheel: weapon · arrows: look · Esc: leave<br>N: jump to the nearest animal · Tab: next clade · V: place a jeep, plane or boat · E: get in or out</div>`;
     parent.append(d);
     this.$ = (id) => d.querySelector('#' + id);
     this._msgT = 0;

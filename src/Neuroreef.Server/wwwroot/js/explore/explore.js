@@ -51,14 +51,24 @@ export class Explore {
   get upm() { return this.world.scale.upm; }
 
   // ------------------------------------------------------------------ entering and leaving
-  enter() {
+  /** Enter Explore. near: the serial of the animal that was selected or followed (0: none). */
+  enter(near = 0) {
     const w = this.world, c = w.controls.target, cam = w.camera;
     this.camWas = { pos: cam.position.clone(), target: c.clone(), fov: cam.fov, near: cam.near, far: cam.far };
-    // start where the overview was looking, facing the way the camera faced
+    // start where the overview was looking, facing the way the camera faced ...
     this.pos.set(((c.x % w.W) + w.W) % w.W, 0, ((c.z % w.W) + w.W) % w.W);
     const d = new THREE.Vector3(); cam.getWorldDirection(d);
     this.yaw = Math.atan2(d.z, d.x); this.pitch = 0;
-    this._toLand();
+    // ... but near life (2026-11-01, the owner: "it just drops you in a random area not near animals"): beside the
+    // animal that was selected or followed, else beside the densest group of animals the overview was looking at
+    // (a swimmer far out in a lake has no dry ground beside it: the next of the group is tried)
+    const cands = (near && w.agents.has(near) ? [near] : []).concat(this._crowdNear(c.x, c.z));
+    let placed = false;
+    for (const t of cands.slice(0, 40)) {
+      const p = this._poseNear(t);
+      if (p) { this.pos.x = p.x; this.pos.z = p.z; this.yaw = p.yaw; this.pitch = p.pitch; placed = true; break; }
+    }
+    if (!placed) this._toLand();
     this._standOn(true);
     this.active = true; this.keys.clear(); this.vy = 0; this.lastT = performance.now();
     w.scene.add(cam);   // the weapon in hand is a child of the camera
@@ -82,8 +92,12 @@ export class Explore {
     // back to an orbit over where the person stood
     const w = this.world, cam = w.camera, g = w.heightAt(this.pos.x, this.pos.z);
     cam.fov = 55; cam.near = 0.01; cam.far = this.camWas ? this.camWas.far : cam.far; cam.updateProjectionMatrix();
+    // ~100 m behind where the person stood and looked, high enough that no hill is between (world3d keeps it so)
+    const bx = this.pos.x - Math.cos(this.yaw) * 1.6, bz = this.pos.z - Math.sin(this.yaw) * 1.6;
     w.controls.target.set(this.pos.x, g, this.pos.z);
-    cam.position.set(this.pos.x - 1.2, g + 0.9, this.pos.z + 1.2);   // ~100 m back, over where the person stood
+    cam.position.set(bx, Math.max(g + 0.9, w.heightAt(bx, bz) + 0.4), bz);
+    cam.position.y = Math.max(cam.position.y, w._sightY(w.controls.target, cam.position));
+    cam.up.set(0, 1, 0);
     w.controls.update();
   }
 
@@ -92,6 +106,84 @@ export class Explore {
     const cam = this.world.camera;
     cam.fov = 72; cam.near = 0.004; cam.far = Math.max(1200, this.world.W * 1.2); cam.updateProjectionMatrix();
     this.world.scene.fog.near = 40; this.world.scene.fog.far = 420;
+  }
+
+  // ------------------------------------------------------------------ finding life
+  /** Animals (serials) of the densest group around (cx, cz): the animals binned on a grid of ~300 m, each bin weighed
+   *  by its count and its nearness to (cx, cz); its members nearest the bin's middle first, then the other bins'. */
+  _crowdNear(cx, cz) {
+    const w = this.world, W = w.W, B = Math.max(2, 300 * this.upm), bins = new Map();
+    for (const [serial, e] of w.agents) {
+      if (e.stage === 0 || w.dead.has(serial) || w.hidden.has(e.sp)) continue;
+      const k = Math.floor(e.x / B) + ',' + Math.floor(e.y / B);
+      let b = bins.get(k); if (!b) bins.set(k, b = { n: 0, x: 0, y: 0, list: [] });
+      b.n++; b.x += e.x; b.y += e.y; b.list.push(serial);
+    }
+    const score = (b) => { let dx = b.x / b.n - cx, dz = b.y / b.n - cz; dx -= Math.round(dx / W) * W; dz -= Math.round(dz / W) * W; return b.n / (1 + Math.hypot(dx, dz) / (W * 0.15)); };
+    const out = [];
+    for (const b of [...bins.values()].sort((p, q) => score(q) - score(p)).slice(0, 4)) {
+      const mx = b.x / b.n, my = b.y / b.n, d = (s) => { const e = w.agents.get(s); return Math.hypot(e.x - mx, e.y - my); };
+      out.push(...b.list.sort((p, q) => d(p) - d(q)).slice(0, 12));
+    }
+    return out;
+  }
+
+  /** A place ~8-14 m from animal serial on dry ground that is not a cliff, facing it: {x, z, yaw, pitch}, or null. */
+  _poseNear(serial) {
+    const w = this.world, e = w.agents.get(serial); if (!e) return null;
+    const W = w.W, m = this.upm, wrap = (v) => ((v % W) + W) % W, a0 = Math.random() * Math.PI * 2;
+    for (const r of [8, 11, 14, 20, 30, 45]) for (let k = 0; k < 12; k++) {
+      const a = a0 + (k / 12) * Math.PI * 2, x = wrap(e.x + Math.cos(a) * r * m), z = wrap(e.y + Math.sin(a) * r * m);
+      const [g, s] = w.groundWater(x, z);
+      if (s === s && s > g + 0.3 * m) continue;                          // water deeper than the ankles
+      const sl = Math.max(Math.abs(w.groundWater(x + 2 * m, z)[0] - w.groundWater(x - 2 * m, z)[0]), Math.abs(w.groundWater(x, z + 2 * m)[0] - w.groundWater(x, z - 2 * m)[0])) / (4 * m);
+      if (sl > 1) continue;                                              // steeper than 45 degrees: a cliff
+      const eye = g + EYE_M * m, tmp = {}; w.creatureNow(serial, e, tmp);
+      const dx = tmp.x - x, dz = tmp.z - z, dy = tmp.cy - eye, hd = Math.hypot(dx, dz);
+      return { x, z, yaw: Math.atan2(dz, dx), pitch: Math.max(-0.6, Math.min(0.6, Math.atan2(dy, hd))) };
+    }
+    return null;
+  }
+
+  /** Jump beside an animal and say who it is. */
+  _jumpTo(serial, how) {
+    const p = this._poseNear(serial);
+    if (!p) { this.hud.message('no dry ground beside it', true, 1500); return false; }
+    if (this.vehicles.driving) { this.hud.message('get out first (E)', true, 1200); return false; }
+    this.setPose(p.x, p.z, p.yaw, p.pitch);
+    const e = this.world.agents.get(serial), c = this.world.clades && this.world.clades[e.sp];
+    this.hud.message(`${how}: <b style="color:${c ? c.color : '#aaa'}">${c ? c.name : 'an animal'}</b> #${serial}<br><span style="font-size:11px">N: nearest animal · Tab: next clade</span>`, false, 2500);
+    return true;
+  }
+
+  /** N: the nearest animal more than 15 m away (the next one along, pressed again). */
+  _jumpNearest() {
+    const w = this.world, W = w.W, m = this.upm; let best = 0, bd = Infinity;
+    for (const [serial, e] of w.agents) {
+      if (e.stage === 0 || w.dead.has(serial) || w.hidden.has(e.sp)) continue;
+      let dx = e.x - this.pos.x, dz = e.y - this.pos.z; dx -= Math.round(dx / W) * W; dz -= Math.round(dz / W) * W;
+      const d = Math.hypot(dx, dz) / m;
+      if (d > 15 && d < bd) { bd = d; best = serial; }
+    }
+    if (!best) { this.hud.message('no other animal', true, 1500); return; }
+    this._jumpTo(best, `nearest animal, ${Math.round(bd)} m away`);
+  }
+
+  /** Tab: the next living clade (most numerous first), its member nearest the person. */
+  _jumpClade(dir) {
+    const w = this.world, W = w.W, counts = new Map();
+    for (const [serial, e] of w.agents) if (e.stage !== 0 && !w.dead.has(serial) && !w.hidden.has(e.sp)) counts.set(e.sp, (counts.get(e.sp) || 0) + 1);
+    const order = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a) || a - b);
+    if (!order.length) { this.hud.message('no animals', true, 1500); return; }
+    const i = order.indexOf(this.cladeCur);
+    this.cladeCur = order[((i < 0 ? (dir > 0 ? -1 : 0) : i) + dir + order.length) % order.length];
+    let best = 0, bd = Infinity;
+    for (const [serial, e] of w.agents) {
+      if (e.sp !== this.cladeCur || e.stage === 0 || w.dead.has(serial)) continue;
+      let dx = e.x - this.pos.x, dz = e.y - this.pos.z; dx -= Math.round(dx / W) * W; dz -= Math.round(dz / W) * W;
+      const d = Math.hypot(dx, dz); if (d < bd) { bd = d; best = serial; }
+    }
+    if (best) this._jumpTo(best, `clade ${order.indexOf(this.cladeCur) + 1} of ${order.length} (${counts.get(this.cladeCur)} seen)`);
   }
 
   // ------------------------------------------------------------------ input
@@ -122,6 +214,8 @@ export class Explore {
       if (e.code === 'Escape') { this.onLeave && this.onLeave(); return; }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight'].includes(e.code)) e.preventDefault();
       if (e.code === 'Space' && !e.repeat) this._jump();
+      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) this._jumpClade(e.shiftKey ? -1 : 1); return; }
+      if (e.code === 'KeyN' && !e.repeat) { this._jumpNearest(); return; }
       if (e.code === 'KeyF' && !e.repeat) { this.fastToggle = !this.fastToggle; this.hud.message(this.fastToggle ? 'travel ×10' : 'travel ×1', false, 1200); }
       const wi = this.weapons.findIndex((w) => w.key === e.key);
       if (wi >= 0) this._setWeapon(wi);
@@ -146,7 +240,8 @@ export class Explore {
   /** Put the person at a place (map units), facing yaw with pitch (radians): for tests and respawns. */
   setPose(x, z, yaw = this.yaw, pitch = this.pitch) {
     const W = this.world.W;
-    this.pos.x = ((x % W) + W) % W; this.pos.z = ((z % W) + W) % W; this.yaw = yaw; this.pitch = pitch;
+    // the pitch within the look's own limits (an unclamped one, past ±90°, turned the view upside down)
+    this.pos.x = ((x % W) + W) % W; this.pos.z = ((z % W) + W) % W; this.yaw = yaw; this.pitch = Math.max(-1.45, Math.min(1.45, pitch));
     this.vy = 0; this._standOn(true); this._send(true);
   }
 
@@ -226,7 +321,9 @@ export class Explore {
     this._weapons(now, dt);
     if (now - this.lastSend > SEND_MS) this._send(false);
     if (now - this.targetT > 100) { this.targetT = now; this._target(); }
-    this.hud.info(`${s.swim ? 'swimming · ' : s.depth > 0.05 ? 'wading · ' : ''}${(speed).toFixed(1)} m/s${fast ? ' ×10' : ''}<br>${this.killed} hunted · ${(this.state && this.state.deaths) || 0} deaths`);
+    // the speed the person moves at now (nothing while it stands), and how
+    const gait = s.swim ? 'swimming' : s.depth > 0.05 ? 'wading' : speed >= RUN * 0.9 ? 'running' : 'walking';
+    this.hud.info(`${fwd || side ? `${gait} ${speed.toFixed(1)} m/s` : s.swim ? 'treading water' : 'standing'}${fast ? ' · <b>×10 travel</b>' : ''}<br>${this.killed} hunted · ${(this.state && this.state.deaths) || 0} deaths`);
   }
 
   _send(force) {
@@ -332,7 +429,8 @@ export class Explore {
   /** The animal under the crosshair: its name, clade and distance. */
   _target() {
     const cam = this.world.camera, o = cam.position, d = new THREE.Vector3(); cam.getWorldDirection(d);
-    const hit = rayCreatures(this.world, o, d, 400 * this.upm);
+    // only an animal the person can see: the ray stops at the ground (a hill or a bank hides what is behind it)
+    const R = 400 * this.upm, hit = rayCreatures(this.world, o, d, Math.min(R, rayGround(this.world, o, d, R)));
     this.aim = hit;
     if (!hit) { this.hud.target(''); return; }
     const c = this.world.clades && this.world.clades.find((q) => q && q.id === hit.e.sp);

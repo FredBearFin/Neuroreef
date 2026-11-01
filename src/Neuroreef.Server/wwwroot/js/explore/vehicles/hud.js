@@ -77,7 +77,11 @@ export class VehicleHud {
     const rounds = v.rounds ?? 0;
     let wl = `<span id="xv-weapon">${w ? w.name : '—'}</span> <b>${rounds}</b>`;
     if (v.kind === 'jeep') wl += `<div class="bar" style="margin-top:3px"><b style="width:${Math.min(100, x.heat * 100).toFixed(0)}%;background:${x.overheat ? '#ff5d73' : x.heat > 0.7 ? '#e6c35a' : 'var(--accent,#4fd1c5)'}"></b></div><div class="lbl">${x.overheat ? '<span class="warn">OVERHEATED</span>' : 'heat'}</div>`;
-    if (v.kind === 'boat') wl += `<div class="lbl">depth ${x.depth.toFixed(1)} m · ${x.homing ? 'homing' : 'straight'}</div>`;
+    if (v.kind === 'boat') {
+      // the depth it is set to, and the one it would run at here (a torpedo keeps half a metre off the bottom)
+      const runs = Math.max((w && w.depthMinM) || 0.5, Math.min(x.depth, v.depthM - 0.5));
+      wl += `<div class="lbl">torpedo depth ${x.depth.toFixed(1)} m${runs < x.depth - 0.05 ? ` <span class="warn">· runs at ${runs.toFixed(1)} m here</span>` : ''} · ${x.homing ? 'homing' : 'straight'}</div>`;
+    }
     if (v.kind === 'plane') wl += `<div class="lbl">blast ${w ? w.radiusM : 0} m</div>`;
     cols.push(`<div class="col">${wl}</div>`);
     const warn = v.stalled && !v.onGround ? 'STALL' : v.blocked ? v.blocked.toUpperCase() : v.mud > 0.3 ? 'MUD' : v.kind === 'jeep' && v.depthM > 0.1 ? 'WADING' : v.kind === 'boat' && v.depthM < 1.5 ? 'SHALLOWS' : '';
