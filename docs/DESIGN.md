@@ -3,6 +3,68 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**Rivers that run along their own lines** (2026-11-01; Hydrology.Route and Waters, Channels.cs, RiverStats.cs, Wire
+RIVERS; images docs/art/terrain2/riv_before_*.png and riv_after_*.png, tools/RiverProbe). The owner: "the rivers are
+weird". Measured before (1024 map, seeds 3, 7, 11; RiverStats):
+- Every step of every channel ran at a multiple of 45 degrees (100%, against 11% for directions spread evenly), and 17-18%
+  of 6-cell reaches did: D8 staircases and straight 45-degree runs. A river was drawn as the chain of its cell centres.
+- The relief itself leaned to the grid: 64-65% of the steep land faced within 22.5 degrees of a diagonal (uniform 50%),
+  from D8 receivers in deep-time and fine erosion. The discharge map had D8 streaks down every hillslope.
+- Drainage density 0.08-0.12 km/km2 (36-40 heads, 830-1,210 channel cells); land lay 3.1-4.2 km from a channel and
+  10.6-13.6 cells from drinkable water. Strahler order 2-3, N(1) / N(2) 4.0-6.3.
+- Sinuosity (3-cell ruler) 1.11-1.13, all of it the staircase's own; no reach had a valley slope under 0.002.
+- No straight streams ran side by side on this relief: the parallel gullies of docs/art/terrain/hydro_after_3.png
+  were drawn on the relief before the geomorphology merge.
+Changes:
+- *Routing (Route, Waters).* Flow directions are D-infinity (Tarboton 1997) over the filled surface: the steepest of the
+  8 facets around a cell, an angle between a cardinal and a diagonal neighbour. On a hillslope (below SPREAD_A of
+  gathered rain) the flow is shared between them in proportion to the angle (dispersive, as Quinn et al. 1991's
+  multiple-flow routing), so a plane gathers no streaks. A stream (above it) goes whole to one of them, drawn with the
+  same odds from a hash of the cell and the relief (Fairfield & Leymarie 1991's rho8), so it runs down the true aspect on
+  average. Net gives the second receiver and its share (Recv2, Share). Inside a filled depression the flood's receivers
+  stand. Geology's deep time runs on the same Route (its owner agreed): the diagonal lean of the relief fell to 58-59%.
+- *Channel heads* are placed by the inflow with the hillslopes' spread (Net.HeadIn), not along the single receivers.
+  CHANNEL_C 0.01 -> 0.005: drainage density 0.12-0.17 km/km2. A 218-m cell cannot hold the real 1-5 km/km2 of
+  first-order streams without drowning the land, so this is what a map at the 1:250,000 scale shows, not the field's.
+- *Channel lines (Channels.cs).* The network is cut into rivers (head down, the larger branch going on at each
+  confluence), laid largest first. The valley axis is the cell path smoothed (Gaussian, CHANNEL_SMOOTH cells or 3/4 of the
+  width) and held within a cell of it. An alluvial river meanders where its valley slope S is under the meandering-braided
+  threshold S_t = MEANDER_ST Q^-0.44 (Leopold & Wolman 1957; Q bankfull, m3/s): sinuosity 1 + (MEANDER_P - 1)(1 - S/S_t),
+  on a sine of wavelength MEANDER_L widths (Leopold & Wolman 1960) with the amplitude that gives that sinuosity, no wider
+  than the valley floor (ground within MEANDER_HAND of the bed). The amplitude fades in below the head and out before the
+  river's end; a loop that meets itself is cut through (a neck cutoff); no line enters ground that drains to another
+  lake. The channel cells are the cells the line crosses; each drains to the next, and where the line crosses it is
+  kept (World.RivX, RivY, with the width RivW; Checkpoint land fields). Cells of the old course drain to the river.
+  Every cell drains to the lake it drained to before, so the lakes' balances and spill order stand. The discharge is
+  gathered again along the new drainage.
+- *Pond sites* may lie POND_GAP_RIVER (2) cells from a river; POND_GAP (6) still holds from the sea and the lakes.
+  With the denser network only 1 site was left POND_GAP from every river on seeds 3 and 4; now 34-74 on seeds 3, 4, 7
+  (floodplain ponds and backswamps; seed 4 had 16 before).
+- *Wire.* WORLD ends with a RIVERS section: each river's points (x, y in cells, width, depth), the river it joins, its
+  order and how it ends (ICD.md). Hydrology.Lines builds it.
+After (same seeds):
+- Steps at a multiple of 45 degrees: 13.7-16.3%; 6-cell reaches 11.1-11.5% (uniform 11.1%). No histogram bin holds 3x
+  its share.
+- Drainage density 0.12-0.17 km/km2 (63-67 heads, 1,870-2,540 channel cells; river water 3.0-5.0% of the map, against
+  1.4-3.2%); land 2.0-2.8 km from a channel, 7.3-9.8 cells from drinkable water.
+- N(1) / N(2) 3.3-5.0 (pooled 4.1; natural networks 3-5). Strahler order is still 2-3, and Horton's length ratio is
+  1.2-1.4 (natural 1.5-3.5): the grid holds no first-order streams, and most networks end in a lake after a few
+  confluences.
+- Sinuosity 1.06-1.08: these are mountain rivers on valley slopes of 1-10%, which do not meander (above S_t, 0.005-0.03
+  for their discharges). On a synthetic valley with a 40-cell floor (HydrologyTests.Valley; images riv_after_valley_*)
+  the trunk's sinuosity is ~1.6 at a valley slope of 0.0003, 1.44 at 0.0012 and 1.00 at 0.01.
+- The drawn width never falls downstream; the water cross-section falls at 1.5-4.4% of steps (it was 1.0-7.6%).
+- Generation time: Hydrology.Waters with the channel lines takes 0.04-0.06 s at 1024. Terrain.Build took 2.8-3.5 s with
+  the machine lightly loaded (2.3-6.4 s before, under varying load) and 4-7 s at a load of 16 on 4 cores.
+Tests (HydrologyTests): flow accumulation conserves rain with the spread shares; no cell past the channel threshold lies
+more than 8 cells from its river; no angle spikes; N(1) / N(2) in 3-5.5 pooled; continuous lines (points under 2.2 cells
+apart, width never falling, every channel cell on exactly one line); sinuosity rising as the valley slope falls; the lines
+are the same bits on every build. WireTests checks the RIVERS section against Hydrology.Lines. ClimateTests' no-climate
+hash is re-pinned (0x753FBC092B902E01).
+Not done: braided reaches (steep, heavily loaded rivers are straight lines, not several threads); deltas and estuaries.
+The evenly spaced parallel gullies on long uniform slopes are the relief's (Geology owns it); they now follow the true
+aspect, not 45 degrees.
+
 **Caves and karst from rock and water** (2026-11-01; Caves.cs; images docs/art/terrain2/caves_*.png). The owner saw no
 caves. Now, built at Terrain.Finish from the rock, relief, rivers and the mean year's water (the terrain seed alone):
 - *Limestone.* Sedimentary rock is carbonate (World.Carb) where a regional draw of formations (fBm of the terrain seed)

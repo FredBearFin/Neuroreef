@@ -34,8 +34,9 @@ public static partial class Hydrology
         /// the cell's Flow it takes (Recv takes the rest); -1 and 0 where all of it goes to Recv.</summary>
         public readonly int[] Recv2;
         public readonly float[] Share;
-        /// <summary>Waters only: each cell's discharge with the hillslopes' spread (mm a year x cells), which places the channel heads.</summary>
-        public double[]? HeadQ;
+        /// <summary>Waters only (2026-11-01): what runs into each cell from above with the hillslopes' spread (cells of mean
+        /// land rain), the discharge that places the channel heads.</summary>
+        public float[]? HeadIn;
         public Net(int n) { Recv = new int[n]; Order = new int[n]; Fill = new float[n]; Flow = new float[n]; Recv2 = new int[n]; Share = new float[n]; }
     }
 
@@ -511,7 +512,9 @@ public static partial class Hydrology
             if (r2 >= 0 && r == recv[c] && qs[c] < spreadQ) { double s2 = share[c] * qs[c]; qs[r2] += s2; qs[r] += qs[c] - s2; }
             else qs[r] += qs[c];
         }
-        net.HeadQ = qs;
+        var headIn = new float[n];
+        for (int i = 0; i < n; i++) headIn[i] = lake[i] >= 0 ? 0f : (float)((qs[i] - yld[i]) / K.P_MEAN);
+        net.HeadIn = headIn;
         var chan = new bool[n];
         float aMin = K.CHANNEL_A_MIN * scale, aBig = K.RIVER_ACC * scale;
         for (int q = n - 1; q >= 0; q--)
@@ -520,7 +523,7 @@ public static partial class Hydrology
             if (lake[c] >= 0 || r < 0) continue;
             // a head is fed from above: what runs in from upstream decides (a channel cell is water, and the rain on
             // its own ground never reaches the water cycle's streams)
-            float qin = (float)((qs[c] - yld[c]) / K.P_MEAN);
+            float qin = headIn[c];
             if (!chan[c] && qin >= aMin)
             {
                 float down = lake[r] >= 0 ? level[lake[r]] : h[r];

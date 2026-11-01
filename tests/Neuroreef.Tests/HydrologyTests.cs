@@ -33,11 +33,24 @@ public class HydrologyTests
         Hydrology.Route(w.Elev, w.SeaLevel, rain, net);
         double fell = 0, arrived = 0;
         var inflow = new double[n];
+        int spread = 0;
         for (int i = 0; i < n; i++)
         {
             fell += rain[i];
-            if (net.Recv[i] < 0) arrived += net.Flow[i]; else inflow[net.Recv[i]] += net.Flow[i];
+            if (net.Recv[i] < 0) { arrived += net.Flow[i]; continue; }
+            // 2026-11-01: on a hillslope (below SPREAD_A) the flow is shared between the two neighbours of its D-infinity
+            // direction; a stream goes whole to its receiver
+            double s2 = net.Recv2[i] >= 0 ? net.Share[i] : 0.0;
+            inflow[net.Recv[i]] += net.Flow[i] * (1 - s2);
+            if (net.Recv2[i] >= 0)
+            {
+                spread++;
+                inflow[net.Recv2[i]] += net.Flow[i] * s2;
+                Assert.True(net.Flow[i] < K.SPREAD_A && net.Share[i] > 0f && net.Share[i] < 1f, $"cell {i} spreads {net.Share[i]} of {net.Flow[i]}");
+                Assert.True(net.Fill[i] > net.Fill[net.Recv2[i]], $"cell {i} spreads uphill");
+            }
         }
+        Assert.True(spread > n / 4, $"{spread} cells spread their flow");
         Assert.True(fell > 0.5 * n, $"rain {fell}");
         Assert.Equal(1.0, arrived / fell, 4);
         // each cell's flow is its own rain plus what drains into it; outlets are lakes only
@@ -50,7 +63,11 @@ public class HydrologyTests
         // no cycles: the topological order puts every receiver before the cells draining into it
         var pos = new int[n];
         for (int k = 0; k < n; k++) pos[net.Order[k]] = k;
-        for (int i = 0; i < n; i++) if (net.Recv[i] >= 0) Assert.True(pos[net.Recv[i]] < pos[i]);
+        for (int i = 0; i < n; i++)
+        {
+            if (net.Recv[i] >= 0) Assert.True(pos[net.Recv[i]] < pos[i]);
+            if (net.Recv2[i] >= 0) Assert.True(pos[net.Recv2[i]] < pos[i]);
+        }
     }
 
     // 2026-10-31: rivers are no longer the cells over a fixed catchment (RIVER_ACC) but channels: they start where the
@@ -95,21 +112,30 @@ public class HydrologyTests
         Assert.True(heads > 30, $"{heads} channel heads");
         Assert.True(toSea > mouths / 2, $"{toSea} of {mouths} mouths at the sea");
         // channel initiation: no cell that the water running in from above and its slope put past the threshold is left
-        // without a channel (Q S^2 >= CHANNEL_C, or Q >= RIVER_ACC, with Q at least CHANNEL_A_MIN)
+        // without a channel (Q S^2 >= CHANNEL_C, or Q >= RIVER_ACC, with Q at least CHANNEL_A_MIN). 2026-11-01: Q is the
+        // inflow with the hillslopes' spread (Net.HeadIn, D-infinity), and a river now runs along its own line, so a cell
+        // of its old course may lie beside it on the valley floor: it drains into the river within a few cells
+        var v = new World(16, 7);
+        var net = Hydrology.Waters(v, Terrain.Shape(v));
         float scale = n / 65536f;
-        var qin = new float[n];
-        for (int i = 0; i < n; i++) if (w.Recv[i] >= 0 && w.LakeOf[i] < 0) qin[w.Recv[i]] += w.Flow[i];
+        int passed = 0, beside = 0;
         for (int i = 0; i < n; i++)
         {
-            int r = w.Recv[i];
-            if (w.LakeOf[i] >= 0 || r < 0 || Channel(w, i)) continue;
-            float q = qin[i] * 0.999f;
-            float down = w.LakeOf[r] >= 0 ? w.Elev[r] + w.Depth[r] : w.Elev[r];
+            int r = v.Recv[i];
+            if (v.LakeOf[i] >= 0 || r < 0) continue;
+            float q = net.HeadIn![i] * 0.999f;
+            float down = v.LakeOf[r] >= 0 ? v.Elev[r] + v.Depth[r] : v.Elev[r];
             float dist = (i % Map.FW != r % Map.FW && i / Map.FW != r / Map.FW) ? 1.4142135f : 1f;
-            float s = MathF.Max(0f, w.Elev[i] - down) / dist;
-            Assert.False(q >= K.CHANNEL_A_MIN * scale && (q >= K.RIVER_ACC * scale || q * s * s >= K.CHANNEL_C),
-                $"cell {i}: inflow {q:F0} and slope {s:F4} pass the channel threshold, but it is no river");
+            float s = MathF.Max(0f, v.Elev[i] - down) / dist;
+            if (!(q >= K.CHANNEL_A_MIN * scale && (q >= K.RIVER_ACC * scale || q * s * s >= K.CHANNEL_C))) continue;
+            passed++;
+            if (Channel(v, i)) continue;
+            beside++;
+            int c = i, k = 0;
+            while (k < 8 && v.Recv[c] >= 0 && v.LakeOf[v.Recv[c]] < 0 && !Channel(v, v.Recv[c])) { c = v.Recv[c]; k++; }
+            Assert.True(k < 8, $"cell {i}: inflow {q:F0} and slope {s:F4} pass the channel threshold, but no river is near");
         }
+        Assert.True(beside < passed / 4, $"{beside} of {passed} cells past the threshold lie beside their river");
     }
 
     [Fact] // downstream hydraulic geometry: depth ~ Q^0.4 up to wadeable, width ~ Q^0.5: the big rivers are several cells wide
@@ -331,5 +357,156 @@ public class HydrologyTests
             Assert.Equal(1f, w.Moisture[i], 4);   // a flooded cell's soil is soaked
         }
         Assert.Equal(before, after, 1);
+    }
+
+    // ---- rivers that look and run like rivers (2026-11-01): lines through the plane, not chains of D8 cells
+
+    [Fact] // a river's course is not locked to the grid's 8 directions: its bearing, step by step and over reaches, spreads
+           // over all angles (D8: every step at a multiple of 45 degrees)
+    public void ChannelsAreNotLockedToEightDirections()
+    {
+        foreach (uint seed in new uint[] { 3, 11 })
+        {
+            var w = new World(16, seed);
+            Terrain.Build(w);
+            var R = RiverStats.Measure(w);
+            // within 2.5 degrees of a multiple of 45: 11.1% for directions spread evenly. Measured 13.7-16.3% of steps and
+            // 11.2-11.5% of 6-cell reaches (seeds 3, 7, 11); before, 100% and 16.9-18.4%
+            Assert.True(R.StepSpike < 0.25, $"seed {seed}: {R.StepSpike:P1} of the channel's steps at a multiple of 45 degrees");
+            Assert.True(R.ReachSpike < 0.15, $"seed {seed}: {R.ReachSpike:P1} of its reaches at a multiple of 45 degrees");
+            // no histogram bin holds more than three times its even share
+            for (int b = 0; b < RiverStats.BINS; b++) Assert.True(R.StepHist[b] < 3.0 / RiverStats.BINS, $"seed {seed}: {R.StepHist[b]:P1} of steps at {5 * b} degrees");
+            // and no straight streams side by side (parallel D8 gullies)
+            Assert.True(R.Parallel <= R.LongLinks / 20, $"seed {seed}: {R.Parallel} of {R.LongLinks} links run straight beside another");
+        }
+    }
+
+    [Fact] // the network branches as natural ones do: Horton's bifurcation ratio N(1) / N(2) is 3-5 (Horton 1945; Strahler
+           // 1957); the channels are continuous lines, as wide as their discharge, and widen downstream
+    public void ChannelNetworkIsNaturalAndContinuous()
+    {
+        int n1 = 0, n2 = 0;
+        foreach (uint seed in new uint[] { 3, 7, 11 })
+        {
+            var w = new World(16, seed);
+            Terrain.Build(w);
+            var R = RiverStats.Measure(w);
+            n1 += R.StreamsOfOrder[1]; n2 += R.StreamsOfOrder[2];
+            Assert.True(R.StreamsOfOrder[2] > 0 && R.StreamsOfOrder[1] / (double)R.StreamsOfOrder[2] is > 2.5 and < 7,
+                $"seed {seed}: {R.StreamsOfOrder[1]} first-order and {R.StreamsOfOrder[2]} second-order streams");
+            // drainage density at what a 218-m cell can hold: 0.12-0.17 km/km2 measured (0.08-0.12 before)
+            Assert.InRange(R.Density, 0.08, 0.3);
+            Assert.Equal(0.0, R.WidthDrops);
+            int n = Map.FW * Map.FW;
+            for (int i = 0; i < n; i++)
+            {
+                if (!RiverStats.IsChannel(w, i)) { Assert.True(w.RivX[i] == 0f && w.RivY[i] == 0f && w.RivW[i] == 0f, $"cell {i} is no channel but has a line"); continue; }
+                // the line crosses the cell; the next point is in the next cell, within reach of a continuous line
+                Assert.InRange(w.RivX[i], -0.5f, 0.5f); Assert.InRange(w.RivY[i], -0.5f, 0.5f);
+                Assert.True(w.RivW[i] >= 1f && w.RivW[i] <= K.RIVER_W_MAX);
+            }
+            var lines = Hydrology.Lines(w);
+            int cells = 0;
+            for (int k = 0; k < lines.Count; k++)
+            {
+                var L = lines[k];
+                cells += L.Points.Count - 1;
+                Assert.True(L.Points.Count >= 2);
+                for (int p = 1; p < L.Points.Count; p++)
+                {
+                    var (x0, y0, w0, _) = L.Points[p - 1]; var (x1, y1, w1, _) = L.Points[p];
+                    float d = MathF.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+                    Assert.True(d > 0.05f && d < 2.2f, $"seed {seed}: river {k} jumps {d:F2} cells at point {p}");
+                    Assert.True(w1 >= w0 - 1e-5f, $"seed {seed}: river {k} narrows downstream at point {p}");
+                }
+                // it joins a larger river, or ends in its lake or the sea
+                if (L.EndKind == 0) Assert.True(L.Down >= 0 && L.Down < k, $"river {k} joins {L.Down}");
+                else Assert.Equal(-1, L.Down);
+            }
+            int chan = 0; for (int i = 0; i < n; i++) if (RiverStats.IsChannel(w, i)) chan++;
+            Assert.Equal(chan, cells);   // every channel cell is on exactly one line
+        }
+        Assert.InRange(n1 / (double)n2, 3.0, 5.5);   // measured 4.1 (195 / 47); natural networks 3-5
+    }
+
+    /// <summary>A straight valley from a sea along the first rows (both ways round the torus), of valley slope lowSlope (m/m),
+    /// with a 40-cell flat floor between steep sides and low noise, so the water has a course to find.</summary>
+    static World Valley(float lowSlope)
+    {
+        var w = new World(16, 5);
+        int FW = Map.FW, n = FW * FW;
+        w.SeaLevel = 0.05f;
+        float mPer = K.H_RELIEF / (1f - w.SeaLevel), cell = K.GEO_CELL_M;
+        float low = lowSlope * cell / mPer, side = 0.1f * cell / mPer, floor = 2f * cell / mPer * 0.0002f;
+        for (int y = 0; y < FW; y++)
+            for (int x = 0; x < FW; x++)
+            {
+                float d = MathF.Min(y, FW - y);                                   // from the sea, along the valley
+                float along = d < 6 ? -0.02f : (d - 6) * low;
+                float ax = MathF.Abs(x - FW / 2);                                // across it
+                const float fw = 20f;                                             // a 40-cell floor
+                float across = ax <= fw ? ax * floor : fw * floor + (ax - fw) * side;
+                float noise = 0.4f * floor * (((x * 73856093) ^ (y * 19349663)) & 1023) / 1023f;
+                w.Elev[y * FW + x] = w.SeaLevel + along + across + (d < 6 ? 0f : noise);
+            }
+        var rain = new float[n];
+        for (int i = 0; i < n; i++) rain[i] = w.Elev[i] >= w.SeaLevel ? 1.5f : 0f;
+        Hydrology.Waters(w, rain);
+        return w;
+    }
+
+    /// <summary>Sinuosity (a ruler of 3 points) of the largest river where it runs between d0 and d1 cells from the sea.</summary>
+    static float Sinuosity(World w, int d0, int d1)
+    {
+        var L = Hydrology.Lines(w)[0];
+        int FW = Map.FW;
+        var pts = new System.Collections.Generic.List<(float x, float y)>();
+        foreach (var (x, y, _, _) in L.Points)
+        {
+            float yy = ((y % FW) + FW) % FW, d = MathF.Min(yy, FW - yy);
+            if (d >= d0 && d <= d1) pts.Add((x, y));
+        }
+        Assert.True(pts.Count > 20, $"{pts.Count} points of the river between {d0} and {d1} cells from the sea");
+        double len = 0;
+        for (int k = 3; k < pts.Count; k += 3) len += Math.Sqrt((pts[k].x - pts[k - 3].x) * (pts[k].x - pts[k - 3].x) + (pts[k].y - pts[k - 3].y) * (pts[k].y - pts[k - 3].y));
+        int e = (pts.Count - 1) / 3 * 3;
+        double chord = Math.Sqrt((pts[e].x - pts[0].x) * (pts[e].x - pts[0].x) + (pts[e].y - pts[0].y) * (pts[e].y - pts[0].y));
+        return (float)(len / chord);
+    }
+
+    [Fact] // an alluvial river meanders on a low gradient and runs straighter as its valley steepens (Leopold & Wolman 1957,
+           // 1960): the same valley at three slopes; its trunk carries ~37 m3/s at bankfull, so it stops meandering above 0.0026
+    public void SinuosityRisesInLowlands()
+    {
+        int FW = Map.FW;
+        var w = Valley(0.0003f);
+        float flat = Sinuosity(w, 20, FW / 2 - 20), mid = Sinuosity(Valley(0.0012f), 20, FW / 2 - 20), steep = Sinuosity(Valley(0.01f), 20, FW / 2 - 20);
+        // measured about 1.6, 1.44 and 1.00 (tools/RiverProbe valley:0.0003, valley:0.0012, valley:0.01)
+        Assert.True(flat > 1.35f, $"the flat valley's river has sinuosity {flat:F2}");
+        Assert.True(mid < flat - 0.1f && mid > 1.05f, $"sinuosity {mid:F2} on the steeper valley, {flat:F2} on the flat one");
+        Assert.True(steep < 1.05f, $"the steep valley's river has sinuosity {steep:F2}");
+        // the meanders stay continuous channels down to the sea
+        for (int i = 0; i < FW * FW; i++)
+        {
+            if (!RiverStats.IsChannel(w, i)) continue;
+            int c = i, k = 0;
+            while (w.LakeOf[w.Recv[c]] < 0) { c = w.Recv[c]; Assert.True(RiverStats.IsChannel(w, c)); Assert.True(++k < FW * FW); }
+        }
+    }
+
+    [Fact] // the river lines are the same bits every time a world is built
+    public void RiverLinesAreDeterministic()
+    {
+        ulong Hash()
+        {
+            var w = new World(16, 11);
+            Terrain.Build(w);
+            ulong h = 14695981039346656037UL;
+            for (int i = 0; i < Map.FW * Map.FW; i++)
+                foreach (float v in new[] { w.RivX[i], w.RivY[i], w.RivW[i], w.Flow[i] }) { h ^= (uint)BitConverter.SingleToInt32Bits(v); h *= 1099511628211UL; }
+            for (int i = 0; i < Map.FW * Map.FW; i++) { h ^= (uint)w.Recv[i]; h *= 1099511628211UL; }
+            return h;
+        }
+        Assert.Equal(Hash(), Hash());
     }
 }
