@@ -207,7 +207,7 @@ public static class Resolve
                 spent += K.C_STRIKE * mass;
                 T.Strikes[s]++;
                 float reachAll = Decide.StrikeReach(w.PReach[i], 0f, pl.MassCbrt);
-                if (AlongWay(w, i, x0, y0, pl.X, pl.Y) <= reachAll * reachAll) pl.Struck(w, i);
+                if (AlongWay(w, i, x0, y0, pl.X, pl.Y) <= reachAll * reachAll && !pl.Airborne) pl.Struck(w, i);   // not a plane in the air
             }
         }
 

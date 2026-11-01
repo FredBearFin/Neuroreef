@@ -194,7 +194,7 @@ public static class Decide
         }
         // EXPLORE: the person, sensed as one more organism of another kind (Player.Slot in o1, o2 and strike)
         var pl = w.Player;
-        if (pl != null && pl.Present)
+        if (pl != null && pl.Present && !pl.Airborne)   // a plane in the air is out of their world
             SensePlayer(pl, x, y, fx, fy, R, R2, fovCos, reach, vmax, ref crowd, ref otherSum, ref o1, ref o2, ref o2Mass, ref strike, ref strikeBig, ref strikeBigMass);
         if (metrics != null)
         {

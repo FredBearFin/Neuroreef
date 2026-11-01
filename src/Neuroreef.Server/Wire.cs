@@ -342,7 +342,9 @@ public static class Wire
         return o.ToArray();
     }
 
-    static object ModeJson(WeaponMode m) => new { id = m.Id, name = m.Name, kind = m.Kind, rangeM = m.RangeM, damage = m.Damage, speedMps = m.SpeedMps, cooldown = m.Cooldown, ammo = m.Ammo };
+    static object ModeJson(WeaponMode m) => new { id = m.Id, name = m.Name, kind = m.Kind, rangeM = m.RangeM, damage = m.Damage, speedMps = m.SpeedMps, cooldown = m.Cooldown, ammo = m.Ammo,
+        vehicle = m.Vehicle, radiusM = m.RadiusM, rounds = m.Rounds, heatPerShot = m.HeatPerShot, maxTimeS = m.MaxTimeS, depthMinM = m.DepthMinM, depthMaxM = m.DepthMaxM,
+        area = m.Area, underwater = m.Underwater, ignites = m.Ignites };
 
     /// <summary>Metadata for the console: species, senses, primitives, pools, causes, telemetry layout, frame layouts.</summary>
     public static string Meta(SimHost h)
@@ -370,6 +372,10 @@ public static class Wire
             {
                 metresPerUnit = Player.M_PER_UNIT, geoCellM = K.GEO_CELL_M, hRelief = K.H_RELIEF, playerMass = Player.MASS, maxHp = Player.MAX_HP,
                 weapons = Weapons.All.Select(x => new { id = x.Id, name = x.Name, key = x.Key, primary = ModeJson(x.Primary), secondary = x.Secondary == null ? null : ModeJson(x.Secondary) }),
+                // VEHICLES: what the console drives (js/explore/vehicles) and the weapon each carries
+                vehicles = Vehicles.All.Select(v => new { id = v.Id, name = v.Name, realm = v.Realm, maxSpeedMps = v.MaxSpeedMps, maxSlopeDeg = v.MaxSlopeDeg,
+                    wadeDepthM = v.WadeDepthM, minDepthM = v.MinDepthM, stallMps = v.StallMps, ceilingM = v.CeilingM, weapon = ModeJson(v.Weapon) }),
+                launchSlackM = Player.LAUNCH_SLACK_M,
             },
         };
         return JsonSerializer.Serialize(o);

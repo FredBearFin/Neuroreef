@@ -175,6 +175,16 @@ public static class Fields
     static float Fuel(World w, int i)
         => (w.Pool[(int)Pool.Grass][i] + w.Shrub[i] + w.Pool[(int)Pool.Litter][i]) * (1f - w.Moisture[i]);
 
+    /// <summary>EXPLORE: an explosion (Player.Blast) sets land cell i alight now, if it is not burning and has the fuel a
+    /// fire needs to spread (FUEL_MIN, as dry as Fuel weighs it). The fire then burns and spreads as any (Update). True
+    /// when it caught. Called only for the person's bombs, so a world without the person never comes here.</summary>
+    public static bool IgniteAt(World w, int i)
+    {
+        if (w.Cell[i] != (byte)Realm.Land || w.Fire[i] > 0 || Fuel(w, i) < K.FUEL_MIN) return false;
+        Ignite(w, i, w.Fire);
+        return true;
+    }
+
     static void Ignite(World w, int i, float[] F1)
     {
         F1[i] = K.FIRE_STEPS;

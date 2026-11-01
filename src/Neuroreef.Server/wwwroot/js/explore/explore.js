@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { RELIEF } from '../world3d.js';
 import { ExploreHud } from './hud.js';
 import { rayCreatures, rayGround, Projectile, projectileMesh, viewModel } from './weapons.js';
+import { Vehicles } from './vehicles/index.js';   // VEHICLES: jeep, plane, boat (js/explore/vehicles/)
 
 const EYE_M = 1.7, WALK = 1.5, RUN = 5, FAST = 10, JUMP_V = 3.4, G_MS2 = 9.81;
 const SWIM_DEPTH_M = 1.3;     // deeper than this the person swims, head at the surface
@@ -44,6 +45,7 @@ export class Explore {
     this.camWas = null;
     world.explore = this;
     this._wire();
+    this.vehicles = new Vehicles(this, view);   // VEHICLES hook (its keys are caught ahead of ours)
   }
 
   get upm() { return this.world.scale.upm; }
@@ -70,6 +72,7 @@ export class Explore {
   exit() {
     if (!this.active) return;
     this.active = false;
+    this.vehicles.leaveExplore();   // VEHICLES hook
     this.link.send({ cmd: 'player', on: false });
     if (document.pointerLockElement) document.exitPointerLock();
     this.hud.show(false);
@@ -184,6 +187,7 @@ export class Explore {
   /** Called by world3d.render each frame in Explore mode: move, aim, fly projectiles, place the camera and view centre. */
   drive(now, target) {
     const dt = Math.min(0.1, Math.max(0, (now - this.lastT) / 1000)); this.lastT = now;
+    if (this.vehicles.update(now, dt, target)) return;   // VEHICLES hook: driving, the vehicle moves the person and the camera
     const k = this.keys, m = this.upm, W = this.world.W;
     // the arrow keys look too (and are the way to look where the mouse cannot be captured)
     const turn = (k.has('ArrowRight') ? 1 : 0) - (k.has('ArrowLeft') ? 1 : 0), tilt = (k.has('ArrowUp') ? 1 : 0) - (k.has('ArrowDown') ? 1 : 0);
@@ -237,7 +241,7 @@ export class Explore {
 
   /** A button pressed or released: primary (left) or secondary (right). */
   press(which, down) {
-    if (!this.active || !this.weapon) return;
+    if (!this.active || this.vehicles.press(which, down) || !this.weapon) return;   // VEHICLES hook: a vehicle's weapon
     const mode = which === 'secondary' ? this.weapon.secondary : this.weapon.primary;
     if (!mode) return;
     if (mode.kind === 'bow') {
@@ -317,7 +321,7 @@ export class Explore {
     if (h.ok) {
       this.hud.hitMarker(h.killed);
       if (h.killed) { this.killed = h.kills; this.hud.message(`you killed a ${name}`, false, 2500); }
-    } else {
+    } else if (h.result !== 'RateLimited') {   // (the jeep's gun: hits beyond its rate are not counted, quietly)
       const why = { OutOfRange: 'out of range', NoLineOfSight: 'no line of sight', NoAnimal: 'it is gone', NotPresent: 'not in the world yet' }[h.result] || h.result;
       this.hud.message(`miss: ${why}`, false, 1000);
     }
@@ -351,6 +355,7 @@ export class Explore {
   }
 
   _respawn() {
+    this.vehicles.eject();   // VEHICLES hook: out of the vehicle, which stays
     this.hud.message('YOU WERE KILLED<br><span style="font-size:12px">back on your feet somewhere else</span>', true, 3500);
     const w = this.world.world, fw = w.fw, S = this.world.W / fw;
     for (let k = 0; k < 500; k++) {
