@@ -376,7 +376,7 @@ public static class Resolve
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)
-        bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > K.SHALLOW;
+        bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > w.ShallowE;
         if (swimming) return cot;
         float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
         return cot * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);

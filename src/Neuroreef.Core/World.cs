@@ -187,6 +187,10 @@ public sealed class World
     /// <summary>Elevation (0..1) per metre at the game's vertical scale: 1 - SeaLevel above the lakes is H_RELIEF m. A height
     /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
     public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / K.H_RELIEF;
+
+    /// <summary>The shallow realm's depth (SHALLOW m) in elevation, as Depth is: water at most this deep is Realm.Shallow
+    /// (wadeable; algae grow), deeper is Realm.Deep (2026-11-01: SHALLOW is in metres).</summary>
+    public float ShallowE => K.SHALLOW * ElevPerM;
     // ---- water cycle (WaterCycle.cs): stores in mm of water over a cell, fluxes in mm x cells per update (WC_EVERY steps).
     // Fixed at WaterCycle.Init: the rain pattern (relative to the land mean; a lake cell holds its row's land mean), soil
     // capacity, the drainage receivers and their topological order (outlets first), the lake each cell drains to
@@ -217,6 +221,13 @@ public sealed class World
     public readonly float[] Carb, CaveVoid, CaveDepth, CaveFlow, CaveSink;
     public readonly int[] CaveNext, CaveSpring;
     public readonly byte[] CaveKind;
+    // ---- wetlands (Wetlands.cs, 2026-11-01): fixed at WaterCycle.Init: the topographic wetness index ln(a / tan b) and its
+    // land mean, the height above the nearest drainage's water (m). Changing: the water table at or near the surface this
+    // update (bit 1) and fed by minerotrophic water (bit 2: groundwater emerging, a flood, a water table the water nearby
+    // holds up); the share of the last year it was so (each), the peat (m) and the wetland kind (Wetlands.Marsh..Bog)
+    public readonly float[] Twi, Hand, WetDur, WetMin, Peat;
+    public float TwiMean;
+    public readonly byte[] WetNow, Wetland;
     // ---- weather years (DESIGN §10.7) and wind seed rain (DESIGN §10.2)
     public float RainAnom;                 // this year's rainfall anomaly (0 = an average year)
     public long RainYear = -1;             // year RainAnom belongs to
@@ -328,6 +339,8 @@ public sealed class World
         WcRow = new double[Map.FW * WaterCycle.NSUM];
         Carb = new float[n]; CaveVoid = new float[n]; CaveDepth = new float[n]; CaveFlow = new float[n]; CaveSink = new float[n];
         CaveNext = new int[n]; Array.Fill(CaveNext, -1); CaveSpring = new int[n]; Array.Fill(CaveSpring, -1); CaveKind = new byte[n];
+        Twi = new float[n]; Hand = new float[n]; WetDur = new float[n]; WetMin = new float[n]; Peat = new float[n];
+        WetNow = new byte[n]; Wetland = new byte[n];
 
         Archive = new sbyte[NS * K.ARCHIVE * G.LEN];
         ArchiveScore = new float[NS * K.ARCHIVE];
@@ -488,12 +501,12 @@ public sealed class World
         {
             float depth = MathF.Max(0f, Depth[cell]);
             float wade = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
-            float mix = Math.Clamp(depth / K.SHALLOW, 0f, 1f);
+            float sh = ShallowE, mix = Math.Clamp(depth / sh, 0f, 1f);
             float v = wade + (PVWater[i] - wade) * mix;
             float maxDepth = MaxWaterDepth(i);
-            if (maxDepth > K.SHALLOW)
+            if (maxDepth > sh)
             {
-                float load = Math.Clamp((depth - K.SHALLOW) / (maxDepth - K.SHALLOW), 0f, 1f);
+                float load = Math.Clamp((depth - sh) / (maxDepth - sh), 0f, 1f);
                 v *= 1f - 0.5f * load;
             }
             return v;
@@ -523,7 +536,8 @@ public sealed class World
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 
-    public float MaxWaterDepth(int i) => K.SHALLOW * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
+    /// <summary>The deepest water body i can go in, in elevation as Depth is: SHALLOW x (1 + SWIM_DEPTH_RANGE x fins) m.</summary>
+    public float MaxWaterDepth(int i) => ShallowE * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
 
     public bool CellAllows(int i, int cell) => CellAllows(i, cell, RealmOf(i));
 

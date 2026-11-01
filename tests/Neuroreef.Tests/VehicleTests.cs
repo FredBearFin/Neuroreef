@@ -15,7 +15,9 @@ public class VehicleTests
         Terrain.Build(w);
         Array.Fill(w.Cell, (byte)realm);
         Array.Fill(w.Elev, 0.6f);   // flat: a plane can take off anywhere
-        if (realm != Realm.Land) Array.Fill(w.Depth, 0.05f);   // hundreds of metres of water
+        // 40 m of water (2026-11-01: depths are metres, and a body reaches SHALLOW x (1 + SWIM_DEPTH_RANGE x fins); 0.05 in
+        // elevation was ~450 m, deeper than any water now and than weak swimmers go)
+        if (realm != Realm.Land) Array.Fill(w.Depth, 40f * w.ElevPerM);
         w.Sp[0].Used = true; w.Sp[0].Alive = true;
         return w;
     }

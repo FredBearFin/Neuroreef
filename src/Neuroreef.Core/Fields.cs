@@ -26,7 +26,7 @@ public static class Fields
         {
             int i = row + x;
             float rC = K.ROT_CARRION, rD = K.ROT_DUNG, rL = K.ROT_LITTER, rW = K.ROT_WOOD, rT = K.ROT_DETRITUS;
-            int ti = 0; float temp = K.T_REF;
+            int ti = 0; float temp = K.T_REF, qrot = 1f;
             if (clim)
             {
                 temp = MathF.FusedMultiplyAdd(tb, w.Cont[i], ta) - w.TLapse[i];
@@ -35,8 +35,11 @@ public static class Fields
                 ti = Climate.Idx(water ? Climate.Water(temp) : temp);
                 // decomposition speeds up with warmth (Q10 = 2, Lloyd & Taylor 1994)
                 float q = Climate.Rot[ti];
-                rC *= q; rD *= q; rL *= q; rW *= q; rT *= q;
+                rC *= q; rD *= q; rL *= q; rW *= q; rT *= q; qrot = q;
             }
+            // 2026-11-01: waterlogged ground is anoxic, and its litter and wood rot slowly (Wetlands)
+            bool landCell = w.Cell[i] == (byte)Realm.Land;
+            if (landCell && w.WetDur[i] > 0f) { float an = Wetlands.Anoxic(w.WetDur[i]); rL *= an; rW *= an; }
             int xl = row + (x == 0 ? FW - 1 : x - 1), xr = row + (x == FW - 1 ? 0 : x + 1), up = yu + x, dn = yd + x;
             float N = w.Nutrient[i];
 
@@ -51,6 +54,8 @@ public static class Fields
             // decomposition by bacteria: every dead pool rots into nutrient
             float rot = Ca[i] * rC + Du[i] * rD + Li[i] * rL + Wo[i] * rW + De[i] * rT;
             Ca[i] -= Ca[i] * rC; Du[i] -= Du[i] * rD; Li[i] -= Li[i] * rL; Wo[i] -= Wo[i] * rW; De[i] -= De[i] * rT;
+            // peat: litter and wood humify where the ground is waterlogged, and the peat decays slowly (Wetlands.Peat)
+            if (landCell && (w.WetDur[i] > 0f || w.Peat[i] > 0f)) rot += Wetlands.Peat(w, i, Li, Wo, qrot);
             Nn += rot * K.C_NUTGAIN + K.WEATHER * w.Fert[i] * 0.1f;
             w.Poll[i] *= 1f - K.D_POLL;
 
@@ -58,7 +63,7 @@ public static class Fields
             {
                 // water producers (DESIGN §10.3)
                 float lim = N / (N + K.K_N);
-                float light = MathK.Exp(-w.Depth[i] / K.SHALLOW);
+                float light = MathK.Exp(-w.Depth[i] / w.ShallowE);   // to 1/e in SHALLOW m (2026-11-01: metres)
                 float ga = (K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim) * light;
                 float gp = K.R_PH * Nature.Plants * lim * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
                 if (clim)
@@ -104,7 +109,7 @@ public static class Fields
         {
             float lim = N / (N + K.K_N);
             float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
-            float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / K.SHALLOW);
+            float al = (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / w.ShallowE);
             float ph = K.R_PH * plants * lim * 0.25f * fe;
             y += diet[(int)Pool.Algae] * Pools.Rho[(int)Pool.Algae] * al;
             y += diet[(int)Pool.Phyto] * Pools.Rho[(int)Pool.Phyto] * ph;

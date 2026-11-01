@@ -126,8 +126,11 @@ public class WaterCycleTests
             // their soils fill and shed it (VIC saturation excess), and the wet season's discharge at the major mouths rose
             // 2.6 times (90,600 -> 237,000) while the dry spell's baseflow rose too (9,800 -> 13,900): what fell is the
             // share, as it does in steep, wet mountain catchments of thin soil (low baseflow indices: Smakhtin 2001). Without
-            // a drop of rain for a whole season (no real dry season is that dry) the rivers still all run
-            Assert.True(q1 > 0.05 * q0, $"rivers carry {q1 / q0:P0} of their wet discharge in the dry spell");
+            // a drop of rain for a whole season (no real dry season is that dry) the rivers still all run.
+            // 2026-11-01: 4.8% (5.9% without them): wetlands, whose water table stands at the surface, keep their soil wet from
+            // the groundwater and the water running through them and evaporate at the potential rate through the dry spell
+            // (riparian evapotranspiration takes a share of dry-season baseflow: Tabacchi et al. 2000; Bond et al. 2002)
+            Assert.True(q1 > 0.04 * q0, $"rivers carry {q1 / q0:P2} of their wet discharge in the dry spell");
             // every river that land drains into runs. A lake's outlet that nothing but the lake feeds stops when the lake
             // falls below its sill, as outlets do in a drought (2026-11-01: one on seed 7, 1 of 2,413 river cells, below a
             // lake of the 13-m LAKE_MIN_DEPTH; it was 0.003 in elevation, 35 m at the 8,000-m relief)

@@ -75,6 +75,8 @@ public static class WaterCycle
         // the drainage, the sea and the lakes (each at its own level, with its area, depth, sill and the lake it spills
         // into) are Terrain.Build's (Hydrology.Waters: the same receivers it routed the rivers with)
         int nl = w.LakeCount;
+        // the wetness index and the height above drainage (Wetlands, 2026-11-01)
+        Wetlands.Build(w);
         // the lake each cell drains to in the end (outlets first in DrainOrder)
         for (int q = 0; q < n; q++)
         {
@@ -92,6 +94,7 @@ public static class WaterCycle
             w.SoilCap[i] = K.SOIL_CAP * (1f + K.ALLUV_CAP * (1f - MathK.Exp(-w.Alluvium[i] / alluvD)));
             w.SoilWater[i] = w.Cell[i] == (byte)Realm.Land ? 0.5f * w.SoilCap[i] : 0f;
             w.Snow[i] = 0f; w.Ground[i] = 0f; w.Deep[i] = 0f; w.PondWater[i] = 0f; w.Seep[i] = 0f; w.Discharge[i] = 0f; w.DischargeMean[i] = 0f;
+            w.WetDur[i] = 0f; w.WetMin[i] = 0f; w.WetNow[i] = 0; w.Wetland[i] = 0;
         }
 
         // spin-up: average years, from the step the world starts at
@@ -112,7 +115,14 @@ public static class WaterCycle
                 parallel(rows, FW);
                 if (yr == 0) for (int i = 0; i < n; i++) rech[i] += w.Ground[i] + w.Deep[i] - before[i];
                 Finish(w, spinup: true);
-                if (yr == K.WC_SPINUP - 1) { for (int i = 0; i < n; i++) qsum[i] += w.Discharge[i]; for (int l = 0; l < nl; l++) lsum[l] += w.LakeGross[l]; }
+                if (yr == K.WC_SPINUP - 1)
+                {
+                    for (int i = 0; i < n; i++) qsum[i] += w.Discharge[i];
+                    for (int l = 0; l < nl; l++) lsum[l] += w.LakeGross[l];
+                    // the share of the year each cell was waterlogged (Wetlands), and fed by emerging groundwater or floods
+                    float u1 = 1f / perYear;
+                    for (int i = 0; i < n; i++) { byte now = w.WetNow[i]; w.WetDur[i] += u1 * (now & 1); w.WetMin[i] += u1 * ((now >> 1) & 1); }
+                }
             }
             // after the first year: groundwater at the steady state of that year's recharge, which would take decades to
             // fill cell by cell (each cell passes on what it receives; where more arrives than it can hold, it emerges)
@@ -125,6 +135,7 @@ public static class WaterCycle
         Array.Fill(w.LakeLevel, 0f, 0, nl);
         w.WbRain = w.WbET = w.WbPondEvap = w.WbToLakes = w.WbLakeRain = w.WbLakeEvap = w.WbLakeSpill = 0;
         w.WaterOn = true;
+        Wetlands.Classify(w);   // no peat yet: marshes and swamps (Wetlands.Holocene lays the peat down after the plants' spin-up)
         Ponds.Update(w);   // floods soak their soil from the next update on, so the budget counts that water
     }
 
@@ -281,7 +292,11 @@ public static class WaterCycle
                 g -= od;
                 float ex = 0f;
                 if (g > K.GW_CAP) { ex = g - K.GW_CAP; g = K.GW_CAP; }
-                w.Deep[c] = g; w.Seep[c] = ex; qc += ex;
+                qc += ex;
+                // 2026-11-01: where the water table stands near the surface the ground is waterlogged and its soil fills from
+                // below and from the water running through it (Wetlands.Saturate: deep store and stream to soil)
+                g = Wetlands.Saturate(w, c, g, ex, ref qc);
+                w.Deep[c] = g; w.Seep[c] = ex;
                 if (r >= 0 && w.Cell[r] == (byte)Realm.Land) w.Deep[r] += od; else qc += od;
                 // a closed basin holds what runs into it, and spills what it cannot hold (fill-and-spill)
                 if (w.PondSite[c] != 0) { float p = w.PondWater[c] + qc; qc = MathF.Max(0f, p - K.POND_CAP); w.PondWater[c] = p - qc; }
@@ -296,7 +311,7 @@ public static class WaterCycle
         // a channel's size follows the flow it carries over years
         float a = YearFrac / K.QMEAN_YEARS;
         if (!spinup) for (int i = 0; i < n; i++) w.DischargeMean[i] += a * (Q[i] - w.DischargeMean[i]);
-        if (!spinup) { Ponds.Update(w); Soak(w, out double soaked); toLakes -= soaked; }
+        if (!spinup) { Wetlands.Update(w); Ponds.Update(w); Soak(w, out double soaked); toLakes -= soaked; }
         w.WbToLakes += toLakes;
     }
 
