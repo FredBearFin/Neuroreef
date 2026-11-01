@@ -7,12 +7,12 @@
 import * as THREE from 'three';
 import { P, FAR, grid, steps } from './kit.js';
 import { bodyMaterial } from './anim.js';
-import { locoOf } from '../net.js';
+import { locoOf, massFromGene } from '../net.js';
 
 export { bodyMaterial, locoOf };
 
 /** Body mass from the mass gene (-127..127), as the sim expresses it. */
-export function massOf(g) { return 0.1 * Math.pow(40 / 0.1, (g + 128) / 255); }   // MASS_LO 0.1 .. MASS_HI 40 (byte 12 carries the body's actual size)
+export function massOf(g) { return massFromGene(g); }   // the world's range (0.1-40 kg by default; byte 12 carries the body's actual size)
 
 /** View size of an organism of this mass (model units; its length grows as mass^(1/3)). The shader reads the mass
  *  back from it. World units are this x the view's bodyK (js/scale.js: the true scale x the magnification). */

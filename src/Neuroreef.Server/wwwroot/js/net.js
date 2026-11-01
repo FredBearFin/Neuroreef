@@ -126,12 +126,22 @@ export function agentState(a, k, world, out) {
   return out;
 }
 
+// the world's body sizes (ICD §2.1 units: massMinKg, massMaxKg; BodySize): record byte 12 is a body's mass on this log
+// scale. 0.1-40 kg unless the world was set up otherwise (a world of giants or of tiny bodies)
+let MASS_LO = 0.1, MASS_HI = 40;
+/** Take the world's body-size range from its units (meta.units / status.units), if it sends one. */
+export function setMassRange(u) {
+  if (u && u.massMinKg > 0 && u.massMaxKg > u.massMinKg) { MASS_LO = u.massMinKg; MASS_HI = u.massMaxKg; }
+}
+/** Body mass (kg) from the mass gene or record byte 12 (-128..127), on the world's scale. */
+export function massFromGene(g) { return MASS_LO * Math.pow(MASS_HI / MASS_LO, (g + 128) / 255); }
+
 /** The part of record k its genes give, the same for its whole life: body size, organs, pairs, locomotion, fur, appearance. */
 export function agentGenes(a, k, out) {
   const o = k * (a.rec || REC), dv = a.dv, b = a.bytes;
   // the organism's own body genes (bytes 12-19, int8): organ sizes are (g + 127) / 254, 0..1
   const gm = dv.getInt8(o + 12);
-  out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = 0.1 * Math.pow(40 / 0.1, out.m01);   // the body's actual size (its size class's floor included)
+  out.gMass = gm; out.m01 = (gm + 128) / 255; out.mass = massFromGene(gm);   // the body's actual size (its size class's floor included)
   out.legs = (dv.getInt8(o + 13) + 127) / 254; out.fins = (dv.getInt8(o + 14) + 127) / 254; out.wings = (dv.getInt8(o + 15) + 127) / 254;
   out.sight = (dv.getInt8(o + 16) + 127) / 254; out.armour = (dv.getInt8(o + 17) + 127) / 254; out.strike = (dv.getInt8(o + 18) + 127) / 254;
   out.meat = (dv.getInt8(o + 19) + 127) / 254;    // meat-eating efficiency, 0..0.95

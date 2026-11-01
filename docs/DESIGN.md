@@ -809,6 +809,24 @@ one class with probability FLOOR_MUT = 5e-5 per birth. Ancestors are spread over
 their mass log-uniform from the floor up to max(4 x floor, 20 on land or 5 in water). The console's AGENTS record carries
 the body's actual size; the split test compares actual sizes.
 
+**Body sizes are a world setting** (2026-11-01, the owner: "we want more customizability on the size floors - why not be
+able to do a world of giants on purpose"): the setup screen's Bodies group (and --bodies, --body-min, --body-max,
+--body-floors) chooses the mass gene's range, 0.001 to 50,000 kg (BodySize; presets Normal 0.1-40 kg, Giants 100 kg-20 t,
+Tiny 1 g-1 kg), and the size classes' floors: by default the same log proportions of the range as 0.1, 1, 3 and 10 are of
+0.1-40, or set one by one. The mass gene maps on a log scale onto the range, so a mutation changes a body by a share of its
+size. The smallest newborn is a tenth of the smallest body (NEWBORN_MIN at the default). What depended on the largest body
+is the world's own: the farthest eye (BodySize.MaxSight, x (Max/40)^0.2), the farthest call (MaxHear, x (Max/40)^(1/3)) and
+the spatial-hash cells (Map.HCell, Map.HCellCall: the smallest divisors of the map side that hold a step's largest
+perception and the loudest call; a grid narrower than its neighbourhood searches each cell once). Every other law of a body
+is its own physics of its mass: flight stops near 16 kg whatever the range, giants overheat and hold their breath longer,
+walk the day ranges of their size (M^0.25) and live longer. Saved in checkpoints and world saves from format 23; older
+saves load with the default. With the default range a run is bit for bit what it was. Real densities fall with size
+(Damuth 1981: log10 D/km2 = 1.30 - 0.66 log10 M), so the setup screen shows what the chosen map would hold of real animals
+of these sizes and warns that giants need a much bigger map; the map is never resized for you. One law had to be mended
+for giants: the leg-load term of walking speed (LOAD_DRAG x M^(1/3) x ...) is negative for bodies whose legs share the
+load better than the reference, and above ~14 t with three or four leg pairs made the speed negative or infinite; the
+gain is now at most twice the plain body's speed (it never binds up to 1.7 t).
+
 **Big brains fixed** (2026-10-30, found after the user saw the big-brained founders kill each other at once): the
 brain size was stored in a byte, so a 256-unit brain ran with 0 memory units while paying for 256; it is now a ushort.
 And newborn brains are calm at any size: founder output weights from memory unit h are scaled by BRAIN_START/h beyond
@@ -1132,7 +1150,7 @@ Kleiber's energy scale, a strike's reach the body plus a 15 s sprint at Garland'
 home range of its body (HR_KM2 x M, Jetz et al. 2004). A step is hours, so what an animal perceives is what lay within
 sight of the way it travelled (Decide.Perceive: the disc of the band's area, Gerritsen & Strickler 1977), and a strike or
 a mating reaches along that way (Resolve.AlongWay). The bodies' hash cell (HCELL = 8, 7x7 cells) is sized from the
-largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call. docs/CONSTANTS.md group Units has every
+largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call (both wider in a world of bigger bodies: Map.HCell, Map.HCellCall). docs/CONSTANTS.md group Units has every
 value and its source; docs/ICD.md §2.1 what the console gets.
 
 ## 1. The idea in one page
@@ -1398,7 +1416,7 @@ Functional traits have physical costs:
 
 | Trait | Gene → value | Cost / effect |
 |---|---|---|
-| mass | log range MASS_LO..MASS_HI | all of allometry (§9.1) |
+| mass | log range of the world's body sizes (BodySize; MASS_LO..MASS_HI by default) | all of allometry (§9.1) |
 | legs, fins, wings | organ size 0..1 | speed in each medium follows smoothly from the organs (Revision G): land v·(CRAWL + (1 − CRAWL)·legs), water v·SWIM_SPEED·(0.1 + 0.9·fins), air only if wings·WING_LIFT ≥ M^(1/3) (wing loading). Any organism may enter land and shallows; deep water needs 0.1 + 0.9·fins ≥ DEEP_SWIM. Settled only with almost no organ at all. Half a fin is half a fin. COST_LIMB·(legs·legPairs + fins·finPairs)/2 and COST_WING·wings·M^(1/3) basal |
 | leg, fin, eye pairs | 1..4 | more leg pairs spread an armoured body's drag (÷√pairs); more fin pairs turn faster (FIN_TURN); more eye pairs widen the field of view (EYE_FOV); COST_EYE per eye pair |
 | lifespan | ×/÷ LIFE_RANGE | COST_LONGEVITY·(k − 1) basal (body repair) |
