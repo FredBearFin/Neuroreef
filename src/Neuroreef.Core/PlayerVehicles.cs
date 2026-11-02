@@ -36,7 +36,8 @@ public static class Vehicles
     /// <summary>Why a vehicle cannot be placed at (x, y) (world units), or null when it can: a jeep on land, a boat on water
     /// at least its depth deep, a plane on land flat enough to take off from (the field cell and its neighbours within
     /// the plane's slope; the console checks its runway on the drawn ground).</summary>
-    public static string? SpawnCheck(World w, string kind, float x, float y)
+    /// <param name="scale">the person's size (Player.Scale): its vehicles are built to it, so a boat needs that much less depth</param>
+    public static string? SpawnCheck(World w, string kind, float x, float y, float scale = 1f)
     {
         var v = Spec(kind);
         if (v == null) return "unknown vehicle";
@@ -45,7 +46,7 @@ public static class Vehicles
         if (v.Realm == "water")
         {
             if (land) return "not on water";
-            if (Player.WaterDepthM(w, c) < v.MinDepthM) return "too shallow";
+            if (Player.WaterDepthM(w, c) < v.MinDepthM * scale) return "too shallow";
             return null;
         }
         if (!land) return "not on land";
@@ -118,7 +119,7 @@ public sealed partial class Player
     /// <summary>A vehicle of this kind is placed in the world: its weapon is loaded. Returns why not, or null.</summary>
     public string? Spawn(World w, string kind, float x, float y)
     {
-        var why = Vehicles.SpawnCheck(w, kind, x, y);
+        var why = Vehicles.SpawnCheck(w, kind, x, y, Scale);
         if (why != null) return why;
         var v = Vehicles.Spec(kind)!;
         _spawned.Add(kind);
@@ -208,7 +209,7 @@ public sealed partial class Player
         Rounds[m.Id] = rep.RoundsLeft = left - 1;
         Blasts++;
 
-        float R = m.RadiusM, Ru = R / M_PER_UNIT;
+        float R = m.RadiusM * Scale, Ru = R / M_PER_UNIT;   // a smaller person's bombs are as much smaller (Resize)
         for (int i = 0; i < w.SlotsUsed; i++)
         {
             byte st = w.StageOf[i];

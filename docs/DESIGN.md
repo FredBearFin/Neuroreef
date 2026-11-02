@@ -336,6 +336,37 @@ explore mode, all the animals just disappear". Display only; the simulation is u
   is sheared to the slope like a near one, so a magnified animal stands on a hillside rather than half in it. Plants
   in Explore stay true size. The server still checks weapon range from the true centre.
 
+**True size by default: the cameras reworked instead** (2026-11-02, later; js/world3d.js, scale.js, explore/explore.js,
+explore/vehicles/index.js, look/vegetation.js, Player.cs). The owner: "why do they need to be 100x size? maybe the view
+is WAY too far out? maybe in explore WE are too big?" and "if we are 1.7 m tall, shouldn't the 50 t animals be HUGE?"
+Display and cameras only, except the person's own size and reach.
+- *Overview.* It opens low over the densest group of animals (40 m bins), framed 30-80 m across at ~20° above the
+  ground, after showing the map for a moment; it zooms from ~1 m to the whole map (wheel, Q / E), pans with W A S D or
+  the arrows at a share of the view's distance per second, and N / Shift+N go to the next group (most numerous first),
+  Tab / Shift+Tab to the next clade (lineage) at its densest group, as in Explore. Near and far planes follow the zoom.
+- *Follow camera.* 6.5 body lengths behind and 2.2 above (drawn length); near plane 0.3 of the body, far plane at the
+  fog, for depth precision with bodies a few cm long.
+- *Explore: the person's size* (Z, the menu in the size box): animal-sized by default (as tall as the median living
+  animal is long, as heavy as the median), human (1.7 m, 70 kg) or tiny (5 cm, 30 g). Its eye, reach, weapons' ranges
+  and flights, vehicles, near plane and the distance it is put from an animal all scale with its height; it walks at
+  sqrt of it (Froude). The server has the person's size (ICD §3 `player` scale, mass; Player.Resize): the animals sense
+  a body of that mass, strike it against that mass, and the hit check, line of sight, blast radius and a boat's least
+  depth use the scale. Damage and health are not scaled. An older console sends no size: the 70 kg person, as before.
+- *Defaults.* True size in every view (new localStorage keys, -v2, so a saved x100 / x10 does not override it). The
+  multiplier is now "at least this visible": a body up to 10 cm is drawn x times longer, a longer one grows only as the
+  fourth root beyond that and never below its true length (x100: 5 cm -> 5 m, 1 kg -> 10 m, 40 kg -> 14 m, a 20 t
+  giant -> 23 m where a plain x100 made it 270 m; x10: a giant at true size). Each body's factor rides in the body
+  shader's action word, so the shader still reads its true mass (legs, feathers) from the drawn size; the minimum-pixel
+  size uses the same path (a far speck no longer turned into a stubby-legged heavyweight).
+- *Giants.* Bodies decode on the world's mass range (status units massMinKg..massMaxKg) on every path; a change of
+  range (a giants world after the prehistory) now decodes every body again (it kept each animal's old-range mass). A
+  20 t animal is drawn its true length, BODY_L_M x M^(1/3) x its length gene (2.7 m for a cube-shaped body, up to ~7 m
+  elongated) - the sim's own length, not changed here.
+- *Plants stippled the animals away.* The plants' near fade dissolved every tree within 0.9 of its height of the
+  camera's foot (18 m for a 20 m tree), and every bush and rock close by: from the ground, Explore was full of dark,
+  dithered trees, and the animals behind them read as stippled ghosts. Now only a plant the camera is inside fades.
+  Explore's shadow map also shrinks with the person (a 10 cm body over a 5 cm texel shaded itself into acne).
+
 **High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
 Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and
 mtn_after_*: _shade top-down, _view the highest peak, _view2 the highest below 45° latitude, both at true scale). The

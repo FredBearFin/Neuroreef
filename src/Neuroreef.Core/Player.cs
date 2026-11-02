@@ -45,7 +45,8 @@ public sealed partial class Player
 {
     /// <summary>The pseudo-slot the person has in DECIDE's targets (o1, o2, strike) and in ITarget: never a real slot.</summary>
     public const int Slot = -2;
-    /// <summary>Body mass in the sim's units (M = 1 is about 1 kg: K.FLY_M_MAX's convention): a 70 kg person.</summary>
+    /// <summary>Body mass in the sim's units (M = 1 is about 1 kg: K.FLY_M_MAX's convention) of a full-sized person: 70 kg.
+    /// The person's own mass now is Mass (the console's player size, Resize).</summary>
     public const float MASS = 70f;
     /// <summary>Meat in its diet (an omnivore): what the animals sense as its carnivory, and its scent.</summary>
     public const float MEAT = 0.5f;
@@ -55,8 +56,25 @@ public sealed partial class Player
     /// <summary>Metres per world unit (K.M_PER_UNIT: a field cell of FCELL units is GEO_CELL_M m; the 3D view draws the land,
     /// and since 2026-11-01 the animals' senses and moves, at this scale).</summary>
     public const float M_PER_UNIT = K.M_PER_UNIT;
-    /// <summary>Eye height above the ground, for line of sight (m).</summary>
+    /// <summary>Eye height above the ground of a full-sized person, for line of sight (m); EyeM is the person's now.</summary>
     public const float EYE_M = 1.7f;
+    /// <summary>Limits of the console's player size (Resize): the height factor (1: a 1.7 m person) and the mass (sim units).</summary>
+    public const float SCALE_MIN = 0.01f, SCALE_MAX = 1f, MASS_MIN = 0.01f, MASS_MAX = MASS;
+
+    /// <summary>The person's size (2026-11-02, the console's player size: human, animal-sized, tiny). Scale is its height
+    /// against a 1.7 m person: its eye height and every weapon's reach (range, blast radius) are scaled by it, so a person
+    /// the size of the animals reaches as far as a peer would. Mass is what the animals sense, strike and would eat (by
+    /// default 70 kg; animal-sized, the typical animal's). Damage and health are not scaled.</summary>
+    public float Scale = 1f, Mass = MASS;
+    public float EyeM => EYE_M * Scale;
+
+    /// <summary>Set the person's size from the console ('player' scale and mass; ICD §3). Out-of-range values are clamped;
+    /// missing ones (NaN) leave it as it was, so an older console (no size sent) keeps the full-sized person.</summary>
+    public void Resize(float scale, float mass)
+    {
+        if (float.IsFinite(scale) && scale > 0f) Scale = Math.Clamp(scale, SCALE_MIN, SCALE_MAX);
+        if (float.IsFinite(mass) && mass > 0f) Mass = Math.Clamp(mass, MASS_MIN, MASS_MAX);
+    }
 
     public bool Present;
     public float X, Y, Heading;          // world units, radians (the sim's frame)
@@ -67,7 +85,7 @@ public sealed partial class Player
     public uint LastKiller;              // serial of the last animal that killed it
     float _lx = float.NaN, _ly;
 
-    public float MassCbrt => MathK.Cbrt(MASS);
+    public float MassCbrt => MathK.Cbrt(Mass);
 
     /// <summary>How far it is heard from any direction: running or wading through brush is loud; walking only up close; an
     /// engine (any vehicle) is heard twice as far as running.</summary>
@@ -104,7 +122,7 @@ public sealed partial class Player
     public void Struck(World w, int a)
     {
         float power = w.PStrike[a] * w.MassOf(a);
-        float defence = MASS * K.DEF_BASE;
+        float defence = Mass * K.DEF_BASE;
         float p = K.P0_STRIKE * power / (power + defence + 1e-6f);
         if (Rng.U(w.Seed, (uint)w.Step, (uint)a, Rs.Strike) >= p)
         {
@@ -112,7 +130,7 @@ public sealed partial class Player
             return;
         }
         Hits++;
-        Hp -= K.C_DAMAGE * power / (K.C_EMAX * MASS) * MAX_HP;
+        Hp -= K.C_DAMAGE * power / (K.C_EMAX * Mass) * MAX_HP;
         if (Hp > 0f) { w.T.Fight(X, Y, w.Spc[a], -1, Telemetry.F_WOUND, w.Step, w.Serial[a], 0); return; }
         w.T.Fight(X, Y, w.Spc[a], -1, Telemetry.F_KILL, w.Step, w.Serial[a], 0);
         Deaths++; LastKiller = w.Serial[a]; Hp = MAX_HP;
@@ -169,10 +187,10 @@ public sealed partial class Player
         float dx = World.Delta1(w.X[i] - X), dy = World.Delta1(w.Y[i] - Y), d = MathF.Sqrt(dx * dx + dy * dy);
         // what the console may lag behind: its animal moved up to a step and a half, the person up to two steps' moves
         float slack = 1.5f * w.Speed[i] + 2f * Speed + 0.1f;
-        float range = m.RangeM / M_PER_UNIT;
+        float range = m.RangeM * Scale / M_PER_UNIT;   // a smaller person's weapons reach less far (Resize)
         distM = d * M_PER_UNIT; limitM = (range + BodyR(w, i) + slack) * M_PER_UNIT;
         if (!(d <= range + BodyR(w, i) + slack)) return HitResult.OutOfRange;
-        if (!LineOfSight(w, X, Y, w.X[i], w.Y[i], m.Kind == "thrown" || m.Kind == "bow" ? 0.25f * m.RangeM : 0f)) return HitResult.NoLineOfSight;
+        if (!LineOfSight(w, X, Y, w.X[i], w.Y[i], m.Kind == "thrown" || m.Kind == "bow" ? 0.25f * m.RangeM * Scale : 0f, EyeM)) return HitResult.NoLineOfSight;
         if (m.Kind == "auto" && !Fire(m)) return HitResult.RateLimited;   // automatic fire: no more hits than its rate allows
         float dmg = m.Damage * Math.Clamp(power, 0.2f, 1f);
         if (reported > 0f) dmg = MathF.Min(dmg, reported);
@@ -202,11 +220,11 @@ public sealed partial class Player
 
     /// <summary>Whether the ground between two places hides one from the other: the ground (cell elevations, in metres)
     /// sampled along the way may rise at most a little above the line from the person's eye to the animal's middle; an
-    /// arc (a thrown spear, an arrow) may also pass over by up to arcM.</summary>
-    public static bool LineOfSight(World w, float x0, float y0, float x1, float y1, float arcM)
+    /// arc (a thrown spear, an arrow) may also pass over by up to arcM. eyeM: the eye's height (the person's: EyeM).</summary>
+    public static bool LineOfSight(World w, float x0, float y0, float x1, float y1, float arcM, float eyeM = EYE_M)
     {
         float dx = World.Delta1(x1 - x0), dy = World.Delta1(y1 - y0), d = MathF.Sqrt(dx * dx + dy * dy);
-        float h0 = GroundM(w, x0, y0) + EYE_M, h1 = GroundM(w, x1, y1) + 10f;
+        float h0 = GroundM(w, x0, y0) + eyeM, h1 = GroundM(w, x1, y1) + 10f;
         int n = Math.Max(2, (int)(d / (0.5f * K.FCELL)) + 1);
         const float SLACK = 25f;   // the view's triangles and the sim's cells differ by this much on steep ground
         for (int k = 1; k < n; k++)

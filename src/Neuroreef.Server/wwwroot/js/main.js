@@ -215,12 +215,17 @@ function showMag() {
   $('mag').max = MAGS.length - 1;
   $('mag').value = MAGS.indexOf(m);
   $('mag-v').textContent = m === 1 ? 'true' : '×' + m;
-  $('mag-k').textContent = m === 1 ? 'true size' : ex || pm === 1 ? 'magnified' : `magnified · plants ×${pm.toFixed(1).replace(/\.0$/, '')}`;
+  // (a multiplier is 'at least this visible': small bodies are drawn up to x m, big ones barely, js/scale.js)
+  $('mag-k').textContent = m === 1 ? 'true size' : ex || pm === 1 ? 'small ones magnified' : `small ones magnified · plants ×${pm.toFixed(1).replace(/\.0$/, '')}`;
+  if (explore) { $('psize').value = explore.sizeMode; $('psize-k').textContent = ex ? explore.sizeText().replace(/^[a-z-]+ · /, '') : ''; }
   for (const b of document.querySelectorAll('#magpre button')) b.classList.toggle('on', +b.dataset.mag === m);
 }
 
 function wireScale() {
   world.onScale = showMag;
+  world.onNote = (h) => toast(h, 3500);   // the overview's N / Tab: which group or clade it flew to
+  explore.onSize = showMag;
+  $('psize').onchange = (e) => { explore.setSize(e.target.value); e.target.blur(); showMag(); };
   $('mag').oninput = () => world.setMagnification(MAGS[+$('mag').value]);
   for (const b of document.querySelectorAll('#magpre button')) b.onclick = (e) => { e.stopPropagation(); world.setMagnification(+b.dataset.mag); };
   $('fitworld').onclick = () => { if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); };

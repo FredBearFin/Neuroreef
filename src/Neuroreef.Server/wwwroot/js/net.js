@@ -128,11 +128,16 @@ export function agentState(a, k, world, out) {
 
 // the world's body sizes (ICD §2.1 units: massMinKg, massMaxKg; BodySize): record byte 12 is a body's mass on this log
 // scale. 0.1-40 kg unless the world was set up otherwise (a world of giants or of tiny bodies)
-let MASS_LO = 0.1, MASS_HI = 40;
+let MASS_LO = 0.1, MASS_HI = 40, MASS_VER = 0;
 /** Take the world's body-size range from its units (meta.units / status.units), if it sends one. */
 export function setMassRange(u) {
-  if (u && u.massMinKg > 0 && u.massMaxKg > u.massMinKg) { MASS_LO = u.massMinKg; MASS_HI = u.massMaxKg; }
+  if (u && u.massMinKg > 0 && u.massMaxKg > u.massMinKg && (u.massMinKg !== MASS_LO || u.massMaxKg !== MASS_HI)) {
+    MASS_LO = u.massMinKg; MASS_HI = u.massMaxKg; MASS_VER++;
+  }
 }
+/** Changes whenever the range does (2026-11-02): world3d.js decodes every body again then (a world of giants after a
+ *  prehistory on the default range kept each animal's mass from the old range until its serial was new). */
+export function massRangeVersion() { return MASS_VER; }
 /** Body mass (kg) from the mass gene or record byte 12 (-128..127), on the world's scale. */
 export function massFromGene(g) { return MASS_LO * Math.pow(MASS_HI / MASS_LO, (g + 128) / 255); }
 

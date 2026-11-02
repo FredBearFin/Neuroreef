@@ -29,7 +29,7 @@ export class Lighting {
   /** The season (-1 dry .. 1 wet) and the year's rain anomaly from the status message, smoothed in update(). */
   setClimate(season, rain) { this.season = season || 0; this.rain = rain || 0; }
 
-  update(camera, target, mode, dt) {
+  update(camera, target, mode, dt, ps = 1) {
     const atm = this.atm;
     // sun: azimuth fixed (from the south-west, behind and to the left of the start view), elevation by season
     const k = 1 - Math.exp(-dt / 4000);
@@ -58,7 +58,9 @@ export class Lighting {
     // (close up, as small as the view: the bodies and plants are drawn at true size or near it, a few metres to tens)
     if (mode === 'overview') { R = Math.min(700, Math.max(0.6, camD * 1.05)); c.copy(target); }
     else {
-      R = mode === 'explore' ? 12 : Math.max(1, Math.min(60, camD * 3));
+      // (Explore: 48 m round a full-sized person, as much smaller round a smaller one, explore.js ps: a 10 cm body over
+      // a texel or two of a 48 m map shaded itself into a dark stipple of shadow acne)
+      R = mode === 'explore' ? Math.max(0.4, 12 * Math.min(1, ps)) : Math.max(1, Math.min(60, camD * 3));
       camera.getWorldDirection(this._f); this._f.y = 0; this._f.normalize();
       c.copy(camera.position).addScaledVector(this._f, R * 0.55);
     }
