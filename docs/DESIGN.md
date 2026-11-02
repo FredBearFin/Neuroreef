@@ -2387,6 +2387,42 @@ Telemetry records it as `rain.anomaly`.
 Meat-eaters deposit c_scent·eff_meat into their cell each step, and MARK multiplies this by 4. Scent
 decays at d_scent and diffuses at 10%.
 
+### 10.7 The ocean (2026-11-02, Ocean.cs)
+
+The owner: "an ocean mode ... where the whole world is underwater, the evolution is all underwater stuff, the map
+is in the ocean". `--ocean` (the setup screen's Ocean preset; `--islands X` keeps X of the map above the sea) builds
+the same deep-time relief as any world and drowns it. A world with land is unchanged bit for bit (the pinned hashes:
+StepLengthTests, ClimateTests); everything below is read only where `World.Ocean` is set.
+
+- **Seafloor.** The worked relief's elevations, ranked and mapped monotonely: the highest OCEAN_BANKS (25%) are
+  banks and reef flats from OCEAN_CREST (1 m) to OCEAN_SHELF (30 m), and below them the relief's own slopes fall to
+  basins Map.ReliefM deep (153 m on the 256 map, 433 m on 1024, 725 m on 2048). The elevation frame keeps 1 − SeaLevel
+  = ReliefM m (SeaLevel 0.5), so every depth in metres reads as on land. Rivers, rain on land, lakes and ponds have no
+  land cells to work on; the sea is the one standing water (one lake id), and nothing divides by a land area.
+- **Seawater.** Oxygen saturation with Weiss's (1970) salinity term at SALINITY 35 (~19% below fresh water at
+  20 °C: 7.4 against 9.1 mg/L); a mixed layer Z_MIX_SEA (40 m), below it a permanent thermocline toward T_DEEP_SEA
+  (4 °C) by e per Z_THERMO_SEA (200 m); below the mixed layer the oxygen falls toward at most O2_LOSS_SEA (50%) of
+  saturation under warm stratified water (apparent oxygen utilisation, Garcia et al. 2010), never anoxic.
+- **Producers.** Benthic algae grow by the light on the bottom (K_LIGHT_SEA 0.06 /m, clear seawater), plankton by the
+  mean light of its mixed layer (Sverdrup 1953), both with a Monod light response (SEA_I_IK) and Monod in the mixed
+  layer's nitrate concentration (K_N_SEA 0.5 umol/L). The plankton drifts: neighbouring water exchanges plankton and
+  nutrient by concentration (Ocean.Drift, Fields.SeaTransport).
+- **Nutrient.** Where the bottom lies below the mixed layer, E_RATIO (0.2) of the plankton's deaths sinks to the
+  bottom as detritus and the rest is remineralised in the mixed layer; detritus on such a floor rots into the deep
+  water (World.DeepN), which exchanges with the mixed layer across the thermocline at K_Z (3e-5 m2/s, Bryan & Lewis
+  1979), more under a surface as cold as the deep (K_Z_CONV: winter convection). In: SEA_N_IN (fixation and deposition,
+  0.5 gN/m2/yr) instead of weathering; out: deep water above C_DEEP_MAX (45 umol/L). The book closes (OceanTests).
+- **Life.** Every ancestor is a water ancestor (EvoSettings.AllWater). Animals use the existing depth physics
+  (Respiration: depth preference, breath-hold dives, gills against the sea's oxygen).
+- **Measured** (OceanTests, the 256 map, seed 3, no animals): open water ~74 gC/m2/yr (Field et al. 1998: 50-150),
+  slopes ~120, banks ~170 (coastal and shelf seas 200-500), reef flats ~65. The reef flats are far below the
+  1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their benthic algae cannot persist on the ambient
+  nitrate (~0.05 umol/L), and the benthic nitrogen fixation and current-driven mass transfer that feed real reefs
+  (Atkinson & Bilger 1992) are not modelled (phase 2). Founding on seeds 1-5: all 16 water ancestors viable on each.
+- **Console.** `meta.ocean`; the camera may go under the surface (the seabed is its floor), the haze, the clear
+  colour and the light follow the depth (red absorbed first), the surface is drawn from below, and the opening view
+  is under the surface at the densest group's depth. Animals are drawn at their simulated depth (AGENTS format 7).
+
 ## 11. Step contract (NR-108)
 
 "∥" means the phase is parallel, over fixed slot ranges or field rows. Each worker writes only what
