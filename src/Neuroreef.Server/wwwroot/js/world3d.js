@@ -676,6 +676,7 @@ export class World3D {
    *  ~20 degrees above the ground, from the side the camera is on now. dur: ms of flight (0: at once). */
   frameGroup(g, dur = 900) {
     if (!g || this.mode !== 'overview') return;
+    if (this.ocean && this.world && this._frameSwimmer(g, dur)) return;
     const c = this.controls.target, W = this.W;
     const x = g.x + W * Math.round((c.x - g.x) / W), z = g.y + W * Math.round((c.z - g.y) / W);
     let acrossM = Math.min(VIEW_M_MAX, Math.max(VIEW_M_MIN, 2.5 * g.r + 15));
@@ -694,6 +695,38 @@ export class World3D {
     if (this.ocean && this.world) { const sf = this.surfAt(p1.x, p1.z); if (sf === sf) { p1.y = Math.min(p1.y, sf - 0.5 * this.scale.upm); this.controls.maxPolarAngle = Math.PI * 0.92; } }
     this.controls.maxDistance = Math.max(this.controls.maxDistance, d * 2);
     this._flyTo(c1, p1, dur);
+  }
+
+  /**
+   * Under the sea (2026-11-02): a group is seen only as far as the water is clear (seaC: ~4.8 / c, a few metres in a
+   * plankton bloom, tens in clear ocean), so the view frames one of its animals, the one nearest its middle in the lit
+   * upper water (within 25 m of the surface if any is), at its drawn depth, from the side and a little above, about 6
+   * of its drawn lengths away but within a third of the visibility; its neighbours show as the water allows.
+   */
+  _frameSwimmer(g, dur) {
+    const W = this.W, c = this.controls.target, upm = this.scale.upm;
+    let best = null, bd = Infinity;
+    for (const [serial, e] of this.agents) {
+      if (e.stage === 0 || this.dead.has(serial) || this.hidden.has(e.sp)) continue;
+      let dx = e.x - g.x, dy = e.y - g.y; dx -= Math.round(dx / W) * W; dy -= Math.round(dy / W) * W;
+      const d = Math.hypot(dx, dy) + ((e.depth || 0) > 25 ? 1e4 : 0);
+      if (d < bd) { bd = d; best = e; }
+    }
+    if (!best) return false;
+    const x = best.x + W * Math.round((c.x - best.x) / W), z = best.y + W * Math.round((c.z - best.y) / W);
+    const sc = this._size(best), y = this._height(best, x, z, sc), L = sc * MODEL_LEN;
+    const V = 4.8 / this.seaC(x, z) * upm, d = Math.max(3 * L, Math.min(6 * L, V / 3));
+    const off = this.camera.position.clone().sub(c); off.y = 0;
+    if (off.lengthSq() < 1e-12) off.set(0, 0, 1);
+    off.normalize().multiplyScalar(d * Math.cos(0.25)); off.y = d * Math.sin(0.25);
+    const c1 = new THREE.Vector3(x, y + 0.3 * L, z), p1 = c1.clone().add(off);
+    const sf = this.surfAt(p1.x, p1.z), bed = this.bedAt(p1.x, p1.z);
+    if (sf === sf) p1.y = Math.min(p1.y, sf - 0.3 * upm);
+    p1.y = Math.max(p1.y, bed + 0.3 * L);
+    this.controls.maxPolarAngle = Math.PI * 0.92;
+    this.controls.minDistance = Math.min(this.controls.minDistance, 2 * L);
+    this._flyTo(c1, p1, dur);
+    return true;
   }
 
   /** The opening view: low over the densest group, once animals and the ground are there (unless the view was moved). */
@@ -1052,6 +1085,8 @@ export class World3D {
         const L = sz * MODEL_LEN, dist = L * 6.5, up = L * 2.2;
         const want = new THREE.Vector3(selP[0] - hx * dist, gh + up, selP[1] - hz * dist);
         want.y = Math.max(want.y, this.floorAt(want.x, want.z) + sz * 0.8);
+        // under the sea the camera stays in the water with a body that is under it (2026-11-02)
+        if (this.ocean) { const sf = this.surfAt(want.x, want.z); if (sf === sf && gh < sf - sz) want.y = Math.min(want.y, sf - 0.3 * sz); }
         this.camera.position.lerp(want, ease(0.12));
         // on its way there (from the overview, or round a hill the animal walked past) the camera never goes into the ground
         const cp = this.camera.position, floor = this.floorAt(cp.x, cp.z) + sz * 0.5;
