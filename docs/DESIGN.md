@@ -168,6 +168,12 @@ Wetlands (Wetlands.cs; nothing places one):
   the air, tall trees at air temperature, so trees stop growing first in the cold (ColdGrowth: limits crown growth, wood
   and seed, not the losses). Stem life: LIFE_EXP 1 (lifespan ~ M^1/4, M ~ H^4: Marba et al. 2007; Niklas 1994), a 15 m
   tree 50 years and a 30 m tree 100, the 1-2% a year of mature forests (Stephenson & van Mantgem 2005); was 0.75 (19 years).
+- *Round 3 (2026-11-01).* The sea-level annual mean by latitude is T_EQ 26 - DT_EP 18 sin² - DT_EP4 24 sin⁴ (Climate.
+  SeaLevelMean), through the observed zonal means (Sellers 1965): 14.5 °C at 40°, 7.1 at 50°, 5.5 at 52°, -16 at the pole.
+  The old 27 - 40 sin² made 52° 2.2 °C and held trees there near their cold limit. Geology's deep-time glaciation keeps the
+  old profile, as GEO_T_EQ 27 and GEO_DT_EP 40, and so do Hydrology's mean-year water and Caves' dissolution
+  (Climate.LandMean), so each seed builds the same land as before. Plant maintenance respiration follows the temperature
+  (Q10_RESP 2: Ryan 1991; Atkin & Tjoelker 2003); before, an evergreen respired its 20 °C rate through a -8 °C winter.
 Measured (512 map, seeds 3, 5, 7; a new world and one more year, no animals; WetProbe):
 - Wetlands 0.55 / 0.41 / 1.06% of the land (69 / 54 / 144 cells): marsh 8 / 6 / 8, swamp 16 / 5 / 30, fen 38 / 38 / 95,
   bog 7 / 5 / 11. Settings: lake and sea shores 13 / 13 / 23 cells, river banks 42 / 26 / 59, spring lines away from

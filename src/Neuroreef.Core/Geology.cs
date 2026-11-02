@@ -503,7 +503,7 @@ public static class Geology
     }
 
     /// <summary>The deep-time snowline (ELA, km above the lakes) and the Earth-like sea-level annual mean temperature (°C)
-    /// of each row of a grid of side W: T_EQ - DT_EP sin² latitude falls by LAPSE per km and reaches GEO_T_ELA at the
+    /// of each row of a grid of side W: GEO_T_EQ - GEO_DT_EP sin² latitude (Climate.LandMean) falls by LAPSE per km and reaches GEO_T_ELA at the
     /// ELA (the latitude of a row as Climate has it on the field grid). Climate-setting free, so a seed makes one land.</summary>
     internal static void Snowline(World w, int W, float[] ela, float[] tSea)
     {
@@ -511,7 +511,7 @@ public static class Geology
         for (int y = 0; y < W; y++)
         {
             float s = Climate.SinLat(w, (y + 0.5f) * FW / W - 0.5f);   // the world's latitude (2026-11-01: one band on a small map)
-            tSea[y] = K.T_EQ - K.DT_EP * s * s;
+            tSea[y] = Climate.LandMean(s);
             ela[y] = MathF.Max(0f, (tSea[y] - K.GEO_T_ELA) / K.LAPSE);
         }
     }

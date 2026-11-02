@@ -41,7 +41,7 @@ public class ClimateTests
             float lo = float.MaxValue, hi = float.MinValue;
             for (int y = 0; y < FW; y++) { Climate.RowParams(w, y, out float a, out _); lo = MathF.Min(lo, a); hi = MathF.Max(hi, a); }
             Assert.True(hi - lo < 0.05f, $"sea-level annual mean spans {hi - lo:F3} K across a {Map.WidthM / 1000f:F1} km map");
-            Assert.Equal(K.T_EQ - K.DT_EP * s * s, 0.5f * (lo + hi), 1);
+            Assert.Equal(Climate.SeaLevelMean(s), 0.5f * (lo + hi), 1);
             // the seasons follow the hemisphere: a northern world's summer swing is positive at a quarter year
             w.Step = (ulong)(Nature.SeasonLength / 4);
             Climate.RowParams(w, FW / 3, out _, out float b);
@@ -135,9 +135,11 @@ public class ClimateTests
         // 2026-11-01: the water producers' rates measured a day (R_A, M_A, R_PH, M_PH: algae and plankton grow and die
         // ~4-40x faster, as measured) re-pinned it: the water pools, detritus and nutrient of every water cell changed. It
         // was 0x39C887C08E839DDF before.
-        // 2026-11-01 (merge): the water producers' rates (0xD5BF33F526462038 on their branch) with the plants' rounds 1-3
-        // (0x9D198E74A912EFAF on theirs) re-pinned it.
-        Assert.Equal(0x0UL, h);
+        // 2026-11-01 (merge, plants round 3): the water producers' measured rates (0xD5BF33F526462038 on their branch) with
+        // the plants' canopy bound, live wood, Beer's law and stem life (0x9D198E74A912EFAF on theirs) re-pinned it; round 3's
+        // cold limit, vapour-pressure demand and respiration Q10 are identity without a climate, and the land is still built
+        // under the old latitude profile (Climate.LandMean), so the world's new profile does not move it.
+        Assert.Equal(0xBFF7554AFE744466UL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water
@@ -149,11 +151,11 @@ public class ClimateTests
             var w = new World(16, 3);
             Terrain.Build(w);
             int FW = Map.FW;
-            // equator 27 °C, poles 27 - 40 at sea level (annual mean)
+            // equator 26 °C, poles 26 - 18 - 24 at sea level (annual mean)
             Climate.RowParams(w, 0, out float a0, out _);
             Climate.RowParams(w, FW / 4, out float aN, out _);
             Assert.Equal(K.T_EQ, a0, 3);
-            Assert.Equal(K.T_EQ - K.DT_EP, aN, 3);
+            Assert.Equal(K.T_EQ - K.DT_EP - K.DT_EP4, aN, 3);
             w.Step = (ulong)(Nature.SeasonLength / 4);   // the northern summer
             for (int d = 1; d < FW / 2; d += 7)
             {
@@ -399,9 +401,16 @@ public class ClimateTests
         // years), at fixed latitude, trees spread less on high ground with a climate, and alike without one. 2026-11-01 (the
         // 1 km world): the map sits at one latitude, set here to a cool 52°, where the 256 map's hills of ~150 m reach the cold
         // limit of trees (at 37°, the middle of the old band of rows, hills this low hold no treeline: 1.00, as they should)
+        // 2026-11-01 (plants round 3): at 52° with the zonal means of Sellers (1965) the lowland's annual mean is ~5.5 °C,
+        // July ~19 °C, and trees grow only above ~5 °C at their meristems (Plants.ColdGrowth), so over these two years they
+        // spread at the pace of the growing season and ~1 K cooler hills (150 m at 6.5 K/km) slow them: the thermal
+        // gradient the test looks for, not a closed treeline (real lowlands at 52° are forest; a treeline needs ~1,000 m
+        // more relief than a 256 map has). Measured: 0.917 high/low with the climate, 0.997 without. Open: at 60° the high
+        // ground held more trees (1.186), a near-limit effect not explained yet
+        const float LAT = 52f;
         double Treeline(float climate) => With(climate, () =>
         {
-            float fire = Nature.Fire, drought = Nature.Drought, lat0 = Nature.Latitude; Nature.Fire = 0f; Nature.Drought = 0f; Nature.Latitude = 52f;
+            float fire = Nature.Fire, drought = Nature.Drought, lat0 = Nature.Latitude; Nature.Fire = 0f; Nature.Drought = 0f; Nature.Latitude = LAT;
             try
             {
                 using var sim = new Simulation(64, 9, 2, empty: true);
@@ -414,7 +423,11 @@ public class ClimateTests
                 }
                 for (int k = 0; k < 6000; k++) sim.Step();
                 var cells = new System.Collections.Generic.List<int>();
-                for (int i = 0; i < FW * FW; i++) if (w.Cell[i] == (byte)Realm.Land) cells.Add(i);   // one latitude: all the land
+                // one latitude: all the land away from the shores (2026-11-01, plants round 3). A land cell beside water loses
+                // nutrient to it every step (Fields.Transport) and its ground is the waterlogged one (Wetlands), both of which
+                // hold trees back on the lowest ground whatever the temperature; the shore cells are all in the low third,
+                // so the thirds are compared beyond DistWater 3 cells (48 m) where only the height differs
+                for (int i = 0; i < FW * FW; i++) if (w.Cell[i] == (byte)Realm.Land && w.DistWater[i] > 3f) cells.Add(i);
                 Assert.True(cells.Count > 300, $"{cells.Count} land cells in the band");
                 cells.Sort((a, b) => w.Elev[a].CompareTo(w.Elev[b]));
                 int third = cells.Count / 3; double lo = 0, hi = 0;

@@ -776,7 +776,7 @@ public static partial class Hydrology
             for (int i = y * FW; i < (y + 1) * FW; i++) if (rain[i] > 0f) { sr += rain[i]; nr++; }
             float rowMean = nr > 0 ? (float)(sr / nr) : 1f;
             float s = Climate.SinLat(w, y);
-            float t0 = K.T_REF + K.CLIMATE * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
+            float t0 = K.T_REF + K.CLIMATE * (Climate.LandMean(s) - K.T_REF);
             for (int i = y * FW; i < (y + 1) * FW; i++)
             {
                 float hm = MathF.Max(0f, w.Elev[i] - sea) / MathF.Max(1e-6f, 1f - sea) * Map.ReliefM;

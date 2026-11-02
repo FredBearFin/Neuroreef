@@ -216,7 +216,7 @@ public static class Plants
         float r0 = P[o + Ph.R0];
         float nfc = P[o + Ph.NFIXC] * (1f + MathF.Max(0f, (K.NFIX_T - T) / K.NFIX_TW));
         float A = MathF.Max(K.A_MIN, (1f - P[o + Ph.CSTAT] - nfc - P[o + Ph.AR]) * P[o + Ph.ANORM]);
-        return Gross(P, o, r0, WaterOf(P, o, W, 0f), N, T, L, A, out _, out _, anox) - K.RESP * r0 * P[o + Ph.LES];
+        return Gross(P, o, r0, WaterOf(P, o, W, 0f), N, T, L, A, out _, out _, anox) - K.RESP * r0 * P[o + Ph.LES] * Climate.Resp[Climate.Idx(T)];
     }
 
     /// <summary>NORM: a mid genome at full water, light and nutrient, at T_REF, grows at r0 net of respiration.</summary>
@@ -351,7 +351,7 @@ public static class Plants
                     int id = L[(int)(Rng.U(w.Seed, (uint)i, (uint)(s * 16 + d), Rs.PlantFound + 1) * L.Count)];
                     int o = id * PlantTable.NP;
                     float r0 = t.Phe[o + Ph.R0];
-                    float g = Gross(t.Phe, o, r0, WaterOf(t.Phe, o, W, 0f), N, T, 1f, 1f, out _, out _, ax) - K.RESP * r0 * t.Phe[o + Ph.LES];
+                    float g = Gross(t.Phe, o, r0, WaterOf(t.Phe, o, W, 0f), N, T, 1f, 1f, out _, out _, ax) - K.RESP * r0 * t.Phe[o + Ph.LES] * Climate.Resp[Climate.Idx(T)];
                     g /= r0;
                     if (g > bv) { second = best; sv = bv; best = id; bv = g; }
                     else if (g > sv && id != best) { second = id; sv = g; }
@@ -446,6 +446,7 @@ public static class Plants
             for (int s = 0; s < 3; s++) { w.SeedOut[s * n + i] = 0f; w.SeedMom[s * n + i] = 0; w.SeedDad[s * n + i] = 0; }
             if (w.Cell[i] != (byte)Realm.Land) continue;
             float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f)), ax = w.WetDur[i];
+            float respT = Climate.Resp[Climate.Idx(T)];
             B[HERB] = G[i]; B[SHRUB] = S[i]; B[TREE] = Tr[i]; B[SAP] = Sp[i];
             int flags = w.PFlags[i];
             for (int k = 0; k < SLOTS; k++)
@@ -491,7 +492,7 @@ public static class Plants
                 if (on && pv < th - K.DECID_HYST) on = false;
                 else if (!on && pv > th + K.DECID_HYST) { on = true; b -= K.RELEAF * b; }
                 if (on) flags |= 1 << k; else flags &= ~(1 << k);
-                float les = Pe[o + Ph.LES], resp = K.RESP * r0 * les;
+                float les = Pe[o + Ph.LES], resp = K.RESP * r0 * les * respT;   // respiration follows the temperature (Q10_RESP, 2026-11-01)
                 float net = on ? gA - resp : -K.LEAFOFF_RESP * resp;
                 float room = MathF.Max(0f, Room(k, B[HERB], B[SHRUB], B[TREE], B[SAP]));
                 // (2026-11-01) what a leafy canopy fixes per step: REPRO_RATE (NPP_MAX of a closed canopy per unit leafy cover)
