@@ -2513,6 +2513,19 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   Measured: founding (256 map) 14, 16, 14, 15, 16 lineages on seeds 1-5 (was 5, 11, 5, 7, 6); the valley run (seed 3,
   2,000 steps, random brains) kept one lineage, 0 swimmers / 72 waders / 329 fliers at step 500, 0 / 13 / 107 at 2,000
   (1,223 founded; deaths 1,154: killed 1,046, starved 36), where before all were extinct by step 1,200, mostly starved.
+  Then (the same day) **sea diets**: in a world that is all sea (no islands) a random ancestor's diet genes are drawn over
+  the sea's foods only, plankton, algae, detritus, prey and blood (Clades.AncestorBody, SeaFoods; carcasses and dung
+  fall into the water as detritus, so carrion and dung are not among them), the rest at their least: an initial
+  condition, as the water realm is, since marine faunas descend from marine ancestors; evolution may change the diet
+  after. Land worlds and island worlds draw as before. Founding (256 map) gave 16, 16, 16, 16, 15 lineages on seeds 1-5:
+  fliers 9, 11, 7, 8, 5; legged swimmers ("waders") 6, 3, 7, 5, 8; finned swimmers 0, 2, 2, 3, 2 (one walker on seed 1).
+  Most non-winged lineages are meat-eaters founded on 1-6 animals; the big non-winged ones (seed 2:
+  600 + 600 waders, a 600 blood-drinking swimmer; seed 3: a 292 plankton wader; seed 4: 600 + 600 + 600 + 176 waders,
+  600 + 33 swimmers; seed 5: 421 + 392 algae waders, a 600 plankton swimmer). The valley run (seed 3, 2,000 steps,
+  random brains): 1,136 founded in 16 lineages; alive 2,620 / 3,487 / 3,633 / 4,804 at steps 500-2,000 in 11 / 10 / 7 /
+  6 lineages (the loco census of grown animals: swimmers 5 / 3 / 2 / 1, waders 261 / 254 / 367 / 779, fliers 555 / 470
+  / 902 / 1,143). The world now grows: its two big lineages are a 0.23 kg winged detritus eater that dives to ~16 m and
+  a 20 kg legged (flightless) plankton eater, 1,123 and 776 at step 2,000; deaths 2,043 (killed 1,284, parasites 456, lost young 156, starved 117).
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12

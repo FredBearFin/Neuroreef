@@ -99,7 +99,8 @@ public static class Clades
     /// whether it can live where it starts is tested by the founding (Revision P), not given.
     /// </summary>
     /// <param name="brainUnits">0: a random brain of up to BRAIN_START units; otherwise exactly this many (a big-brained ancestor)</param>
-    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0, bool voiced = false, int floorClass = 0)
+    /// <param name="sea">a world of open sea, no land (2026-11-02): the diet is drawn over the sea's foods only</param>
+    public static void AncestorBody(Span<sbyte> body, uint seed, int ancestor, bool land, int brainUnits = 0, bool voiced = false, int floorClass = 0, bool sea = false)
     {
         float U(int k) => Rng.U(seed, (uint)ancestor, (uint)k, Rs.Founder + 7000u);
         sbyte Lin(int k, float lo, float hi) => G.ToGene(lo + (hi - lo) * U(k), -1f, 1f);   // organ genes: -1..1 maps to 0..1 size
@@ -166,10 +167,24 @@ public static class Clades
         // at the rest. Revision P: no staple is given (a forced grass or plankton diet made every land ancestor a grazer
         // and every water one a plankton eater, one niche each, and worlds ended with 1-3 lineages); instead an ancestor
         // is a body its home range can feed (Simulation.FoundAncestors, Life.RangeCapacity), whatever it eats.
-        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = (sbyte)(-90 + (int)(U(40 + p) * 40f));
+        // (2026-11-02, the ocean audit) In a world that is all sea (sea), the diet is drawn over the foods the sea has
+        // (SeaFoods), as the realm itself is: marine faunas descend from marine ancestors, whose guts were made for marine
+        // food; the genes of foods the sea lacks start at their least, and evolution may raise them. Before, an ancestor at
+        // sea spent most of its digestive budget on browse, fruit, seed and roots that no cell of the world grows
+        // (OceanTests.WhyDrawsPassOrFailFoundingAtSea), so its plankton and algae were digested at 0.1-0.4.
+        int nf = sea ? SeaFoods.Length : Pools.N;
+        for (int p = 0; p < Pools.N; p++) body[G.B_DIET - B + p] = sea && Array.IndexOf(SeaFoods, p) < 0 ? (sbyte)-127 : (sbyte)(-90 + (int)(U(40 + p) * 40f));
         int good = 1 + (int)(U(70) * 3f);
-        for (int k = 0; k < good; k++) body[G.B_DIET - B + (int)(U(71 + k) * Pools.N) % Pools.N] = (sbyte)(40 + (int)(U(74 + k) * 87f));
+        for (int k = 0; k < good; k++)
+        {
+            int f = (int)(U(71 + k) * nf) % nf;
+            body[G.B_DIET - B + (sea ? SeaFoods[f] : f)] = (sbyte)(40 + (int)(U(74 + k) * 87f));
+        }
     }
+
+    /// <summary>The foods a world of open sea has (AncestorBody's sea diets): plankton, attached algae, detritus (carcasses
+    /// and dung fall into it in water: Resolve.Die), prey and its blood. Carrion and dung lie only on land.</summary>
+    static readonly int[] SeaFoods = { (int)Pool.Algae, (int)Pool.Phyto, (int)Pool.Detritus, (int)Pool.Meat, (int)Pool.Blood };
 
     /// <summary>Standing variation: each founder's body genes vary around its ancestor's by FOUNDER_BODY_SD.</summary>
     public static void VaryBody(Span<sbyte> body, uint seed, uint key)

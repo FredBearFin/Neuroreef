@@ -247,7 +247,8 @@ public sealed class Simulation : IDisposable
         var w = W;
         int draw = a + t * 0x10000;
         Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)draw);
-        Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, draw, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES);   // ancestors spread over the size classes
+        Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, draw, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES,
+            sea: w.Ocean && Nature.Islands <= 0f);   // ancestors spread over the size classes; at sea, sea diets (2026-11-02)
     }
 
     /// <summary>What a home range can feed of animals with this genome, and the range's radius: one is made, measured and removed again.</summary>
