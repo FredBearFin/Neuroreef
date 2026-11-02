@@ -2482,6 +2482,19 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   What holds intake down, in the model's own terms: bodies are cubes (BODY_L_M x M^(1/3) unless the length gene
   stretches them, so a 2 kg body is 0.13 m long where a 2 kg fish is ~0.5 m and cruises four times as fast), and the
   basal cost is a mammal's (C_BASAL, Kleiber) at full warmth without a climate, where fishes run at ~1/10 of it.
+- **Metabolic level and body shape** (2026-11-02, fourth round, every world, approved by the owner; MetabolismTests).
+  A body's tissues run at Heat.Level = ECTO_LEVEL (0.2)^(1 - endothermy) of a warm-blooded body's of its mass at the
+  same core temperature (Bennett & Ruben 1979; White, Phillips & Seymour 2006): its basal cost (PBasal, brain apart:
+  a neuron costs the same), its gut and digestion, and through OrganBase its organs' aerobic capacity, climate on or off.
+  The core's temperature paces it on top (Heat.Activity is Rate alone now, so the level is not applied twice): a
+  cold-blooded body at 20 °C burns 1/22 of a mammal at 38 °C. The shape genes reach 1/3-3 of the cube on each axis
+  (SHAPE_RANGE): a 2 kg body can be 0.47 m long; speed in water and air goes as Hoerner's (1965) volume drag of its
+  fineness ratio, least near 4.5 (a 2 kg long body swims 1.6x a cube). At sea a flier is founded only where it can land.
+  Measured, valley ocean (seed 3, 2,000 steps): 5 lineages founded, extinct by step 1,200 (deaths: starvation 702,
+  lost young 922, parasites 440, killed 213); founding on the 256 map 5, 11, 5, 7, 6 lineages on seeds 1-5 (nearly all
+  winged: Loco.Fly). Valley land (seed 3, 1,500 steps, random brains): 16 lineages founded, 15 alive; warm-blooded
+  (endothermy > 0.5) 45-52% of animals and 9 of 15 lineages mostly warm; deaths 12,478: killed 60%, lost young 32%,
+  parasites 6%, starved 17, suffocated 104, cold 24.
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12

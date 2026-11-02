@@ -99,7 +99,8 @@ public class WadingTests
         var wing = Body0(mass: -40, wings: 127);
         Assert.Equal(Loco.Fly, wing.w.LocoOf(0));
         float wo = wing.w.PWings[0];
-        float kleiber = K.C_BASAL * MathK.Pow(wing.w.PM[0], K.EXP_BASAL) * wing.w.Dt;
+        // its tissues' metabolic level (Heat.Level, 2026-11-02) scales the wings' upkeep with the rest of its basal cost
+        float kleiber = K.C_BASAL * MathK.Pow(wing.w.PM[0], K.EXP_BASAL) * wing.w.Dt * Heat.Level(wing.w.PEndo[0]);
         float extra = wing.w.PBasal[0] - bare.w.PBasal[0];
         _out.WriteLine($"{wing.w.PM[0]:F2} kg, wings {wo:F2}: basal {bare.w.PBasal[0]:E3} -> {wing.w.PBasal[0]:E3} (+{100 * extra / bare.w.PBasal[0]:F0}%; COST_WING x wings alone {100 * K.COST_WING * wo:F0}% of Kleiber's)");
         Assert.True(extra >= K.COST_WING * wo * kleiber * 0.999f, "the wings' upkeep at least");

@@ -419,10 +419,16 @@ public static class Life
         {
             x = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 100u + (uint)t * 2) * Map.W;
             y = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 101u + (uint)t * 2) * Map.W;
-            if (w.CellAllows(i, World.FIdx(x, y), realm)) return true;
+            if (FounderAllows(w, i, World.FIdx(x, y), realm)) return true;
         }
         x = y = 0; return false;
     }
+
+    /// <summary>Can founder i be placed in this cell? Where its realm allows; at sea a flier only where it can land (World.
+    /// GroundAllows: it eats and rests landed), as RangeCapacity counts its range (2026-11-02: a 13 kg flier was founded
+    /// over open water it could neither swim in nor stand in).</summary>
+    static bool FounderAllows(World w, int i, int cell, Realm realm)
+        => w.CellAllows(i, cell, realm) && (!w.Ocean || w.PLoco[i] != (byte)Loco.Fly || w.GroundAllows(i, cell));
 
     /// <summary>
     /// Create one founder organism of a clade at step 0 (or from a gene bank). With an empty genome, a random brain
@@ -454,7 +460,7 @@ public static class Life
                 float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 200u + (uint)t * 2) * 2f * MathF.PI;
                 float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * spread;
                 x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
-                ok = w.CellAllows(c, World.FIdx(x, y), realm);
+                ok = FounderAllows(w, c, World.FIdx(x, y), realm);
             }
         if (!ok && !RandomSite(w, c, realm, key, out x, out y)) { FreeSlot(w, c); return -1; }
         Place(w, c, clade, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);

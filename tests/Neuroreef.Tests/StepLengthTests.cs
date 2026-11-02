@@ -53,7 +53,12 @@ public class StepLengthTests
         // CRUISE_BL lengths a second for FEED_DAY of the step), sweeping plankton and cropping the bottom's algae and
         // detritus by its gape (BottomKg; the bottom was bitten without an area limit), and pays swimming's cost for it;
         // this world's lake and river feeders moved. It was 2011528924806897781 before.
-        Assert.Equal(3283118220941252680UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-02 (fourth round, MetabolismTests; approved by the owner for all worlds): a body's basal cost,
+        // gut and organ capacity follow its metabolic level, ECTO_LEVEL (0.2)^(1 - endothermy), climate on or off (was 1
+        // for every body), with the core's temperature pace on top and not twice; and the shape genes reach 1/3-3 of the
+        // cube on each axis with Hoerner's volume drag for swimming and flight (were 1/2-2 and a bounded linear factor).
+        // Every body in this world changed. It was 3283118220941252680 before.
+        Assert.Equal(14911671059831046093UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time
