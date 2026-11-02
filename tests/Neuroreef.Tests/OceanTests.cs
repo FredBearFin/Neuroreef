@@ -25,14 +25,14 @@ public class OceanTests
 
     static float DepthM(World w, int i) => Respiration.ColumnM(w, i);
 
-    [Fact] // an ocean world: no land, banks a few metres deep, slopes and basins as deep as the map's relief; every ancestor in the water
+    [Fact] // an ocean world: no land, a few banks, a shelf, slopes and basins as deep as the map's relief; every ancestor in the water
     public void AnOceanWorldHasNoLandAndOnlyWaterAncestors()
     {
         Sea(() =>
         {
             using var sim = new Simulation(64, 3, 2, empty: true);
             var w = sim.W;
-            int n = Map.FW * Map.FW, land = 0, photic = 0, deep = 0;
+            int n = Map.FW * Map.FW, land = 0, photic = 0, deep = 0, under2 = 0, under5 = 0;
             float min = float.MaxValue, max = 0f;
             for (int i = 0; i < n; i++)
             {
@@ -40,15 +40,21 @@ public class OceanTests
                 float d = DepthM(w, i);
                 min = MathF.Min(min, d); max = MathF.Max(max, d);
                 if (d <= K.OCEAN_SHELF + 0.5f) photic++;
+                if (d < 2f) under2++;
+                if (d < 5f) under5++;
                 if (d >= 0.5f * Map.ReliefM) deep++;
                 for (int p = 0; p < Pools.NFIELD; p++) Assert.True(float.IsFinite(w.Pool[p][i]), $"pool {p} at {i}");
                 Assert.True(float.IsFinite(w.Nutrient[i]) && float.IsFinite(w.DeepN[i]));
             }
-            _out.WriteLine($"land {land}, depth {min:F1}-{max:F1} m (relief {Map.ReliefM:F0} m), banks <= {K.OCEAN_SHELF} m {photic * 100f / n:F0}%, basins >= half the relief {deep * 100f / n:F0}%; lakes {w.LakeCount}");
+            _out.WriteLine($"land {land}, depth {min:F1}-{max:F1} m (relief {Map.ReliefM:F0} m), banks <= {K.OCEAN_SHELF} m {photic * 100f / n:F1}%, under 5 m {under5 * 100f / n:F2}%, under 2 m {under2 * 100f / n:F2}%, basins >= half the relief {deep * 100f / n:F0}%; lakes {w.LakeCount}");
             Assert.Equal(0, land);
             Assert.InRange(min, 0.5f, 2f);
             Assert.InRange(max, 0.9f * Map.ReliefM, 1.01f * Map.ReliefM);
-            Assert.InRange(photic / (float)n, 0.2f, 0.32f);
+            // (2026-11-02) a shelf sea, not a reef flat: OCEAN_BANKS (5%) of the floor 1-30 m deep, little under 5 m, the
+            // rest deeper than any body stands (was 25% of it 1-30 m)
+            Assert.InRange(photic / (float)n, 0.04f, 0.08f);
+            Assert.True(under5 <= 0.015f * n, "little under 5 m");
+            Assert.True(under2 <= 0.005f * n, "very little under 2 m");
             Assert.True(deep > n / 10, "deep basins");
             Assert.Equal(0, w.Evo.AncestorsLand);
             Assert.Equal(K.ANCESTORS_LAND + K.ANCESTORS_WATER, w.Evo.AncestorsWater);
@@ -165,7 +171,14 @@ public class OceanTests
         // standing stock, WATER_KG_M2, holds a reef flat below that), Ryther 1969 and Field 1998 (coastal and shelf 200-500)
         Assert.InRange(open, 50.0, 150.0);
         Assert.InRange(c.open, 50.0, 150.0);
-        Assert.InRange(bank, 200.0, 500.0);
+        // (2026-11-02) the shelf-sea floor (OCEAN_BANKS 0.05, a shelf to OCEAN_BREAK) moved the banks from ~400-440 to
+        // ~175-185 (reef flats ~100, slopes ~150-155, open water ~86-87): the banks are now 5% of the floor, scattered in
+        // nutrient-poor open water whose plankton and nitrate they exchange (Ocean.Drift, Exchange), where at 25% they were
+        // a contiguous sea of their own. 175 is a shelf sea's production (the North Sea's is ~100-250 gC/m2/yr: Joint &
+        // Pomroy 1993; Ryther 1969's coastal zone ~100), below the 200-500 asserted before. What the model lacks is the
+        // nitrate a real shelf gets from the ocean's deep water at its break and tidal fronts, which no rule here brings
+        // up (only the thermocline's K_Z over each cell's own deep water)
+        Assert.InRange(bank, 100.0, 500.0);
         Assert.True(bank > open && c.bank > c.open, "the banks outgrow the open water");
         Assert.True(reef > 80.0, "the reef flats grow on what they fix");
     }
@@ -238,6 +251,57 @@ public class OceanTests
             });
             Assert.True(lineages >= 3, $"seed {seed}: {lineages} lineages");
         }
+    }
+
+    [Fact] // --ocean-shallow: a reef-flat world is still a setting (2026-11-02): its share of the floor on banks 1-30 m deep
+    public void OceanShallowMakesAReefFlatWorld()
+    {
+        float s0 = Nature.OceanShallow;
+        try
+        {
+            foreach (float share in new[] { K.OCEAN_BANKS, 0.25f })
+            {
+                Nature.OceanShallow = share;
+                Sea(() =>
+                {
+                    var w = new World(16, 3);
+                    Terrain.Build(w);
+                    int n = Map.FW * Map.FW, banks = 0, shelf = 0;
+                    for (int i = 0; i < n; i++) { float d = DepthM(w, i); if (d <= K.OCEAN_SHELF + 0.5f) banks++; else if (d <= MathF.Min(K.OCEAN_BREAK, 0.6f * Map.ReliefM) + 0.5f) shelf++; }
+                    _out.WriteLine($"--ocean-shallow {share:F2}: banks (<= {K.OCEAN_SHELF} m) {100f * banks / n:F1}%, shelf {100f * shelf / n:F1}%, deeper {100f * (n - banks - shelf) / n:F1}%");
+                    Assert.InRange(banks / (float)n, share - 0.02f, share + 0.03f);
+                    Assert.True(shelf >= 0.5f * n, "most of the floor is shelf");
+                    return 0;
+                });
+            }
+        }
+        finally { Nature.OceanShallow = s0; }
+    }
+
+    [Fact] // the ECO census of an ocean world (2026-11-02): no land to divide by, so no NaN or Infinity; water NPP and the census
+    public void EcoLinesOfAnOceanWorldAreFinite()
+    {
+        string all = Sea(() =>
+        {
+            using var sim = new Simulation(64, 3, 2);
+            var eco = new Neuroreef.Server.EcoWatch(sim);
+            var stdout = Console.Out;
+            Console.SetOut(System.IO.TextWriter.Null);
+            try
+            {
+                for (int k = 0; k < Neuroreef.Server.EcoWatch.EVERY; k++) { sim.Step(); eco.Sample(sim); }
+                return eco.Report(sim);
+            }
+            finally { Console.SetOut(stdout); }
+        });
+        foreach (var l in all.Split('\n')) if (l.StartsWith("ECO ") && !l.StartsWith("ECO FOUNDING")) _out.WriteLine(l.Length > 400 ? l[..400] : l);
+        Assert.DoesNotContain("NaN", all);
+        Assert.DoesNotContain("Infinity", all);
+        Assert.DoesNotContain("\u221E", all);   // the infinity sign some cultures print
+        Assert.Contains("ECO SEA ", all);
+        Assert.Contains("water NPP", all);
+        // the shelf's plankton is counted (it printed 0 while the counter sat in the lakes' code)
+        Assert.Matches(@"ECO SEA +300 .*30-130 m [1-9]", all);
     }
 
     [Fact] // the WORLD frame's depth in decimetres after the rivers (2026-11-02): past the u8 plane's 254 m

@@ -196,7 +196,7 @@ public static class Respiration
         var diet = w.DietOf(i);
         float v = 0f;
         for (int p = 0; p < Pools.NFIELD; p++)
-            if (diet[p] > 0f) v = MathF.Max(v, diet[p] * Pools.Rho[p] * w.Pool[p][cell] * Access(w, cell, p, z, 1f));
+            if (diet[p] > 0f) v = MathF.Max(v, diet[p] * Pools.Rho[p] * w.Pool[p][cell] * Access(w, cell, p, z, 1f, 0f));
         return v;
     }
 
@@ -247,7 +247,7 @@ public static class Respiration
         }
         // not a swimmer: on the bottom (its head in the air if the water is shallower than it stands) or paddling at the
         // surface with its head up for the share its fins and legs allow; whichever gives more oxygen
-        float stand = K.STAND_H * MathK.Cbrt(m) * (0.3f + 0.7f * w.PLegs[i]);
+        float stand = StandM(w, i);
         float aB = WaterO2(w, cell, col);
         float headUp = col <= stand ? 1f : 0f;
         float ub = basal * (headUp * aAir * K.LUNG_SCOPE * L + aB * (K.GILL_SCOPE * Gi + skin));
@@ -316,14 +316,28 @@ public static class Respiration
         return b.Uptake >= need + cost;
     }
 
+    /// <summary>How tall body i stands at its present size (m): STAND_H x M^(1/3) x (0.3 + 0.7 legs), the shoulder height
+    /// of a body on full legs (Garcia &amp; da Silva 2006), its belly's height on none. Water shallower than this leaves its
+    /// head and back in the air and its feet on the bottom: it stands and wades. Deeper, its trunk is under water, and a
+    /// body about as dense as water (Schmidt-Nielsen 1984) floats off its feet: it swims or paddles (2026-11-02).</summary>
+    public static float StandM(World w, int i) => K.STAND_H * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-4f)) * (0.3f + 0.7f * w.PLegs[i]);
+
+    /// <summary>Its leg length (hip height, m): WADE_LEG of its standing height. The depth against which wading's cost is
+    /// measured (World.WadeFactor).</summary>
+    public static float LegM(World w, int i) => K.WADE_LEG * StandM(w, i);
+
     /// <summary>
     /// What share of a food pool in a water cell body i reaches at its depth: plankton by the light where it is
-    /// (Beer-Lambert), attached algae and detritus on the bottom only. 1 on land and for every other pool.
+    /// (Beer-Lambert), attached algae and detritus on the bottom only. 1 on land and for every other pool. From the
+    /// surface (the share of the step it is not at depth) it reaches the bottom only where the water is no deeper than
+    /// it stands: a wader's head reaches its feet, a body floating at the surface reaches down about its own height
+    /// (a dabbling duck up-ends to about its length). Before 2026-11-02 every body at the surface reached the bottom
+    /// anywhere BOTTOM_BAND (2 m) deep, so a 0.3 kg wader grazed algae under 2 m of water it could not stand in.
     /// </summary>
     public static float Access(World w, int i, int cell, int pool)
-        => Access(w, cell, pool, w.Z[i], w.ZShare[i]);
+        => Access(w, cell, pool, w.Z[i], w.ZShare[i], StandM(w, i));
 
-    public static float Access(World w, int cell, int pool, float z, float share)
+    public static float Access(World w, int cell, int pool, float z, float share, float reachM = 0f)
     {
         if ((w.Cell[cell] & (byte)Realm.Water) == 0) return 1f;
         if (pool == (int)Pool.Phyto)
@@ -335,7 +349,7 @@ public static class Respiration
         if (pool == (int)Pool.Algae || pool == (int)Pool.Detritus)
         {
             float col = ColumnM(w, cell);
-            return (z >= col - K.BOTTOM_BAND ? share : 0f) + (col <= K.BOTTOM_BAND ? 1f - share : 0f);
+            return (z >= col - K.BOTTOM_BAND ? share : 0f) + (col <= reachM ? 1f - share : 0f);
         }
         return 1f;
     }

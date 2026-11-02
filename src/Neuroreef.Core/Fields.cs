@@ -156,6 +156,7 @@ public static class Fields
         float al0 = Al[i], ph0 = Ph[i];
         Al[i] = Math.Clamp(al0 + ga - da, 0f, 1f);
         Ph[i] = Math.Clamp(ph0 + gp - dp, 0f, 1f);
+        if (w.SeaProdA != null) { w.SeaProdA[i] += Al[i] - al0 + da; w.SeaProdP![i] += Ph[i] - ph0 + dp; }   // reporting only (EcoWatch)
         // over a deep floor E_RATIO of the plankton's deaths sinks as detritus; the rest is remineralised in the mixed layer
         float sink = deepFloor ? K.E_RATIO * dp : dp;
         De[i] += da + sink;

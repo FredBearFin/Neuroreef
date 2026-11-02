@@ -31,7 +31,7 @@ public sealed class Land
     static byte[] NatureNow()
     {
         var ms = new MemoryStream();
-        using (var bw = new BinaryWriter(ms)) { Nature.Write(bw); bw.Write(Nature.Ocean); bw.Write(Nature.Islands); }   // the ocean is in a checkpoint's header, not Nature.Write
+        using (var bw = new BinaryWriter(ms)) { Nature.Write(bw); bw.Write(Nature.Ocean); bw.Write(Nature.Islands); if (Nature.Ocean) bw.Write(Nature.OceanShallow); }   // the ocean is in a checkpoint's header, not Nature.Write
         return ms.ToArray();
     }
 

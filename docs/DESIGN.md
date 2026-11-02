@@ -2392,11 +2392,17 @@ decays at d_scent and diffuses at 10%.
 The owner: "an ocean mode ... where the whole world is underwater, the evolution is all underwater stuff, the map
 is in the ocean". `--ocean` (the setup screen's Ocean preset; `--islands X` keeps X of the map above the sea) builds
 the same deep-time relief as any world and drowns it. A world with land is unchanged bit for bit (the pinned hashes:
-StepLengthTests, ClimateTests); everything below is read only where `World.Ocean` is set.
+StepLengthTests, ClimateTests); everything below is read only where `World.Ocean` is set, except standing and
+wading (2026-11-02), which is physics of every world's water and re-pinned StepLengthTests' animal world.
 
-- **Seafloor.** The worked relief's elevations, ranked and mapped monotonely: the highest OCEAN_BANKS (25%) are
-  banks and reef flats from OCEAN_CREST (1 m) to OCEAN_SHELF (30 m), and below them the relief's own slopes fall to
-  basins Map.ReliefM deep (153 m on the 256 map, 433 m on 1024, 725 m on 2048). The elevation frame keeps 1 − SeaLevel
+- **Seafloor** (2026-11-02, a shelf sea). The worked relief's elevations, ranked and mapped monotonely, piecewise
+  linear in elevation between the ranks: the highest Nature.OceanShallow (OCEAN_BANKS, 5%; `--ocean-shallow S`) are
+  banks and reef flats from OCEAN_CREST (1 m) to OCEAN_SHELF (30 m), the next OCEAN_SHELF_SHARE (60%) is shelf down to
+  OCEAN_BREAK (130 m, the mean shelf break: Shepard 1963; Harris et al. 2014; at most 0.6 x ReliefM on a small map), and
+  the rest falls to basins Map.ReliefM deep (153 m on the 256 map, 433 m on 1024, 725 m on 2048). On the 256 map: 5.2%
+  at most 30 m, 0.6% under 5 m, 0.15% under 2 m. Before, the highest 25% were 1-30 m deep and the rest sloped straight
+  to the basins (a reef-flat world: real shelves are ~7% of the ocean, reef flats a sliver of them); `--ocean-shallow
+  0.25` still makes one. The elevation frame keeps 1 − SeaLevel
   = ReliefM m (SeaLevel 0.5), so every depth in metres reads as on land. Rivers, rain on land, lakes and ponds have no
   land cells to work on; the sea is the one standing water (one lake id), and nothing divides by a land area.
 - **Seawater.** Oxygen saturation with Weiss's (1970) salinity term at SALINITY 35 (~19% below fresh water at
@@ -2417,13 +2423,38 @@ StepLengthTests, ClimateTests); everything below is read only where `World.Ocean
   an input of the book. Reef flats (REEF_FLUSH_D, 10 m or shallower) are renewed by the open sea's surface water in
   REEF_RES (half a day; Lowe & Falter 2015), what they gain the open water loses (Ocean.Renew), and exchange with their
   neighbours at REEF_FLUSH. The sea's algal detritus rots at ROT_DETRITUS_SEA (0.05 /day; Enriquez, Duarte & Sand-Jensen 1993).
+- **Standing and wading** (2026-11-02, every world). A body stands only where the water is shallower than its
+  standing height, Respiration.StandM = STAND_H M^(1/3) (0.3 + 0.7 legs) (Garcia & da Silva 2006); deeper, being about
+  as dense as water, it floats off its feet and swims or paddles, at its swimming speed and swimming's cost
+  (World.GroundSpeed, Resolve.MoveCost, World.StandsIn). Standing, it wades at World.WadeFactor of land's cost a metre,
+  1 + WADE_DRAG (d / leg)^2 up to the hip (leg = WADE_LEG of its height), 2.5 there and deeper: about land's at the
+  ankle, 2-3x at the hip (Gleim & Nicholas 1989; Masumoto et al. 2004; Halsey 2016); at the same power its speed is
+  land's over that factor. From the surface a body reaches the bottom's food (algae, detritus) only where the water is no
+  deeper than it stands (Respiration.Access); before, anything at the surface reached the bottom anywhere under
+  BOTTOM_BAND (2 m), and every body waded at 0.6 x its land speed or better and land's cost to SHALLOW (2 m) whatever
+  its size: a 0.3 kg wader grazed a 1 m bank ten times deeper than its legs. A winged body that never flies pays its
+  wings' upkeep (COST_WING and the gut serving it) in its basal cost, carries the flight muscle as dead load on its legs
+  (WingGroundFactor), and gets no height, reach or wading speed from its wings (WadingTests).
 - **Life.** Every ancestor is a water ancestor (EvoSettings.AllWater). Animals use the existing depth physics
   (Respiration: depth preference, breath-hold dives, gills against the sea's oxygen). A flier eats landed (Resolve), so
   at sea the founding counts a flier's food only where it can land, swimming or wading (World.GroundAllows); a flier
   over water it cannot land in flies at its cost (Resolve.MoveCost, no landing duty) or, when it cannot, is in the water
   and swims, paddles or drowns by its organs. (Over lakes in a world with land the same founding rule is not applied:
   it would move the pinned default world.)
-- **Measured** (OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
+- **Measured on the shelf-sea floor** (2026-11-02, OceanTests, the 256 map, seed 3, no animals): reef flats (<5 m) ~100,
+  banks (5-30 m) ~175-185, slopes (30-80 m) ~150-155, open water (>80 m) ~86-87 gC/m2/yr. The banks fell from ~420:
+  at 5% they are scattered in nutrient-poor open water whose plankton and nitrate they exchange; 175 is a shelf sea's
+  (the North Sea's ~100-250, Joint & Pomroy 1993), below the 200-500 asserted before. Missing: the nitrate a real shelf
+  gets from the ocean's deep water at its break and tidal fronts. The ECO lines of an ocean world (EcoWatch) report
+  water NPP (plankton and benthic, by depth zone), grazing as a share of it, the swimmer / wader / flier census and the
+  share of animals in water that stand, and never divide by the land's zero area. A headless run on the new floor
+  (valley map, seed 3, random brains, 2,000 steps) went from 170 swimmers / 80 waders / 680 fliers at the start to
+  332 / 124 / 2,735 (the old floor: 775 / 1,269 / 279 at step 2,000); no animal in water stood (all of it is deeper than
+  any body), the "waders" being legged bodies that swim faster than they walk. The fliers are one lineage of 0.12 kg
+  winged plankton-eaters that dive to ~55 m and never fly (a diving petrel's niche), paying their wings' upkeep;
+  grazing rose to 67-78% of the water's NPP (microzooplankton graze ~60-70% of marine production: Calbet & Landry
+  2004). Not fixed: a flier's chase reach (Body.ReachM, from its top flight speed) is kept while it swims.
+- **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12
   of a unit on ~0.23 umol/L of nitrate, limited by what the flat fixes and recycles, and at a full unit (WATER_KG_M2,

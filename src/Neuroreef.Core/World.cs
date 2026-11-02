@@ -289,6 +289,9 @@ public sealed class World
     public readonly float[] Carb, CaveVoid, CaveDepth, CaveFlow, CaveSink;
     /// <summary>Nutrient in the deep water of a cell, below its mixed layer (an ocean world only, Ocean.cs; 0 elsewhere).</summary>
     public readonly float[] DeepN;
+    /// <summary>Reporting only (null unless a census sets them; never saved or hashed): the growth kept by an ocean world's
+    /// benthic algae and plankton in each cell since they were cleared, in pool units (Fields.SeaCell; EcoWatch, 2026-11-02).</summary>
+    public double[]? SeaProdA, SeaProdP;
     public readonly int[] CaveNext, CaveSpring;
     public readonly byte[] CaveKind;
     // ---- wetlands (Wetlands.cs, 2026-11-01): fixed at WaterCycle.Init: the topographic wetness index ln(a / tan b) and its
@@ -587,16 +590,21 @@ public sealed class World
     {
         if ((Cell[cell] & (byte)Realm.Water) != 0)
         {
+            // (2026-11-02) a body stands and wades only where the water is shallower than it stands (Respiration.StandM);
+            // wading costs WadeFactor of walking a metre, so at the same power it goes 1 / WadeFactor as fast. Deeper, it
+            // floats off its feet and swims (or paddles) at its swimming speed. Before, every body waded at 0.6 x its land
+            // speed or better, blended to its swimming speed over SHALLOW (2 m) whatever its size: a 0.3 kg wader walked
+            // on a 1 m bank, ten times deeper than its legs, at over half its land speed
             float depth = MathF.Max(0f, Depth[cell]);
-            float wade = MathF.Max(PVWater[i], 0.6f * PVLand[i]);
-            float sh = ShallowE, mix = Math.Clamp(depth / sh, 0f, 1f);
-            float v = wade + (PVWater[i] - wade) * mix;
+            float sh = ShallowE, v = PVWater[i];
             float maxDepth = MaxWaterDepth(i);
-            if (maxDepth > sh)
+            if (maxDepth > sh && depth > sh)
             {
                 float load = Math.Clamp((depth - sh) / (maxDepth - sh), 0f, 1f);
                 v *= 1f - 0.5f * load;
             }
+            float colM = depth / ElevPerM, stand = Respiration.StandM(this, i);
+            if (colM < stand) v = MathF.Max(v, PVLand[i] / WadeFactor(colM, K.WADE_LEG * stand));
             return v;
         }
         float vl = PVLand[i] * Footing(i, cell);
@@ -636,6 +644,20 @@ public sealed class World
     }
 
     public float Vmax(int i) => Vmax(i, FIdx(X[i], Y[i]));
+
+    /// <summary>Wading (2026-11-02): the cost per distance of walking in water colM deep on legs legM long, against walking
+    /// on land: 1 + WADE_DRAG x min(1, colM / legM)^2 (Gleim &amp; Nicholas 1989; Masumoto et al. 2004; Halsey 2016): ~1 at
+    /// the ankle, 2.5 at the hip and deeper.</summary>
+    public static float WadeFactor(float colM, float legM)
+    {
+        float r = MathF.Min(1f, MathF.Max(0f, colM) / MathF.Max(legM, 1e-3f));
+        return 1f + K.WADE_DRAG * r * r;
+    }
+
+    /// <summary>Is body i standing in this water cell (its feet on the bottom, the water shallower than it stands,
+    /// Respiration.StandM)? A body in deeper water floats: it swims or paddles. False on land.</summary>
+    public bool StandsIn(int i, int cell)
+        => (Cell[cell] & (byte)Realm.Water) != 0 && MathF.Max(0f, Depth[cell]) / ElevPerM < Respiration.StandM(this, i);
 
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 

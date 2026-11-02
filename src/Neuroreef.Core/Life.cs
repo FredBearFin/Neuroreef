@@ -193,10 +193,11 @@ public static class Life
                 if (w.Ocean && (Loco)w.PLoco[c] == Loco.Fly && !w.GroundAllows(c, cell)) continue;
                 // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
                 if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
-                breathCost += bc;   // ventilation, osmoregulation and buoyancy there (2026-11-01)
-                for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share);
+                breathCost += bc;
+                float standM = Respiration.StandM(w, c);   // ventilation, osmoregulation and buoyancy there (2026-11-01)
+                for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share, standM);
                 y += Fields.Yield(w, cell, reached); n++;
-                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share);   // kg
+                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share, standM);   // kg
                 if (Climate.On)
                 {
                     heatNeed += DayNeed(w, c, cell);
