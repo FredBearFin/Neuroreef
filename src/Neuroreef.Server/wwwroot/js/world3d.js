@@ -1217,7 +1217,10 @@ export class World3D {
       const gh = this._height(sel, selP[0], selP[1]);
       this.selRing.visible = this.mode !== 'ride';
       // the ring round its body, and (overview) a beam to find it from afar, as tall as a share of the view's distance
-      const camD = this.camera.position.distanceTo(c), rs = Math.max(sz * 1.5, camD * 0.012) * (1 + 0.08 * Math.sin(now / 200));
+      // (the distance to the animal itself: following, the view centre c is at height 0, and a true-size body's ring was
+      // as wide as the camera's height above sea level allowed)
+      const camD = this.camera.position.distanceTo(c), ringD = Math.hypot(this.camera.position.x - selP[0], this.camera.position.y - gh, this.camera.position.z - selP[1]);
+      const rs = Math.max(sz * 1.5, (this.mode === 'overview' ? ringD * 0.012 : 0)) * (1 + 0.08 * Math.sin(now / 200));
       this.selRing.position.set(selP[0], gh + Math.min(0.2, sz * 0.1), selP[1]); this.selRing.scale.setScalar(rs);
       this.selBeam.visible = this.mode === 'overview'; this.selBeam.position.set(selP[0], gh, selP[1]);
       this.selBeam.scale.set(camD * 0.004 / 0.06, camD * 0.25 / 30, camD * 0.004 / 0.06);
