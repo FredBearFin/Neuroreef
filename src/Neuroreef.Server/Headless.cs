@@ -396,14 +396,14 @@ public static class Headless
         var o = new StringBuilder();
         o.AppendLine();
         o.AppendLine($"OBSERVATION REPORT at step {w.Step:N0} (seed {w.Seed}). Counts are totals for the whole run.");
-        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS  LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease cold heat hunted suffoc drowned  TOP FOOD (energy)");
+        o.AppendLine("CLADE         ALIVE  CREATED  IMMIGR  CONCEIV  MATINGS    LAYS  STRIKES  KILLS   DEATHS: starve thirst killed parasit old fire lost disease cold heat hunted suffoc drowned  TOP FOOD (energy)");
         for (int s = 0; s < w.NS; s++)
         {
             if (!w.Sp[s].Used) continue;
             var sb = new StringBuilder();
             sb.Append(w.Sp[s].Name.PadRight(12)).Append(sim.ActiveCount[s].ToString().PadLeft(7)).Append(T.Created[s].ToString().PadLeft(9))
               .Append(T.Immigrants[s].ToString().PadLeft(8)).Append(T.Conceptions[s].ToString().PadLeft(9)).Append(T.Matings[s].ToString().PadLeft(9))
-              .Append(T.Lays[s].ToString().PadLeft(6)).Append(T.Strikes[s].ToString().PadLeft(9)).Append(T.Kills[s].ToString().PadLeft(7)).Append("          ");
+              .Append(T.Lays[s].ToString().PadLeft(8)).Append(T.Strikes[s].ToString().PadLeft(9)).Append(T.Kills[s].ToString().PadLeft(7)).Append("          ");
             for (int c = 0; c < Cause.N; c++) sb.Append(T.Deaths[s * Cause.N + c].ToString().PadLeft(c == 0 ? 6 : 7));
             int best = -1; double bv = 0, tot = 0;
             for (int p = 0; p < Pools.N; p++) { double v = T.Intake[s * Pools.N + p]; tot += v; if (v > bv) { bv = v; best = p; } }

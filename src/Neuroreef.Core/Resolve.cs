@@ -769,14 +769,17 @@ public static class Resolve
         return rew;
     }
 
-    /// <summary>Asexual reproduction (LAY): an asexual organism makes a litter of mutated copies of itself on its own.</summary>
+    /// <summary>Asexual reproduction (LAY): an asexual organism makes a litter of mutated copies of itself on its own.
+    /// (2026-11-02) T.Lays counts litters actually laid. It counted every LAY act, and an act that made no young (too
+    /// little reserve for one, or no slot at the memory limit) sets no cooldown, so a ready animal tried again every step:
+    /// z1 reported 1.49 million "lays" by Fazanax against 52,541 young conceived. Those acts cost nothing (Conceive charges
+    /// a young only once its slot exists), so no energy was lost or made; only the count was wrong.</summary>
     static float Lay(World w, int i, int cell)
     {
         if (w.PSexual[i] != 0) return 0;
         Decide.Metrics?.Allow(P.LAY);
-        w.T.Lays[w.Spc[i]]++;
         float reward = Conceive(w, i, -1, w.PLitter[i]);
-        if (reward > 0f) Decide.Metrics?.Apply(P.LAY);
+        if (reward > 0f) { Decide.Metrics?.Apply(P.LAY); w.T.Lays[w.Spc[i]]++; }
         return reward;
     }
 

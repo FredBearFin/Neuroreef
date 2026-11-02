@@ -13,7 +13,9 @@
 //   det  = PG_DETECT + (1 - PG_DETECT) q                how well the immune system sees it
 //   E'   = E + PG_RISE imm det L/(L + PG_HALF) (PG_NAIVE + E) - PG_E_DECAY E   clonal expansion
 //   L'   = L exp(r fit (1 - L) - PG_KILL E det)         r: replication less persistence and breadth costs
-//   D'   = D + PG_DMG toxin mode L - PG_REPAIR reserve  death when D >= 1
+//   D'   = D + PG_DMG (toxin mode + PG_EXPLOIT r/PG_REP_HI) L - PG_REPAIR reserve   death when D >= 1
+// Replication (r) thus raises both transmission (through the load it sheds) and harm (the tissue it consumes and the
+// load the toxin acts on): the transmission-virulence trade-off (Anderson & May 1982; Alizon et al. 2009).
 // Shedding PG_SHED L mode (1 + PG_TOX_SHED toxin) is split by the route genes: contact (to animals in reach, DECIDE),
 // the ground of the host's cell, its dung, and water (the cell's or a neighbouring water cell's). The reservoir
 // (World.ResLoad) decays by the strain's persistence, faster on dry land, and runs downstream along rivers.
@@ -262,7 +264,8 @@ public static class Pathogens
         // clonal expansion (Antia, Levin & May 1994); the bound of 10 is a numerical guard only (killing at E = 10 is far
         // above any strain's growth, so a response clears its strain well before it)
         w.ImmEff[i] = MathF.Min(10f, E + K.PG_RISE * imm * det * L / (L + K.PG_HALF) * (K.PG_NAIVE + E) - K.PG_E_DECAY * E);
-        float D = MathF.Max(0f, w.PgDamage[i] + K.PG_DMG * tox * mode * L - K.PG_REPAIR * reserve);
+        // tissue damage: the toxin it expresses and the host tissue its replication consumes (PG_EXPLOIT, 2026-11-02), against repair
+        float D = MathF.Max(0f, w.PgDamage[i] + K.PG_DMG * (tox * mode + K.PG_EXPLOIT * r * (1f / K.PG_REP_HI)) * L - K.PG_REPAIR * reserve);
         w.PgDamage[i] = D;
         if (D >= 1f) { Resolve.Die(w, i, Cause.Disease, -1); return true; }
         if (L1 < K.PG_CLEAR)

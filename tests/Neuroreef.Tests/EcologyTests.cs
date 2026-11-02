@@ -535,6 +535,44 @@ public class EcologyTests
         Assert.True(w.T.Lays[0] >= 1);
     }
 
+    [Fact] // 2026-11-02 (z1: 1.49 million "lays" against 52,541 young): an egg costs its mother its whole energy (its reserve
+           // and its tissue) and nothing is made from nothing; a LAY that makes no young costs nothing and is not counted as a
+           // litter; a mother lays one litter, then waits her cooldown
+    public void EggsCostTheirFullEnergyAndOnlyLittersLaidCount()
+    {
+        var (w, a, b) = Pair(false, false);
+        Life.FreeSlot(w, b);   // a alone
+        // big eggs and the lowest breeding condition, so a mother can be ready to breed yet unable to afford an egg
+        w.Genome[a * G.LEN + G.B_BREEDE] = -127; w.Genome[a * G.LEN + G.B_BIRTH] = 127; Body.Express(w, a);
+        float childE = K.F_BIRTH * K.C_EMAX * w.PM[a] * w.PBirth[a];
+        float tissue = Resolve.TissueCost(w.PBirth[a], w.PM[a]);
+        // too little reserve for even one egg (but above its breeding condition): nothing happens, nothing is paid
+        float poor = w.PReadyE[a] * w.EmaxOf(a) + 1e-4f;
+        Assert.True(poor < childE + tissue + 0.15f * w.EmaxOf(a), "the test needs a mother ready to breed but unable to afford an egg");
+        w.Energy[a] = poor; w.Gut[a] = 0f;
+        Act(w, a, P.LAY);
+        Resolve.Run(w, 1, 0);
+        Assert.Equal(0, Count(w, St.Egg));
+        Assert.Equal(0, w.T.Lays[0]);
+        Assert.Equal(0, w.T.Conceptions[0]);
+        Assert.Equal(0f, w.Cooldown[a]);
+        // fed: a litter, each egg paid in full (its reserve, which it carries, and its tissue at TISSUE_E / GROWTH_EFF)
+        w.Energy[a] = w.EmaxOf(a); w.Cooldown[a] = 0;
+        float before = w.Energy[a]; double spent0 = w.T.SpendRepro[0];
+        Act(w, a, P.LAY);
+        Resolve.Run(w, 1, 0);
+        int eggs = Count(w, St.Egg);
+        Assert.True(eggs >= 1 && eggs <= w.PLitter[a], $"eggs {eggs}, litter {w.PLitter[a]}");
+        Assert.Equal(1, w.T.Lays[0]);
+        Assert.Equal(eggs, w.T.Conceptions[0]);
+        Assert.Equal(eggs * (childE + tissue), w.T.SpendRepro[0] - spent0, 4);
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] == St.Egg) Assert.Equal(childE, w.Energy[i], 5);
+        Assert.True(before - w.Energy[a] >= eggs * (childE + tissue) - 1e-4f, $"mother paid {before - w.Energy[a]} for {eggs} eggs of {childE + tissue}");
+        Assert.True(w.Cooldown[a] >= w.PCool[a] - 1f, $"cooldown {w.Cooldown[a]} of {w.PCool[a]}");   // set at laying, one step counted down
+        // ready again only after the cooldown: one litter per PCool steps at most (~7 a year at 1 kg)
+        Assert.False(Decide.Ready(w, a));
+    }
+
     [Fact] // NR-334: there is no species check; mating fails more the more two genomes differ, and costs are still paid
     public void DistantGenomesCannotProduceYoung()
     {

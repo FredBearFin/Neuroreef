@@ -64,6 +64,70 @@ public class PathogenTests
         Assert.True(Pathogens.Cross(w, a, HostKey(w, a), 0) > 0.99f);
     }
 
+    /// <summary>Run host a, fed (a full reserve, so it repairs at its best), until it dies or clears its infection or
+    /// steps run out. Returns the step it died at (-1 if it lived), and the peak damage.</summary>
+    static (int died, float peakD) Course(World w, int a, int steps)
+    {
+        var act = new int[w.NS]; float peakD = 0;
+        for (int t = 0; t < steps; t++)
+        {
+            w.Energy[a] = w.EmaxOf(a);
+            Life.Run(w, act); w.Step++;
+            Array.Clear(w.ResLoad);
+            if (w.StageOf[a] == St.Dead) return (t, 1f);
+            peakD = MathF.Max(peakD, w.PgDamage[a]);
+            if (w.PgLoad[a] <= 0f) break;
+        }
+        return (-1, peakD);
+    }
+
+    [Fact] // 2026-11-02 (z1: 1.4 million infections, 0 deaths by disease): harm can kill. A fast-growing, full-toxin strain kills
+           // a naive host of ordinary immunity in days, as untreated cholera or a virulent myxoma strain does, before its
+           // primary immune response (~4-7 days) can control it
+    public void VirulentStrainKillsANaiveHost()
+    {
+        using var sim = new Simulation(4096, 87, 1, empty: true);
+        var w = sim.W;
+        int a = Animal(w, 7);
+        w.PImmune[a] = 0.3f;   // the immunity gene z1's hosts evolved (0.29)
+        Pathogens.Infect(w, a, Gene(rep: 255, tox: 255, qs: 0), 0, HostKey(w, a), 0, false);
+        var (died, _) = Course(w, a, 400);
+        Assert.True(died >= 0, "a full-toxin strain at the fastest growth did not kill a naive host");
+        float days = died / K.STEPS_PER_DAY;
+        Assert.True(days > 1f && days < 7f, $"died after {days:F1} days");
+        Assert.Equal(1, w.T.Deaths[0 * Cause.N + Cause.Disease]);
+        // the same host remembering this antigen meets a recalled response at once and lives
+        int b = Animal(w, 8);
+        w.PImmune[b] = 0.3f;
+        Array.Copy(HostKey(w, b), 0, w.ImmKey, b * G.NMHC, G.NMHC); w.ImmMem[b] = 1f;
+        Pathogens.Infect(w, b, Gene(rep: 255, tox: 255, qs: 0), 0, HostKey(w, b), 0, false);
+        Assert.True(Course(w, b, 400).died < 0, "a host immune to the strain died of it");
+    }
+
+    [Fact] // 2026-11-02: virulence goes with replication (Anderson & May 1982; Alizon et al. 2009). Without toxin, a fast
+           // replicator harms its host (it consumes tissue) and a slow one does not; with the same toxin, faster growth does
+           // more harm; a slow, stealthy strain is harmless, as commensals are
+    public void HarmRisesWithReplication()
+    {
+        float Peak(int rep, int tox, int qs)
+        {
+            using var sim = new Simulation(4096, 88, 1, empty: true);
+            var w = sim.W;
+            int a = Animal(w, 9);
+            w.PImmune[a] = 1f;   // a strong immune response: no strain here kills it, so the peaks can be compared
+            Pathogens.Infect(w, a, Gene(rep, tox, qs), 0, HostKey(w, a), 0, false);
+            var (died, peak) = Course(w, a, 600);
+            Assert.True(died < 0, $"rep {rep} tox {tox} killed a host of full immunity");
+            return peak;
+        }
+        float fastClean = Peak(255, 0, 0), slowClean = Peak(0, 0, 0);
+        Assert.True(fastClean > 0.02f, $"a toxin-free strain at the fastest growth did no harm ({fastClean})");
+        Assert.Equal(0f, slowClean);
+        float fastTox = Peak(200, 128, 0), slowTox = Peak(60, 128, 0);
+        Assert.True(fastTox > 2f * slowTox + 0.01f, $"with half toxin: fast growth peak damage {fastTox}, slow {slowTox}");
+        Assert.True(Peak(0, 255, 255) < 0.01f, "a slow, stealthy strain harmed its host");
+    }
+
     [Fact] // antigen-specific immunity: memory of one antigen protects against it, not against a drifted one of equal fit
     public void AntigenDriftEscapesOldImmunity()
     {
