@@ -2469,6 +2469,19 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   few hundred metres in hours, where a real filter feeder cruises at about a body length a second all the while it
   feeds, so the water swept (and paid for) is one to two orders of magnitude below a real one's. That is the open
   question, not the clearance physics.
+- **The feeding bout** (2026-11-02, third round; DivingTests). An eating step in water has a bout of FEED_DAY (0.4) of
+  the step's time less its travel time, cruised back and forth within the patch at CRUISE_BL (1) body lengths a second
+  x its propulsion (Videler 1993; Sato et al. 2007), not moving the animal and paid at swimming's cost of transport
+  (Respiration.FeedCruiseM, CruiseCost). It sweeps plankton (PlanktonKg) and crops the bottom's algae and detritus
+  along its path at its mouth's width (BottomKg; Spalinger & Hobbs 1992), where the bottom was bitten without limit.
+  Founding uses the same model (algae; detritus is not yet capped there). Measured: a 2 kg finned body (cube-shaped,
+  0.126 m) cruises 0.13 m/s, ~530 m an eating step, and takes ~1.2 g of plankton a step at 0.3 of a unit: a day of eating
+  gives 0.05 x its basal cost on that test genome's diet (0.19; ~0.2 x at a specialist's 0.7). The valley run (seed 3)
+  founded 6 lineages and fell to 16 animals of one by step 2,000 (0 swimmers, 16 waders, 0 fliers); founding on the
+  256 map gave 0, 13, 6, 9 and 0 lineages on seeds 1-5 (FoundingAtSeaGivesSeveralWaterLineages fails on seeds 1 and 5).
+  What holds intake down, in the model's own terms: bodies are cubes (BODY_L_M x M^(1/3) unless the length gene
+  stretches them, so a 2 kg body is 0.13 m long where a 2 kg fish is ~0.5 m and cruises four times as fast), and the
+  basal cost is a mammal's (C_BASAL, Kleiber) at full warmth without a climate, where fishes run at ~1/10 of it.
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12

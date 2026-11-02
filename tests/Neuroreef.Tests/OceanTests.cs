@@ -223,6 +223,7 @@ public class OceanTests
     {
         string? all = Environment.GetEnvironmentVariable("OCEAN_PROBE");
         uint[] seeds = all == "1" ? new uint[] { 1, 2, 3, 4, 5 } : new uint[] { 1 };
+        var counts = new System.Collections.Generic.List<int>();
         foreach (uint seed in seeds)
         {
             int lineages = Sea(() =>
@@ -249,8 +250,10 @@ public class OceanTests
                 _out.WriteLine($"seed {seed}: {k} lineages of {w.Evo.AncestorsWater} water ancestors, {w.AliveCount} animals");
                 return k;
             });
-            Assert.True(lineages >= 3, $"seed {seed}: {lineages} lineages");
+            counts.Add(lineages);
         }
+        // every seed is founded before any is judged, so a probe reports them all (2026-11-02)
+        for (int k = 0; k < seeds.Length; k++) Assert.True(counts[k] >= 3, $"seed {seeds[k]}: {counts[k]} lineages (all: {string.Join(", ", counts)})");
     }
 
     [Fact] // --ocean-shallow: a reef-flat world is still a setting (2026-11-02): its share of the floor on banks 1-30 m deep

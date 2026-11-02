@@ -49,7 +49,11 @@ public class StepLengthTests
         // plankton is taken from the water a body sweeps (Respiration.PlanktonKg; was the whole column's at a bite), dives
         // are paid, and wings stroke under water (Body.Propulsor). Every world's lakes and every chase moved. It was
         // 9027147687691935544 before.
-        Assert.Equal(2011528924806897781UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-02 (third round): a feeding bout in water cruises within its patch (Respiration.FeedCruiseM:
+        // CRUISE_BL lengths a second for FEED_DAY of the step), sweeping plankton and cropping the bottom's algae and
+        // detritus by its gape (BottomKg; the bottom was bitten without an area limit), and pays swimming's cost for it;
+        // this world's lake and river feeders moved. It was 2011528924806897781 before.
+        Assert.Equal(3283118220941252680UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time
