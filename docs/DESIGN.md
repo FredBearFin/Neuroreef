@@ -1789,6 +1789,8 @@ identification metadata and an optional overlay. Shared primitive geometry, bila
 and bounded gene ranges remain developmental constraints, not unrestricted topology evolution.
 The expanded layout uses gene-bank/checkpoint version 9 and AGENTS format 6.
 
+**Open-ended bodies (prototype, 2026-11-02).** The labelled organ genes above can only tune organs we designed. docs/BODYPLAN.md designs a variable-length genome of segment and appendage modules (duplication, divergence, deletion) whose capabilities come from physics applied to the developed morphology, with a working prototype in `src/Neuroreef.Core/Morph/` that is not wired into the live simulation.
+
 Thirst rises only on land cells, by C_THIRST·M^EXP_THIRST·(1 − WATER_ECON·g)·(1 − SOIL_WATER·moisture),
 where g is the water-economy gene: any organism in water draws water from it, and damp ground dries an
 organism out more slowly (Revision G). Eating relieves thirst by K_FOODWATER·(bite·water content + MET_WATER·
