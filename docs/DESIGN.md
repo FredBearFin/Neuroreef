@@ -2219,7 +2219,7 @@ of every turnover), carrion and dung returned 0.7 per land unit's kilogram whate
 - *Inputs*: weathering and deposition, fixation, founders' bodies (Book.FOUND). *Outputs*: what a cell holds above
   N_MAX (leaching and denitrification), FIRE_N_LOSS 0.8 of burned biomass's N (Raison 1979). *Debt*: what had to be made
   because a store had too little (an animal's growth or birth beyond its gut and its cell), counted
-  (NutrientBalanceTests: ~1.5e-5 of the total over 300 steps). Book.Open = false closes the world (tests).
+  (NutrientBalanceTests: 1-3e-5 of the total over 300 steps). Book.Open = false closes the world (tests).
 
 ### 10.5 Fire (NR-309)
 

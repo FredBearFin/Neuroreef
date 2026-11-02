@@ -32,7 +32,7 @@ public class NutrientBalanceTests
     // ~1e-7 of the total over 300 steps)
     static double Tol(Nutrients.Totals t) => 1e-6 * t.All;
     // debt: nutrient made because a newborn's or a growing body's need exceeded its mother's gut and the soil or water of
-    // its cell (measured 2026-11-02: ~1.5e-5 of the total over 300 steps on this world, all from animals). It is counted,
+    // its cell (measured 2026-11-02: 1.5-3e-5 of the total over 300 steps on this world, all from animals). It is counted,
     // not hidden; this bounds it
     static double DebtMax(Nutrients.Totals t) => 1e-4 * t.All;
 
