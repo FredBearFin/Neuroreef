@@ -254,7 +254,9 @@ public static class Physics
                 capEta += cap * ProfileEta(2f * a.Len / a.Chord, flat);
             }
         }
-        if (m.MaxW > m.MaxH) p.LiftArea += 0.5f * m.Length * m.MaxW * (1f - m.MaxH / m.MaxW);   // a flattened body lifts too
+        // a flattened body lifts too, segment by segment (an earlier whole-body MaxW against MaxH, taken from different
+        // segments, let a wide flat head on a tall narrow trunk "lift" along the whole length; docs/BODYPLAN.md §8)
+        foreach (var s in m.Segs) if (s.W > s.H) p.LiftArea += 0.5f * s.L * s.W * (1f - s.H / s.W);
         p.Span = m.MaxW + 2f * maxReach;
         // axial undulation: the trunk's own muscle, if the trunk can bend (Lighthill 1975: thrust from the trailing depth)
         float flex = Flex(m), ax = 0f;
@@ -649,6 +651,10 @@ public static class Physics
         float predBite = env.PredBite * MathK.Pow(sizeK, 2f / 3f);
         float predSpeed = env.PredSpeed * MathK.Pow(sizeK, 1f / 6f);
         float predR = Phys.PRED_R * MathK.Cbrt(sizeK);
+        // the predators that hunt a cluttered habitat are those that can manoeuvre in it (Webb 1984): their turning radius is
+        // at most half the clutter gap, whatever their size. Without this, a 100 kg predator scaled to a 10 kg prey could not
+        // follow it between 0.3 m boulders, and sea-floor bodies ran to the 10 kg cap (docs/BODYPLAN.md §8)
+        if (env.Clutter > 0f) predR = MathF.Min(predR, 0.5f * env.Clutter);
 
         var sp = Swim(m, rho, env.Nu);
         var wp = Walk(m, rho);

@@ -273,7 +273,10 @@ public static class Development
         }
         m.SkinThick = m.SkinArea > 0f ? skinT / m.SkinArea : 0f;
         m.Rigidity = m.ExoMass > 0f ? rigW / m.ExoMass : 0f;
-        m.FrontalArea = MathF.PI / 4f * m.MaxW * m.MaxH;
-        m.Fineness = m.Length / MathF.Max(1e-6f, MathK.Sqrt(m.MaxW * m.MaxH));
+        // the largest cross-section of any one segment (MaxW x MaxH from different segments overstated it)
+        float wh = 0f;
+        foreach (var s in m.Segs) wh = MathF.Max(wh, s.W * s.H);
+        m.FrontalArea = MathF.PI / 4f * wh;
+        m.Fineness = m.Length / MathF.Max(1e-6f, MathK.Sqrt(wh));
     }
 }
