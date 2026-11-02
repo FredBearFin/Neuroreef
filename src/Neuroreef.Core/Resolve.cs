@@ -366,6 +366,12 @@ public static class Resolve
             if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
             // a core below freezing is a cold shortfall it cannot make up (2026-11-01: before, a cold-blooded body took any frost)
             shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core);
+            // shivering and non-shivering heat are aerobic: a body makes no more heat than its oxygen uptake leaves room for
+            // above its other needs; the rest is a cold shortfall, not an oxygen debt (2026-11-02: an endotherm at extreme
+            // cold "suffocated" when its heat demand outran its lungs; the summit metabolism of cold-exposed mammals is set
+            // by oxygen delivery, and beyond it the body cools: Hayes & Chappell 1990, Wang 1978)
+            float aer = MathF.Max(0f, breath.Uptake - (basal + moveCost) - Respiration.Cost(breath, basal + moveCost + thermo));
+            if (thermo > aer) { shortCold += thermo - aer; thermo = aer; }
             w.TOp[i] = top;
             w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
             // what it cannot cover strains it; a body recovers from a little strain each step
@@ -433,7 +439,10 @@ public static class Resolve
         {
             if (dg != null && hurt4 > 1e-6f) dg.StarveHurt[dgG]++;
             if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
-            Die(w, i, Cause.Starve, -1); return;
+            // a body whose reserve ran out because it was burning it against the cold died of the cold: hypothermia
+            // follows the exhaustion of the fuel for heat (2026-11-02; with the gut's own upkeep a body at -250 C spent
+            // its whole reserve in one step before its strain reached 1, and was counted starved)
+            Die(w, i, shortCold > 0f && thermo > basal + moveCost + grow ? Cause.Cold : Cause.Starve, -1); return;
         }
         if (w.Thirst[i] >= 1f) { Die(w, i, Cause.Thirst, -1); return; }
         if (w.ThermStrain[i] >= 1f) { Die(w, i, shortCold > 0f ? Cause.Cold : Cause.Heat, -1); return; }
