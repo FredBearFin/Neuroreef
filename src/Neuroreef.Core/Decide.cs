@@ -282,7 +282,7 @@ public static class Decide
         if ((o1.J >= 0 || o1.J == Player.Slot) && meatEff > 0)
         {
             // value of eating it: a bite of its edible tissue, on the same scale as the plants
-            float preyGain = meatEff * K.RHO_MEAT * MathF.Min(bite, Resolve.CarcassKg(o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS, 0f));   // its edible tissue (2026-11-01)
+            float preyGain = meatEff * K.RHO_MEAT * MathF.Min(bite, Resolve.CarcassKg(o1.J >= 0 ? w.ApparentMass(o1.J) : w.Player!.Mass, 0f));   // its edible tissue (2026-11-01)
             float prey = Worth(preyGain, need);
             // (2026-11-01) prey and plants are compared by the energy a bite of each gives, and the way to food leads to
             // prey only for what it would give beyond the food underfoot. Both were compared as worths, which saturate:
@@ -781,15 +781,15 @@ public static class Decide
         f[k + 4] = active ? w.Carnivory(j) : 0f;
     }
 
-    /// <summary>EXPLORE: the same raw senses of the person (Player.cs): a 70 kg, armed omnivore moving as the console moves it.</summary>
+    /// <summary>EXPLORE: the same raw senses of the person (Player.cs): an armed omnivore of the person's mass (70 kg, or the console's player size: Player.Resize) moving as the console moves it.</summary>
     static void OtherPlayer(World w, int i, Near o, float R, float vmax, float fx, float fy, float myMass, Span<float> f, int k)
     {
         var pl = w.Player!;
         f[k] = 1f - o.D / R;
-        f[k + 1] = MathK.Tanh(MathK.Log(Player.MASS / MathF.Max(myMass, 1e-4f)));
+        f[k + 1] = MathK.Tanh(MathK.Log(pl.Mass / MathF.Max(myMass, 1e-4f)));
         float rvx = pl.Speed * MathK.Cos(pl.Heading) - w.Speed[i] * fx, rvy = pl.Speed * MathK.Sin(pl.Heading) - w.Speed[i] * fy;
         f[k + 2] = Math.Clamp(-(rvx * o.Dx + rvy * o.Dy) / MathF.Max(o.D, 1e-3f) / MathF.Max(vmax, 0.05f), -1f, 1f);
-        f[k + 3] = MathK.Tanh(Player.STRIKE * MathK.Cbrt(Player.MASS / MathF.Max(myMass, 1e-4f)));
+        f[k + 3] = MathK.Tanh(Player.STRIKE * MathK.Cbrt(pl.Mass / MathF.Max(myMass, 1e-4f)));
         f[k + 4] = Player.MEAT;
     }
 
@@ -809,10 +809,10 @@ public static class Decide
         float close = 1f - d / R;
         crowd += close; otherSum += close;
         if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
-        if (Player.MASS > o2Mass) { o2Mass = Player.MASS; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
+        if (pl.Mass > o2Mass) { o2Mass = pl.Mass; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
         float reachJ = StrikeReach(reach, vmax, pl.MassCbrt);
         if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
-        if (d <= reachJ && Player.MASS > strikeBigMass) { strikeBigMass = Player.MASS; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
+        if (d <= reachJ && pl.Mass > strikeBigMass) { strikeBigMass = pl.Mass; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
     }
 
     public static float Weakness(World w, int j)

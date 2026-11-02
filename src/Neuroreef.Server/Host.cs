@@ -459,7 +459,8 @@ public static class Host
             var p = h.W.Player;   // the live world's, or the watched branch's
             if (p == null) return null;
             return new { present = p.Present, hp = MathF.Round(p.Hp, 1), maxHp = Player.MAX_HP, deaths = p.Deaths, kills = p.Kills, hits = p.Hits, x = p.X, y = p.Y,
-                vehicle = p.Vehicle, alt = MathF.Round(p.AltM), blasts = p.Blasts, blastKills = p.BlastKills, fires = p.FiresStarted };
+                vehicle = p.Vehicle, alt = MathF.Round(p.AltM), blasts = p.Blasts, blastKills = p.BlastKills, fires = p.FiresStarted,
+                scale = MathF.Round(p.Scale, 4), mass = MathF.Round(p.Mass, 3) };
         }
 
         async Task Receive(CancellationToken ct)
@@ -548,10 +549,13 @@ public static class Host
                             // VEHICLES: the vehicle it is in (a spawned kind, or none) and its height above the ground (m)
                             string? veh = e.TryGetProperty("veh", out var pv) && pv.ValueKind == JsonValueKind.String ? pv.GetString() : null;
                             float alt = e.TryGetProperty("alt", out var pa) && pa.ValueKind == JsonValueKind.Number ? (float)pa.GetDouble() : 0f;
+                            // the person's size (the console's player size; ICD §3): height factor and mass; absent, unchanged
+                            float psc = e.TryGetProperty("scale", out var ps) && ps.ValueKind == JsonValueKind.Number ? (float)ps.GetDouble() : float.NaN;
+                            float pms = e.TryGetProperty("mass", out var pmv) && pmv.ValueKind == JsonValueKind.Number ? (float)pmv.GetDouble() : float.NaN;
                             if (!float.IsFinite(px) || !float.IsFinite(py) || !float.IsFinite(ph)) break;
                             h.PlayerSeen = DateTime.UtcNow; _exploring = true;
                             double now = Wall.Elapsed.TotalSeconds;
-                            h.PostView(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Board(veh, alt); p.Place(px, py, ph, run); });
+                            h.PostView(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Resize(psc, pms); p.Board(veh, alt); p.Place(px, py, ph, run); });
                             break;
                         }
                         case "vehicle":

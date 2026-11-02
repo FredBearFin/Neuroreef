@@ -6,13 +6,28 @@
 // true size and the animals at Explore's own creature size (js/scale.js: default x10, true size a click away; it was forced to x1
 // until 2026-11-02, and 5-30 cm animals in the grass were all but invisible: 'all the animals just disappear'). The person's
 // eye is 1.7 m above the ground; it walks at 1.5 m/s and runs at 5 m/s (Ctrl held, or F, multiplies by 10: the map is
-// many km across). It stands on the drawn ground (world3d.groundWater), wades slowly through shallow water and swims at
+// many km across). Those are a full-sized person's: since 2026-11-02 the person has a size (below) and all of them follow
+// it. It stands on the drawn ground (world3d.groundWater), wades slowly through shallow water and swims at
 // the surface of deep water, and the map wraps at its edges as the animals' does.
 //
 // The person is in the simulation: its place and heading go to the server ~5 times a second ('player'), where the
 // animals sense it as a 70 kg armed omnivore and predators may strike it (Player.cs). Weapons aim here, against the
 // creatures as drawn, and the server checks and applies each hit ('hit' -> Player.Hit). Animals move in sim steps;
 // the person moves in real time, so at a few steps a second they jump while it walks.
+//
+// The person's size (2026-11-02, the owner: "maybe in explore WE are too big?"): a 1.7 m person's eye is 1.6 m up and
+// 5-30 cm animals are specks in the grass at its feet. Three sizes (the Z key, the menu in the size box):
+//   Human: 1.7 m, 70 kg;
+//   Animal-sized (the default): as tall as the typical (median) animal is long, and as heavy as it is: the animals look
+//     as big as they would to a peer;
+//   Tiny: 5 cm, 30 g (a mouse).
+// ps (the height against 1.7 m) scales everything that is the person's: its eye, its reach, its weapons' ranges and
+// flights, its vehicles, the near plane, and how near it stands to an animal it is put beside. upm below is view
+// units per metre OF THE PERSON (the world's metres x ps), so the code reads as for a full-sized person; upmT is the
+// world's own. It walks Froude-scaled (speed as the square root of its size: an animal-sized person ~0.4 m/s walking).
+// The server gets its size ('player' scale and mass, ICD §3): the animals sense, strike and would eat a body of that
+// mass, and it checks the reach of each hit and blast with the same scale (Player.Resize). Damage and health are not
+// scaled.
 
 import * as THREE from 'three';
 import { RELIEF } from '../world3d.js';
@@ -25,6 +40,9 @@ const SWIM_DEPTH_M = 1.3;     // deeper than this the person swims, head at the 
 const SEND_MS = 200;          // place updates to the server
 const ARROWS = 30;
 const LOOK = 0.0022;          // radians per pixel of mouse movement
+const SIZE_KEY = 'nr-player-size';
+export const PLAYER_SIZES = ['animal', 'human', 'tiny'];
+const SIZE_NAME = { human: 'human (1.7 m)', animal: 'animal-sized', tiny: 'tiny (a mouse)' };
 
 export class Explore {
   constructor(world, link, meta, view) {
@@ -45,17 +63,66 @@ export class Explore {
     this.lastSend = 0; this.lastT = 0; this.state = null; this.deathsSeen = -1; this.hpSeen = this.maxHp;
     this.killed = 0; this.targetT = 0;
     this.camWas = null;
+    // the person's size (above): ps, its height against 1.7 m; pmass, kg
+    this.sizeMode = 'animal'; try { const v = localStorage.getItem(SIZE_KEY); if (PLAYER_SIZES.includes(v)) this.sizeMode = v; } catch { /* private mode */ }
+    this.ps = 1; this.pmass = 70; this.heightM = EYE_M;
     world.explore = this;
     this._wire();
     this.vehicles = new Vehicles(this, view);   // VEHICLES hook (its keys are caught ahead of ours)
   }
 
-  get upm() { return this.world.scale.upm; }
+  /** View units per metre of the person's own size (the world's x ps): its eye, reach, weapons and vehicles. */
+  get upm() { return this.world.scale.upm * this.ps; }
+  /** View units per true metre (the world's). */
+  get upmT() { return this.world.scale.upm; }
+
+  /** The typical living animal: its median true length (m) and mass (kg); a 1 kg animal when there are none. */
+  _typical() {
+    const w = this.world, L = [], M = [];
+    for (const [serial, e] of w.agents) {
+      if (e.stage === 0 || w.dead.has(serial) || !e.mass) continue;
+      const l = w.lenM.get(serial); L.push(l > 0 ? l : w.scale.lengthM(e.mass)); M.push(e.mass);
+    }
+    if (!L.length) return { L: w.scale.lengthM(1), M: 1 };
+    const med = (a) => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
+    return { L: med(L), M: med(M) };
+  }
+
+  /** Work out ps and pmass for a size ('human', 'animal', 'tiny'). */
+  _applySize(mode = this.sizeMode) {
+    this.sizeMode = mode;
+    let h = EYE_M, mass = 70;
+    if (mode === 'tiny') { h = 0.05; mass = 0.03; }
+    else if (mode === 'animal') { const t = this._typical(); h = Math.min(EYE_M, Math.max(0.03, t.L)); mass = Math.min(70, Math.max(0.01, t.M)); }
+    this.heightM = h; this.ps = h / EYE_M; this.pmass = mass;
+  }
+
+  /** Change the person's size (Z, the menu), remembered. Not while driving (the vehicle is built to the size it has). */
+  setSize(mode) {
+    if (!PLAYER_SIZES.includes(mode)) return false;
+    if (this.active && this.vehicles.driving) { this.hud.message('get out first (E)', true, 1200); return false; }
+    try { localStorage.setItem(SIZE_KEY, mode); } catch { /* private mode */ }
+    this._applySize(mode);
+    if (this.active) {
+      this.vehicles.rescale();
+      this.setView(); this._setWeapon(this.cur); this._standOn(true); this._send(true);
+      this.hud.message(`you are <b>${this.sizeText()}</b><br><span style="font-size:11px">Z: human · animal-sized · tiny</span>`, false, 2200);
+    }
+    this.onSize && this.onSize();
+    return true;
+  }
+
+  /** The size in words, with its height. */
+  sizeText() {
+    const h = this.heightM, hs = h >= 1 ? `${h.toFixed(2)} m` : `${Math.round(h * 100)} cm`;
+    return this.sizeMode === 'human' ? `human · ${hs}` : this.sizeMode === 'tiny' ? `tiny · ${hs}` : `animal-sized · ${hs}, ${this.pmass < 1 ? Math.round(this.pmass * 1000) + ' g' : this.pmass.toFixed(this.pmass < 10 ? 1 : 0) + ' kg'}`;
+  }
 
   // ------------------------------------------------------------------ entering and leaving
   /** Enter Explore. near: the serial of the animal that was selected or followed (0: none). */
   enter(near = 0) {
     const w = this.world, c = w.controls.target, cam = w.camera;
+    this._applySize(); this.vehicles.rescale(); this.setView();   // the person's size (animal-sized: the animals now)
     this.camWas = { pos: cam.position.clone(), target: c.clone(), fov: cam.fov, near: cam.near, far: cam.far };
     // start where the overview was looking, facing the way the camera faced ...
     this.pos.set(((c.x % w.W) + w.W) % w.W, 0, ((c.z % w.W) + w.W) % w.W);
@@ -76,7 +143,7 @@ export class Explore {
     w.scene.add(cam);   // the weapon in hand is a child of the camera
     this._setWeapon(this.cur);
     this.hud.show(true);
-    this.hud.message('EXPLORE · click the view to look with the mouse', false, 3000);
+    this.hud.message(`EXPLORE · you are <b>${this.sizeText()}</b> · click the view to look with the mouse<br><span style="font-size:11px">Z: your size · N: nearest animal · Tab: next clade</span>`, false, 4000);
     this._send(true);
     this._lock();
   }
@@ -103,10 +170,11 @@ export class Explore {
     w.controls.update();
   }
 
-  /** The lens and fog of a walker's view (world3d.setMode('explore')). Near plane a few mm-scale units for the hands. */
+  /** The lens and fog of a walker's view (world3d.setMode('explore')). Near plane 2 cm of the person's size for the
+   *  hands; a person smaller than full size has its far plane at the fog (depth precision a few cm from the eye). */
   setView() {
     const cam = this.world.camera;
-    cam.fov = 72; cam.near = 0.004; cam.far = Math.max(1200, this.world.W * 1.2); cam.updateProjectionMatrix();
+    cam.fov = 72; cam.near = 0.02 * this.upm; cam.far = this.ps < 0.99 ? 700 : Math.max(1200, this.world.W * 1.2); cam.updateProjectionMatrix();
     this.world.scene.fog.near = 40; this.world.scene.fog.far = 420;
   }
 
@@ -114,7 +182,7 @@ export class Explore {
   /** Animals (serials) of the densest group around (cx, cz): the animals binned on a grid of ~300 m, each bin weighed
    *  by its count and its nearness to (cx, cz); its members nearest the bin's middle first, then the other bins'. */
   _crowdNear(cx, cz) {
-    const w = this.world, W = w.W, B = Math.max(2, 300 * this.upm), bins = new Map();
+    const w = this.world, W = w.W, B = Math.max(2, 300 * this.upmT), bins = new Map();
     for (const [serial, e] of w.agents) {
       if (e.stage === 0 || w.dead.has(serial) || w.hidden.has(e.sp)) continue;
       const k = Math.floor(e.x / B) + ',' + Math.floor(e.y / B);
@@ -170,7 +238,8 @@ export class Explore {
       if (d > 15 && d < bd) { bd = d; best = serial; }
     }
     if (!best) { this.hud.message('no other animal', true, 1500); return; }
-    this._jumpTo(best, `nearest animal, ${Math.round(bd)} m away`);
+    const dm = bd * this.ps;   // (in true metres)
+    this._jumpTo(best, `nearest animal, ${dm < 10 ? dm.toFixed(1) : Math.round(dm)} m away`);
   }
 
   /** Tab: the next living clade (most numerous first), its member nearest the person. */
@@ -220,6 +289,7 @@ export class Explore {
       if (e.code === 'Space' && !e.repeat) this._jump();
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) this._jumpClade(e.shiftKey ? -1 : 1); return; }
       if (e.code === 'KeyN' && !e.repeat) { this._jumpNearest(); return; }
+      if (e.code === 'KeyZ' && !e.repeat) { this.setSize(PLAYER_SIZES[(PLAYER_SIZES.indexOf(this.sizeMode) + 1) % PLAYER_SIZES.length]); return; }
       if (e.code === 'KeyF' && !e.repeat) { this.fastToggle = !this.fastToggle; this.hud.message(this.fastToggle ? 'travel ×10' : 'travel ×1', false, 1200); }
       const wi = this.weapons.findIndex((w) => w.key === e.key);
       if (wi >= 0) this._setWeapon(wi);
@@ -299,10 +369,11 @@ export class Explore {
     else if (s0.depth > 0.05) speed *= 1 - 0.6 * Math.min(1, s0.depth / SWIM_DEPTH_M);   // wading slows
     if (fast) speed *= FAST;
     this.running = (fwd || side) && speed >= RUN * 0.9;
+    const sk = 1 / Math.sqrt(this.ps);   // Froude: a person of size ps goes sqrt(ps) as fast in true metres
     if (fwd || side) {
       const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw), l = Math.hypot(fwd, side);
       const vx = (cy * fwd - sy * side) / l, vz = (sy * fwd + cy * side) / l;
-      this.pos.x += vx * speed * m * dt; this.pos.z += vz * speed * m * dt;
+      this.pos.x += vx * speed * sk * m * dt; this.pos.z += vz * speed * sk * m * dt;
       this.pos.x = ((this.pos.x % W) + W) % W; this.pos.z = ((this.pos.z % W) + W) % W;   // the torus
     }
     const s = this._support();
@@ -327,14 +398,15 @@ export class Explore {
     if (now - this.targetT > 100) { this.targetT = now; this._target(); }
     // the speed the person moves at now (nothing while it stands), and how
     const gait = s.swim ? 'swimming' : s.depth > 0.05 ? 'wading' : (fast ? speed / FAST : speed) >= RUN * 0.9 ? 'running' : 'walking';
-    this.hud.info(`${fwd || side ? `${gait} ${speed.toFixed(1)} m/s` : s.swim ? 'treading water' : 'standing'}${fast ? ' · <b>×10 travel</b>' : ''}<br>${this.killed} hunted · ${(this.state && this.state.deaths) || 0} deaths`);
+    const tv = speed * sk * this.ps;   // true m/s
+    this.hud.info(`${fwd || side ? `${gait} ${tv.toFixed(tv < 1 ? 2 : 1)} m/s` : s.swim ? 'treading water' : 'standing'}${fast ? ' · <b>×10 travel</b>' : ''} · ${this.sizeText()}<br>${this.killed} hunted · ${(this.state && this.state.deaths) || 0} deaths`);
   }
 
   _send(force) {
     const now = performance.now();
     if (!force && now - this.lastSend < SEND_MS) return;
     this.lastSend = now;
-    this.link.send({ cmd: 'player', on: true, x: this.pos.x, y: this.pos.z, h: this.yaw, run: !!this.running });
+    this.link.send({ cmd: 'player', on: true, x: this.pos.x, y: this.pos.z, h: this.yaw, run: !!this.running, scale: this.ps, mass: this.pmass });
   }
 
   // ------------------------------------------------------------------ weapons
@@ -439,7 +511,8 @@ export class Explore {
     if (!hit) { this.hud.target(''); return; }
     const c = this.world.clades && this.world.clades.find((q) => q && q.id === hit.e.sp);
     const stage = ['egg', 'juvenile', 'adult'][hit.e.stage] || '';
-    this.hud.target(`<span style="color:${c ? c.color : '#aaa'}">●</span> ${c ? c.name : 'creature'} #${hit.serial} <span class="d">· ${stage} · ${Math.round(hit.d / this.upm)} m</span>`);
+    const dm = hit.d / this.upmT, lm = this.world.lenM.get(hit.serial);
+    this.hud.target(`<span style="color:${c ? c.color : '#aaa'}">●</span> ${c ? c.name : 'creature'} #${hit.serial} <span class="d">· ${stage}${lm ? ` · ${lm < 1 ? Math.round(lm * 100) + ' cm' : lm.toFixed(1) + ' m'} long` : ''} · ${dm < 10 ? dm.toFixed(1) : Math.round(dm)} m</span>`);
   }
 
   // ------------------------------------------------------------------ the server's view of the person
