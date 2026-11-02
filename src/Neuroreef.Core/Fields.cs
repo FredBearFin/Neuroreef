@@ -89,6 +89,7 @@ public static class Fields
                 float al0 = Al[i], ph0 = Ph[i];
                 Al[i] = Math.Clamp(al0 + ga - da, 0f, 1f);
                 Ph[i] = Math.Clamp(ph0 + gp - dp, 0f, 1f);
+        if (w.SeaProdA != null) { w.SeaProdA[i] += Al[i] - al0 + da; w.SeaProdP![i] += Ph[i] - ph0 + dp; }   // reporting only (EcoWatch)
                 De[i] += da + dp;
                 EN[i] += (da + dp) * Nutrients.Water;
                 // the growth that was kept (the clamp at a full cell keeps less) is what took nutrient

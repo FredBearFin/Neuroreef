@@ -491,10 +491,19 @@ public static class Resolve
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)
-        bool swimming = (w.Cell[cell] & (byte)Realm.Water) != 0 && w.Depth[cell] > w.ShallowE;
-        if (swimming) return cot;
+        // in water deeper than it stands it floats and swims (2026-11-02: before, any body in water under SHALLOW, 2 m,
+        // walked at land's cost, whatever its legs); shallower it wades, at WadeFactor of land's cost a metre
+        bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
+        float wade = 1f;
+        if (water)
+        {
+            float colM = MathF.Max(0f, w.Depth[cell]) / w.ElevPerM, stand = Respiration.StandM(w, i);
+            if (colM >= stand) return cot;
+            wade = World.WadeFactor(colM, K.WADE_LEG * stand);
+            if (w.PVWater[i] >= w.PVLand[i] / wade) return cot;   // it swims faster there than it wades: it swims
+        }
         float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
-        return cot * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);
+        return cot * wade * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);
     }
 
     /// <summary>Squared distance from (tx, ty) to the way organism i went this step, from (x0, y0) to where it is now

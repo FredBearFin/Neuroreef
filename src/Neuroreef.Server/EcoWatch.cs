@@ -3,6 +3,10 @@
 // plant standing stock and net primary production (PlantTable.Production), the herbivores' offtake of it
 // (Telemetry.EatenMass), production and consumption by trophic level, deaths by cause, pathogen prevalence.
 // At the end, per clade: density against Damuth's rule, life table, mortality causes, lifespan against expected.
+// An ocean world (2026-11-02) has no land: its areas are the sea's, its production the benthic algae's and the plankton's
+// (World.SeaProdA, SeaProdP, by depth zone), its offtake what grazers took of them, and each line counts the swimmers,
+// waders and fliers and how many of the animals in water stand on the bottom. Before, it divided by the land's zero area
+// and printed NaN and Infinity. Every ratio here goes through Div, so neither can be printed.
 
 using System;
 using System.Linq;
@@ -19,6 +23,14 @@ public sealed class EcoWatch
     double _yr = K.T_SEASON, _perDay = K.STEPS_PER_DAY; ulong From = FromEnv > 0 ? FromEnv : (ulong)K.T_SEASON;
     readonly double _landKm2;
     readonly int _land;
+    readonly bool _ocean;
+    // an ocean world's production since the last sample and pooled (pool units), and its depth zones (Zone)
+    double[] _zProdA = new double[4], _zProdP = new double[4], _sZA = new double[4], _sZP = new double[4];
+    readonly int[] _zCells = new int[4];
+    static readonly string[] ZoneName = { "<5 m", "5-30 m", "30-130 m", ">130 m" };
+    static int Zone(float d) => d < 5f ? 0 : d <= K.OCEAN_SHELF ? 1 : d <= K.OCEAN_BREAK ? 2 : 3;
+    /// <summary>a / b, or 0 where b is not positive or the quotient is not finite.</summary>
+    static double Div(double a, double b) { if (!(b > 0)) return 0; double q = a / b; return double.IsFinite(q) ? q : 0; }
     double[] _prod = new double[5], _eaten = new double[Pools.N], _intake = Array.Empty<double>(), _grow = Array.Empty<double>(), _repro = Array.Empty<double>();
     long[] _deaths = Array.Empty<long>(), _births = Array.Empty<long>();
     ulong _lastStep;
@@ -38,11 +50,23 @@ public sealed class EcoWatch
     public EcoWatch(Simulation sim)
     {
         var w = sim.W;
-        for (int i = 0; i < Map.FW * Map.FW; i++) if ((w.Cell[i] & (byte)Realm.Land) != 0) _land++;
+        _ocean = w.Ocean;
+        // the area animals live on: the land, or in an ocean world the sea (2026-11-02)
+        for (int i = 0; i < Map.FW * Map.FW; i++)
+        {
+            if ((w.Cell[i] & (byte)Realm.Land) != 0) { if (!_ocean) _land++; }
+            else if (_ocean && (w.Cell[i] & (byte)Realm.Water) != 0) { _land++; _zCells[Zone(Respiration.ColumnM(w, i))]++; }
+        }
+        if (_ocean) { w.SeaProdA = new double[Map.FW * Map.FW]; w.SeaProdP = new double[Map.FW * Map.FW]; }
         _moist = new double[Map.FW * Map.FW]; _tree = new double[Map.FW * Map.FW];
         _landKm2 = _land * (K.GEO_CELL_M / 1000.0) * (K.GEO_CELL_M / 1000.0);
         Reset(w);
-        Series.AppendLine($"ECO: land {_land} cells = {_landKm2:F0} km2 (map {Map.FW * K.GEO_CELL_M / 1000.0:F1} km); one energy unit = {K.BMR_W * K.STEP_S / K.C_BASAL / 1e6:F2} MJ");
+        Series.AppendLine($"ECO: {(_ocean ? "sea" : "land")} {_land} cells = {_landKm2:F0} km2 (map {Map.FW * K.GEO_CELL_M / 1000.0:F1} km); one energy unit = {K.BMR_W * K.STEP_S / K.C_BASAL / 1e6:F2} MJ");
+        if (_ocean)
+        {
+            int nc = Math.Max(1, _zCells.Sum());
+            Series.AppendLine("ECO SEA FLOOR: " + string.Join("  ", Enumerable.Range(0, 4).Select(z => $"{ZoneName[z]} {100.0 * _zCells[z] / nc:F1}%")) + $" of {nc} sea cells");
+        }
         Series.AppendLine($"ECO: a unit of plant cover is {K.PLANT_KG_M2} kg dry/m2 at {K.PLANT_KJ_G} kJ/g ({Pools.Kg[(int)Pool.Grass]:F0} kg of food per unit in a {K.GEO_CELL_M} m cell)");
         // the founding (2026-11-01): each clade's founders, their mean mass, the food they get most energy from, and
         // whether its ancestor was tested after the others, on the animals living in its range
@@ -65,7 +89,8 @@ public sealed class EcoWatch
         Series.AppendLine(fl.ToString());
         Series.AppendLine($"ECO FOUNDING: {fc} clades founded, {fa} of them animal-food eaters; {sim.WaitedClades.Count} ancestors tested after the others");
         Console.WriteLine(fl.ToString()); Console.WriteLine($"ECO FOUNDING: {fc} clades founded, {fa} of them animal-food eaters; {sim.WaitedClades.Count} ancestors tested after the others");
-        Series.AppendLine("ECO   step  alive  | herbiv n  kg/km2 | omniv n kg/km2 | carniv n kg/km2 | detr n | green kg/m2 herb woody | NPP kgdry/m2/yr offtake% | P2/NPP  P3/P2 | infected% | deaths: starve thirst killed disease old other | clades alive (carn by intake, animal-founded) | juvenile strikes/step, killed");
+        if (_ocean) Series.AppendLine("ECO   step  alive  | herbiv n  kg/km2 | omniv n kg/km2 | carniv n kg/km2 | detr n | water NPP gC/m2/yr plankton benthic grazed% | P2/NPP  P3/P2 | infected% | deaths: starve thirst killed disease old other | clades alive (carn by intake, animal-founded) | juvenile strikes/step, killed | swim wade fly (airborne%) walk, in water standing% | top");
+        else Series.AppendLine("ECO   step  alive  | herbiv n  kg/km2 | omniv n kg/km2 | carniv n kg/km2 | detr n | green kg/m2 herb woody | NPP kgdry/m2/yr offtake% | P2/NPP  P3/P2 | infected% | deaths: starve thirst killed disease old other | clades alive (carn by intake, animal-founded) | juvenile strikes/step, killed");
     }
 
     void Reset(World w)
@@ -136,6 +161,22 @@ public sealed class EcoWatch
         // NPP in energy (2026-11-01): a unit of cover is PLANT_KG_M2 of dry matter per m2 at PLANT_KJ_G, Pools.ECell in a
         // cell, whatever stratum made it (before: herb at RHO_GRASS and woody at RHO_WOOD per unit read as 1 kg per cell)
         double nppE = prod * Pools.ECell[(int)Pool.Grass];
+        // an ocean world: the water producers' production since the last sample, by depth zone (2026-11-02)
+        double sea = 0, seaA = 0, seaP = 0, seaOff = 0;
+        if (_ocean && w.SeaProdA != null)
+        {
+            Array.Clear(_zProdA); Array.Clear(_zProdP);
+            for (int i = 0; i < Map.FW * Map.FW; i++)
+            {
+                if ((w.Cell[i] & (byte)Realm.Water) == 0) continue;
+                int z = Zone(Respiration.ColumnM(w, i));
+                _zProdA[z] += w.SeaProdA[i]; _zProdP[z] += w.SeaProdP![i];
+            }
+            Array.Clear(w.SeaProdA); Array.Clear(w.SeaProdP!);
+            seaA = _zProdA.Sum(); seaP = _zProdP.Sum(); sea = seaA + seaP;
+            nppE = sea * Pools.ECell[(int)Pool.Algae];
+            for (int p = (int)Pool.Algae; p <= (int)Pool.Phyto; p++) seaOff += (T.EatenMass[p] - _eaten[p]) / Pools.Kg[p];   // kg eaten into units
+        }
         // the most numerous clade: its count, mean mass, births and deaths since the last sample, its main food
         int top = -1; for (int s = 0; s < w.NS; s++) if (sim.ActiveCount[s] > 0 && (top < 0 || sim.ActiveCount[s] > sim.ActiveCount[top])) top = s;
         string topS = "";
@@ -160,7 +201,19 @@ public sealed class EcoWatch
             _jStr = str; _jSteps = st; _jKilled = kd;
         }
         double P2 = prE[0] + prE[1] * 0.5, P3 = prE[2] + prE[1] * 0.5;
-        Line($"ECO {w.Step,6} {alive,6}  | {n[0],7} {bio[0] / _landKm2,7:F1} | {n[1],6} {bio[1] / _landKm2,6:F1} | {n[2],7} {bio[2] / _landKm2,7:F2} | {n[3],5} | {herb / _land,6:F3} {browse / _land,6:F3} | {prod / years / _land * K.PLANT_KG_M2,9:F3}  {(prod > 0 ? 100 * off / prod : 0),8:F2} | {(nppE > 0 ? P2 / nppE : 0),6:P2} {(P2 > 0 ? P3 / P2 : 0),6:P1} | {(alive > 0 ? 100.0 * infected / alive : 0),8:F1} | {dc[Cause.Starve],6} {dc[Cause.Thirst],6} {dc[Cause.Killed],6} {dc[Cause.Disease],7} {dc[Cause.Old],4} {other,5} | {cAlive,3} ({cCarn}, {cAnimal}){juv}{topS}");
+        string tail = $"{(alive > 0 ? 100.0 * infected / alive : 0),8:F1} | {dc[Cause.Starve],6} {dc[Cause.Thirst],6} {dc[Cause.Killed],6} {dc[Cause.Disease],7} {dc[Cause.Old],4} {other,5} | {cAlive,3} ({cCarn}, {cAnimal}){juv}";
+        string head = $"ECO {w.Step,6} {alive,6}  | {n[0],7} {Div(bio[0], _landKm2),7:F1} | {n[1],6} {Div(bio[1], _landKm2),6:F1} | {n[2],7} {Div(bio[2], _landKm2),7:F2} | {n[3],5} | ";
+        if (_ocean)
+        {
+            double gc = K.WATER_KG_M2 * 1000.0 * 0.45;   // gC per m2 of a unit of a water producer (0.45 gC per g dry, Wetzel 2001)
+            Line(head + $"{Div(sea, years * _land) * gc,9:F0} {Div(seaP, years * _land) * gc,8:F0} {Div(seaA, years * _land) * gc,7:F0} {100 * Div(seaOff, sea),8:F2} | {Div(P2, nppE),6:P2} {Div(P3, P2),6:P1} | " + tail + " | " + Census(w) + topS);
+            Line($"ECO SEA  {w.Step,6}  NPP gC/m2/yr by depth (plankton + benthic): " + string.Join("  ", Enumerable.Range(0, 4).Where(z => _zCells[z] > 0)
+                .Select(z => $"{ZoneName[z]} {Div(_zProdP[z], years * _zCells[z]) * gc:F0} + {Div(_zProdA[z], years * _zCells[z]) * gc:F0}")));
+            if (w.Step > From) for (int z = 0; z < 4; z++) { _sZA[z] += _zProdA[z]; _sZP[z] += _zProdP[z]; }
+        }
+        else
+            Line(head + $"{Div(herb, _land),6:F3} {Div(browse, _land),6:F3} | {Div(prod, years * _land) * K.PLANT_KG_M2,9:F3}  {100 * Div(off, prod),8:F2} | {Div(P2, nppE),6:P2} {Div(P3, P2),6:P1} | " + tail + topS);
+        if (_ocean) { prod = sea; off = seaOff; }   // pooled below as the sea's
         if (w.Step <= From) _cellProd0 = (float[])t.CellProd.Clone();
         else for (int i = 0; i < Map.FW * Map.FW; i++) { _moist[i] += w.Moisture[i]; _tree[i] += w.Tree[i]; }
         if (w.Step > From)
@@ -172,6 +225,22 @@ public sealed class EcoWatch
             for (int k = 0; k < 5; k++) _sProd[k] += t.Production[k] - _prod[k];
         }
         Reset(w);
+    }
+
+    /// <summary>How the animals move (2026-11-02, the ocean): swimmers, waders, fliers (the share of fliers in the air) and
+    /// walkers, and of the animals in water how many stand on the bottom (World.StandsIn) rather than swim or float.</summary>
+    static string Census(World w)
+    {
+        var by = new int[5]; int air = 0, inWater = 0, standing = 0;
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;
+            by[w.PLoco[i]]++;
+            if (w.PLoco[i] == (byte)Loco.Fly && w.Airborne(i)) air++;
+            int c = World.FIdx(w.X[i], w.Y[i]);
+            if ((w.Cell[c] & (byte)Realm.Water) != 0 && !w.Airborne(i)) { inWater++; if (w.StandsIn(i, c)) standing++; }
+        }
+        return $"{by[(int)Loco.Swim]} {by[(int)Loco.Wade]} {by[(int)Loco.Fly]} ({100 * Div(air, by[(int)Loco.Fly]):F0}%) {by[(int)Loco.Walk]}, {100 * Div(standing, inWater):F1}%";
     }
 
     /// <summary>NPP by biome after the first year, in g C/m2/yr (dry matter x 0.45 C). The biome of a land cell is read
@@ -204,15 +273,22 @@ public sealed class EcoWatch
         var w = sim.W; var T = w.T; var o = new StringBuilder();
         o.Append(Series);
         o.AppendLine();
-        o.AppendLine($"ECO POOLED after step {From} ({_nS:F0} samples): NPP {_sN1 / Math.Max(1, _sSteps) * _yr / _land * K.PLANT_KG_M2:F3} kg dry/m2/yr " +
-            $"= {_sNpp / Math.Max(1, _sSteps) * _yr * Pools.EnergyJ / 1e6 / (_landKm2 * 1e6) * 1000:F0} kJ/m2/yr; herbivore offtake {(_sN1 > 0 ? 100 * _sOff / _sN1 : 0):F2}% of NPP (mass); " +
-            $"assimilated by herbivores {(_sNpp > 0 ? 100 * _sIn0 / _sNpp : 0):F2}% of NPP energy, by carnivores {(_sIn0 > 0 ? 100 * _sIn2 / _sIn0 : 0):F2}% of the herbivores' intake ({(_sP1 > 0 ? 100 * _sIn2 / _sP1 : 0):F1}% of their production); " +
-            $"production P2/NPP {(_sNpp > 0 ? 100 * _sP1 / _sNpp : 0):F2}%, P3/P2 {(_sP1 > 0 ? 100 * _sP2 / _sP1 : 0):F2}%; mean biomass herbivores {_sBio1 / Math.Max(1, _nS) / _landKm2:F1} kg/km2, carnivores {_sBio2 / Math.Max(1, _nS) / _landKm2:F2} kg/km2 (1 : {(_sBio2 > 0 ? _sBio1 / _sBio2 : 0):F0})");
-        o.AppendLine($"ECO ANIMAL FOOD (pooled, any clade whatever its group): meat and blood assimilated {(_sP1 > 0 ? 100 * _sMeat / _sP1 : 0):F2}% of herbivore production ({(_sIn0 > 0 ? 100 * _sMeat / _sIn0 : 0):F3}% of herbivore intake), carrion {(_sP1 > 0 ? 100 * _sCarrion / _sP1 : 0):F2}% of herbivore production");
-        o.AppendLine("ECO PRODUCTION (pooled, kg dry/m2 of land/yr): " + string.Join("  ", new[] { "herb", "shrub", "tree", "sapling", "repro" }.Select((n, k) => $"{n} {_sProd[k] / Math.Max(1, _sSteps) * _yr / _land * K.PLANT_KG_M2:F3}")));
+        double unitKg = _ocean ? K.WATER_KG_M2 : K.PLANT_KG_M2;   // a unit of the producers' cover, kg dry/m2
+        o.AppendLine($"ECO POOLED after step {From} ({_nS:F0} samples): {(_ocean ? "water " : "")}NPP {Div(_sN1 * _yr, Math.Max(1, _sSteps) * _land) * unitKg:F3} kg dry/m2/yr " +
+            $"= {Div(_sNpp * _yr * Pools.EnergyJ / 1e6, Math.Max(1, _sSteps) * _landKm2 * 1e6) * 1000:F0} kJ/m2/yr; {(_ocean ? "grazing" : "herbivore offtake")} {100 * Div(_sOff, _sN1):F2}% of NPP (mass); " +
+            $"assimilated by herbivores {100 * Div(_sIn0, _sNpp):F2}% of NPP energy, by carnivores {100 * Div(_sIn2, _sIn0):F2}% of the herbivores' intake ({100 * Div(_sIn2, _sP1):F1}% of their production); " +
+            $"production P2/NPP {100 * Div(_sP1, _sNpp):F2}%, P3/P2 {100 * Div(_sP2, _sP1):F2}%; mean biomass herbivores {Div(_sBio1, Math.Max(1, _nS) * _landKm2):F1} kg/km2, carnivores {Div(_sBio2, Math.Max(1, _nS) * _landKm2):F2} kg/km2 (1 : {Div(_sBio1, _sBio2):F0})");
+        if (_ocean)
+        {
+            double gc = K.WATER_KG_M2 * 1000.0 * 0.45, yrs = Math.Max(1, _sSteps) / _yr;
+            o.AppendLine("ECO SEA POOLED NPP gC/m2/yr by depth (plankton + benthic): " + string.Join("  ", Enumerable.Range(0, 4).Where(z => _zCells[z] > 0)
+                .Select(z => $"{ZoneName[z]} ({_zCells[z]} cells) {Div(_sZP[z], yrs * _zCells[z]) * gc:F0} + {Div(_sZA[z], yrs * _zCells[z]) * gc:F0}")));
+        }
+        o.AppendLine($"ECO ANIMAL FOOD (pooled, any clade whatever its group): meat and blood assimilated {100 * Div(_sMeat, _sP1):F2}% of herbivore production ({100 * Div(_sMeat, _sIn0):F3}% of herbivore intake), carrion {100 * Div(_sCarrion, _sP1):F2}% of herbivore production");
+        if (!_ocean) o.AppendLine("ECO PRODUCTION (pooled, kg dry/m2 of land/yr): " + string.Join("  ", new[] { "herb", "shrub", "tree", "sapling", "repro" }.Select((n, k) => $"{n} {Div(_sProd[k] * _yr, Math.Max(1, _sSteps) * _land) * K.PLANT_KG_M2:F3}")));
         o.Append(Biomes(w));
-        o.AppendLine("ECO EATEN (pooled, M/km2/yr; energy E/km2/yr at the pool's density): " + string.Join("  ", Enumerable.Range(0, Pools.N).Where(p => _sEat[p] > 0).Select(p => $"{(Pool)p} {_sEat[p] / Math.Max(1, _sSteps) * _yr / _landKm2:F1} ({_sEat[p] * Pools.Rho[p] / Math.Max(1, _sSteps) * _yr / _landKm2:F0})")));
-        o.AppendLine("ECO CLADES (living): name, group (whole run), alive, adults, juveniles%, mean adult mass kg, density /km2 land, Damuth 4e4 M(g)^-0.75 /km2, ratio, infected%, mean age at death / expected lifespan, deaths: starve thirst killed disease old other");
+        o.AppendLine("ECO EATEN (pooled, M/km2/yr; energy E/km2/yr at the pool's density): " + string.Join("  ", Enumerable.Range(0, Pools.N).Where(p => _sEat[p] > 0).Select(p => $"{(Pool)p} {Div(_sEat[p] * _yr, Math.Max(1, _sSteps) * _landKm2):F1} ({Div(_sEat[p] * Pools.Rho[p] * _yr, Math.Max(1, _sSteps) * _landKm2):F0})")));
+        o.AppendLine($"ECO CLADES (living): name, group (whole run), alive, adults, juveniles%, mean adult mass kg, density /km2 {(_ocean ? "sea" : "land")}, Damuth 4e4 M(g)^-0.75 /km2, ratio, infected%, mean age at death / expected lifespan, deaths: starve thirst killed disease old other");
         for (int s = 0; s < w.NS; s++)
         {
             if (!w.Sp[s].Used) continue;
@@ -227,13 +303,13 @@ public sealed class EcoWatch
             if (alive == 0) continue;
             int g = Group(T.Intake, Array.Empty<double>(), s);
             string gn = g switch { 0 => "herb", 1 => "omni", 2 => "carn", 3 => "detr", _ => "-" };
-            double mm = adults > 0 ? m / adults : 0, dens = alive / _landKm2, damuth = mm > 0 ? 4e4 * Math.Pow(mm * 1000, -0.75) : 0;
+            double mm = adults > 0 ? m / adults : 0, dens = Div(alive, _landKm2), damuth = mm > 0 ? 4e4 * Math.Pow(mm * 1000, -0.75) : 0;
             long hatched = T.DeathsByAge[s * 4 + 1] + T.DeathsByAge[s * 4 + 2] + T.DeathsByAge[s * 4 + 3];
             double ageD = hatched > 0 ? T.AgeAtDeath[s] / hatched : 0;
             long st = T.Deaths[s * Cause.N + Cause.Starve], th = T.Deaths[s * Cause.N + Cause.Thirst], ki = T.Deaths[s * Cause.N + Cause.Killed],
                  di = T.Deaths[s * Cause.N + Cause.Disease], ol = T.Deaths[s * Cause.N + Cause.Old];
             long all = 0; for (int c = 0; c < Cause.N; c++) all += T.Deaths[s * Cause.N + c];
-            o.AppendLine($"  {w.Sp[s].Name,-12} {gn} {alive,6} {adults,6} {100.0 * (alive - adults) / alive,5:F0}% {mm,7:F2} {dens,8:F2} {damuth,8:F0} {(damuth > 0 ? dens / damuth : 0),7:F3} {100.0 * inf / alive,5:F0}% {ageD / _perDay,6:F0} d / {life / alive / K.STEPS_PER_DAY,5:F0} d   {st,6} {th,6} {ki,6} {di,6} {ol,6} {all - st - th - ki - di - ol,6}");
+            o.AppendLine($"  {w.Sp[s].Name,-12} {gn} {alive,6} {adults,6} {100.0 * (alive - adults) / alive,5:F0}% {mm,7:F2} {dens,8:F2} {damuth,8:F0} {Div(dens, damuth),7:F3} {100.0 * inf / alive,5:F0}% {Div(ageD, _perDay),6:F0} d / {Div(life, alive * (double)K.STEPS_PER_DAY),5:F0} d   {st,6} {th,6} {ki,6} {di,6} {ol,6} {all - st - th - ki - di - ol,6}");
         }
         return o.ToString();
     }

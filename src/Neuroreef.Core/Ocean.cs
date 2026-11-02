@@ -3,9 +3,9 @@
 // sea: the same deep-time relief as any world (Geology, the running water's passes), drowned. What changes is physics
 // that a lake world does not need, and only an ocean world reads (World.Ocean); a world with land is bit for bit as before.
 //
-//   seafloor   the relief's own shape, ranked: the highest OCEAN_BANKS of the floor (after any islands, Nature.Islands)
-//              are banks and reef flats from OCEAN_CREST to OCEAN_SHELF deep; below them it slopes down to basins
-//              Map.ReliefM deep (153 m on the 256 map, 433 m on 1024, 725 m on 2048). Elevation keeps its frame:
+//   seafloor   the relief's own shape, ranked: the highest Nature.OceanShallow (OCEAN_BANKS, --ocean-shallow) of the floor
+//              (after any islands, Nature.Islands) are banks and reef flats from OCEAN_CREST to OCEAN_SHELF deep; the next
+//              OCEAN_SHELF_SHARE is the shelf, down to OCEAN_BREAK; below, it slopes down to basins Map.ReliefM deep (153 m on the 256 map, 433 m on 1024, 725 m on 2048). Elevation keeps its frame:
 //              SeaLevel 0.5 with 1 - SeaLevel standing for ReliefM metres, so every height and depth in metres (ElevPerM,
 //              Respiration.ColumnM) reads as it does on land.
 //   seawater   salinity SALINITY lowers oxygen's solubility (Weiss 1970's salinity term: ~19% at 20 °C); the mixed layer
@@ -39,8 +39,12 @@ public static class Ocean
     /// <summary>
     /// Drown the worked relief (Terrain.Shape, an ocean world): rank its elevations and map them, monotonely, onto the
     /// seascape: islands (the top Nature.Islands, as high above the sea as they stood above their own lowest shore), the
-    /// banks (OCEAN_BANKS of the map, OCEAN_CREST to OCEAN_SHELF deep, or the shore to OCEAN_SHELF with islands), and the
-    /// slopes and basins down to Map.ReliefM. Ridges stay ridges and valleys valleys; only the sea level moves.
+    /// banks (Nature.OceanShallow of the map, OCEAN_CREST to OCEAN_SHELF deep, or the shore to OCEAN_SHELF with islands),
+    /// the shelf (OCEAN_SHELF_SHARE, OCEAN_SHELF to OCEAN_BREAK) and the slopes and basins down to Map.ReliefM. Within each
+    /// band depth follows the relief's own elevation, so ridges stay ridges and valleys valleys; only the sea level moves.
+    /// (2026-11-02) Before, the highest 25% of the floor were banks and reef flats 1-30 m deep and the rest sloped straight
+    /// to the basins: a reef-flat world. Real shelves are ~7% of the ocean and mostly 0-200 m deep, breaking at ~130 m on
+    /// average (Shepard 1963; Harris et al. 2014); flats under a few metres are a small share of any shelf.
     /// </summary>
     public static void Drown(World w)
     {
@@ -48,11 +52,16 @@ public static class Ocean
         float[] e = w.Elev;
         var sorted = (float[])e.Clone();
         Array.Sort(sorted);
-        float isl = Math.Clamp(Nature.Islands, 0f, 0.5f), banks = MathF.Min(K.OCEAN_BANKS, 1f - isl);
+        float isl = Math.Clamp(Nature.Islands, 0f, 0.5f);
+        float banks = MathF.Min(Math.Clamp(Nature.OceanShallow, 0f, 0.6f), 1f - isl);
+        float shelf = MathF.Max(0f, MathF.Min(K.OCEAN_SHELF_SHARE, 1f - isl - banks - 0.05f));
         float eMin = sorted[0], eMax = sorted[n - 1];
         float eIsl = isl > 0f ? sorted[Math.Min(n - 1, (int)((1f - isl) * n))] : eMax;
         float eBrk = sorted[Math.Clamp((int)((1f - isl - banks) * n), 0, n - 1)];
-        float D = Map.ReliefM, dTop = isl > 0f ? 0f : K.OCEAN_CREST, dBrk = MathF.Min(K.OCEAN_SHELF, 0.5f * D);
+        float eShf = sorted[Math.Clamp((int)((1f - isl - banks - shelf) * n), 0, n - 1)];
+        float D = Map.ReliefM, dTop = isl > 0f ? 0f : K.OCEAN_CREST;
+        // a small map's relief (153 m on the 256 map) is shallower than a real shelf break: its bands keep their order
+        float dShf = MathF.Min(K.OCEAN_BREAK, 0.6f * D), dBrk = MathF.Min(K.OCEAN_SHELF, 0.5f * dShf);
         float mPerE0 = Map.ReliefM / MathF.Max(1e-6f, 1f - w.SeaLevel);   // the land's own vertical scale, for the islands
         float epm = (1f - SEA0) / Map.ReliefM;
         for (int i = 0; i < n; i++)
@@ -60,7 +69,8 @@ public static class Ocean
             float v = e[i], depth;
             if (isl > 0f && v >= eIsl) { e[i] = MathF.Min(1f, SEA0 + MathF.Max(1e-5f, (v - eIsl) * mPerE0) * epm); continue; }
             if (v >= eBrk) depth = dTop + (eIsl - v) / MathF.Max(1e-9f, eIsl - eBrk) * (dBrk - dTop);
-            else depth = dBrk + (eBrk - v) / MathF.Max(1e-9f, eBrk - eMin) * (D - dBrk);
+            else if (v >= eShf) depth = dBrk + (eBrk - v) / MathF.Max(1e-9f, eBrk - eShf) * (dShf - dBrk);
+            else depth = dShf + (eShf - v) / MathF.Max(1e-9f, eShf - eMin) * (D - dShf);
             e[i] = SEA0 - MathF.Max(depth, 0.05f) * epm;
         }
         w.SeaLevel = SEA0;

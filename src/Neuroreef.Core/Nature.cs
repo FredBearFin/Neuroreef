@@ -33,6 +33,9 @@ public static class Nature
     // islands (0: none). A world takes Ocean when it is built (World.Ocean); checkpoints keep both in their header
     public static bool Ocean = false;
     public static float Islands = 0f;
+    // the share of an ocean world's floor on banks and reef flats, OCEAN_CREST to OCEAN_SHELF deep (Ocean.Drown; --ocean-shallow;
+    // 2026-11-02). Read when the seafloor is built; a saved world keeps the seafloor it was built with
+    public static float OceanShallow = K.OCEAN_BANKS;
     public static float LatSpan = 0f;
 
     public static void Clamp()
@@ -44,6 +47,7 @@ public static class Nature
         Ponds = System.Math.Clamp(Ponds, 0f, 1f); Climate = System.Math.Clamp(Climate, 0f, 2f);
         StepH = ClampStep(StepH); WorldStepH = ClampStep(WorldStepH);
         Islands = System.Math.Clamp(Islands, 0f, 0.5f);
+        OceanShallow = System.Math.Clamp(OceanShallow, 0f, 0.6f);
     }
 
     // for checkpoints and saved worlds: the map side and every setting, in a fixed order
