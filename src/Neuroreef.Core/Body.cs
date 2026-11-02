@@ -40,10 +40,12 @@ public static class Body
     /// <summary>Relative body axes, sharing the renderer's exponential scale and unit-volume normalization.</summary>
     public static void Dimensions(sbyte lengthGene, sbyte widthGene, sbyte heightGene, out float length, out float width, out float height)
     {
-        float logTwo = MathK.Log(2f);
-        length = MathK.Exp(logTwo * (2f * Organ(lengthGene) - 1f));
-        width = MathK.Exp(logTwo * (2f * Organ(widthGene) - 1f));
-        height = MathK.Exp(logTwo * (2f * Organ(heightGene) - 1f));
+        // each axis from 1 / SHAPE_RANGE to SHAPE_RANGE of the cube's before the volume is restored (2026-11-02: was 1/2 to 2,
+        // so the longest body was 2.5 cube sides, fineness 4; now 4.3, fineness up to 9, an eel's)
+        float logR = MathK.Log(K.SHAPE_RANGE);
+        length = MathK.Exp(logR * (2f * Organ(lengthGene) - 1f));
+        width = MathK.Exp(logR * (2f * Organ(widthGene) - 1f));
+        height = MathK.Exp(logR * (2f * Organ(heightGene) - 1f));
         float volumeScale = MathK.Cbrt(length * width * height);
         length /= volumeScale; width /= volumeScale; height /= volumeScale;
     }
@@ -141,15 +143,21 @@ public static class Body
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
         // (2026-11-02) its gut is built to its own basal cost (GutScale): absorption and digestion grow with it, and so does
         // the gut's upkeep, part of that cost
-        float kleiber = K.C_BASAL * mPow;
+        // (2026-11-02) its tissues' metabolic level (Heat.Level: a cold-blooded body's standard metabolism is ~1/5 of a
+        // warm-blooded one's of its mass at the same body temperature) sets its body's resting cost, its gut (built to that
+        // cost) and its organs' capacity (Respiration.OrganBase), in every world; the brain costs per unit whatever the body
+        float level = Heat.Level(w.PEndo[i]);
+        float kleiber = K.C_BASAL * mPow * level;
         float gut = GutScale(kleiber * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF, kleiber, out float basal);
         // rates are per step (x World.Dt: the constants are per reference step of K.STEP_H) and durations in steps (/ Dt):
         // at the default step Dt is 1 and these are the constants' values bit for bit (2026-11-02)
         float dt = w.Dt;
         w.PBasal[i] = basal * dt;
         w.PGut[i] = K.C_GUT * m;
-        w.PDig[i] = K.C_DIGEST * mPow * gut * dt;
-        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * dt;   // energy the gut can take up a step (2026-11-01)
+        // a gut processes and absorbs at the pace of the tissues that build and run it (level): a reptile's food intake and
+        // digestive throughput are a fraction of a mammal's of its size (Karasov & Diamond 1985; Nagy 2005)
+        w.PDig[i] = K.C_DIGEST * mPow * gut * level * dt;
+        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * level * dt;   // energy the gut can take up a step (2026-11-01)
         w.PBite[i] = K.C_BITE * mPow * dt;
         float t = MathK.Pow(m, K.EXP_LIFE);
         w.PMature[i] = K.C_MATURE * t * devel / dt;
@@ -170,12 +178,17 @@ public static class Body
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * prop);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         float lengthShare = length;   // of the cube of its volume (LengthM)
+        float whShare = width * height;   // its cross-section, of the cube's face
         const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
         length = MathK.Log(length) * invLn2 * 0.5f; width = MathK.Log(width) * invLn2 * 0.5f; height = MathK.Log(height) * invLn2 * 0.5f;
         float limbShape = Organ(gn[G.B_LIMB_SHAPE]) - 0.5f;
         // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
         // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
-        float streamlining = Math.Clamp(1f + 0.2f * length - 0.15f * width - 0.15f * height, 0.75f, 1.25f);
+        // (2026-11-02) drag of a body of revolution at a given volume against its fineness ratio f = length / sqrt(width x
+        // height): C_DV ~ 4 f^(1/3) + 6 f^(-7/6) + 24 f^(-8/3) (Hoerner 1965), least near f = 4.5, as fishes' and
+        // cetaceans' bodies are (Webb 1975; Fish 1993); at a given power, speed goes as drag^(-1/3), against a cube's
+        // (f = 1). Was a bounded linear guess (0.75-1.25)
+        float streamlining = Streamlining(lengthShare, whShare);
         vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
         vWater *= streamlining * (1f - 0.2f * limbShape * legs);
         w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
@@ -254,6 +267,18 @@ public static class Body
     /// </summary>
     public static float ReachM(float m, float speedRatio, float lengthM)
         => lengthM + SprintMps(m) * K.T_CHASE * Math.Clamp(speedRatio, 0f, 2f);
+
+    /// <summary>Hoerner's (1965) volume drag of a streamlined body of fineness ratio f: 4 f^(1/3) + 6 f^(-7/6) + 24 f^(-8/3).</summary>
+    public static float VolumeDrag(float f)
+    {
+        f = MathF.Max(f, 0.05f);
+        return 4f * MathK.Cbrt(f) + 6f * MathK.Pow(f, -7f / 6f) + 24f * MathK.Pow(f, -8f / 3f);
+    }
+
+    /// <summary>Speed at a given power against a cube's (drag^(-1/3)), for a body of length share lengthShare and width x
+    /// height share wh (Dimensions: length x width x height = 1, so wh = 1 / lengthShare when the volume holds).</summary>
+    public static float Streamlining(float lengthShare, float wh)
+        => MathK.Cbrt(VolumeDrag(1f) / VolumeDrag(lengthShare / MathF.Sqrt(MathF.Max(wh, 1e-4f))));
 
     /// <summary>
     /// What propels a body under water, in fins' worth (2026-11-02): its fins, and its wings stroked as flippers, as auks,
