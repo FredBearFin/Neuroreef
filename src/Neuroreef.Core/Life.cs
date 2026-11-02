@@ -186,6 +186,11 @@ public static class Life
                 if ((dx * dx + dy * dy) * cs * cs > r * r) continue;
                 int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
                 if (!w.CellAllows(c, cell, realm)) continue;
+                // a flier eats only where it can land (Resolve: it eats landed): over deep water, only if it can swim
+                // there (World.GroundAllows; 2026-11-02, the ocean, where flying founders were judged on plankton they could
+                // never reach). The same holds over lakes in a world with land, but there it is not applied yet: it would
+                // change the founding of every default world (the pinned hashes); see the ocean report
+                if (w.Ocean && (Loco)w.PLoco[c] == Loco.Fly && !w.GroundAllows(c, cell)) continue;
                 // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
                 if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
                 breathCost += bc;   // ventilation, osmoregulation and buoyancy there (2026-11-01)

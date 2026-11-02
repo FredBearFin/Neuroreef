@@ -95,7 +95,7 @@ export class World3D {
     // zooming toward the point under the cursor (so a few turns of it reach any herd) and double-click diving in
     // (since 2026-11-02 from about a metre: animals are drawn at true size by default)
     this.controls.minDistance = MIN_DIST_M * this.scale.upm; this.controls.maxDistance = this.W * 1.6;
-    this.controls.addEventListener('start', () => { this._userMoved = true; });
+    this.controls.addEventListener('start', () => { this._userMoved = true; this._track = 0; });
     this._overviewKeys();
     this.controls.zoomToCursor = true; this.controls.zoomSpeed = 3;   // x0.86 a notch: the whole map to a few metres in ~60
     this._fly = null;
@@ -705,14 +705,15 @@ export class World3D {
    */
   _frameSwimmer(g, dur) {
     const W = this.W, c = this.controls.target, upm = this.scale.upm;
-    let best = null, bd = Infinity;
+    let best = null, bd = Infinity, bs = 0;
     for (const [serial, e] of this.agents) {
       if (e.stage === 0 || this.dead.has(serial) || this.hidden.has(e.sp)) continue;
       let dx = e.x - g.x, dy = e.y - g.y; dx -= Math.round(dx / W) * W; dy -= Math.round(dy / W) * W;
       const d = Math.hypot(dx, dy) + ((e.depth || 0) > 25 ? 1e4 : 0);
-      if (d < bd) { bd = d; best = e; }
+      if (d < bd) { bd = d; best = e; bs = serial; }
     }
     if (!best) return false;
+    this._track = bs;
     const x = best.x + W * Math.round((c.x - best.x) / W), z = best.y + W * Math.round((c.z - best.y) / W);
     const sc = this._size(best), y = this._height(best, x, z, sc), L = sc * MODEL_LEN;
     const V = 4.8 / this.seaC(x, z) * upm, d = Math.max(3 * L, Math.min(6 * L, V / 3));
@@ -771,7 +772,7 @@ export class World3D {
       if (skip(e)) return;
       if (e.code === 'KeyN' && !e.repeat) { this._userMoved = true; this.nextGroup(e.shiftKey ? -1 : 1); return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) { this._userMoved = true; this.nextClade(e.shiftKey ? -1 : 1); } return; }
-      if (PAN_KEYS.includes(e.code)) { e.preventDefault(); held.add(e.code); this._userMoved = true; this._fly = null; }
+      if (PAN_KEYS.includes(e.code)) { e.preventDefault(); held.add(e.code); this._userMoved = true; this._fly = null; this._track = 0; }
     });
     addEventListener('keyup', (e) => held.delete(e.code));
     addEventListener('blur', () => held.clear());
@@ -1082,7 +1083,9 @@ export class World3D {
       // (distances in the animal's own drawn lengths, MODEL_LEN x sz: the view keeps its framing at any size. 2026-11-02:
       // about 6.5 lengths behind and 2.2 above, so a 20 cm animal at true size is a sixth of the view's height)
       if (this.mode === 'follow') {
-        const L = sz * MODEL_LEN, dist = L * 6.5, up = L * 2.2;
+        // under the sea within the water's visibility (seaC: 4.8 / c): at most 0.4 of it away, at least 1.5 lengths (2026-11-02)
+        const L = sz * MODEL_LEN, vis = this.ocean && this.camDepthM() > 0 ? 4.8 / this.seaC(selP[0], selP[1]) * this.scale.upm : Infinity;
+        const dist = Math.min(L * 6.5, Math.max(L * 1.5, 0.4 * vis)), up = dist * 2.2 / 6.5;
         const want = new THREE.Vector3(selP[0] - hx * dist, gh + up, selP[1] - hz * dist);
         want.y = Math.max(want.y, this.floorAt(want.x, want.z) + sz * 0.8);
         // under the sea the camera stays in the water with a body that is under it (2026-11-02)
@@ -1111,6 +1114,19 @@ export class World3D {
         const F = this._fly, u = Math.min(1, (now - F.t0) / F.dur), e = u * u * (3 - 2 * u);
         c.lerpVectors(F.c0, F.c1, e); this.camera.position.lerpVectors(F.p0, F.p1, e);
         if (u >= 1) this._fly = null;
+      }
+      // under the sea the framed swimmer is carried along (_frameSwimmer): an animal crosses many metres a step and the
+      // water hides it beyond a few, so the view moves with it until the person moves the view (2026-11-02)
+      if (this.ocean && this._track && !this._fly) {
+        const e = this.agents.get(this._track);
+        if (!e || e.stage === 0 || this.dead.has(this._track)) this._track = 0;
+        else {
+          const p = this._pos(e, alpha, c.x, c.z), sc = this._size(e), y = this._height(e, p[0], p[1], sc) + 0.3 * sc * MODEL_LEN;
+          const d = new THREE.Vector3(p[0] - c.x, y - c.y, p[1] - c.z);
+          c.add(d); this.camera.position.add(d);
+          const sf = this.surfAt(this.camera.position.x, this.camera.position.z);
+          if (sf === sf && y < sf) this.camera.position.y = Math.min(this.camera.position.y, sf - 0.3 * this.scale.upm);
+        }
       }
       // keep the orbit target inside the base tile; move the camera with it
       if (c.x < 0 || c.x >= W || c.z < 0 || c.z >= W) {
@@ -1384,14 +1400,14 @@ export class World3D {
   /**
    * The sea's beam attenuation c (1/m) at a position (2026-11-02): pure seawater's ~0.05 /m in the blue-green and the
    * plankton's, c_p = 0.41 Chl^0.795 (Loisel & Morel 1998), Chl (mg/m3) from the plankton pool over its mixed layer
-   * (a unit is 0.05 kg dry matter per m2, 45% carbon, C:Chl 50). A diver sees about 4.8 / c (Davies-Colley 1988): ~40 m
+   * (a unit is 0.05 kg dry matter per m2, 45% carbon, C:Chl 100: nutrient-limited plankton in bright surface water, 50-200; Geider 1987). A diver sees about 4.8 / c (Davies-Colley 1988): ~40 m
    * in the clearest ocean, 15-25 m at 0.2-0.5 mg/m3, a few metres in a bloom.
    */
   seaC(x, y) {
     const f = this.fields, w = this.world; if (!f || !w) return 0.15;
     const ci = this._cellOf(x, y), fw = w.fw, d = f.d, fi = Math.min(d - 1, ((ci / fw) | 0) >> 1) * d + Math.min(d - 1, (ci % fw) >> 1);
     const kp = this._kPhyto ??= this._layer('phyto'), ph = kp >= 0 ? f.data[kp * d * d + fi] / 255 : 0;
-    const h = Math.min(40, Math.max(0.5, depthM(w, ci))), chl = 450 * ph / h;
+    const h = Math.min(40, Math.max(0.5, depthM(w, ci))), chl = 225 * ph / h;
     return 0.05 + 0.41 * Math.pow(chl, 0.795);
   }
 

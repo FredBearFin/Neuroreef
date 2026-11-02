@@ -105,6 +105,8 @@ public class OceanTests
     /// A year of the water producers of an ocean world (Fields.Row on every row, no animals) after a year's spin-up, and
     /// their gross growth by depth zone, in gC/m2/yr (0.45 gC per g of algal dry matter, Wetzel 2001).
     /// </summary>
+    static string Stand = "";
+
     static (double reef, double bank, double slope, double open, double deepN, double surfN) Production(uint seed, float climate)
     {
         return Sea(() =>
@@ -127,15 +129,17 @@ public class OceanTests
             }
             double toGC = K.WATER_KG_M2 * 1000.0 * 0.45;
             double[] sum = new double[4]; int[] cnt = new int[4];
-            double dn = 0, sn = 0;
+            double dn = 0, sn = 0; double[] al = new double[4], ph = new double[4], um = new double[4], de = new double[4];
             for (int i = 0; i < n; i++)
             {
                 float d = DepthM(w, i);
                 int z = d <= 5f ? 0 : d <= K.OCEAN_SHELF ? 1 : d <= 80f ? 2 : 3;
                 sum[z] += g[i] * toGC; cnt[z]++;
+                al[z] += Al[i]; ph[z] += Ph[i]; um[z] += Ocean.Umol(w.Nutrient[i], Ocean.MixedM(d)); de[z] += w.Pool[(int)Pool.Detritus][i];
                 dn += w.DeepN[i]; sn += w.Nutrient[i];
             }
             double M(int z) => cnt[z] > 0 ? sum[z] / cnt[z] : double.NaN;
+            Stand = string.Join("; ", Enumerable.Range(0, 4).Select(z => $"zone {z}: algae {al[z] / Math.Max(1, cnt[z]):F3} plankton {ph[z] / Math.Max(1, cnt[z]):F3} detritus {de[z] / Math.Max(1, cnt[z]):F2} nitrate {um[z] / Math.Max(1, cnt[z]):F3} uM"));
             return (M(0), M(1), M(2), M(3), dn, sn);
         }, climate: climate);
     }
@@ -143,24 +147,27 @@ public class OceanTests
     [Fact] // the sea's production by depth: open ocean 50-150 gC/m2/yr (Field et al. 1998), banks and slopes above it
     public void OceanProductionByDepthIsInTheLiteratureRanges()
     {
-        // Measured 2026-11-02 (seed 3, the 256 map): reef flats ~65, banks ~170, slopes ~120, open water ~74 gC/m2/yr.
-        // Open water is in Field et al. (1998)'s 50-150; banks are just under the 200-500 of coastal and shelf seas
-        // (Ryther 1969; Field 1998). Reef flats are NOT in the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988):
-        // their few metres of water hold little plankton, and the benthic algae cannot persist on the ambient nitrate
-        // (~0.05 umol/L: R_A x lim < M_A). Real flats live on benthic nitrogen fixation and the mass transfer of currents
-        // sweeping ocean water over them (Atkinson &amp; Bilger 1992), neither of which is modelled yet (phase 2). Asserted is
-        // what holds, so a change that moves it is seen.
+        // Measured 2026-11-02 (seed 3, the 256 map), with the reefs' nitrogen fixation (N_FIX_REEF), the renewal of reef
+        // flats by open water (REEF_RES) and the sea's own detritus rot (ROT_DETRITUS_SEA): reef flats ~105, banks
+        // ~400-440, slopes ~220, open water ~115 gC/m2/yr (before them: ~65, ~170, ~120, ~74). Open water is in Field et
+        // al. (1998)'s 50-150 and the banks in the 200-500 of coastal and shelf seas (Ryther 1969; Field 1998). Reef flats
+        // are NOT in the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their benthic algae hold ~0.12 of
+        // a unit on ~0.23 umol/L of nitrate, limited by the nitrogen the flat fixes and recycles; and at a full unit
+        // (WATER_KG_M2, 0.05 kg/m2, far below a kelp bed's or a turf's 0.2-1 kg) they could make at most M_A x a unit,
+        // ~820 gC/m2/yr. Asserted is what holds, so a change that moves it is seen.
         var (reef, bank, slope, open, deepN, surfN) = Production(3, 0f);
         _out.WriteLine($"no climate: reef flats (<5 m) {reef:F0}, banks (5-30 m) {bank:F0}, slopes (30-80 m) {slope:F0}, open water (>80 m) {open:F0} gC/m2/yr; nutrient surface {surfN:F1} deep {deepN:F1}");
+        _out.WriteLine("  standing: " + Stand);
         var c = Production(3, K.CLIMATE);
+        _out.WriteLine("  standing: " + Stand);
         _out.WriteLine($"climate:    reef flats {c.reef:F0}, banks {c.bank:F0}, slopes {c.slope:F0}, open water {c.open:F0} gC/m2/yr; nutrient surface {c.surfN:F1} deep {c.deepN:F1}");
         // Field et al. 1998 (open ocean 50-150), Mann 1973 and Hatcher 1988 (kelp and reef flats 1,000-2,000; the pool's
         // standing stock, WATER_KG_M2, holds a reef flat below that), Ryther 1969 and Field 1998 (coastal and shelf 200-500)
         Assert.InRange(open, 50.0, 150.0);
         Assert.InRange(c.open, 50.0, 150.0);
-        Assert.InRange(bank, 120.0, 500.0);
+        Assert.InRange(bank, 200.0, 500.0);
         Assert.True(bank > open && c.bank > c.open, "the banks outgrow the open water");
-        Assert.True(reef > 20.0, "the reef flats grow");
+        Assert.True(reef > 80.0, "the reef flats grow on what they fix");
     }
 
     /// <summary>A world with animals run Steps steps, its nutrient before and after (NutrientBalanceTests.Run, at sea).</summary>
@@ -257,5 +264,34 @@ public class OceanTests
             });
         }
         finally { Map.Set(TestWorld.Side); }
+    }
+
+    [Fact] // fliers at sea (2026-11-02): a founded flier must be able to land where it lives (it eats landed: Resolve), so
+           // over deep water only one that can swim there is founded; a flier that cannot land flies at its cost or is downed
+    public void FoundedFliersAtSeaCanLandWhereTheyLive()
+    {
+        foreach (uint seed in new uint[] { 1, 2 })
+        {
+            Sea(() =>
+            {
+                using var sim = new Simulation(64, seed, 2);
+                var w = sim.W;
+                for (int c = 0; c < K.CLADES; c++)
+                {
+                    if (!w.Sp[c].Used) continue;
+                    int n = 0, land = 0; Loco loco = Loco.Walk;
+                    for (int i = 0; i < w.SlotsUsed; i++)
+                    {
+                        if (w.StageOf[i] == St.Dead || w.Spc[i] != c) continue;
+                        n++; loco = (Loco)w.PLoco[i];
+                        if (w.GroundAllows(i, World.FIdx(w.X[i], w.Y[i]))) land++;
+                    }
+                    if (n == 0 || loco != Loco.Fly) continue;
+                    _out.WriteLine($"seed {seed} flier clade {c}: {n} founders, {land * 100 / n}% where they can land (swim or wade)");
+                    Assert.True(land * 2 >= n, $"seed {seed} clade {c}: {land} of {n} fliers can land where they are");
+                }
+                return 0;
+            });
+        }
     }
 }
