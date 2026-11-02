@@ -677,10 +677,10 @@ export class World3D {
     off.normalize().multiplyScalar(d * Math.cos(el)); off.y = d * Math.sin(el);
     let gy = this.world ? this.heightAt(x, z) : 0;
     // an ocean world: the view centre at the group's mean depth, and the camera beside it under the surface
-    if (this.ocean && this.world) { const sf = this.surfAt(x, z); if (sf === sf) gy = Math.max(this.bedAt(x, z), sf - (g.z || 0) * this.scale.upm); off.y *= 0.35; }
+    if (this.ocean && this.world) { const sf = this.surfAt(x, z); if (sf === sf) gy = Math.max(this.bedAt(x, z), sf - Math.max(4, g.z || 0) * this.scale.upm); off.y *= 0.35; }
     const c1 = new THREE.Vector3(x, gy, z), p1 = c1.clone().add(off);
     if (this.world) p1.y = Math.max(p1.y, this._sightY(c1, p1));
-    if (this.ocean && this.world) { const sf = this.surfAt(p1.x, p1.z); if (sf === sf) p1.y = Math.min(p1.y, sf - 0.5 * this.scale.upm); }
+    if (this.ocean && this.world) { const sf = this.surfAt(p1.x, p1.z); if (sf === sf) { p1.y = Math.min(p1.y, sf - 0.5 * this.scale.upm); this.controls.maxPolarAngle = Math.PI * 0.92; } }
     this.controls.maxDistance = Math.max(this.controls.maxDistance, d * 2);
     this._flyTo(c1, p1, dur);
   }
@@ -1075,6 +1075,8 @@ export class World3D {
       {
         const dd = this.camera.position.distanceTo(c);
         this.controls.maxPolarAngle = Math.min(Math.PI * 0.47, Math.asin(Math.min(1, 0.7 * W / Math.max(1, dd))));
+        // under the sea the camera may look up at what swims above it (2026-11-02)
+        if (this.ocean && this.camDepthM() > 0) this.controls.maxPolarAngle = Math.PI * 0.92;
       }
       this.controls.update();
       // the view centre stays on the ground (zooming toward the cursor moves it over a flat plane), and the camera above it
