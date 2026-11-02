@@ -37,8 +37,14 @@ public class StepLengthTests
         Assert.Equal(1f, sim.W.Dt);
         for (int k = 0; k < 300; k++) sim.Step();
         Assert.True(sim.W.AliveCount > 0);
-        // pinned on the code before the step became a setting (5565abc)
-        Assert.Equal(14491964511445264084UL, WorldHash(sim.W));
+        // pinned on the code before the step became a setting (5565abc).
+        // Re-pinned 2026-11-02 for standing and wading (WadingTests): in water a body stands only where it is shallower
+        // than its standing height (Respiration.StandM) and wades there at World.WadeFactor of land's cost and 1 / that of
+        // its land speed; deeper it swims at its swimming speed and cost; and from the surface it reaches the bottom's
+        // algae and detritus only where the water is no deeper than it stands (was: land's cost and >= 0.6 x land speed
+        // anywhere under SHALLOW, 2 m, and the bottom within BOTTOM_BAND, 2 m, from the surface). This world's lakes and
+        // rivers have animals in them, so their speeds, costs and food moved. It was 14491964511445264084 before.
+        Assert.Equal(9027147687691935544UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

@@ -300,6 +300,8 @@ public class OceanTests
         Assert.DoesNotContain("\u221E", all);   // the infinity sign some cultures print
         Assert.Contains("ECO SEA ", all);
         Assert.Contains("water NPP", all);
+        // the shelf's plankton is counted (it printed 0 while the counter sat in the lakes' code)
+        Assert.Matches(@"ECO SEA +300 .*30-130 m [1-9]", all);
     }
 
     [Fact] // the WORLD frame's depth in decimetres after the rivers (2026-11-02): past the u8 plane's 254 m
