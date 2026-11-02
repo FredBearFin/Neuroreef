@@ -2447,7 +2447,13 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   (the North Sea's ~100-250, Joint & Pomroy 1993), below the 200-500 asserted before. Missing: the nitrate a real shelf
   gets from the ocean's deep water at its break and tidal fronts. The ECO lines of an ocean world (EcoWatch) report
   water NPP (plankton and benthic, by depth zone), grazing as a share of it, the swimmer / wader / flier census and the
-  share of animals in water that stand, and never divide by the land's zero area.
+  share of animals in water that stand, and never divide by the land's zero area. A headless run on the new floor
+  (valley map, seed 3, random brains, 2,000 steps) went from 170 swimmers / 80 waders / 680 fliers at the start to
+  332 / 124 / 2,735 (the old floor: 775 / 1,269 / 279 at step 2,000); no animal in water stood (all of it is deeper than
+  any body), the "waders" being legged bodies that swim faster than they walk. The fliers are one lineage of 0.12 kg
+  winged plankton-eaters that dive to ~55 m and never fly (a diving petrel's niche), paying their wings' upkeep;
+  grazing rose to 67-78% of the water's NPP (microzooplankton graze ~60-70% of marine production: Calbet & Landry
+  2004). Not fixed: a flier's chase reach (Body.ReachM, from its top flight speed) is kept while it swims.
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12
