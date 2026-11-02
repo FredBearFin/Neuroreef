@@ -2,8 +2,9 @@
 //
 // Scale: the land is drawn at true scale, a field cell (FCELL = 4 units) being GEO_CELL_M = 16 m and the relief's
 // vertical scale (meta.explore.hRelief, Map.ReliefM: 153 m on the 256 map) being RELIEF = hRelief x 4 / GEO_CELL_M units
-// (world3d.js setRelief, from the server's meta), so a metre is 4 / 16 = 0.25 units (2026-11-01); the animals and plants
-// are drawn at true size too (js/scale.js: Explore is always x1, the overview magnifies). The person's
+// (world3d.js setRelief, from the server's meta), so a metre is 4 / 16 = 0.25 units (2026-11-01); the plants are drawn at
+// true size and the animals at Explore's own creature size (js/scale.js: default x10, true size a click away; it was forced to x1
+// until 2026-11-02, and 5-30 cm animals in the grass were all but invisible: 'all the animals just disappear'). The person's
 // eye is 1.7 m above the ground; it walks at 1.5 m/s and runs at 5 m/s (Ctrl held, or F, multiplies by 10: the map is
 // many km across). It stands on the drawn ground (world3d.groundWater), wades slowly through shallow water and swims at
 // the surface of deep water, and the map wraps at its edges as the animals' does.
@@ -30,8 +31,8 @@ export class Explore {
     this.world = world; this.link = link; this.meta = meta;
     const ex = meta.explore || {};
     // units per metre: the view's (world.scale, js/scale.js: the sim's metres per unit, 0.018), which is the relief's own
-    // vertical scale (RELIEF / H_RELIEF). The creatures and plants are drawn at true size here (x1), so the eye height,
-    // walking speed and every weapon's reach are in the same metres as the bodies they aim at
+    // vertical scale (RELIEF / H_RELIEF). Eye height, walking speed and every weapon's reach are in true metres; the
+    // animals are drawn at Explore's creature size (js/scale.js), and aiming hits the body as drawn
     this.upmV = RELIEF / (ex.hRelief || 153);
     this.weapons = ex.weapons || [];
     this.maxHp = ex.maxHp || 100;
@@ -130,11 +131,13 @@ export class Explore {
   }
 
   /** A place ~8-14 m from animal serial on dry ground that is not a cliff, facing it: {x, z, yaw, pitch}, or null. */
-  _poseNear(serial) {
+  _poseNear(serial, radii = [8, 11, 14, 20, 30, 45]) {
     const w = this.world, e = w.agents.get(serial); if (!e) return null;
     const W = w.W, m = this.upm, wrap = (v) => ((v % W) + W) % W, a0 = Math.random() * Math.PI * 2;
-    for (const r of [8, 11, 14, 20, 30, 45]) for (let k = 0; k < 12; k++) {
-      const a = a0 + (k / 12) * Math.PI * 2, x = wrap(e.x + Math.cos(a) * r * m), z = wrap(e.y + Math.sin(a) * r * m);
+    // (the animal as drawn, magnified by Explore's creature size: the person stands that much farther off, not inside it)
+    const body = w.creatureNow(serial, e, {}).r * 4;
+    for (const r of radii) for (let k = 0; k < 12; k++) {
+      const rr = r * m + body, a = a0 + (k / 12) * Math.PI * 2, x = wrap(e.x + Math.cos(a) * rr), z = wrap(e.y + Math.sin(a) * rr);
       const [g, s] = w.groundWater(x, z);
       if (s === s && s > g + 0.3 * m) continue;                          // water deeper than the ankles
       const sl = Math.max(Math.abs(w.groundWater(x + 2 * m, z)[0] - w.groundWater(x - 2 * m, z)[0]), Math.abs(w.groundWater(x, z + 2 * m)[0] - w.groundWater(x, z - 2 * m)[0])) / (4 * m);
@@ -456,6 +459,14 @@ export class Explore {
   _respawn() {
     this.vehicles.eject();   // VEHICLES hook: out of the vehicle, which stays
     this.hud.message('YOU WERE KILLED<br><span style="font-size:12px">back on your feet somewhere else</span>', true, 3500);
+    // back on its feet within sight of the nearest group of animals, a little farther off than on entering (2026-11-02:
+    // it was a random dry cell of the map, so after a death, or being thrown out of a vehicle, the animals seemed to
+    // have vanished: the person was usually hundreds of metres to kilometres from any of them)
+    const cands = this._crowdNear(this.pos.x, this.pos.z);
+    for (const t of cands.slice(0, 40)) {
+      const p = this._poseNear(t, [40, 60, 90]);
+      if (p) { this.setPose(p.x, p.z, p.yaw, p.pitch); this.ammo = ARROWS; this.hud.weapons(this.weapons, this.cur, this.ammo); return; }
+    }
     const w = this.world.world, fw = w.fw, S = this.world.W / fw;
     for (let k = 0; k < 500; k++) {
       const i = Math.floor(Math.random() * fw * fw);
