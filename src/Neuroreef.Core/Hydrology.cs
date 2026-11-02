@@ -652,6 +652,9 @@ public static partial class Hydrology
         for (int i = 0; i < n; i++)
         {
             if (lake[i] < 0) continue;
+            // no shore anywhere (an ocean world with no islands, 2026-11-02: Terrain.Distance's 999): no shoreface either;
+            // before, the 999 cells were read as metres from a shore and held the 2048 ocean's basins to ~470 m
+            if (dist[i] >= 999f) { w.Depth[i] = MathF.Max(level[lake[i]] - w.Elev[i], 1e-5f * w.ElevPerM); w.Elev[i] = level[lake[i]] - w.Depth[i]; continue; }
             float x = MathF.Max(0.5f, dist[i] - 0.5f) * K.GEO_CELL_M;
             float prof = x <= xc ? K.SHORE_A * MathK.Pow(x, 2f / 3f) : K.SHORE_HC + K.SHORE_S * (x - xc);
             float lv = level[lake[i]], d = MathF.Max(MathF.Min(lv - w.Elev[i], prof * epm), 1e-5f * epm);

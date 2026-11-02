@@ -48,7 +48,8 @@ public static class Wire
         int n = Map.FW * Map.FW;
         var lines = Hydrology.Lines(w);
         int nv = 0; foreach (var l in lines) nv += l.Points.Count;
-        var b = new byte[16 + 10 * n + RiversSize(lines.Count, nv)];
+        int rs = RiversSize(lines.Count, nv);
+        var b = new byte[16 + 10 * n + rs + 2 * n];   // 2026-11-02: + the depth in decimetres after the rivers (DepthDm)
         Header(b, T_WORLD, w.Step);
         BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(8), (ushort)Map.FW);
         BinaryPrimitives.WriteSingleLittleEndian(b.AsSpan(12), w.SeaLevel);
@@ -64,6 +65,9 @@ public static class Wire
             BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(16 + 8 * n + 2 * i), (ushort)Math.Clamp((int)MathF.Round(w.Elev[i] * 65535f), 0, 65535));
         }
         Rivers(b.AsSpan(16 + 10 * n), lines, nv);
+        // the depth in decimetres (2026-11-02, the ocean: the u8 plane stops at 254 m, the 2048 ocean is 725 m deep)
+        for (int i = 0, o = 16 + 10 * n + rs; i < n; i++, o += 2)
+            BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(o), (ushort)Math.Clamp((int)MathF.Round(MathF.Max(0f, w.Depth[i]) / w.ElevPerM * 10f), 0, 65535));
         return b;
     }
 

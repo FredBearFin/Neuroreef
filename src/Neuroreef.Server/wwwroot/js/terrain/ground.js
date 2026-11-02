@@ -97,6 +97,7 @@ const VERT_MAIN = /* glsl */`
 const FRAG_DECL = /* glsl */`
 uniform sampler2D tCover, tMat, tMat2, tNrm, tChan, tFeat;
 uniform float uPlain;
+uniform float uSeaY, uSeaK, uSeaQ, uSeaT;   // the sea's surface (world units; far below the ground: none), its light's loss a unit of depth, caustics
 varying vec3 vWP;
 varying float vDetail, vDist;
 vec3 gTerrN;
@@ -191,6 +192,18 @@ const FRAG_MAIN = /* glsl */`
     vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2) * bump;
     n = normalize(abs(det) * n - grad);
   }
+  // under the sea (2026-11-02): sand ripples, and caustics, the sun focused on the bed by the surface's waves (two
+  // drifting interference patterns), fading with the water above and with distance (they would alias)
+  if (vWP.y < uSeaY) {
+    float dz = uSeaY - vWP.y;
+    vec2 q = vWP.xz * uSeaQ;
+    float rip = 0.5 + 0.5 * sin(q.x * 0.31 + q.y * 0.11 + 2.0 * sin(q.y * 0.05));
+    col *= 0.88 + 0.2 * rip;
+    float a = 0.5 + 0.5 * sin(q.x + 1.7 * sin(q.y * 0.9 + uSeaT));
+    float b = 0.5 + 0.5 * sin(q.y * 1.1 + 1.5 * sin(q.x * 0.8 - uSeaT * 1.1));
+    float caus = pow(a * b, 3.0) * 2.2 * exp(-uSeaK * dz) * (1.0 - smoothstep(6.0, 30.0, vDist));
+    col *= 1.0 + caus;
+  }
   gTerrN = n;
   diffuseColor.rgb = col;
 `;
@@ -266,6 +279,7 @@ export class Ground {
       uFw: { value: fw }, uS: { value: d.S }, uCR: { value: CR }, uSplit: { value: SPLIT }, uGrid: { value: GRID },
       uDisp: { value: DISP_MAX }, uDispNear: { value: DISP_NEAR }, uDispFar: { value: DISP_FAR }, uRidgeMean: { value: RIDGE_MEAN },
       uCam: { value: new THREE.Vector3() }, uPlain: { value: 0 },
+      uSeaY: { value: -1e9 }, uSeaK: { value: 0 }, uSeaQ: { value: 1 }, uSeaT: { value: 0 },
     };
     const m = this.material = new THREE.MeshLambertMaterial({ color: 0xffffff });
     m.onBeforeCompile = (sh) => {
@@ -277,8 +291,8 @@ export class Ground {
         .replace('#include <color_fragment>', FRAG_MAIN)
         .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gTerrN, 0.0)).xyz);');
     };
-    m.customProgramCacheKey = () => 'nr-ground-1';
-    if (patch) patch(m, 'nr-ground-1');
+    m.customProgramCacheKey = () => 'nr-ground-2';
+    if (patch) patch(m, 'nr-ground-2');
     // the same surface for shadow maps (mesh.customDepthMaterial): its vertices are placed here too
     const dm = this.depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
     dm.onBeforeCompile = (sh) => {

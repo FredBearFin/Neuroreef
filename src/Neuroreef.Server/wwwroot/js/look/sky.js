@@ -27,7 +27,7 @@ export function installAerialFog() {
     float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
     gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
   #else
-    float aHaze = 1.0 - exp( - vFogDepth / max( fogNear, 1.0 ) );
+    float aHaze = 1.0 - exp( - vFogDepth / max( fogNear, 0.05 ) );
     float aEdge = smoothstep( 0.55, 1.0, vFogDepth / fogFar );
     vec3 aCol = mix( fogColor * vec3( 0.50, 0.66, 1.0 ), fogColor, max( aEdge, aHaze * aHaze * aHaze ) );
     gl_FragColor.rgb = mix( gl_FragColor.rgb, aCol, max( aHaze * 0.75, aEdge ) );

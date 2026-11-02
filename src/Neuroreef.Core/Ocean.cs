@@ -137,7 +137,7 @@ public static class Ocean
         return f > 0f ? MathF.Min(f, MathF.Max(0f, even)) : MathF.Max(f, MathF.Min(0f, even));
     }
 
-    [ThreadStatic] static float[]? _ph, _h;
+    [ThreadStatic] static float[]? _ph, _h, _col;
 
     /// <summary>
     /// FIELDS, after the swap (an ocean world, serial): the plankton drifts with the water. Neighbouring water exchanges
@@ -149,9 +149,10 @@ public static class Ocean
     public static void Drift(World w)
     {
         int FW = Map.FW, n = FW * FW;
-        if (_ph == null || _ph.Length != n) { _ph = new float[n]; _h = new float[n]; }
+        if (_ph == null || _ph.Length != n) { _ph = new float[n]; _h = new float[n]; _col = new float[n]; }
         float[] Ph = w.Pool[(int)Pool.Phyto], ph = _ph, hh = _h!;
-        for (int i = 0; i < n; i++) { ph[i] = Ph[i]; hh[i] = (w.Cell[i] & (byte)Realm.Water) != 0 ? MixedM(Respiration.ColumnM(w, i)) : 0f; }
+        var cc = _col!;
+        for (int i = 0; i < n; i++) { ph[i] = Ph[i]; cc[i] = Respiration.ColumnM(w, i); hh[i] = (w.Cell[i] & (byte)Realm.Water) != 0 ? MixedM(cc[i]) : 0f; }
         for (int y = 0; y < FW; y++)
         {
             int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW, row = y * FW;
@@ -165,10 +166,46 @@ public static class Ocean
                 d += Ex(xl); d += Ex(xr); d += Ex(yu + x); d += Ex(yd + x);
                 Ph[i] = MathF.Max(0f, ph[i] + d);
 
-                float Ex(int j) { float hj = hh[j]; return hj > 0f ? 0.25f * K.N_DIFF * (ph[j] / hj - ci) * MathF.Min(hi, hj) : 0f; }
+                float Ex(int j) { float hj = hh[j]; return hj > 0f ? Exchange(cc[i], cc[j]) * (ph[j] / hj - ci) * MathF.Min(hi, hj) : 0f; }
             }
         }
+        Renew(w, Ph, cc, hh);
+        Renew(w, w.Nutrient, cc, hh);
     }
+
+    /// <summary>
+    /// The renewal of reef flats' water by the open sea's (2026-11-02): waves and tides drive the ocean's surface water over
+    /// a flat (REEF_FLUSH_D deep or less) and off it, renewing it in REEF_RES. A share 1 - exp(-step / REEF_RES) of each
+    /// flat's water a step is replaced by the open water's mean mixed layer (the cells deeper than OCEAN_SHELF), carrying
+    /// its concentration of a (plankton or nitrate) on and the flat's off; what the flats gain the open water loses, in
+    /// proportion to its mixed layers, so the sum is kept (the nutrient book closes).
+    /// </summary>
+    static void Renew(World w, float[] a, float[] col, float[] h)
+    {
+        int n = Map.FW * Map.FW;
+        double sa = 0, sh = 0;
+        for (int i = 0; i < n; i++) if (h[i] > 0f && col[i] > K.OCEAN_SHELF) { sa += a[i]; sh += h[i]; }
+        if (sh <= 0) return;
+        float cOpen = (float)(sa / sh), f = 1f - MathK.Exp(-K.STEP_H / 24f / K.REEF_RES);
+        double moved = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (h[i] <= 0f || col[i] > K.REEF_FLUSH_D) continue;
+            float d = f * (cOpen * h[i] - a[i]);
+            a[i] += d; moved += d;
+        }
+        // the open water gives what the flats took (or takes what they gave), as much a metre of its mixed layers
+        float per = (float)(moved / sh), floor = 0f;
+        for (int i = 0; i < n; i++) if (h[i] > 0f && col[i] > K.OCEAN_SHELF) a[i] = MathF.Max(floor, a[i] - per * h[i]);
+    }
+
+    /// <summary>Nitrogen fixed in a reference step on a sea floor of col metres at full warmth and no nitrate (N_FIX_REEF x
+    /// the light on the bottom), nutrient units; Fields.SeaCell scales it by the warmth and the nitrate the water lacks.</summary>
+    public static float NFix(float colM) => K.N_FIX_REEF * 1e-3f * Pools.CellM2 / Nutrients.UnitKgN / K.T_SEASON * BottomLight(colM);
+
+    /// <summary>The share of the concentration difference two neighbouring sea cells (columns ci, cj m) exchange a step: the
+    /// open sea's N_DIFF / 4, or REEF_FLUSH where either is a reef flat (REEF_FLUSH_D), flushed by waves and tides.</summary>
+    public static float Exchange(float ci, float cj) => MathF.Min(ci, cj) <= K.REEF_FLUSH_D ? K.REEF_FLUSH : 0.25f * K.N_DIFF;
 
     /// <summary>The nitrogen the sea gains a reference step in a cell (SEA_N_IN), in nutrient units.</summary>
     public static readonly float NIn = K.SEA_N_IN * 1e-3f * Pools.CellM2 / Nutrients.UnitKgN / K.T_SEASON;

@@ -40,6 +40,7 @@ All binary frames are **little-endian** and start with an 8-byte header:
 | 16 + 7·FW² | u8[FW²] | cave courses (2026-11-01, display only): 0 = none; for a cell with bit 1 or 2 above, bits 0-2 = the neighbour its conduit or tube runs to (the river direction codes; 0 also where it ends: a spring or a tube's lower end) and bits 3-7 = size class 1 + round(4·log2(conduit discharge / CAVE_Q_MIN)), 1..31 (quarter octaves; 1 for a lava tube). Following the directions from any cell with bit 1 stays on passage cells and leads to its spring |
 | 16 + 8·FW² | u16[FW²] | elevation × 65535 (2026-11-01): the same elevation as the u8 plane at offset 16, finer (the u8 plane's 1/255 steps are ~35 m at H_RELIEF 8000 m, and terrace high mountains); the u8 plane stays, for clients that predate this one |
 | 16 + 10·FW² | RIVERS | the rivers as lines (2026-11-01, display only; below). A client that predates it ignores the trailing section |
+| after RIVERS (16 + 10·FW² + 8 + 16·R + 16·V) | u16[FW²] | water depth in decimetres (2026-11-02, the ocean: the u8 depth plane stops at 254 m, and an ocean world's basins are as deep as the map's relief, 725 m on 2048): metres × 10, rounded, to 6,553.5 m; 0 on land. A client reads it when the frame is long enough, else the u8 plane |
 
 **RIVERS section** (`Wire.Rivers`, built by `Hydrology.Lines`). Rivers are no longer chains of cell centres: each runs along a
 smooth line through the plane, meandering on low gradients, and its channel cells are the cells that line crosses. Draw a

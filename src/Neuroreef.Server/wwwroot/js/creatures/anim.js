@@ -627,6 +627,7 @@ const GLSL_BODY = `
 `;
 
 const GLSL_FRAG_COMMON = `
+uniform float uRimSea;
 varying vec3 vCol; varying vec3 vMark; varying vec4 vSkin; varying vec4 vPattern; varying vec4 vInteg; varying float vUnder;
 uniform vec3 uWaterCol;
 vec2 nrHash(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
@@ -757,12 +758,15 @@ const GLSL_EMISSIVE = `
   totalEmissiveRadiance += vec3(0.35) * vInteg.y * step(cls, 0.5) * pow(max(dot(normal, normalize(vec3(0.35, 0.55, 1.0))), 0.0), 18.0);
   if (cls == 2.0 || cls == 6.0) totalEmissiveRadiance += skinColor * 0.22;   // thin skin lets light through
   if (cls == 3.0) totalEmissiveRadiance += vec3(0.9) * pow(max(dot(normal, normalize(vec3(0.35, 0.55, 1.0))), 0.0), 28.0);
+  // under the sea (uRimSea, 2026-11-02): the light scattered from all round the water lights its outline (a rim, as
+  // divers see fish against open water), and its own colour a little, so a body reads against the blue
+  totalEmissiveRadiance += uRimSea * (vec3(0.55, 0.85, 1.0) * 0.9 * rim + skinColor * 0.35);
 `;
 
 /** The one material all organisms share (near and far meshes). uTime in material.userData.uniforms. */
 export function bodyMaterial() {
   const mat = new THREE.MeshLambertMaterial();
-  const u = { uTime: { value: 0 }, uSpeciesOverlay: { value: 0 }, uBodyK: { value: 1 }, uWaterCol: { value: new THREE.Color(0.03, 0.12, 0.16) } };
+  const u = { uTime: { value: 0 }, uSpeciesOverlay: { value: 0 }, uBodyK: { value: 1 }, uWaterCol: { value: new THREE.Color(0.03, 0.12, 0.16) }, uRimSea: { value: 0 } };
   mat.userData.uniforms = u;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -778,6 +782,6 @@ export function bodyMaterial() {
       // a swimmer under the surface: lost into the water's colour with its depth (and the water's murk)
       .replace('#include <fog_fragment>', 'gl_FragColor.rgb = mix(gl_FragColor.rgb, uWaterCol, vUnder);\n#include <fog_fragment>');
   };
-  mat.customProgramCacheKey = () => 'neuroreef-body-v4';
+  mat.customProgramCacheKey = () => 'neuroreef-body-v5';
   return mat;
 }

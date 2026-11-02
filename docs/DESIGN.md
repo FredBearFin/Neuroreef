@@ -2412,16 +2412,33 @@ StepLengthTests, ClimateTests); everything below is read only where `World.Ocean
   water (World.DeepN), which exchanges with the mixed layer across the thermocline at K_Z (3e-5 m2/s, Bryan & Lewis
   1979), more under a surface as cold as the deep (K_Z_CONV: winter convection). In: SEA_N_IN (fixation and deposition,
   0.5 gN/m2/yr) instead of weathering; out: deep water above C_DEEP_MAX (45 umol/L). The book closes (OceanTests).
+- **Reefs** (phase 2). Cyanobacteria on a lit floor fix N_FIX_REEF (10 gN/m2/yr in full light; reef flats 2-20,
+  Larkum et al. 1988; Charpy-Roubaud et al. 2001) x the light on the bottom x the warmth, repressed by the nitrate there;
+  an input of the book. Reef flats (REEF_FLUSH_D, 10 m or shallower) are renewed by the open sea's surface water in
+  REEF_RES (half a day; Lowe & Falter 2015), what they gain the open water loses (Ocean.Renew), and exchange with their
+  neighbours at REEF_FLUSH. The sea's algal detritus rots at ROT_DETRITUS_SEA (0.05 /day; Enriquez, Duarte & Sand-Jensen 1993).
 - **Life.** Every ancestor is a water ancestor (EvoSettings.AllWater). Animals use the existing depth physics
-  (Respiration: depth preference, breath-hold dives, gills against the sea's oxygen).
-- **Measured** (OceanTests, the 256 map, seed 3, no animals): open water ~74 gC/m2/yr (Field et al. 1998: 50-150),
-  slopes ~120, banks ~170 (coastal and shelf seas 200-500), reef flats ~65. The reef flats are far below the
-  1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their benthic algae cannot persist on the ambient
-  nitrate (~0.05 umol/L), and the benthic nitrogen fixation and current-driven mass transfer that feed real reefs
-  (Atkinson & Bilger 1992) are not modelled (phase 2). Founding on seeds 1-5: all 16 water ancestors viable on each.
-- **Console.** `meta.ocean`; the camera may go under the surface (the seabed is its floor), the haze, the clear
-  colour and the light follow the depth (red absorbed first), the surface is drawn from below, and the opening view
-  is under the surface at the densest group's depth. Animals are drawn at their simulated depth (AGENTS format 7).
+  (Respiration: depth preference, breath-hold dives, gills against the sea's oxygen). A flier eats landed (Resolve), so
+  at sea the founding counts a flier's food only where it can land, swimming or wading (World.GroundAllows); a flier
+  over water it cannot land in flies at its cost (Resolve.MoveCost, no landing duty) or, when it cannot, is in the water
+  and swims, paddles or drowns by its organs. (Over lakes in a world with land the same founding rule is not applied:
+  it would move the pinned default world.)
+- **Measured** (OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
+  slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
+  flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12
+  of a unit on ~0.23 umol/L of nitrate, limited by what the flat fixes and recycles, and at a full unit (WATER_KG_M2,
+  0.05 kg/m2, below a turf's or a kelp bed's 0.2-1 kg) they could make at most ~820 gC/m2/yr. Founding on seeds 1-5:
+  all 16 water ancestors viable on each.
+- **Console.** `meta.ocean`; the camera may go under the surface (the seabed is its floor). The haze is the water's
+  clarity where the camera is: beam attenuation c = 0.05 + 0.41 Chl^0.795 /m (Loisel & Morel 1998), Chl from the
+  plankton pool over the mixed layer (C:Chl 100; Geider 1987), contrast falling by e per 1/c and nothing seen beyond
+  4.8 / c (Davies-Colley 1988). The sim's plankton makes that a few metres (it holds 0.2-0.6 of a unit, 5-14 gC/m2,
+  a bloom's standing stock), so the overview frames one swimmer of the densest group within a third of the visibility
+  and carries the view with it, and the follow camera keeps within 0.4 of it. Bodies under water get a rim light; the
+  seabed is sand ripples under algal turf from the benthic pool, with caustics; plankton motes drift round the camera;
+  the surface is drawn from below. Animals are drawn at their simulated depth (AGENTS format 7); the WORLD frame carries
+  depth in decimetres after the rivers (past the u8 plane's 254 m). Explore: the person dives and swims in 3D (Space
+  up, C down, forward along the look); the server still senses it at the surface.
 
 ## 11. Step contract (NR-108)
 

@@ -95,7 +95,7 @@ export class World3D {
     // zooming toward the point under the cursor (so a few turns of it reach any herd) and double-click diving in
     // (since 2026-11-02 from about a metre: animals are drawn at true size by default)
     this.controls.minDistance = MIN_DIST_M * this.scale.upm; this.controls.maxDistance = this.W * 1.6;
-    this.controls.addEventListener('start', () => { this._userMoved = true; });
+    this.controls.addEventListener('start', () => { this._userMoved = true; this._track = 0; });
     this._overviewKeys();
     this.controls.zoomToCursor = true; this.controls.zoomSpeed = 3;   // x0.86 a notch: the whole map to a few metres in ~60
     this._fly = null;
@@ -437,7 +437,7 @@ export class World3D {
           carrion = L('carrion'), algae = L('algae'), phyto = L('phyto'), nectar = L('nectar'), pond = L('pond'),
           frozen = L('frozen'), temp = L('temp'), flood = L('flood'),
           snow = L('snow'), volc = L('volcanic'), sedi = L('sedimentary'), lime = L('limestone'), allu = L('alluvium'),
-          wetland = L('wetland');   // marsh and swamp share (hydrology, when sent; none: no wetlands drawn)
+          wetland = L('wetland'), detritusL = L('detritus');   // marsh and swamp share (hydrology, when sent; none: no wetlands drawn)
     // the sim's snowpack when it sends one (the water cycle on); else snow where the air is below freezing
     let hasSnow = false; if (snow) for (let k = 0; k < snow.length; k++) if (snow[k]) { hasSnow = true; break; }
     const sea = w.sea, b8 = (v) => Math.max(0, Math.min(255, Math.round(v * 255)));
@@ -471,6 +471,15 @@ export class World3D {
           const tr = t < 0.5 ? 1 - 0.85 * u : 1, tg = 1 - 0.8 * u, tb = t < 0.5 ? 1 : 1 - 0.85 * u;
           r += (tr - r) * 0.7; g += (tg - g) * 0.7; b += (tb - b) * 0.7;
         }
+      }
+      // the seabed of an ocean world (2026-11-02): pale carbonate sand, under algal turf and seagrass where the benthic
+      // algae grow (the algae pool, shown by its square root: a thin turf still shows), darker where detritus lies
+      if (this.ocean && f && w.cell[i] !== 1) {
+        const al = Math.min(1, 1.6 * Math.sqrt(algae[fi] / 255)), de = detritusL ? Math.min(1, detritusL[fi] / 255) : 0;
+        r = 0.70; g = 0.64; b = 0.50;
+        r += (0.16 - r) * al; g += (0.34 - g) * al; b += (0.14 - b) * al;
+        r *= 1 - 0.35 * de; g *= 1 - 0.3 * de; b *= 1 - 0.3 * de;
+        plants = 0.6 * al;
       }
       C[i * 4] = b8(r); C[i * 4 + 1] = b8(g); C[i * 4 + 2] = b8(b); C[i * 4 + 3] = b8(plants);
       let sn = 0;
@@ -667,9 +676,12 @@ export class World3D {
    *  ~20 degrees above the ground, from the side the camera is on now. dur: ms of flight (0: at once). */
   frameGroup(g, dur = 900) {
     if (!g || this.mode !== 'overview') return;
+    if (this.ocean && this.world && this._frameSwimmer(g, dur)) return;
     const c = this.controls.target, W = this.W;
     const x = g.x + W * Math.round((c.x - g.x) / W), z = g.y + W * Math.round((c.z - g.y) / W);
-    const acrossM = Math.min(VIEW_M_MAX, Math.max(VIEW_M_MIN, 2.5 * g.r + 15));
+    let acrossM = Math.min(VIEW_M_MAX, Math.max(VIEW_M_MIN, 2.5 * g.r + 15));
+    // under the sea the view is framed within the water's visibility (seaC: 4.8 / c): the camera at most a third of it away
+    if (this.ocean && this.world) { const V = 4.8 / this.seaC(g.x, g.y), tH0 = Math.tan(this.camera.fov * Math.PI / 360) * Math.max(0.5, this.camera.aspect); acrossM = Math.max(3, Math.min(acrossM, 2 * tH0 * V / 3)); }
     const tH = Math.tan(this.camera.fov * Math.PI / 360) * Math.max(0.5, this.camera.aspect);
     const d = acrossM * this.scale.upm / (2 * tH), el = 0.36;
     const off = this.camera.position.clone().sub(c); off.y = 0;
@@ -683,6 +695,39 @@ export class World3D {
     if (this.ocean && this.world) { const sf = this.surfAt(p1.x, p1.z); if (sf === sf) { p1.y = Math.min(p1.y, sf - 0.5 * this.scale.upm); this.controls.maxPolarAngle = Math.PI * 0.92; } }
     this.controls.maxDistance = Math.max(this.controls.maxDistance, d * 2);
     this._flyTo(c1, p1, dur);
+  }
+
+  /**
+   * Under the sea (2026-11-02): a group is seen only as far as the water is clear (seaC: ~4.8 / c, a few metres in a
+   * plankton bloom, tens in clear ocean), so the view frames one of its animals, the one nearest its middle in the lit
+   * upper water (within 25 m of the surface if any is), at its drawn depth, from the side and a little above, about 6
+   * of its drawn lengths away but within a third of the visibility; its neighbours show as the water allows.
+   */
+  _frameSwimmer(g, dur) {
+    const W = this.W, c = this.controls.target, upm = this.scale.upm;
+    let best = null, bd = Infinity, bs = 0;
+    for (const [serial, e] of this.agents) {
+      if (e.stage === 0 || this.dead.has(serial) || this.hidden.has(e.sp)) continue;
+      let dx = e.x - g.x, dy = e.y - g.y; dx -= Math.round(dx / W) * W; dy -= Math.round(dy / W) * W;
+      const d = Math.hypot(dx, dy) + ((e.depth || 0) > 25 ? 1e4 : 0);
+      if (d < bd) { bd = d; best = e; bs = serial; }
+    }
+    if (!best) return false;
+    this._track = bs;
+    const x = best.x + W * Math.round((c.x - best.x) / W), z = best.y + W * Math.round((c.z - best.y) / W);
+    const sc = this._size(best), y = this._height(best, x, z, sc), L = sc * MODEL_LEN;
+    const V = 4.8 / this.seaC(x, z) * upm, d = Math.max(3 * L, Math.min(6 * L, V / 3));
+    const off = this.camera.position.clone().sub(c); off.y = 0;
+    if (off.lengthSq() < 1e-12) off.set(0, 0, 1);
+    off.normalize().multiplyScalar(d * Math.cos(0.25)); off.y = d * Math.sin(0.25);
+    const c1 = new THREE.Vector3(x, y + 0.3 * L, z), p1 = c1.clone().add(off);
+    const sf = this.surfAt(p1.x, p1.z), bed = this.bedAt(p1.x, p1.z);
+    if (sf === sf) p1.y = Math.min(p1.y, sf - 0.3 * upm);
+    p1.y = Math.max(p1.y, bed + 0.3 * L);
+    this.controls.maxPolarAngle = Math.PI * 0.92;
+    this.controls.minDistance = Math.min(this.controls.minDistance, 2 * L);
+    this._flyTo(c1, p1, dur);
+    return true;
   }
 
   /** The opening view: low over the densest group, once animals and the ground are there (unless the view was moved). */
@@ -727,7 +772,7 @@ export class World3D {
       if (skip(e)) return;
       if (e.code === 'KeyN' && !e.repeat) { this._userMoved = true; this.nextGroup(e.shiftKey ? -1 : 1); return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) { this._userMoved = true; this.nextClade(e.shiftKey ? -1 : 1); } return; }
-      if (PAN_KEYS.includes(e.code)) { e.preventDefault(); held.add(e.code); this._userMoved = true; this._fly = null; }
+      if (PAN_KEYS.includes(e.code)) { e.preventDefault(); held.add(e.code); this._userMoved = true; this._fly = null; this._track = 0; }
     });
     addEventListener('keyup', (e) => held.delete(e.code));
     addEventListener('blur', () => held.clear());
@@ -1012,6 +1057,7 @@ export class World3D {
 
   render(probe) {
     this._camUnder = this.ocean && this.camDepthM() > 0;
+    if (this.ocean) this._sea();
     if (!this.tiles) { this.look.update(); this.look.render(); return; }   // [look]
     const now = performance.now();
     const alpha = Math.min(1, (now - this.frameT) / this.frameDt);
@@ -1037,9 +1083,13 @@ export class World3D {
       // (distances in the animal's own drawn lengths, MODEL_LEN x sz: the view keeps its framing at any size. 2026-11-02:
       // about 6.5 lengths behind and 2.2 above, so a 20 cm animal at true size is a sixth of the view's height)
       if (this.mode === 'follow') {
-        const L = sz * MODEL_LEN, dist = L * 6.5, up = L * 2.2;
+        // under the sea within the water's visibility (seaC: 4.8 / c): at most 0.4 of it away, at least 1.5 lengths (2026-11-02)
+        const L = sz * MODEL_LEN, vis = this.ocean && this.camDepthM() > 0 ? 4.8 / this.seaC(selP[0], selP[1]) * this.scale.upm : Infinity;
+        const dist = Math.min(L * 6.5, Math.max(L * 1.5, 0.4 * vis)), up = dist * 2.2 / 6.5;
         const want = new THREE.Vector3(selP[0] - hx * dist, gh + up, selP[1] - hz * dist);
         want.y = Math.max(want.y, this.floorAt(want.x, want.z) + sz * 0.8);
+        // under the sea the camera stays in the water with a body that is under it (2026-11-02)
+        if (this.ocean) { const sf = this.surfAt(want.x, want.z); if (sf === sf && gh < sf - sz) want.y = Math.min(want.y, sf - 0.3 * sz); }
         this.camera.position.lerp(want, ease(0.12));
         // on its way there (from the overview, or round a hill the animal walked past) the camera never goes into the ground
         const cp = this.camera.position, floor = this.floorAt(cp.x, cp.z) + sz * 0.5;
@@ -1064,6 +1114,19 @@ export class World3D {
         const F = this._fly, u = Math.min(1, (now - F.t0) / F.dur), e = u * u * (3 - 2 * u);
         c.lerpVectors(F.c0, F.c1, e); this.camera.position.lerpVectors(F.p0, F.p1, e);
         if (u >= 1) this._fly = null;
+      }
+      // under the sea the framed swimmer is carried along (_frameSwimmer): an animal crosses many metres a step and the
+      // water hides it beyond a few, so the view moves with it until the person moves the view (2026-11-02)
+      if (this.ocean && this._track && !this._fly) {
+        const e = this.agents.get(this._track);
+        if (!e || e.stage === 0 || this.dead.has(this._track)) this._track = 0;
+        else {
+          const p = this._pos(e, alpha, c.x, c.z), sc = this._size(e), y = this._height(e, p[0], p[1], sc) + 0.3 * sc * MODEL_LEN;
+          const d = new THREE.Vector3(p[0] - c.x, y - c.y, p[1] - c.z);
+          c.add(d); this.camera.position.add(d);
+          const sf = this.surfAt(this.camera.position.x, this.camera.position.z);
+          if (sf === sf && y < sf) this.camera.position.y = Math.min(this.camera.position.y, sf - 0.3 * this.scale.upm);
+        }
       }
       // keep the orbit target inside the base tile; move the camera with it
       if (c.x < 0 || c.x >= W || c.z < 0 || c.z >= W) {
@@ -1153,6 +1216,7 @@ export class World3D {
     const U = this.bodyMat.userData.uniforms;
     U.uTime.value = now / 1000; U.uBodyK.value = bk;
     U.uSpeciesOverlay.value = this.speciesOverlay ? 1 : 0;
+    U.uRimSea.value = this._camUnder ? 1 : 0;   // under the sea: a bright rim, so a body reads against the blue (2026-11-02)
     let nn = 0, nf = 0, ne = 0;
     // with tens of thousands of organisms, draw every near one and a sample of the far ones (by serial, so the
     // same ones stay drawn from frame to frame): far bodies are a few pixels, and the frame time stays bounded
@@ -1331,6 +1395,49 @@ export class World3D {
     const murk = this._murkAt(ci), vis = 6 / (1 + 3 * murk), dd = (sf - y0) / this.scale.upm;
     if (y0 < sf - 0.45 * sc && !this._camUnder) e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));   // (wading: its back is dry)
     return y0;
+  }
+
+  /**
+   * The sea's beam attenuation c (1/m) at a position (2026-11-02): pure seawater's ~0.05 /m in the blue-green and the
+   * plankton's, c_p = 0.41 Chl^0.795 (Loisel & Morel 1998), Chl (mg/m3) from the plankton pool over its mixed layer
+   * (a unit is 0.05 kg dry matter per m2, 45% carbon, C:Chl 100: nutrient-limited plankton in bright surface water, 50-200; Geider 1987). A diver sees about 4.8 / c (Davies-Colley 1988): ~40 m
+   * in the clearest ocean, 15-25 m at 0.2-0.5 mg/m3, a few metres in a bloom.
+   */
+  seaC(x, y) {
+    const f = this.fields, w = this.world; if (!f || !w) return 0.15;
+    const ci = this._cellOf(x, y), fw = w.fw, d = f.d, fi = Math.min(d - 1, ((ci / fw) | 0) >> 1) * d + Math.min(d - 1, (ci % fw) >> 1);
+    const kp = this._kPhyto ??= this._layer('phyto'), ph = kp >= 0 ? f.data[kp * d * d + fi] / 255 : 0;
+    const h = Math.min(40, Math.max(0.5, depthM(w, ci))), chl = 225 * ph / h;
+    return 0.05 + 0.41 * Math.pow(chl, 0.795);
+  }
+
+  /** Once a frame in an ocean world: the ground's sea uniforms (caustics) and the plankton motes round the camera. */
+  _sea() {
+    const G = this.ground; if (!G || !this.world) return;
+    const cam = this.camera.position, sf = this.surfAt(cam.x, cam.z), upm = this.scale.upm;
+    const U = G.uniforms;
+    U.uSeaY.value = sf === sf ? sf : -1e9; U.uSeaK.value = 0.12 / upm; U.uSeaQ.value = 2 * Math.PI / (1.5 * upm); U.uSeaT.value = performance.now() / 1000;
+    // plankton motes: specks drifting in a box of ~16 m round the camera, as many as the plankton is dense
+    const R = 8 * upm, N = 1200;
+    if (!this._motes) {
+      const g = new THREE.BufferGeometry(), P = new Float32Array(N * 3);
+      for (let k = 0; k < N * 3; k++) P[k] = Math.random() * 2 - 1;
+      g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+      this._moteSeed = P.slice();
+      const m = new THREE.PointsMaterial({ color: 0xcfe8d8, size: 0.035 * upm, transparent: true, opacity: 0.5, depthWrite: false, sizeAttenuation: true });
+      this._motes = new THREE.Points(g, m); this._motes.frustumCulled = false; this.scene.add(this._motes);
+    }
+    const on = this._camUnder; this._motes.visible = on; if (!on) return;
+    const P = this._motes.geometry.attributes.position.array, S = this._moteSeed, t = performance.now() / 1000;
+    const c = this.seaC(cam.x, cam.z), dens = Math.min(1, Math.max(0.15, (c - 0.05) / 0.5));
+    this._motes.geometry.setDrawRange(0, Math.round(N * dens));
+    for (let k = 0; k < N; k++) {
+      // each mote's place in the box, fixed in the water (drifting slowly), wrapped round the camera
+      const wx = S[3 * k] * R + 0.02 * t * upm, wy = S[3 * k + 1] * R + 0.01 * Math.sin(t * 0.3 + k) * upm, wz = S[3 * k + 2] * R;
+      const m = (v, o) => o + ((((v - o) % (2 * R)) + 3 * R) % (2 * R)) - R;
+      P[3 * k] = m(wx, cam.x); P[3 * k + 1] = Math.min(sf - 0.05, m(wy, cam.y)); P[3 * k + 2] = m(wz, cam.z);
+    }
+    this._motes.geometry.attributes.position.needsUpdate = true;
   }
 
   /** The water's murk at a cell, 0..1 (algae and plankton in the FIELDS frame). */
@@ -1514,7 +1621,7 @@ function wrapPatch(mat, U, key) {
 }
 
 /** Water depth of cell i, m, from the WORLD frame's depth plane (2026-11-01: round(16 sqrt(m)); ICD §WORLD). */
-function depthM(w, i) { const b = w.depth[i] / 16; return b * b; }
+function depthM(w, i) { if (w.depthDm) return w.depthDm[i] / 10; const b = w.depth[i] / 16; return b * b; }   // (decimetres since 2026-11-02, else the u8 plane to 254 m)
 
 /** The river plane for a server that does not send it: open water above lake level drains to its lowest wet
  *  neighbour (else its lowest), sized from its depth (2026-11-01: m = RIVER_D x Q^0.4, Q in m3/s). */
