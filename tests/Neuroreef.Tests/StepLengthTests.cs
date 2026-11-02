@@ -44,7 +44,12 @@ public class StepLengthTests
         // algae and detritus only where the water is no deeper than it stands (was: land's cost and >= 0.6 x land speed
         // anywhere under SHALLOW, 2 m, and the bottom within BOTTOM_BAND, 2 m, from the surface). This world's lakes and
         // rivers have animals in them, so their speeds, costs and food moved. It was 14491964511445264084 before.
-        Assert.Equal(9027147687691935544UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-02 (second round, DivingTests): a chase reaches at the speed of the medium a body is in
+        // (World.ReachOf: swimming in water, running on land, flying only in the air; was its fastest speed anywhere),
+        // plankton is taken from the water a body sweeps (Respiration.PlanktonKg; was the whole column's at a bite), dives
+        // are paid, and wings stroke under water (Body.Propulsor). Every world's lakes and every chase moved. It was
+        // 9027147687691935544 before.
+        Assert.Equal(2011528924806897781UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

@@ -2453,7 +2453,22 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   any body), the "waders" being legged bodies that swim faster than they walk. The fliers are one lineage of 0.12 kg
   winged plankton-eaters that dive to ~55 m and never fly (a diving petrel's niche), paying their wings' upkeep;
   grazing rose to 67-78% of the water's NPP (microzooplankton graze ~60-70% of marine production: Calbet & Landry
-  2004). Not fixed: a flier's chase reach (Body.ReachM, from its top flight speed) is kept while it swims.
+  2004). Not fixed then: a flier's chase reach (Body.ReachM, from its top flight speed) is kept while it swims.
+- **The water column, second round** (2026-11-02, every world; DivingTests). Plankton is taken from the water a body
+  sweeps (Respiration.PlanktonKg): the mixed layer's concentration (stock over the cell's area and the mixed depth, less
+  below it by the light, for the share of the step it is there) x GAPE (0.5) of its frontal area x the metres it swims,
+  its travel and its dives (Jorgensen 1966; Hansen, Bjornsen & Hansen 1997; Sanderson & Wassersug 1993); before, a
+  body anywhere in the water took the whole column's plankton at a bite. Dives are swum down and up (Breath.DiveM:
+  2z a dive, as many breath-hold dives as fill its share of the step at depth) at swimming's cost of transport. A chase
+  reaches at the medium's speed (World.ReachOf: PReachSwim, PReachLand, PReach in the air). Wings stroke under water
+  as flippers (Body.Propulsor = fins + WING_SWIM 4 w (1 - w)): best at half the wing gene, which flies only light bodies,
+  so a heavy diver trades flight against swimming (Thaxter et al. 2010; Elliott et al. 2013). Measured: the valley run
+  (seed 3, 2,000 steps) founded 7 lineages (16 before) and collapsed to one, a 0.27 kg legged algae and detritus eater
+  (124 "waders", 0 swimmers, 0 fliers at step 2,000; 332 / 124 / 2,735 before); founding on the 256 map gave 9, 16, 7,
+  12 and 10 lineages on seeds 1-5. Plankton-eaters starve: a step's travel is the model's net displacement (DMD_M), a
+  few hundred metres in hours, where a real filter feeder cruises at about a body length a second all the while it
+  feeds, so the water swept (and paid for) is one to two orders of magnitude below a real one's. That is the open
+  question, not the clearance physics.
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12
