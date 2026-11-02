@@ -544,7 +544,7 @@ public class EcologyTests
         Life.FreeSlot(w, b);   // a alone
         // big eggs and the lowest breeding condition, so a mother can be ready to breed yet unable to afford an egg
         w.Genome[a * G.LEN + G.B_BREEDE] = -127; w.Genome[a * G.LEN + G.B_BIRTH] = 127; Body.Express(w, a);
-        float childE = K.F_BIRTH * K.C_EMAX * w.PM[a] * w.PBirth[a];
+        float childE = K.F_BIRTH * Body.Emax(w.PM[a] * w.PBirth[a]);
         float tissue = Resolve.TissueCost(w.PBirth[a], w.PM[a]);
         // too little reserve for even one egg (but above its breeding condition): nothing happens, nothing is paid
         float poor = w.PReadyE[a] * w.EmaxOf(a) + 1e-4f;
@@ -556,6 +556,10 @@ public class EcologyTests
         Assert.Equal(0, w.T.Lays[0]);
         Assert.Equal(0, w.T.Conceptions[0]);
         Assert.Equal(0f, w.Cooldown[a]);
+        // a smaller egg can be paid from the body's fat reserve (a larger egg's tissue alone exceeds it)
+        w.Genome[a * G.LEN + G.B_BIRTH] = -127; Body.Express(w, a);
+        childE = K.F_BIRTH * Body.Emax(w.PM[a] * w.PBirth[a]);
+        tissue = Resolve.TissueCost(w.PBirth[a], w.PM[a]);
         // fed: a litter, each egg paid in full (its reserve, which it carries, and its tissue at TISSUE_E / GROWTH_EFF)
         w.Energy[a] = w.EmaxOf(a); w.Cooldown[a] = 0;
         float before = w.Energy[a]; double spent0 = w.T.SpendRepro[0];
@@ -907,6 +911,41 @@ public class EcologyTests
         for (int k = 0; k < 60; k++) { r = 0.5 * (lo + hi); if (3 * Math.Exp(-r * alpha) / (1 - Math.Exp(-r * tau)) > 1) lo = r; else hi = r; }
         double fenchel = 0.025 * Math.Pow(140, -0.26);
         Assert.InRange(r / fenchel, 1.0, 4.0);
+    }
+
+    [Fact] // the reserve is the body's fat (2026-11-01): fat 0.075 M^1.19 kg (Calder 1984) at 39.3 kJ/g, so a body fasting at
+    // basal lasts 10.1 M^0.44 days (Lindstedt & Boyce 1985): ~3.7 days at 0.1 kg, ~10 at 1 kg, ~37 at 20 kg
+    public void FastingEnduranceAtBasalMatchesFatAllometry()
+    {
+        // the reserve holds the fat's energy, in joules, whatever the energy unit
+        foreach (float m in new[] { 0.02f, 1f, 20f, 1000f })
+            Assert.Equal(0.075 * Math.Pow(m, 1.19) * 39.3e6, Body.Emax(m) * (double)Pools.EnergyJ, 0.002 * 0.075 * Math.Pow(m, 1.19) * 39.3e6);
+        Assert.InRange(Body.Emax(1f) / K.C_BASAL / K.STEPS_PER_DAY, 9.8f, 10.3f);
+        Assert.InRange(Body.Emax(20f) / (K.C_BASAL * MathK.Pow(20f, K.EXP_BASAL)) / K.STEPS_PER_DAY, 36.5f, 38.5f);
+        // a lone adult with no food, standing still in the thermoneutral zone, paying Kleiber's basal (no brain, no extras),
+        // lives as many days as its fat pays for its metabolism
+        foreach (float m in new[] { 0.1f, 1f, 20f })
+        {
+            var w = new World(8, 1);
+            Array.Fill(w.Temp, 20f); Array.Fill(w.Moisture, 1f);
+            int i = Life.NewSlot(w);
+            Brain.RandomGenome(w.GenomeOf(i), 1, 0, 1);
+            int g = i * G.LEN;
+            w.Genome[g + G.B_LEGS] = 100; w.Genome[g + G.B_FINS] = -127; w.Genome[g + G.B_WINGS] = -127; w.Genome[g + G.B_ENDO] = 127;
+            w.Spc[i] = 0; w.StageOf[i] = St.Adult; w.Sp[0].Used = true; w.Sp[0].Alive = true;
+            Body.Express(w, i); Brain.InitLife(w, i);
+            w.PM[i] = m; w.PBrain[i] = 0; w.PBasal[i] = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+            w.X[i] = 1f; w.Y[i] = 1f; w.Energy[i] = w.EmaxOf(i); w.Age[i] = 1f; w.Gut[i] = 0f; w.GutEnergy[i] = 0f;
+            int steps = 0;
+            while (w.StageOf[i] != St.Dead && steps < 20000)
+            {
+                w.IActs[i] = 0; w.ITarget[i] = -1; w.IMate[i] = -1; w.ISpeed[i] = 0; w.Thirst[i] = 0f; w.Age[i] = 1f;
+                Resolve.Run(w, 1, 0); w.Step++; steps++;
+            }
+            Assert.Equal(1L, w.T.Deaths[Cause.Starve]);
+            double days = steps / K.STEPS_PER_DAY, expect = 0.075 * Math.Pow(m, 1.19) * 39.3e3 / (3.39 * Math.Pow(m, 0.75) * 86.4);
+            Assert.InRange(days / expect, 0.9, 1.05);
+        }
     }
 
     [Fact] // NR-322: growth is limited by spare energy: a hungry juvenile does not grow, a fed one grows and matures at adult size

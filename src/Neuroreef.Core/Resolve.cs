@@ -46,7 +46,7 @@ public static class Resolve
         var loco = w.LocoOf(i);
         int s = w.Spc[i];
         uint seed = w.Seed, step = (uint)w.Step;
-        float mass = w.MassOf(i), emax = K.C_EMAX * mass, mf = mass / w.PM[i];
+        float mass = w.MassOf(i), emax = Body.Emax(mass), mf = mass / w.PM[i];
         var diet = w.DietOf(i);
         float r = 0f;   // what others do to it is added after all have moved (Run)
         float spent = 0f;   // energy spent this step on what it chose to do (strikes, calls, moving, keeping warm), Revision P
@@ -709,7 +709,7 @@ public static class Resolve
             w.PendingR[v] -= K.R_PAIN * drain / MathF.Max(w.EmaxOf(v), 1e-3f);
             float m = MathF.Min(space, drain / K.RHO_BLOOD);
             // (the victim's body loses energy, not mass: a blood meal carries no nutrient; Nutrients.cs)
-            if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell, 0f);
+            if (m > 0) { rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell, 0f); w.T.EatenMass[(int)Pool.Blood] += m; }
             bool dead = w.Energy[v] <= 0;
             w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], dead ? Telemetry.F_DRAINED : Telemetry.F_BITE, w.Step, w.Serial[a], w.Serial[v]);
             if (dead) { w.T.Kills[w.Spc[a]]++; w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
@@ -721,7 +721,7 @@ public static class Resolve
         float eat = MathF.Min(space, carcass);
         // the body's nutrient (and its gut's) goes with its flesh: the eaten share to the killer, the rest to the carcass (2026-11-02)
         float bodyN = Nutrients.Body(w, v) + w.GutN[v]; w.GutN[v] = 0f;
-        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { float nm = bodyN * eat / carcass; bodyN -= nm; rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell, nm); carcass -= eat; if (dg != null) { dg.StrMeatKg[dgG] += eat; dg.StrMeatE[dgG] += eat * K.RHO_MEAT * dietA[(int)Pool.Meat]; } }
+        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { float nm = bodyN * eat / carcass; bodyN -= nm; rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell, nm); carcass -= eat; w.T.EatenMass[(int)Pool.Meat] += eat; if (dg != null) { dg.StrMeatKg[dgG] += eat; dg.StrMeatE[dgG] += eat * K.RHO_MEAT * dietA[(int)Pool.Meat]; } }
         if (dg != null) dg.StrKill[dgG]++;
         w.T.Kills[w.Spc[a]]++;   // only a death counts as a kill (a blood meal is not one)
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
@@ -795,7 +795,7 @@ public static class Resolve
     static float Conceive(World w, int mother, int father, int n)
     {
         float birth = w.PBirth[mother];
-        float childE = K.F_BIRTH * K.C_EMAX * w.PM[mother] * birth;
+        float childE = K.F_BIRTH * Body.Emax(w.PM[mother] * birth);   // a share of the newborn's own reserve
         bool live = w.PLive[mother] != 0;
         float tissue = live ? 0f : TissueCost(birth, w.PM[mother]);
         int made = 0;
@@ -823,7 +823,7 @@ public static class Resolve
     }
 
     static float LitterCost(World w, int m)
-        => w.PLitter[m] * (K.F_BIRTH * K.C_EMAX * w.PM[m] * w.PBirth[m] + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
+        => w.PLitter[m] * (K.F_BIRTH * Body.Emax(w.PM[m] * w.PBirth[m]) + (w.PLive[m] != 0 ? 0f : TissueCost(w.PBirth[m], w.PM[m])));
 
     /// <summary>Energy needed to build a newborn's tissue (its birth share of the adult mass).</summary>
     /// (2026-11-01) The whole body is built, bone, gut and skin with the muscle, at the energy of wet tissue (TISSUE_E,

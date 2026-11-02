@@ -218,6 +218,42 @@ ground). HydrologyTests' hydraulic geometry in metres; WetYearsFloodTheFloodplai
 (4-5 now); WaterCycleTests' dry-spell baseflow over 4% of the wet discharge, not 5% (4.8% with the wetlands' ET, 5.9%
 without); DecisionTests and AppearanceTests set depths through World.ShallowE; PlantTests' Key and Cross take a 32-bit
 high key and flood tolerance costs growth; ClimateTests' hash re-pinned.
+**The energy reserve is the body's fat** (2026-11-01; Constants.cs, Body.cs, World.cs, Resolve.cs, Life.cs, Player.cs;
+reporting: Server/EcoWatch.cs). Emax was C_EMAX·M with C_EMAX = 2 E/kg, 17.8 MJ per kg of body: ~45% of the body as
+lipid (39.3 kJ/g) at a full reserve, so a 1 kg body fasted 61 days at basal. Fat-mass allometry gives far less, and a
+steeper slope: fat 0.075·M^1.19 kg (Calder 1984), so fasting endurance at basal ~M^0.44 (Lindstedt & Boyce 1985).
+Now:
+- Emax = Body.Emax(M) = C_EMAX·M^EXP_EMAX: FAT_KG = 0.075 kg at LIPID_KJ_G = 39.3 kJ/g, EXP_EMAX = 1.19, so C_EMAX =
+  FAT_KG·LIPID_KJ_G·C_BASAL/(BMR_W·STEP_S) = 0.331 E (2.95 MJ). At basal a body fasts 10.1·M^0.44 days: 1.8 at 20 g, 3.7 at
+  0.1 kg, 10 at 1 kg, 37 at 20 kg (EcologyTests.FastingEnduranceAtBasalMatchesFatAllometry runs a lone body to
+  starvation). Fat is 2% of a 1 g body, 7.5% at 1 kg, 13% at 20 kg, 28% at 1 t.
+- What used the reserve as linear in mass now calls Body.Emax: the newborn's endowment (F_BIRTH of its own reserve, in
+  Conceive and LitterCost), the founders' starting energy, the person's health in Explore. The shares of Emax (SATIETY,
+  READY_LO/HI, GROW_RESERVE, CARE_RESERVE, F_BIRTH, the 0.1/0.15 Emax margins) keep their meaning.
+- Damage and retaliation were energies tuned against the old reserve ("an armed attacker subdues equal-sized prey in a
+  few hits"): C_DAMAGE 0.4 E -> 0.2·C_EMAX, C_RETAL 0.06 E -> 0.03·C_EMAX, the same share of a 1 kg reserve (5 hits of
+  strike 1 at 1 kg). A wound is linear in the attacker's mass and the reserve goes as M^1.19, so a bigger victim takes
+  ~M^0.19 more hits (1.8x at 20 kg). Costs of the animal's own acts are against its metabolism and stay: C_STRIKE (one
+  basal step), C_MATE (0.02 E/kg, now 6% of a 1 kg reserve, was 1%). C_DRAIN, the parasite's blood meal, stays an energy
+  (HT), so it takes ~6x the share of a host's reserve it did.
+Measured (valley map, random brains, seeds 3, 5, 7, 2,000 steps, NR_ECO=1 NR_ECO_FROM=600 --threads 2; before -> after;
+pooled after step 600):
+- Alive at step 2,000: 5,869 -> 5,866, 7,054 -> 7,025, 10,780 -> 7,370 (seed 7 -32%: births 12,971 -> 8,902). All herbivores.
+- Starvation deaths 5,003 -> 5,676, 3,709 -> 2,813, 3,174 -> 2,785: not more, though a body now lasts 1/6 as long without
+  food; the hunger sense (1 - E/Emax) rises six times faster, and herbivores assimilated more of NPP: 0.56 -> 0.68%,
+  0.59 -> 0.75%, 0.87 -> 0.92% (offtake 0.92 -> 1.10%, 0.89 -> 1.16%, 1.45 -> 1.51%).
+- Parasitism deaths 689 -> 2,302, 1,536 -> 3,568, 1,911 -> 4,148 (the unscaled blood meal); kills 4,203 -> 3,107,
+  6,012 -> 5,445, 7,963 -> 4,104 (the bodies here are 3-33 kg: more hits each).
+- Meat eaten 57 -> 19, 55 -> 30, 76 -> 27 kg/km2/yr: a carcass carries its reserve as meat (E/RHO_MEAT), now a sixth as
+  much, and there are fewer kills. Carrion eaten 53-73 -> 54-76; blood 18-32 either way.
+- Densities against Damuth (4e4 M(g)^-0.75 /km2), median clade ratio 0.065 -> 0.095, 0.149 -> 0.159, 0.180 -> 0.154; the
+  slope of log density on log mass across clades stays positive (1.0-1.8), not Damuth's -0.75.
+Not changed, and now binding: RHO_MEAT is 4 E/kg (35.7 MJ/kg, the energy of fat, against ~7 MJ/kg for wet lean tissue),
+and its note ties it to the reserve ("tissue ~2-4x the stored reserve"). A newborn's tissue costs C_CARC·RHO_MEAT/
+GROWTH_EFF = 2.7 E per kg of newborn, so an egg of a tenth of a 10 kg mother costs 2.7 E against her full reserve of
+5.1 E (was 20): an egg-layer can afford about one egg per conception from a full reserve. That, not the reserve, is
+a likely cause of seed 7's fewer births (not measured here).
+
 **Why the grazers boomed: free energy and a life-history clock without days** (2026-11-01; Plants.cs, Resolve.cs, Body.cs,
 Life.cs, Constants.cs; reporting: Server/EcoWatch.cs, NR_ECO=1). The owner: "why are grazers booming?" Measured with
 the new ecology census (512 map; seeds 5 and 7 to 3,000-3,600 steps, where the world reached 16,384 slots or ran out of
@@ -2067,7 +2103,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
 | growth | a juvenile spends min(energy above GROW_RESERVE·Emax, M·(1 − Birth)/A_m·TISSUE_E/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15). Since 2026-11-01 the whole body is built at the energy of wet tissue (TISSUE_E = 7 MJ/kg), ~9 MJ per kg with GROWTH_EFF; it was C_CARC·M·ρ_meat (18 MJ/kg), 2.5x the cost of real growth |
-| reserve | Emax = C_EMAX·M with C_EMAX = 2: a stored reserve of the same order as tissue energy |
+| reserve | Emax = C_EMAX·M^EXP_EMAX (Body.Emax): the energy of the body's fat, FAT_KG·M^1.19 kg at LIPID_KJ_G = 39.3 kJ/g (Calder 1984), C_EMAX = 0.331 E; a body fasts 10.1·M^0.44 days at basal (Lindstedt & Boyce 1985). Until 2026-11-01 C_EMAX·M with C_EMAX = 2 |
 
 ### 9.2 Movement and realm
 
@@ -2525,7 +2561,7 @@ The one-time review made these changes, each for a stated physical reason:
 |---|---|
 | Growth and offspring tissue cost energy (GROWTH_EFF, C_CARC, RHO_MEAT) | a body was free to build, but yielded energy when eaten: energy from nothing |
 | Newborn mass per species (`Birth`) | a fixed 30% newborn made a fish egg cost a third of a fish; real clutch size and egg size trade off |
-| Reserve C_EMAX = 2 | stored reserve of the same order as tissue energy |
+| Reserve C_EMAX = 2 | stored reserve of the same order as tissue energy (replaced 2026-11-01 by the fat-store allometry, C_EMAX·M^1.19) |
 | Canopy shading of grass and shrubs reduced | grass vanished with no animals present |
 | Light competition (taller layers overtop) | grass took all free space and locked shrubs out, which is not how shrubs grow |
 | Resprouting after fire | savanna grasses and shrubs resprout from rootstock |

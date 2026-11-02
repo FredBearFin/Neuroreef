@@ -10,8 +10,8 @@
 //                HT  = hand-tuned in headless runs
 //
 // One step = one tick = STEP_H (2.9 h; T_SEASON steps are a year). Distances are world units of M_PER_UNIT (4 m),
-// set in metres from allometries (section 1b). Masses are kg. Energy is arbitrary units (1 unit of body mass stores
-// C_EMAX units; C_BASAL is Kleiber's metabolism, so 1 unit is 8.9 MJ). The plant and water-producer fields are cover, a
+// set in metres from allometries (section 1b). Masses are kg. Energy is arbitrary units (a body stores the energy of
+// its fat, C_EMAX x M^EXP_EMAX units; C_BASAL is Kleiber's metabolism, so 1 unit is 8.9 MJ). The plant and water-producer fields are cover, a
 // share of the field cell (PLANT_KG_M2 or WATER_KG_M2 of dry matter per m2 at 1; Pools.Kg turns a unit into kg in a
 // cell of GEO_CELL_M); carrion and dung are kg per field cell (2026-11-01).
 
@@ -81,7 +81,10 @@ public static class K
     [K("Allometry", "sight range exponent", "-", "ECO: eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008)")] public const float EXP_SIGHT = 0.20f;
     [K("Allometry", "turn rate exponent", "-", "HT")] public const float EXP_TURN = -0.20f;
     [K("Allometry", "basal cost at M=1", "E/step", "ECO: Revision M, ecology review: x4, so an animal burns many times its tissue energy over a life (Rubner 1908; Speakman 2005) and fasts ~1/16 of a life, not a third (Lindstedt & Boyce 1985)")] public const float C_BASAL = 0.0040f;
-    [K("Allometry", "energy reserve per unit mass", "E/M", "ECO: stored reserve of the same order as tissue energy")] public const float C_EMAX = 2.0f;
+    [K("Allometry", "fat mass of a 1 kg body (x M^EXP_EMAX): the stored reserve (Emax) is this much lipid", "kg", "ECO (2026-11-01): fat mass of mammals 0.075 M^1.19 kg (Calder 1984, after Pitts & Bullard 1968; the exponent Lindstedt & Boyce 1985 use for fasting endurance)")] public const float FAT_KG = 0.075f;
+    [K("Allometry", "mass exponent of the fat store (the energy reserve): fat is a larger share of a bigger body", "-", "ECO (2026-11-01): fat ~M^1.19 (Calder 1984); with basal ~M^0.75 the fasting endurance scales as M^0.44 (Lindstedt & Boyce 1985)")] public const float EXP_EMAX = 1.19f;
+    [K("Allometry", "energy of stored lipid", "kJ/g", "ECO: 39.3 kJ/g for fat (Blaxter 1989; Schmidt-Nielsen 1997)")] public const float LIPID_KJ_G = 39.3f;
+    [K("Allometry", "energy reserve at M=1 (Emax = C_EMAX x M^EXP_EMAX, Body.Emax): FAT_KG of lipid at LIPID_KJ_G, in energy units (one unit is BMR_W x STEP_S / C_BASAL)", "E", "derived (2026-11-01): 2.95 MJ = 0.331 E at 1 kg, so a body fasts 10 days at basal at 1 kg, 1.8 at 20 g and 37 at 20 kg (10.1 M^0.44 days; Lindstedt & Boyce 1985: fasting endurance ~M^0.44). Was 2 E per kg (17.8 MJ/kg, 45% of the body as fat at a full reserve; 61 days at 1 kg), justified only as of the order of tissue energy")] public const float C_EMAX = FAT_KG * LIPID_KJ_G * 1e6f * C_BASAL / (BMR_W * STEP_S);
     [K("Allometry", "gut capacity per unit mass", "M/M", "HT")] public const float C_GUT = 0.30f;
     [K("Allometry", "digestion rate at M=1", "M/step", "ECO: Revision M: the most an animal can digest is ~5x basal at 0.5 digestibility (Hammond & Diamond 1997)")] public const float C_DIGEST = 0.025f;
     [K("Allometry", "energy the gut can absorb per step at M=1 (x M^0.75): digestion passes rich digesta only as fast as their energy is taken up (Resolve), and the food a forager picks is worth at most this a step", "E/step", "ECO (2026-11-01): intestinal nutrient transport has a set capacity with modest spare (Karasov & Diamond 1983; Diamond 1991), and maximal sustained energy budgets reach ~7x basal (Hammond & Diamond 1997: lactating mice ~7, cold-exposed rodents 5-7, birds feeding young ~4). Before, mass alone bounded digestion, so seeds (7 E/M, 0.75 digestible), fruit and nectar gave 30-47x basal at 0.1 kg against 6.7x for grass. (2026-11-02) This is the reference gut's, a Kleiber body's; a gut is built to its body's own basal metabolism (GUT_SHARE, Body.GutScale), so it absorbs C_ABSORB / C_BASAL = 7x the basal cost of whatever body carries it")] public const float C_ABSORB = 7f * C_BASAL;
@@ -131,7 +134,7 @@ public static class K
     [K("Hunting", "base strike success", "-", "HT")] public const float P0_STRIKE = 0.45f;
     [K("Hunting", "prey-group confusion", "-", "V1")] public const float C_CONF = 0.25f;
     [K("Hunting", "cost of a strike", "E/M", "HT")] public const float C_STRIKE = 0.004f;
-    [K("Hunting", "retaliation per unit of excess defence", "E", "HT")] public const float C_RETAL = 0.06f;
+    [K("Hunting", "retaliation per unit of excess defence: 3% of a 1 kg reserve", "E", "HT: tuned as 0.06 E against the old reserve of 2 E at 1 kg; kept as the same share of the reserve when the reserve became the fat store (2026-11-01)")] public const float C_RETAL = 0.03f * C_EMAX;
     [K("Hunting", "edible tissue (carcass) per unit body mass (a body is built whole, at TISSUE_E per kg)", "M/M", "ECO: about half of live mass is edible tissue")] public const float C_CARC = 0.5f;
     [K("Hunting", "defence multiplier for juveniles", "-", "HT")] public const float JUV_DEFENCE = 0.25f;
     [K("Hunting", "defence of an unarmoured body per unit mass (skin, muscle, bone)", "-", "ECO: a body's own size is its first defence; predators rarely take prey much larger than themselves (Carbone et al. 1999)")] public const float DEF_BASE = 0.5f;

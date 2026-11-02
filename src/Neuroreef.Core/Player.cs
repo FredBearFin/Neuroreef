@@ -117,7 +117,7 @@ public sealed partial class Player
     /// <summary>
     /// Animal a strikes the person (RESOLVE, serial). The same odds as a strike on an animal of the person's mass with no
     /// armour (Resolve.Strike): p = P0_STRIKE x power / (power + defence); a landed hit takes C_DAMAGE x power of a reserve of
-    /// C_EMAX x MASS, shown as health. At 0 the person dies and is put back at full health (the console moves it).
+    /// Body.Emax(MASS), shown as health. At 0 the person dies and is put back at full health (the console moves it).
     /// </summary>
     public void Struck(World w, int a)
     {
@@ -130,7 +130,7 @@ public sealed partial class Player
             return;
         }
         Hits++;
-        Hp -= K.C_DAMAGE * power / (K.C_EMAX * Mass) * MAX_HP;
+        Hp -= K.C_DAMAGE * power / Body.Emax(MASS) * MAX_HP;
         if (Hp > 0f) { w.T.Fight(X, Y, w.Spc[a], -1, Telemetry.F_WOUND, w.Step, w.Serial[a], 0); return; }
         w.T.Fight(X, Y, w.Spc[a], -1, Telemetry.F_KILL, w.Step, w.Serial[a], 0);
         Deaths++; LastKiller = w.Serial[a]; Hp = MAX_HP;
@@ -166,7 +166,7 @@ public sealed partial class Player
     /// within the weapon's range (plus its body and what it and the person can have moved since the console saw them),
     /// and the ground between them does not hide it. Then the damage (strike power) is taken from its energy reserve as a
     /// landed strike is (Resolve.Strike: C_DAMAGE x power), less what its armour stops: x DEF_BASE / (DEF_BASE + armour),
-    /// the armour a quarter as good on a juvenile (JUV_DEFENCE). Its reserve grows with its mass (C_EMAX x M), so a big
+    /// the armour a quarter as good on a juvenile (JUV_DEFENCE). Its reserve grows with its mass (Body.Emax: its fat, ~M^1.19), so a big
     /// animal takes more hits. It feels pain and the learner is told (PendingR, credited at the next RESOLVE, as a strike
     /// is). When its reserve is gone it dies of Cause.Hunted, leaving its body as carrion (Resolve.Die).
     /// </summary>
