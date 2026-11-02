@@ -178,8 +178,11 @@ public static class Life
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
         double y = 0, heatNeed = 0, breathCost = 0, actSum = 0, plank = 0; int n = 0;
-        // the water a plankton-eater sweeps in a step: its travel at TRAVEL_SHARE of its top swimming speed (2026-11-02)
-        float sweep = w.PVWater[c] * K.TRAVEL_SHARE * K.M_PER_UNIT;
+        // the water a plankton-eater sweeps and the bottom a grazer crops in an eating step, as RESOLVE: its travel at
+        // TRAVEL_SHARE of its top swimming speed and its feeding bout's cruise, paid (Respiration.FeedCruiseM; 2026-11-02)
+        float travelF = w.PVWater[c] * K.TRAVEL_SHARE * K.M_PER_UNIT, cruiseF = Respiration.FeedCruiseM(w, c, travelF);
+        float sweep = travelF + cruiseF;
+        double bottom = 0, waterCells = 0;
         Span<double> stock = stackalloc double[Pools.NFIELD];
         Span<float> reached = stackalloc float[Pools.N];
         for (int dy = -rc; dy <= rc; dy++)
@@ -197,7 +200,12 @@ public static class Life
                 if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
                 breathCost += bc;
                 float standM = Respiration.StandM(w, c);
-                plank += Respiration.PlanktonKg(w, c, cell, sweep, z, share);   // ventilation, osmoregulation and buoyancy there (2026-11-01)
+                plank += Respiration.PlanktonKg(w, c, cell, sweep, z, share);
+                if ((w.Cell[cell] & (byte)Realm.Water) != 0)
+                {
+                    waterCells++;
+                    bottom += Respiration.BottomKg(w, c, cell, (int)Pool.Algae, sweep, z, share);
+                }   // ventilation, osmoregulation and buoyancy there (2026-11-01)
                 for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share, standM);
                 y += Fields.Yield(w, cell, reached); n++;
                 for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share, standM);   // kg
@@ -213,6 +221,8 @@ public static class Life
         // cost at its core temperature, and the heat it must make to keep its core where its endothermy holds it
         if (Climate.On) need = MathF.Max(1e-6f, (float)(heatNeed / n));
         need += (float)(breathCost / n);   // what breathing there costs (Respiration.Cost): gills in water, lungs at depth
+        // a water forager's feeding cruise, for the share of its range that is water (2026-11-02)
+        if (waterCells > 0) need += Respiration.CruiseCost(w, c, cruiseF) * (float)(waterCells / n);
         // the food the animals already living in the range make (2026-11-01): their production as prey, their bodies
         // as carrion and their dung (AnimalFood). Before, only growing plant food counted, so an ancestor that eats
         // mostly meat, carrion or dung was never founded: no prey existed when it was tested
@@ -240,6 +250,7 @@ public static class Life
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
             float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
             if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));   // what it can clear (Respiration.PlanktonKg)
+            if (p == (int)Pool.Algae && waterCells > 0) pass = MathF.Min(pass, (float)(bottom / n));   // what it can crop (BottomKg)
             rate = MathF.Max(rate, MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         double fed = rate >= margin ? y + an.Detritus : 0;

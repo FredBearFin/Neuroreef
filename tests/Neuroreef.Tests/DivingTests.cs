@@ -49,6 +49,37 @@ public class DivingTests
         Assert.True(Respiration.PlanktonKg(w, 0, c, step, K.Z_MIX_SEA + 60f, 1f) < one);
     }
 
+    [Fact] // a feeding bout cruises within its patch: FEED_DAY of the step at CRUISE_BL lengths a second, paid, the same a day at any step
+    public void AFeedingBoutCruisesAndPaysTheSameADayAtAnyStep()
+    {
+        var (w, c) = Sea(0, 127, -127, 40f);
+        float cruise = Respiration.FeedCruiseM(w, 0, 0f), travel = w.PVWater[0] * K.TRAVEL_SHARE * K.M_PER_UNIT;
+        float kg = Respiration.PlanktonKg(w, 0, c, cruise + travel, 0f, 0f), day = K.STEPS_PER_DAY / w.Dt;
+        float eDay = kg * Pools.Rho[(int)Pool.Phyto] * w.DietOf(0)[(int)Pool.Phyto] * day, basalDay = w.PBasal[0] * day;
+        float costDay = Respiration.CruiseCost(w, 0, cruise) * day;
+        _out.WriteLine($"{w.PM[0]:F2} kg, {Body.LengthM(w, 0):F3} m: cruises {Respiration.CruiseMps(w, 0):F2} m/s, {cruise:F0} m an eating step (travel {travel:F0} m); " +
+            $"plankton {kg * 1000:F1} g a step at 0.3 of a unit; a day of eating gives {eDay / basalDay:F2} x its basal cost (diet {w.DietOf(0)[(int)Pool.Phyto]:F2}) and the cruise costs {costDay / basalDay:F2} x");
+        Assert.InRange(Respiration.CruiseMps(w, 0) / Body.LengthM(w, 0), 0.5f, 1.5f);
+        Assert.Equal(0f, Respiration.FeedCruiseM(w, 0, 1e9f));   // all its time travelling: no bout
+        Assert.True(Respiration.CruiseCost(w, 0, cruise) > 0f);
+        // the bottom: what its mouth crops along its path, never the whole floor
+        float bot = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, cruise, 40f, 1f);
+        w.Pool[(int)Pool.Algae][c] = 0.5f;
+        float b1 = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, cruise, 40f, 1f), b2 = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, 2f * cruise, 40f, 1f);
+        Assert.Equal(2f * b1, b2, 4);
+        Assert.True(b1 < 0.5f * w.Pool[(int)Pool.Algae][c] * Pools.Kg[(int)Pool.Algae]);   // ~47 m2 of the 256 m2 cell a step
+        Assert.True(bot <= b1);
+        // a step of one hour: a third of the bout, three steps a hour's worth: the same metres a day
+        float h0 = Nature.StepH; Nature.StepH = 1f;
+        try
+        {
+            var (w1, _) = Sea(0, 127, -127, 40f);
+            Assert.Equal(Respiration.FeedCruiseM(w, 0, 0f) / w.Dt, Respiration.FeedCruiseM(w1, 0, 0f) / w1.Dt, 2);
+            Assert.True(w1.Dt < 1f);
+        }
+        finally { Nature.StepH = h0; }
+    }
+
     [Fact] // a dive is swum down and back, at swimming's cost of transport
     public void ADiverPaysForItsDives()
     {

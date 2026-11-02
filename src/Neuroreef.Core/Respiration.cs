@@ -363,6 +363,47 @@ public static class Respiration
         return 1f;
     }
 
+    /// <summary>Its cruising speed in water (m/s, 2026-11-02): CRUISE_BL body lengths a second (Body.LengthM at its present
+    /// size) x how well it is propelled there (0.1 + 0.9 x Body.Propulsor, as its swimming speed). Filter feeders and
+    /// divers cruise near the speed of least cost of transport, ~0.5-1.5 lengths a second (Videler 1993; Sato et al. 2007).</summary>
+    public static float CruiseMps(World w, int i)
+        => K.CRUISE_BL * Body.LengthM(w, i) * (0.1f + 0.9f * Body.Propulsor(w.PFins[i], w.PWings[i]));
+
+    /// <summary>
+    /// The seconds of a step body i spends feeding in water, and the metres it cruises doing it (2026-11-02): an eating
+    /// step's bout is FEED_DAY of the step's time (StepSeconds x World.Dt, so the same a day at any step), less the time
+    /// its travel takes at cruising speed (travelM). The cruise is back and forth within its patch: it does not move the
+    /// animal (its displacement is its travel), and it is paid at swimming's cost of transport (Resolve).
+    /// </summary>
+    public static float FeedCruiseM(World w, int i, float travelM)
+    {
+        float v = MathF.Max(CruiseMps(w, i), 1e-4f);
+        float t = MathF.Max(0f, K.FEED_DAY * StepSeconds * w.Dt - travelM / v);
+        return v * t;
+    }
+
+    /// <summary>The cost of cruising this many metres (swimming's cost of transport, C_MOVE x M^EXP_MOVE a unit, a coat's
+    /// drag included), energy per step.</summary>
+    public static float CruiseCost(World w, int i, float metres)
+        => metres / K.M_PER_UNIT * K.C_MOVE * MathK.Pow(MathF.Max(w.MassOf(i), 1e-4f), K.EXP_MOVE) * (1f + K.INS_MOVE * w.PInsul[i]);
+
+    /// <summary>
+    /// The bottom's food (algae or detritus, kg) body i can crop in a step (2026-11-02): the stock a square metre holds
+    /// (over the cell's area) x the area its mouth crops, its width (sqrt(GAPE) x its frontal side) x the metres it
+    /// cruises and travels over the bottom, for the share of the step it is down there (Access). A grazer's intake is
+    /// bounded by the area it can crop (bite area x bite rate: Spalinger &amp; Hobbs 1992; Hiatt &amp; Strasburg 1960 for reef
+    /// grazers), not only by its bites. Never more than the stock it reaches.
+    /// </summary>
+    public static float BottomKg(World w, int i, int cell, int pool, float sweptM)
+        => BottomKg(w, i, cell, pool, sweptM, w.Z[i], w.ZShare[i]);
+
+    public static float BottomKg(World w, int i, int cell, int pool, float sweptM, float z, float share)
+    {
+        float stock = w.Pool[pool][cell] * Pools.Kg[pool] * Access(w, cell, pool, z, share, StandM(w, i));
+        float side = K.BODY_L_M * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-6f));
+        return MathF.Min(stock, stock / Pools.CellM2 * MathF.Sqrt(K.GAPE) * side * MathF.Max(0f, sweptM));
+    }
+
     /// <summary>
     /// The plankton (kg) body i can take in a step in a water cell (2026-11-02): plankton is spread through the mixed
     /// layer at the concentration its stock over the cell's area and that depth makes, and a body takes what lies in the

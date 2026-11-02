@@ -186,6 +186,7 @@ public static class Resolve
         if (preyEat && w.Dt != 1f && Rng.U(seed, step, (uint)i, Rs.PreyEat) >= w.Dt) preyEat = false;
         if (preyEat) { acts |= BIT_STRIKE; metrics?.Allow(P.EAT); }
         else if ((acts & BIT_EAT) != 0 && scanning && metrics != null) metrics.Add(ref metrics.ScanBlockedEats);
+        float feedCost = 0f;   // the cruise of a feeding bout in water (2026-11-02)
         if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !airborne)   // a flier eats landed (2026-10-31)
         {
             // which food: the most energy it can actually use this step, a bite no bigger than what its gut passes in a
@@ -195,10 +196,13 @@ public static class Resolve
             // (2026-11-01) what a step's digestion can absorb is bounded in energy too (C_ABSORB): food richer than the gut's
             // transporters can take up is worth no more a step than food that just saturates them, the denser kept on a tie
             int best = -1; float bv = 0, bestEff = 0, bestBM = 1f, bestRho = 0f;
-            // plankton by the water it sweeps this step, its travel and its dives (Respiration.PlanktonKg, 2026-11-02)
-            float swept = spd * K.M_PER_UNIT + breath.DiveM;
+            // in water, plankton by the water it sweeps and the bottom's food by the area it crops this step: its travel, its
+            // dives, and the cruise of its feeding bout within its patch (Respiration.FeedCruiseM, paid below; 2026-11-02)
+            float travelM = spd * K.M_PER_UNIT, cruiseM = waterCell ? Respiration.FeedCruiseM(w, i, travelM) : 0f;
+            float swept = travelM + breath.DiveM + cruiseM, bottomM = travelM + cruiseM;
             float Avail(int p) => !waterCell ? w.Pool[p][cell] * Pools.Kg[p]
                 : p == (int)Pool.Phyto ? Respiration.PlanktonKg(w, i, cell, swept, w.Z[i], w.ZShare[i])
+                : p == (int)Pool.Algae || p == (int)Pool.Detritus ? Respiration.BottomKg(w, i, cell, p, bottomM)
                 : w.Pool[p][cell] * Respiration.Access(w, i, cell, p) * Pools.Kg[p];
             float pass = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL), bite0 = w.PBite[i] * MathK.Pow(mf, K.EXP_BASAL);
             float absorb = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL);
@@ -221,6 +225,7 @@ public static class Resolve
                 float bite = MathF.Min(MathF.Min(bite0 * bestBM, reach), gutCap - w.Gut[i]);
                 if (bite > 0)
                 {
+                    if (waterCell && Pools.IsWaterPool(best)) feedCost = Respiration.CruiseCost(w, i, cruiseM);   // its feeding cruise
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
                     float units = bite / Pools.Kg[best];   // the bite in the pool's units (cover for plants)
                     // the nutrient it swallows (2026-11-02, Nutrients.cs): what the pool held in the bite, and what the plants lost
@@ -332,7 +337,7 @@ public static class Resolve
 
         // ---- 7. costs, fatigue, digestion (DESIGN §9.1, §9.3)
         float vmax = MathF.Max(w.Vmax(i), 1e-3f);
-        float moveCost = MoveCost(w, i, mass, mf, spd, cell, airborne, canLand);
+        float moveCost = MoveCost(w, i, mass, mf, spd, cell, airborne, canLand) + feedCost;
         // a juvenile runs every unit of its brain from birth, so it pays for all of them; only the body's share scales
         // with its size (audit 2026-10-30: a young brain was charged at body scale; real infant brains cost more, not less)
         float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF * w.Dt;   // per step, as PBasal (World.Dt)
