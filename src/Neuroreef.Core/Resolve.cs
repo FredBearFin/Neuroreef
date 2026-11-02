@@ -215,6 +215,8 @@ public static class Resolve
                 {
                     metrics?.Allow(P.EAT); metrics?.Apply(P.EAT);
                     float units = bite / Pools.Kg[best];   // the bite in the pool's units (cover for plants)
+                    // the nutrient it swallows (2026-11-02, Nutrients.cs): what the pool held in the bite, and what the plants lost
+                    float nIn = Nutrients.Take(w, best, cell, units), plantN0 = Nutrients.Plants(w, cell);
                     w.Pool[best][cell] = MathF.Max(0f, w.Pool[best][cell] - units);
                     T.EatenMass[best] += bite;
                     // roots are the herbs' and shrubs' own mass (2026-11-01): a bite of them takes its energy's worth of their cover
@@ -224,7 +226,8 @@ public static class Resolve
                     else if (best == (int)Pool.Nectar) w.Poll[cell] = MathF.Min(1f, w.Poll[cell] + K.POLL_GAIN * units);
                     if (!waterCell) Plants.Eaten(w, i, cell, best, bite, bestEff);   // what it took from the plants, and the seed and pollen it carries
                     if (dg != null) { dg.EatOk[dgG]++; dg.BiteKg[dgG] += bite; dg.BiteE[dgG] += bite * Pools.Rho[best] * bestEff; }
-                    r += Ingest(w, i, best, bite, bestEff, emax, cell);
+                    nIn += plantN0 - Nutrients.Plants(w, cell);
+                    r += Ingest(w, i, best, bite, bestEff, emax, cell, nIn);
                     Pathogens.Ate(w, i, cell);   // what lies on the food is swallowed with it: the faecal-oral route (Revision R)
                 }
             }
@@ -349,7 +352,9 @@ public static class Resolve
         {
             float tissue = w.PM[i] * (1f - w.PBirth[i]) * K.TISSUE_E / K.GROWTH_EFF;   // energy to build all of it (TissueCost)
             grow = Math.Clamp(MathF.Min(tissue / w.PMature[i] * w.Energy[i] / emax, w.Energy[i] - K.GROW_RESERVE * emax), 0f, tissue / w.PMature[i]);
+            float m0 = w.MassOf(i);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
+            Nutrients.Grow(w, i, cell, m0, w.MassOf(i));   // the new tissue's nutrient, from where it is (2026-11-02)
         }
         // body heat (Revision O): the heat it makes (basal and movement) against what its body loses at the operative
         // temperature around it; it shivers when it loses too much and sweats or pants when it loses too little
@@ -402,6 +407,7 @@ public static class Resolve
             w.Gut[i] -= d; w.GutEnergy[i] -= de; w.GutWaste[i] -= dung; w.GutSeedy[i] -= seedy;
             if (waterCell) w.Pool[(int)Pool.Detritus][cell] += dung / Pools.Kg[(int)Pool.Detritus];   // kg into the pool's units
             else w.Pool[(int)Pool.Dung][cell] += dung;
+            Nutrients.Dung(w, i, cell, frac, waterCell);   // and the nutrient the gut held in it (2026-11-02)
             // the seed that passed the gut whole lands in its dung, with its parents (Revision S)
             Plants.Deposit(w, cell, w.GutSeedG[i], w.GutSeedDad[i], seedy, 0);
         }
@@ -615,8 +621,9 @@ public static class Resolve
     }
 
     /// <summary>Eat mass of a pool: energy, water from the food and from digesting it, and the reward for both.</summary>
-    public static float Ingest(World w, int i, int pool, float mass, float eff, float emax, int cell)
+    public static float Ingest(World w, int i, int pool, float mass, float eff, float emax, int cell, float nIn)
     {
+        Nutrients.Ingest(w, i, cell, nIn, eff);   // its nutrient: the assimilated share excreted, the rest to the gut (2026-11-02)
         float e = mass * Pools.Rho[pool] * eff;
         // water from food and from digesting it (metabolic water: how seed-eating desert rodents live without drinking)
         float content = FoodWater[pool] * (LivePlant(pool) ? MathF.Min(1f, w.Moisture[cell] * 1.4f) : 1f);
@@ -688,7 +695,8 @@ public static class Resolve
             w.Pain[v] = MathF.Min(1f, w.Pain[v] + 0.3f);
             w.PendingR[v] -= K.R_PAIN * drain / MathF.Max(w.EmaxOf(v), 1e-3f);
             float m = MathF.Min(space, drain / K.RHO_BLOOD);
-            if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell);
+            // (the victim's body loses energy, not mass: a blood meal carries no nutrient; Nutrients.cs)
+            if (m > 0) rew += Ingest(w, a, (int)Pool.Blood, m, dietA[(int)Pool.Blood], emax, cell, 0f);
             bool dead = w.Energy[v] <= 0;
             w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], dead ? Telemetry.F_DRAINED : Telemetry.F_BITE, w.Step, w.Serial[a], w.Serial[v]);
             if (dead) { w.T.Kills[w.Spc[a]]++; w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++; Die(w, v, Cause.Parasite, w.Spc[a]); }
@@ -698,13 +706,16 @@ public static class Resolve
         // tissue at the energy of wet tissue and its reserve (CarcassKg, 2026-11-01)
         float carcass = CarcassKg(w.MassOf(v), ev);
         float eat = MathF.Min(space, carcass);
-        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell); carcass -= eat; if (dg != null) { dg.StrMeatKg[dgG] += eat; dg.StrMeatE[dgG] += eat * K.RHO_MEAT * dietA[(int)Pool.Meat]; } }
+        // the body's nutrient (and its gut's) goes with its flesh: the eaten share to the killer, the rest to the carcass (2026-11-02)
+        float bodyN = Nutrients.Body(w, v) + w.GutN[v]; w.GutN[v] = 0f;
+        if (eat > 0 && dietA[(int)Pool.Meat] > 0) { float nm = bodyN * eat / carcass; bodyN -= nm; rew += Ingest(w, a, (int)Pool.Meat, eat, dietA[(int)Pool.Meat], emax, cell, nm); carcass -= eat; if (dg != null) { dg.StrMeatKg[dgG] += eat; dg.StrMeatE[dgG] += eat * K.RHO_MEAT * dietA[(int)Pool.Meat]; } }
         if (dg != null) dg.StrKill[dgG]++;
         w.T.Kills[w.Spc[a]]++;   // only a death counts as a kill (a blood meal is not one)
         w.T.KillMatrix[w.Spc[a] * w.NS + w.Spc[v]]++;
         w.T.Fight(w.X[v], w.Y[v], w.Spc[a], w.Spc[v], egg ? Telemetry.F_EGG : Telemetry.F_KILL, w.Step, w.Serial[a], w.Serial[v]);
-        DieNoBody(w, v, Cause.Killed, w.Spc[a]);
+        DieNoBody(w, v, Cause.Killed, w.Spc[a], bodyLeft: true);
         { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += carcass / Pools.Kg[dp]; }   // kg into the pool's units
+        Nutrients.Carcass(w, cell, water, bodyN);
         w.T.KillFlash(cell);
         return rew;
     }
@@ -782,6 +793,7 @@ public static class Resolve
             if (father >= 0) Life.CrossGenome(w, mother, father, c);
             else Life.CopyGenome(w, mother, c, true);
             Life.Place(w, c, w.Spc[mother], live ? St.Embryo : St.Egg, w.X[mother], w.Y[mother], childE, mother);
+            Nutrients.BodyIn(w, c, mother);   // the young's body holds nutrient: from its mother's gut, else from where it is born (2026-11-02)
             w.Timer[c] = w.PGest[mother];
             made++;
         }
@@ -814,11 +826,14 @@ public static class Resolve
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
         float body = CarcassKg(w.MassOf(i), w.Energy[i]);
         { int dp = water ? (int)Pool.Detritus : (int)Pool.Carrion; w.Pool[dp][cell] += body / Pools.Kg[dp]; }   // kg into the pool's units
-        DieNoBody(w, i, cause, killer);
+        Nutrients.Carcass(w, cell, water, Nutrients.Body(w, i) + w.GutN[i]); w.GutN[i] = 0f;   // with the body's nutrient (2026-11-02)
+        DieNoBody(w, i, cause, killer, bodyLeft: true);
     }
 
-    public static void DieNoBody(World w, int i, int cause, int killer)
+    /// <summary>A death. bodyLeft: the caller gave the body's nutrient to a carcass; else it returns to where it died (Nutrients.BodyOut).</summary>
+    public static void DieNoBody(World w, int i, int cause, int killer, bool bodyLeft = false)
     {
+        if (!bodyLeft) Nutrients.BodyOut(w, i);
         int s = w.Spc[i];
         if (Diag.D is { } dg && w.StageOf[i] >= St.Juvenile)
         {

@@ -139,7 +139,12 @@ public class ClimateTests
         // the plants' canopy bound, live wood, Beer's law and stem life (0x9D198E74A912EFAF on theirs) re-pinned it; round 3's
         // cold limit, vapour-pressure demand and respiration Q10 are identity without a climate, and the land is still built
         // under the old latitude profile (Climate.LandMean), so the world's new profile does not move it.
-        Assert.Equal(0xBFF7554AFE744466UL, h);
+        // 2026-11-02: the nutrient budget (Nutrients.cs) re-pinned it: rot returns what growth took (0.6, not C_NUTGAIN 0.7),
+        // plants take the change of their tissue plus what falls from them, algae and plankton hold Redfield N (0.30 a
+        // unit, not 0.6), dead pools keep what fell into them, fire returns 1 - FIRE_N_LOSS of what burned (not a flat 0.1 a
+        // unit), and tissue the soil cannot supply is not built, so every
+        // cell's nutrient, and the plants and water pools it feeds, changed. It was 0xBFF7554AFE744466 before.
+        Assert.Equal(0x0F3A8B7DBE22DBDAUL, h);
     }
 
     [Fact] // temperature: periodic on the torus, symmetric about the equator with opposite seasons, 6.5 K per 1000 m, damped by water

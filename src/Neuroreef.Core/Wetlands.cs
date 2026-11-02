@@ -145,23 +145,25 @@ public static class Wetlands
 
     /// <summary>
     /// Fields.Row, a land cell, one step: litter and wood humify into peat for the share of the year the ground is
-    /// waterlogged, and the peat decays (q: the temperature's factor on decomposition). Returns the litter mass that
-    /// decayed out of the peat (its nutrient returns to the soil). Writes only cell i.
+    /// waterlogged, and the peat decays (q: the temperature's factor on decomposition). Returns the nutrient that
+    /// decayed out of the peat (it returns to the soil): the peat keeps what its litter and wood held (World.PeatN,
+    /// 2026-11-02). Writes only cell i.
     /// </summary>
     public static float Peat(World w, int i, float[] Li, float[] Wo, float q)
     {
-        float a = w.WetDur[i], p = w.Peat[i], rot = 0f;
+        float a = w.WetDur[i], p = w.Peat[i], pn = w.PeatN[i], rot = 0f;
         if (a > 0f)
         {
-            float h = K.PEAT_FORM * a, l = Li[i] * h, o = Wo[i] * h;
-            Li[i] -= l; Wo[i] -= o; p += K.PEAT_M * (l + o);
+            float h = K.PEAT_FORM * a, l = Li[i] * h, o = Wo[i] * h, on = w.WoodN[i] * h;
+            Li[i] -= l; Wo[i] -= o; w.WoodN[i] -= on; p += K.PEAT_M * (l + o);
+            pn += Nutrients.Leaf * l + on;
         }
         if (p > 0f)
         {
-            float r = (K.PEAT_ROT_AN * a + K.PEAT_ROT_OX * (1f - a)) * q / Nature.SeasonLength, d = p * r;
-            p -= d; rot = d / K.PEAT_M;
+            float r = (K.PEAT_ROT_AN * a + K.PEAT_ROT_OX * (1f - a)) * q / Nature.SeasonLength;
+            p -= p * r; rot = pn * r; pn -= rot;
         }
-        w.Peat[i] = p;
+        w.Peat[i] = p; w.PeatN[i] = pn;
         return rot;
     }
 
@@ -185,6 +187,8 @@ public static class Wetlands
             float alpha = (K.PEAT_ROT_AN * a + K.PEAT_ROT_OX * (1f - a)) * q;           // a year
             w.Peat[i] = alpha > 0f ? p / alpha * (1f - MathK.Exp(-alpha * K.PEAT_AGE)) : p * K.PEAT_AGE;
         }
+        // the peat holds what its litter held (an initial state, as the peat itself is)
+        for (int i = 0; i < n; i++) w.PeatN[i] = Nutrients.Leaf / K.PEAT_M * w.Peat[i];
         Classify(w);
     }
 

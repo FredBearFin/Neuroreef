@@ -19,6 +19,7 @@ public sealed class World
     [PerSlot] public float[] X, Y, Heading, Speed;
     // ---- agents: physiology
     [PerSlot] public float[] Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer;
+    [PerSlot] public float[] GutN;          // nutrient in the gut's undigested share, left in the dung (2026-11-02, Nutrients.cs)
     [PerSlot] public float[] Grown;         // share of its growable tissue a juvenile has built (0 at birth, 1 = adult size; DESIGN §9.1)
     [PerSlot] public float[] Reward, RewardMean, PendingR, LastFear;
     // ---- agents: path integration (Revision P), written by RESOLVE (own slot): the remembered vector (world units) from the
@@ -144,6 +145,10 @@ public sealed class World
     public readonly float[][] Pool;        // [Pools.NFIELD][FW*FW]
     public readonly float[] Shrub, Tree, Sapling;   // cover of the shrub, tree and sapling slots (grass = the herb slot, Pool.Grass), updated in place by Plants
     public readonly float[] LiveWood;               // live wood of the woody slots (2026-11-01; cover units, PLANT_KG_M2 per m2): fed by the canopy's production beyond its crown growth, dies with the stems into Pool.Wood
+    // nutrient held in the dead pools whose content per unit varies with what fell into them (2026-11-02, Nutrients.cs):
+    // dead wood (stems at leafy content, live wood at WOOD_N), detritus, carrion, dung and peat
+    public readonly float[] WoodN, DetN, CarN, DungN, PeatN;
+    [NonSerialized] public readonly Nutrients.Book NutBook;   // nutrient inputs and outputs (run counters, not saved)
     public float[] Nutrient, Scent;
     public float[] NutrientN, ScentN;   // double buffers
     // ---- plants (Revision S, Plants.cs): per land cell the genotype of each slot (herb, shrub, tree, sapling; 0 = empty),
@@ -294,6 +299,7 @@ public sealed class World
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];
         Energy = new float[c]; Gut = new float[c]; GutEnergy = new float[c]; GutWaste = new float[c]; GutSeedy = new float[c];
         Grown = new float[c];
+        GutN = new float[c];
         Thirst = new float[c]; Fatigue = new float[c]; Age = new float[c]; Pain = new float[c]; Cooldown = new float[c]; Timer = new float[c];
         Reward = new float[c]; RewardMean = new float[c]; PendingR = new float[c]; LastFear = new float[c];
         MemDrinkX = new float[c]; MemDrinkY = new float[c]; MemFedX = new float[c]; MemFedY = new float[c]; MemHas = new byte[c];
@@ -336,6 +342,7 @@ public sealed class World
         for (int p = 0; p < Pools.NFIELD; p++) Pool[p] = new float[n];
         Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; LiveWood = new float[n]; Nutrient = new float[n]; Scent = new float[n];
         NutrientN = new float[n]; ScentN = new float[n];
+        WoodN = new float[n]; DetN = new float[n]; CarN = new float[n]; DungN = new float[n]; PeatN = new float[n]; NutBook = new Nutrients.Book(Map.FW);
         POcc = new ushort[4 * n]; BankMom = new ushort[3 * n]; BankDad = new ushort[3 * n]; SeedMom = new ushort[3 * n]; SeedDad = new ushort[3 * n];
         FruitG = new ushort[n]; PollenDad = new ushort[n]; BankM = new float[3 * n]; SeedOut = new float[3 * n]; PFlags = new byte[n];
         int nb = 3 * Plants.Blocks, nr = 3 * Map.FW * ((Map.FW + K.WIND_BLOCK - 1) / K.WIND_BLOCK);

@@ -399,16 +399,18 @@ public static class K
     [K("Vegetation", "algae death into detritus (sloughing, senescence)", "/step", "ECO: periphyton and littoral turnover of 1-3 weeks, P/B 20-100 /yr (Wetzel 2001); 0.1 /day over STEPS_PER_DAY, giving 300-700 gC/m2/yr at ordinary nutrients and light in the shallows (PlantTests.WaterProductionIsInTheLiteratureRange). Was 0.0015 /step (HT)")] public const float M_A = 0.1f / STEPS_PER_DAY;
     [K("Vegetation", "phytoplankton growth: specific rate at full nutrient, at T_REF", "/step", "ECO: phytoplankton grows at up to ~2 /day at 20 C (Eppley 1972) and ~0.5-1.5 /day in lakes (Reynolds 2006); 1 /day over STEPS_PER_DAY. Was 0.003 /step (HT, 0.025 /day: turnover in ~80 days, not days)")] public const float R_PH = 1f / STEPS_PER_DAY;
     [K("Vegetation", "phytoplankton death into detritus (sinking out of the mixed layer, lysis; grazing is the animals')", "/step", "ECO: sinking at 0.1-1 m/day over a mixed layer of 2-20 m, ~0.05 /day (Reynolds 2006); with R_PH this gives 300-450 gC/m2/yr at ordinary nutrients, lakes 100-500 and eutrophic up to ~1,000 (Wetzel 2001). Was 0.0015 /step (HT)")] public const float M_PH = 0.05f / STEPS_PER_DAY;
-    [K("Vegetation", "nutrient used per unit plant growth", "-", "V1")] public const float C_NUTUSE = 0.60f;
-    [K("Vegetation", "rot share that becomes nutrient", "-", "V1")] public const float C_NUTGAIN = 0.70f;
-    [K("Vegetation", "background weathering", "/step", "V1")] public const float WEATHER = 0.0015f;
+    [K("Vegetation", "nutrient in a unit of leafy plant cover (live, litter or dead stems): what its growth takes from the soil and its decay gives back (Nutrients.cs). It defines the nutrient unit: a unit is the nitrogen of 1/C_NUTUSE units of leafy cover at N_LEAF", "-", "V1; 2026-11-02: also what rot returns (it returned C_NUTGAIN 0.7, so every unit of growth that rotted made 0.1 nutrient from nothing)")] public const float C_NUTUSE = 0.60f;
+    [K("Vegetation", "nitrogen share of the dry matter of leafy tissue and its litter", "kg/kg", "ECO: leaf N 0.5-6%, median ~2% (Wright et al. 2004, GLOPNET). Fixes the nutrient unit in kg N (Nutrients.UnitKgN); resorption before leaf fall (~50%, Aerts 1996) is not modelled, the litter keeps the leaf's N")] public const float N_LEAF = 0.02f;
+    [K("Vegetation", "nitrogen share of the dry matter of algae, phytoplankton and their detritus", "kg/kg", "ECO: Redfield C:N 106:16 molar (5.7 by mass) at ~45% C, ~7.9% N (Redfield 1958; Sterner & Elser 2002). A unit of water producer holds N_ALGAE x WATER_KG_M2 / (N_LEAF x PLANT_KG_M2) x C_NUTUSE = 0.30 nutrient; it was C_NUTUSE (0.6), 16% N")] public const float N_ALGAE = 0.079f;
+    [K("Vegetation", "nitrogen share of a live animal's mass (wet)", "kg/kg", "ECO: ~3% N of wet mass in vertebrates and fish, C:N ~4-6 (Sterner & George 2000; Sterner & Elser 2002). A body holds it while alive and gives it to its carcass")] public const float N_BODY = 0.03f;
+    [K("Vegetation", "background weathering and deposition: nutrient a cell gains a step, x its parent material's fertility x 0.1 (the one input besides fixation; Nutrients.Book counts it)", "/step", "V1")] public const float WEATHER = 0.0015f;
     [K("Vegetation", "nutrient mixing between neighbouring water cells", "/step", "HT: water mixes, soil does not")] public const float N_DIFF = 0.05f;
     [K("Vegetation", "carrion rot", "/step", "V1")] public const float ROT_CARRION = 0.0025f;
     [K("Vegetation", "dung rot", "/step", "HT")] public const float ROT_DUNG = 0.0015f;
     [K("Vegetation", "litter rot", "/step", "HT")] public const float ROT_LITTER = 0.0006f;
     [K("Vegetation", "wood rot", "/step", "HT")] public const float ROT_WOOD = 0.00015f;
     [K("Vegetation", "detritus rot", "/step", "HT")] public const float ROT_DETRITUS = 0.0015f;
-    [K("Vegetation", "max nutrient", "-", "V1")] public const float N_MAX = 1.5f;
+    [K("Vegetation", "most nutrient a cell's soil or water holds: what is above it is lost to leaching and denitrification (an explicit output, Nutrients.Book)", "-", "V1")] public const float N_MAX = 1.5f;
     [K("Vegetation", "run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell", "/step", "HT")] public const float RUNOFF = 0.002f;
 
 
@@ -536,7 +538,7 @@ public static class K
     // ---------------------------------------------------------------- 8. fire and scent
     [K("Fire", "ignition rate per unit dry fuel per land cell", "/cell/step", "HT: ~1 ignition per 100 steps in the dry season")] public const float LAMBDA_FIRE = 2e-6f;
     [K("Fire", "spread probability per unit neighbour fuel", "-", "ECO: gives a fire return interval of ~2 years with no animals (savanna: 1-5 years)")] public const float C_SPREAD = 0.15f;
-    [K("Fire", "nutrient from burned biomass", "-", "HT")] public const float C_ASH = 0.5f;
+    [K("Fire", "share of the nutrient in burned biomass lost to the air (the rest returns to the soil as ash)", "-", "ECO: fires volatilise 50-90% of the N of the fuel they consume, more in hot fires (Raison 1979; Boerner 1982); 0.8. 2026-11-02: replaces C_ASH, which returned 0.1 nutrient per unit burned whatever it held")] public const float FIRE_N_LOSS = 0.8f;
     [K("Fire", "steps a cell burns", "steps", "HT")] public const int FIRE_STEPS = 6;
     [K("Fire", "fuel below which fire cannot spread", "-", "HT")] public const float FUEL_MIN = 0.25f;
     [K("Fire", "probability per step that an animal in a burning cell dies", "-", "HT")] public const float FIRE_KILL = 0.3f;

@@ -22,6 +22,8 @@ public static class Fields
         float ta = 0f, tb = 0f;
         if (clim) Climate.RowParams(w, y, out ta, out tb);
         float[] Tmp = w.Temp;
+        float[] CN = w.CarN, DN = w.DungN, WN = w.WoodN, EN = w.DetN;
+        var book = w.NutBook; double[] bk = book.Row; int bo = y * Nutrients.Book.NK;
         for (int x = 0; x < FW; x++)
         {
             int i = row + x;
@@ -51,14 +53,18 @@ public static class Fields
             float sc = w.Scent[i], sb = 0.25f * (w.Scent[xl] + w.Scent[xr] + w.Scent[up] + w.Scent[dn]);
             w.ScentN[i] = MathF.Max(0f, (sc + 0.1f * (sb - sc)) * (1f - K.D_SCENT));
 
-            // decomposition by bacteria: every dead pool rots into nutrient
-            // carrion and dung are kg; the nutrient is in units of plant growth (cover), so they count as kg over a unit's
-            // (Pools.Kg, 2026-11-01: before, a kg of dung fed the soil of a 4.75 ha cell as much as a meadow's whole litter)
-            float rot = (Ca[i] * rC + Du[i] * rD) * InvKgLand + Li[i] * rL + Wo[i] * rW + De[i] * rT;
+            // decomposition by bacteria: every dead pool rots, and gives the soil (or water) the nutrient the rotted share
+            // held (Nutrients.cs). 2026-11-02: it gave C_NUTGAIN 0.7 per unit against the 0.6 growth took, making nutrient
+            // from nothing; carrion and dung gave 0.7 per land unit's kg whatever the body or food held
+            float rotN = CN[i] * rC + DN[i] * rD + Nutrients.Leaf * Li[i] * rL + WN[i] * rW + EN[i] * rT;
+            CN[i] -= CN[i] * rC; DN[i] -= DN[i] * rD; WN[i] -= WN[i] * rW; EN[i] -= EN[i] * rT;
             Ca[i] -= Ca[i] * rC; Du[i] -= Du[i] * rD; Li[i] -= Li[i] * rL; Wo[i] -= Wo[i] * rW; De[i] -= De[i] * rT;
             // peat: litter and wood humify where the ground is waterlogged, and the peat decays slowly (Wetlands.Peat)
-            if (landCell && (w.WetDur[i] > 0f || w.Peat[i] > 0f)) rot += Wetlands.Peat(w, i, Li, Wo, qrot);
-            Nn += rot * K.C_NUTGAIN + K.WEATHER * w.Fert[i] * 0.1f;
+            if (landCell && (w.WetDur[i] > 0f || w.Peat[i] > 0f)) rotN += Wetlands.Peat(w, i, Li, Wo, qrot);
+            // weathering and deposition: the input (Nutrients.Book)
+            float wea = book.Open ? K.WEATHER * w.Fert[i] * 0.1f : 0f;
+            bk[bo + Nutrients.Book.IN] += wea;
+            Nn += rotN + wea;
             w.Poll[i] *= 1f - K.D_POLL;
 
             if (w.Cell[i] != (byte)Realm.Land)
@@ -74,17 +80,23 @@ public static class Fields
                     float fe = temp < 0f ? 0f : Climate.Algae[ti];
                     ga *= fe; gp *= fe;
                 }
+                // growth takes the nutrient its tissue holds (Nutrients.Water), no more than the water has (2026-11-02)
+                float need = (ga + gp) * Nutrients.Water;
+                if (need > Nn) { float f = MathF.Max(0f, Nn) / need; ga *= f; gp *= f; }
                 float da = K.M_A * Al[i], dp = K.M_PH * Ph[i];
-                Al[i] = Math.Clamp(Al[i] + ga - da, 0f, 1f);
-                Ph[i] = Math.Clamp(Ph[i] + gp - dp, 0f, 1f);
+                float al0 = Al[i], ph0 = Ph[i];
+                Al[i] = Math.Clamp(al0 + ga - da, 0f, 1f);
+                Ph[i] = Math.Clamp(ph0 + gp - dp, 0f, 1f);
                 De[i] += da + dp;
-                Nn -= (ga + gp) * K.C_NUTUSE;
-                w.NutrientN[i] = Math.Clamp(Nn, 0f, K.N_MAX);
+                EN[i] += (da + dp) * Nutrients.Water;
+                // the growth that was kept (the clamp at a full cell keeps less) is what took nutrient
+                Nn -= (Al[i] - al0 + da + Ph[i] - ph0 + dp) * Nutrients.Water;
+                w.NutrientN[i] = Nutrients.Cap(w, y, Nn);
                 continue;
             }
 
             // land: the plants (Plants.cs) take their nutrient after the swap
-            w.NutrientN[i] = Math.Clamp(Nn, 0f, K.N_MAX);
+            w.NutrientN[i] = Nutrients.Cap(w, y, Nn);
         }
     }
 
@@ -132,8 +144,6 @@ public static class Fields
 
     /// <summary>The most a logistic stock growing at r B (1 - B) and dying at m B gives a step, sustained (Yield).</summary>
     static float Msy(float r, float m) => r > m ? (r - m) * (r - m) / (4f * r) : 0f;
-
-    static readonly float InvKgLand =1f / Pools.Kg[(int)Pool.Litter];
 
     /// <summary>Is this a pool that Yield counts (it grows from plants, or from their fall)?</summary>
     public static bool Grows(int p) => p <= (int)Pool.Phyto || p == (int)Pool.Litter || p == (int)Pool.Detritus;
@@ -210,8 +220,11 @@ public static class Fields
     {
         F1[i] = K.FIRE_STEPS;
         // the plants burn as their traits let them (Plants.Burn: resprouting, bark, height over the flames)
-        float burned = Plants.Burn(w, i, Fuel(w, i));
-        w.Nutrient[i] = MathF.Min(K.N_MAX, w.Nutrient[i] + K.C_ASH * burned * 0.2f);
+        // what the burned biomass held returns as ash, but for the share the fire sends to the air (FIRE_N_LOSS, an output)
+        Plants.Burn(w, i, Fuel(w, i), out float burnedN);
+        float lost = w.NutBook.Open ? K.FIRE_N_LOSS * burnedN : 0f;
+        w.NutBook.Row[(i / Map.FW) * Nutrients.Book.NK + Nutrients.Book.OUT] += lost;
+        Nutrients.Give(w, i, burnedN - lost);
         w.T.FireCells++;
     }
 }

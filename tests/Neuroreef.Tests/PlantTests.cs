@@ -378,14 +378,14 @@ public class PlantTests
         w.POcc[c * 4] = (ushort)Insert(w, Key(8, (PT.HEIGHT, 3), (PT.RESPROUT, 15)));
         w.POcc[c * 4 + 2] = (ushort)Insert(w, Key(8, (PT.HEIGHT, 15), (PT.BARK, 15)));
         w.Pool[(int)Pool.Grass][c] = 0.4f; w.Tree[c] = 0.5f; w.Shrub[c] = 0f; w.Sapling[c] = 0f; w.BankM[c] = 0.2f;
-        float burned = Plants.Burn(w, c, 0.5f);
+        float burned = Plants.Burn(w, c, 0.5f, out _);
         Assert.True(burned > 0f);
         Assert.InRange(w.Pool[(int)Pool.Grass][c], 0.4f * 0.8f, 0.4f * 0.9f);
         Assert.True(w.Tree[c] > 0.45f, $"tree {w.Tree[c]}");
         Assert.Equal(0.1f, w.BankM[c], 5);
         w.POcc[c * 4] = (ushort)Insert(w, Key(8, (PT.HEIGHT, 3), (PT.RESPROUT, 0)));
         w.Pool[(int)Pool.Grass][c] = 0.4f;
-        Plants.Burn(w, c, 0.5f);
+        Plants.Burn(w, c, 0.5f, out _);
         Assert.Equal(0f, w.Pool[(int)Pool.Grass][c]);
         Assert.True(n > 0);
     }
