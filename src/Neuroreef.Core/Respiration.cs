@@ -151,8 +151,8 @@ public static class Respiration
             // the gills' surface leaks salts (or water) and ion pumps make up for it; air in the lungs pulls up, less
             // as it compresses with depth (Boyle: 1 atmosphere per 10 m), for the share of the step it is down
             b.Extra = basal * (K.GILL_OSMO * (1f - L) + K.BUOY_COST * L * share / (1f + z / 10f));
-            // the dives: swum at swimming's cost of transport (C_MOVE x M^EXP_MOVE a unit of distance; 2026-11-02, before free)
-            b.Extra += b.DiveM / K.M_PER_UNIT * K.C_MOVE * MathK.Pow(MathF.Max(w.MassOf(i), 1e-4f), K.EXP_MOVE) * (1f + K.INS_MOVE * w.PInsul[i]);
+            // the dives: swum at swimming's cost of transport (SwimCost; 2026-11-02, before free, then at running's cost)
+            b.Extra += CruiseCost(w, i, b.DiveM);
         }
         return b;
     }
@@ -382,10 +382,23 @@ public static class Respiration
         return v * t;
     }
 
-    /// <summary>The cost of cruising this many metres (swimming's cost of transport, C_MOVE x M^EXP_MOVE a unit, a coat's
-    /// drag included), energy per step.</summary>
+    /// <summary>The cost of cruising this many metres (swimming's cost of transport, SwimCost, a coat's drag included),
+    /// energy per step.</summary>
     public static float CruiseCost(World w, int i, float metres)
-        => metres / K.M_PER_UNIT * K.C_MOVE * MathK.Pow(MathF.Max(w.MassOf(i), 1e-4f), K.EXP_MOVE) * (1f + K.INS_MOVE * w.PInsul[i]);
+        => metres / K.M_PER_UNIT * SwimCost(w, i, MathF.Max(w.MassOf(i), 1e-4f)) * (1f + K.INS_MOVE * w.PInsul[i]);
+
+    /// <summary>
+    /// Swimming's net cost of transport for body i at this mass, energy per unit of distance (2026-11-02, the ocean audit):
+    /// running's C_MOVE x M^EXP_MOVE scaled to a fish's COT_SWIM_J (an order of magnitude below running: Schmidt-Nielsen
+    /// 1972; Videler &amp; Nolet 1990), x ETA_LIFT over its propulsive efficiency, from paddling's ETA_PADDLE with no
+    /// propulsor to ETA_LIFT with full fins or flippers (Body.Propulsor; Fish 1996). Before, every body swam at running's
+    /// cost a metre.
+    /// </summary>
+    public static float SwimCost(World w, int i, float mass)
+    {
+        float eta = K.ETA_PADDLE + (K.ETA_LIFT - K.ETA_PADDLE) * Body.Propulsor(w.PFins[i], w.PWings[i]);
+        return K.C_MOVE * (K.COT_SWIM_J / K.COT_J) * (K.ETA_LIFT / eta) * MathK.Pow(mass, K.EXP_MOVE);
+    }
 
     /// <summary>
     /// The bottom's food (algae or detritus, kg) body i can crop in a step (2026-11-02): the stock a square metre holds

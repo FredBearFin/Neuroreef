@@ -2495,6 +2495,24 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   winged: Loco.Fly). Valley land (seed 3, 1,500 steps, random brains): 16 lineages founded, 15 alive; warm-blooded
   (endothermy > 0.5) 45-52% of animals and 9 of 15 lineages mostly warm; deaths 12,478: killed 60%, lost young 32%,
   parasites 6%, starved 17, suffocated 104, cold 24.
+- **The ocean audit** (2026-11-02, fifth round, every world; FeedingBudgetTests, OceanTests.WhyDrawsPassOrFailFoundingAtSea).
+  A 1 kg cold-blooded, gilled, finned, streamlined plankton specialist eating every step in RESOLVE at 15 °C and 169 mg
+  C/m3 (0.3 of a unit over the 40 m mixed layer): basal 11.1 kJ/day (body 6.8, gut 2.8, fins 0.6, gills 0.5, eyes 0.3,
+  brain 0.1) plus breathing 1.3, against Clarke & Johnston's (1999) 20.5 kJ/day for a 1 kg teleost at 15 °C (0.6x);
+  clearance 30 L/min (menhaden of ~0.3 kg 5.8-24.8 L/min: Durbin & Durbin 1975); assimilation 0.7; absorbed 78 kJ/day,
+  the gut's ceiling (7x basal). The term off by the most was the feeding cruise: 91 kJ/day, 8x its standard metabolism,
+  because every body swam at running's cost of transport (Taylor et al. 1982, 10.7 J/(kg m) at 1 kg), where a fish
+  swims at ~1 (Schmidt-Nielsen 1972; Videler & Nolet 1990), so the fish lost 30 kJ a day eating without pause and failed
+  the founding test (its gut's ceiling 1.3x its need, FORAGE_MARGIN asks 3x). Swimming now costs COT_SWIM_J (1 J/m at
+  1 kg, x M^EXP_MOVE) x ETA_LIFT over its propulsive efficiency (paddling 0.33 to fins and flippers 0.8: Fish 1996;
+  Respiration.SwimCost), in its travel, dives and feeding cruise: the fish nets +57 kJ/day and is founded (x3.5 its need).
+  The founding of random ancestors at sea is still mostly winged (seed 3, ancestor 1: none of 15 finned or legged draws
+  of the first 20 passed): what fails them is the food test, their diets spending most of the digestive budget on land
+  foods the sea does not have (browse, fruit, seed, root at 0.4-0.6, plankton 0.1-0.4), and short bodies that cruise
+  slowly; the winged draws that pass are judged only on the banks where they can land and stand, whose bottom they crop.
+  Measured: founding (256 map) 14, 16, 14, 15, 16 lineages on seeds 1-5 (was 5, 11, 5, 7, 6); the valley run (seed 3,
+  2,000 steps, random brains) kept one lineage, 0 swimmers / 72 waders / 329 fliers at step 500, 0 / 13 / 107 at 2,000
+  (1,223 founded; deaths 1,154: killed 1,046, starved 36), where before all were extinct by step 1,200, mostly starved.
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12

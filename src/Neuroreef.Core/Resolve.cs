@@ -508,9 +508,11 @@ public static class Resolve
         if (water)
         {
             float colM = MathF.Max(0f, w.Depth[cell]) / w.ElevPerM, stand = Respiration.StandM(w, i);
-            if (colM >= stand) return cot;
+            // swimming at swimming's cost of transport (Respiration.SwimCost; 2026-11-02, the ocean audit: was running's, ~10x a fish's)
+            float swim = Respiration.SwimCost(w, i, mass) * spd * coat;
+            if (colM >= stand) return swim;
             wade = World.WadeFactor(colM, K.WADE_LEG * stand);
-            if (w.PVWater[i] >= w.PVLand[i] / wade) return cot;   // it swims faster there than it wades: it swims
+            if (w.PVWater[i] >= w.PVLand[i] / wade) return swim;   // it swims faster there than it wades: it swims
         }
         float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
         return cot * wade * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);

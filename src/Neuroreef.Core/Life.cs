@@ -158,6 +158,9 @@ public static class Life
     /// </summary>
     /// <param name="habitat">the realm the lineage is founded in (2026-11-01): a lineage founded in water must feed and
     /// breathe in water, so only those of its cells count (Realm.Any: every cell its locomotion allows)</param>
+    /// <summary>Reporting only (2026-11-02, the ocean audit): when set, RangeCapacity reports which test decided what it fed.</summary>
+    public static Action<string>? Trace;
+
     public static float RangeCapacity(World w, int c, float hx, float hy, float r, Realm habitat = Realm.Any)
     {
         // where it can forage is where it moves well: a swimmer in water, a walker on land, a wader on both and in
@@ -169,12 +172,12 @@ public static class Life
             Loco.Wade => Realm.Land | Realm.Shallow,
             _ => w.RealmOf(c),
         } & habitat;
-        if (realm == 0) return 0f;
+        if (realm == 0) { Trace?.Invoke("no realm"); return 0f; }
         var diet = w.DietOf(c);
         float need = K.FIELD_METAB * MathF.Max(w.PBasal[c], 1e-6f);
         // a brain the body cannot pay for: more than BRAIN_SHARE_MAX of its basal cost
         float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[c] / K.BRAIN_REF * w.Dt;   // per step, as PBasal
-        if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) return 0f;
+        if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) { Trace?.Invoke($"brain {brainCost / w.PBasal[c]:P0} of basal"); return 0f; }
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
         double y = 0, heatNeed = 0, breathCost = 0, actSum = 0, plank = 0; int n = 0;
@@ -216,7 +219,8 @@ public static class Life
                     actSum += Heat.Rate(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]));   // the gut's pace: the core's temperature
                 }
             }
-        if (n == 0) return 0f;
+        if (n == 0) { Trace?.Invoke("no cell it may use and breathe in"); return 0f; }
+        float need0 = need;
         // with a climate, a day here costs what this body pays at the temperature around it (Revision P): its basal
         // cost at its core temperature, and the heat it must make to keep its core where its endothermy holds it
         if (Climate.On) need = MathF.Max(1e-6f, (float)(heatNeed / n));
@@ -254,6 +258,24 @@ public static class Life
             rate = MathF.Max(rate, MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         double fed = rate >= margin ? y + an.Detritus : 0;
+        if (Trace != null)
+        {
+            float bestPass = 0f; int bp = -1;
+            for (int p = 0; p < Pools.NFIELD; p++)
+            {
+                if (diet[p] <= 0 || !Fields.Grows(p)) continue;
+                float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+                if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));
+                if (p == (int)Pool.Algae && waterCells > 0) pass = MathF.Min(pass, (float)(bottom / n));
+                float v = MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass);
+                if (v > bestPass) { bestPass = v; bp = p; }
+            }
+            float dayB = Climate.On ? (float)(heatNeed / n) : need0;
+            float cruiseB = waterCells > 0 ? Respiration.CruiseCost(w, c, cruiseF) * (float)(waterCells / n) : 0f;
+            Trace($"cells {n} water {waterCells / n:P0}: need/step {need:E2} = day {dayB:E2} + breath {breathCost / n:E2} + cruise {cruiseB:E2} (basal {w.PBasal[c]:E2}); " +
+                  $"best food {(bp >= 0 ? Pools.Names[bp] : "-")} {bestPass:E2}/step = x{rate / MathF.Max(need, 1e-12f):F2} need, margin x{K.FORAGE_MARGIN:F0} (absorb cap x{absorb / MathF.Max(need, 1e-12f):F2} need; plankton {plank / n * 1000:F2} g, bottom {bottom / Math.Max(1, waterCells) * 1000:F2} g a step) " +
+                  (rate >= margin ? $"FOOD OK, feeds {(y + an.Detritus) / (need / w.Dt):F1}" : "FAILS FOOD TEST"));
+        }
         // a kill goes into the gut whole, as much of it as fits (Resolve.Strike), and passes as fast as the gut digests
         if (an.MeatKg > 0f && MathF.Min(absorb, diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(dig, w.PGut[c]), an.MeatKg)) >= margin)
             fed += an.Meat;

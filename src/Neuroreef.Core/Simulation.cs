@@ -196,6 +196,7 @@ public sealed class Simulation : IDisposable
         for (int t = 0; t < K.ANCESTOR_TRIES; t++)
         {
             Ancestor(anc, seed, a, t, land, big);
+            Life.Trace?.Invoke($"#ancestor {a} draw {t}");
             float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)t, out _, out bool animalFood, out int group);
             // (2026-11-01) viable when its range feeds the smallest group that can breed (Life.BreedingGroup: a pair, or
             // one if it breeds alone), not a fixed FOUND_MIN = 50; the first viable draw is the ancestor
@@ -241,7 +242,7 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>Random ancestor genome number t of ancestor a (t = 0 is the first draw, as before 2026-10-30).</summary>
-    void Ancestor(sbyte[] anc, uint seed, int a, int t, bool land, bool big)
+    internal void Ancestor(sbyte[] anc, uint seed, int a, int t, bool land, bool big)
     {
         var w = W;
         int draw = a + t * 0x10000;
@@ -250,7 +251,7 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>What a home range can feed of animals with this genome, and the range's radius: one is made, measured and removed again.</summary>
-    static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range, out bool animalFood, out int group)
+    internal static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range, out bool animalFood, out int group)
     {
         range = K.HOME_R * Map.W; animalFood = false; group = 2;
         if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
@@ -259,9 +260,14 @@ public sealed class Simulation : IDisposable
         int c = Life.Found(w, clade, genome, true, key, gx, gy, realm, mutate: false);
         if (c < 0) return 0f;
         animalFood = EatsAnimalFood(w, c); group = Life.BreedingGroup(w, c);
+        if (Life.Trace != null)
+        {
+            var d = w.DietOf(c); int bp = 0; for (int p = 1; p < Pools.N; p++) if (d[p] * Pools.Rho[p] > d[bp] * Pools.Rho[bp]) bp = p;
+            Life.Trace($"#body {w.PM[c]:F2} kg {(Loco)w.PLoco[c]} fins {w.PFins[c]:F2} wings {w.PWings[c]:F2} legs {w.PLegs[c]:F2} lungs {w.PLungs[c]:F2} endo {w.PEndo[c]:F2} brain {w.PBrain[c]} len {Body.LengthM(w, c):F2} m; eats {Pools.Names[bp]} at {d[bp]:F2}, phyto {d[(int)Pool.Phyto]:F2} algae {d[(int)Pool.Algae]:F2} detritus {d[(int)Pool.Detritus]:F2}; group {group}");
+        }
         // it must breathe where its founders are put, in the realm it is founded in (2026-11-01: a gill-breather founded
         // on land, or an air-breather that cannot keep its head up in the water it is founded in, would not live a step)
-        if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.FreeFounder(w, c); w.T.Created[clade]--; return 0f; }
+        if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.Trace?.Invoke("cannot breathe where it is put"); Life.FreeFounder(w, c); w.T.Created[clade]--; return 0f; }
         // what it can live on in the realm it is founded in (2026-11-01): a water lineage on water foods, where it can breathe
         // in water at the depth it holds, its organs' upkeep and running costs paid (before, a wading ancestor put in
         // water was fed by the land around it, and water lineages lived ashore on grass and roots, with lungs)

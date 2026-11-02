@@ -58,7 +58,10 @@ public class StepLengthTests
         // for every body), with the core's temperature pace on top and not twice; and the shape genes reach 1/3-3 of the
         // cube on each axis with Hoerner's volume drag for swimming and flight (were 1/2-2 and a bounded linear factor).
         // Every body in this world changed. It was 3283118220941252680 before.
-        Assert.Equal(14911671059831046093UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-02 (the ocean audit, FeedingBudgetTests): swimming is paid at swimming's cost of transport
+        // (COT_SWIM_J, 1 J/m at 1 kg, over its propulsive efficiency: Respiration.SwimCost), not running's 10.7 J/m; this
+        // world's swimmers and feeding cruises in its lake and river pay less. It was 14911671059831046093 before.
+        Assert.Equal(11681709169049197875UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

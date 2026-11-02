@@ -79,7 +79,8 @@ public class WadingTests
         Assert.True(stand < 0.5f);
         Assert.False(w.StandsIn(0, water));
         Assert.True(w.GroundVmax(0, water) <= w.PVWater[0] * 1.0001f, "it swims: no wading speed");
-        float swim = K.C_MOVE * MathK.Pow(m, K.EXP_MOVE) * spd;
+        float swim = Respiration.SwimCost(w, 0, m) * spd * (1f + K.INS_MOVE * w.PInsul[0]);   // swimming's cost of transport (2026-11-02, the ocean audit)
+        Assert.True(swim < K.C_MOVE * MathK.Pow(m, K.EXP_MOVE) * spd, "swimming costs less a metre than running");
         Assert.Equal(swim, Resolve.MoveCost(w, 0, m, 1f, spd, water, false), 5);
         // the bottom's food: not from the surface where the water is deeper than it stands; within reach where it is not
         int alg = (int)Pool.Algae;

@@ -89,7 +89,7 @@ public class DivingTests
             var b = Respiration.Uptake(w, 0, c, false, 0f, out float z, out float share);
             _out.WriteLine($"depth {z:F1} m for {share:P0} of the step: {b.DiveM:F0} m swum diving; extra cost {b.Extra:E3}");
             Assert.True(z > 0f && b.DiveM >= 2f * z * 0.999f);
-            float dive = b.DiveM / K.M_PER_UNIT * K.C_MOVE * MathK.Pow(w.MassOf(0), K.EXP_MOVE);
+            float dive = Respiration.CruiseCost(w, 0, b.DiveM);   // at swimming's cost of transport (Respiration.SwimCost)
             Assert.True(b.Extra >= dive * 0.999f, "the dive's cost is paid");
             return 0;
         });
