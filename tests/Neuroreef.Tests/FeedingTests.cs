@@ -48,6 +48,62 @@ public class FeedingTests
         w.IHeading[i] = w.Heading[i]; w.ISpeed[i] = 0;
     }
 
+    [Fact] // 2026-11-02: a gut is built to its body's basal cost: a Kleiber body keeps the reference gut, a costlier one a bigger gut that pays its own upkeep, up to GUT_FLEX_MAX
+    public void GutIsBuiltToItsBodysBasalCost()
+    {
+        float k = K.C_BASAL * MathK.Pow(3f, K.EXP_BASAL);
+        // the reference body: the reference gut, and its basal cost unchanged
+        Assert.Equal(1f, Body.GutScale(k, k, out float b1), 5);
+        Assert.Equal(k, b1, 6);
+        // a body costing twice Kleiber with the reference gut: the gut grows until its absorption is C_ABSORB / C_BASAL of
+        // the whole cost, its own upkeep included, and that upkeep is GUT_SHARE x Kleiber per reference gut
+        float g2 = Body.GutScale(2f * k, k, out float b2);
+        Assert.True(g2 > 1f && g2 < K.GUT_FLEX_MAX);
+        Assert.Equal(b2, k * g2, 6);                                       // absorption C_ABSORB x M^0.75 x g = scope x its own basal
+        Assert.Equal(2f * k + K.GUT_SHARE * (g2 - 1f) * k, b2, 6);          // it pays for the gut it adds
+        Assert.Equal(k + k / (1f - K.GUT_SHARE), b2, 5);                    // an organ's cost is raised by 1 / (1 - GUT_SHARE)
+        // a very costly body: the gut stops at GUT_FLEX_MAX, so it absorbs less than the scope against its cost
+        float g9 = Body.GutScale(9f * k, k, out float b9);
+        Assert.Equal(K.GUT_FLEX_MAX, g9, 5);
+        Assert.Equal(9f * k + K.GUT_SHARE * (K.GUT_FLEX_MAX - 1f) * k, b9, 5);
+        Assert.True(k * g9 < b9);
+        // a cheap body builds a smaller gut and saves its upkeep
+        Assert.True(Body.GutScale(0.6f * k, k, out float b06) < 1f && b06 < 0.6f * k);
+    }
+
+    [Fact] // 2026-11-02: an expressed body's absorption and digestion are its gut's: a big brain brings a bigger gut at a higher basal cost, and that gut takes up no more than it is given
+    public void ABigBrainedBodyAbsorbsInProportionToItsCost()
+    {
+        float climate = Nature.Climate; Nature.Climate = 0f;
+        try
+        {
+            var w = new World(256, 23); Terrain.Build(w);
+            int cell = LandCell(w);
+            int a = Eater(w, 0, 1, Pool.Seed);
+            Put(w, a, cell);
+            float m = w.PM[a], k = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+            float basal0 = w.PBasal[a], absorb0 = w.PAbsorb[a], dig0 = w.PDig[a], brain0 = K.COST_BRAIN * K.C_BASAL * w.PBrain[a] / K.BRAIN_REF;
+            Assert.Equal(K.C_ABSORB / K.C_BASAL * basal0, absorb0, 5);
+            w.Genome[a * G.LEN + G.B_BRAIN] = Body.UnitsGene(Body.UnitsAffordable(m) * 0.8f); Body.Express(w, a);
+            float brain = K.COST_BRAIN * K.C_BASAL * w.PBrain[a] / K.BRAIN_REF;
+            Assert.True(brain - brain0 > 0.1f * k, $"a big brain: {brain / k:F2} of Kleiber, from {brain0 / k:F2}");
+            // its cost: the brain, and the gut that feeds it
+            Assert.Equal(basal0 + (brain - brain0) / (1f - K.GUT_SHARE), w.PBasal[a], 5);
+            // its gut absorbs and digests in proportion, and holds no more
+            Assert.Equal(K.C_ABSORB / K.C_BASAL * w.PBasal[a], w.PAbsorb[a], 4);
+            Assert.Equal(w.PAbsorb[a] / absorb0, w.PDig[a] / dig0, 3);
+            Assert.Equal(K.C_GUT * m, w.PGut[a], 6);
+            // a gut full of seeds: it takes up at most its absorption a step, all of it from the gut
+            w.Gut[a] = w.PGut[a]; w.GutEnergy[a] = w.Gut[a] * K.RHO_SEED * 0.75f; w.GutWaste[a] = 0f; w.Energy[a] = 0.3f * w.EmaxOf(a);
+            float g0 = w.GutEnergy[a];
+            Act(w, a, P.REST); w.IActs[a] = 0;
+            Resolve.Run(w, 1, 0);
+            float took = g0 - w.GutEnergy[a];
+            Assert.True(took > absorb0 && took <= w.PAbsorb[a] * 1.0001f, $"absorbed {took} a step; its gut's limit {w.PAbsorb[a]}, the small-brained body's {absorb0}");
+        }
+        finally { Nature.Climate = climate; }
+    }
+
     [Fact] // a hungry grazer standing in grass senses it, bites it and gains energy step after step
     public void HerbivoreBesideFoodGainsEnergy()
     {

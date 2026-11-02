@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The founding probe (2026-11-02): builds worlds (land and plant spin-up), founds the random ancestors and prints
+       which were founded, with how many founders, and how many random ancestor bodies the gut could feed. No stepping. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Neuroreef.Core\Neuroreef.Core.csproj" />
+  </ItemGroup>
+</Project>
