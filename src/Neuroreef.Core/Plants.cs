@@ -369,6 +369,7 @@ public static class Plants
             w.PFlags[i] = 0x0F;
         }
         InitWood(w);
+        Nutrients.InitPools(w);   // the dead pools' nutrient from what Terrain laid down (2026-11-02)
     }
 
     // ------------------------------------------------------------------ the update of one stripe
@@ -447,6 +448,7 @@ public static class Plants
             if (w.Cell[i] != (byte)Realm.Land) continue;
             float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f)), ax = w.WetDur[i];
             float respT = Climate.Resp[Climate.Idx(T)];
+            float stock0 = Nutrients.Plants(w, i);   // the plants' nutrient before this update (Nutrients.cs)
             B[HERB] = G[i]; B[SHRUB] = S[i]; B[TREE] = Tr[i]; B[SAP] = Sp[i];
             int flags = w.PFlags[i];
             for (int k = 0; k < SLOTS; k++)
@@ -617,6 +619,8 @@ public static class Plants
             float wDie = woodCover > 1e-6f ? lw * MathF.Min(1f, dt * woodDeath / woodCover) : lw;
             w.LiveWood[i] = lw - wDie;
             Li[i] += litter; Wo[i] += wood + wDie;
+            float litAdd = litter;
+            w.WoodN[i] += Nutrients.Leaf * wood + Nutrients.Wood * wDie;
             prod += woodProd;
             t.CellProd[i] += prod;
 
@@ -635,10 +639,10 @@ public static class Plants
             if (rot > 0f && w.FruitG[i] != 0)
             {
                 int fg = w.FruitG[i]; float sd = rot / (1f + Pe[fg * NP + Ph.PULP]);
-                Li[i] += rot - sd;
+                Li[i] += rot - sd; litAdd += rot - sd;
                 BankAdd(w, (int)Pe[fg * NP + Ph.STRAT], i, fg, fg, sd, Rng.U(seed, step, (uint)i, Rs.PlantPick + 3));
             }
-            else Li[i] += rot;
+            else { Li[i] += rot; litAdd += rot; }
             if (Fr[i] < 1e-7f) w.FruitG[i] = 0;
             Nc[i] = MathF.Max(0f, Nc[i] - Nc[i] * MathF.Min(1f, dt * K.D_NC));
             for (int s = 0; s < 3; s++)
@@ -646,12 +650,24 @@ public static class Plants
                 int bo = s * n + i; int m = w.BankMom[bo];
                 if (m == 0) continue;
                 float d = w.BankM[bo] * MathF.Min(1f, dt * K.D_SD / Pe[m * NP + Ph.BANKD]);
-                w.BankM[bo] -= d; Li[i] += d;
+                w.BankM[bo] -= d; Li[i] += d; litAdd += d;
             }
-            // nutrient taken up by growth, less what fixation supplies
+            // nutrient (2026-11-02, Nutrients.cs): the plants take from the soil what their tissue gained and what fell from
+            // them holds: the change of their cover and live wood, the litter (leaves and stems at leafy content, and the
+            // seed and fruit that rotted into it, which carried none) and the dead wood. A loss of tissue that fell
+            // nowhere (respiration, release from the light) returns its nutrient. Fixation supplies its share of an uptake
+            // (an input). Before, uptake was counted on production at C_NUTUSE and rot gave back C_NUTGAIN, 0.1 more a unit.
             float tot = B[HERB] + B[SHRUB] + B[TREE] + B[SAP];
             float fx = tot > 0f ? fixedShare / tot : 0f, fixS = fx / (N + fx + 1e-6f);
-            w.Nutrient[i] = Math.Clamp(N - ((prod - woodProd) + K.WOOD_N * woodProd) * K.C_NUTUSE * (1f - fixS) - wDie * K.C_NUTGAIN * (1f - K.WOOD_N), 0f, K.N_MAX);
+            var book = w.NutBook; int bko = y * Nutrients.Book.NK;
+            float ex = Nutrients.Plants(w, i) - stock0 + Nutrients.Leaf * (litAdd + wood) + Nutrients.Wood * wDie;
+            if (ex > 0f && book.Open) { float f = ex * fixS; book.Row[bko + Nutrients.Book.IN] += f; ex -= f; }
+            float soil = Nutrients.Uptake(w, y, i, N - ex);
+            // the decay of dying live wood immobilises the nitrogen wood lacks from the soil, as far as the soil has it
+            // (wood-decay fungi import nitrogen: Laiho & Prescott 2004)
+            float imm = MathF.Min(wDie * (Nutrients.Leaf - Nutrients.Wood), soil);
+            w.WoodN[i] += imm;
+            w.Nutrient[i] = soil - imm;
         }
         t.RowStat[y * PlantTable.NSTAT + ST_WIND] += windOut;
     }
@@ -782,6 +798,7 @@ public static class Plants
             if (!land) continue;
 
             // recruitment from each bank into its stratum's slot (the canopy bank into saplings)
+            float stock0 = Nutrients.Plants(w, i);
             B[HERB] = G[i]; B[SHRUB] = w.Shrub[i]; B[TREE] = w.Tree[i]; B[SAP] = w.Sapling[i];
             for (int k = 0; k < SLOTS; k++) id[k] = w.POcc[i * SLOTS + k];
             float W = w.Moisture[i], N = w.Nutrient[i], T = w.Temp[i], lnW = MathK.Log(MathF.Max(W, 1e-6f)), ax = w.WetDur[i];
@@ -842,6 +859,9 @@ public static class Plants
             G[i] = B[HERB]; w.Shrub[i] = B[SHRUB]; w.Tree[i] = B[TREE]; w.Sapling[i] = B[SAP];
             for (int k = 0; k < SLOTS; k++) w.POcc[i * SLOTS + k] = (ushort)(B[k] > 1e-7f ? id[k] : 0);
             Sd[i] = w.BankM[i] + w.BankM[n + i] + w.BankM[2 * n + i];
+            // the recruits' tissue takes its nutrient from the soil (seed carries none, Nutrients.cs); cover the light
+            // hierarchy clips gives its back (2026-11-02)
+            w.Nutrient[i] = Nutrients.Uptake(w, y, i, w.Nutrient[i] - (Nutrients.Plants(w, i) - stock0));
         }
         t.RowStat[st + ST_GATH] += gathered;
         t.RowStat[st + ST_WATER] += water;
@@ -932,7 +952,7 @@ public static class Plants
 
     /// <summary>A fire burns cell i: herbs keep RESPR of their cover, woody stems survive by height over the flames or by bark
     /// (Higgins, Bond &amp; Trollope 2000), killed stems resprout by RESPR; banks keep BANK_FIRE. Returns the biomass burned.</summary>
-    public static float Burn(World w, int i, float fuel)
+    public static float Burn(World w, int i, float fuel, out float burnedN)
     {
         var t = w.Flora; var Pe = t.Phe; int NP = PlantTable.NP, n = Map.FW * Map.FW;
         var Pl = w.Pool;
@@ -942,6 +962,10 @@ public static class Plants
         float g = Pl[(int)Pool.Grass][i];
         float keep = gh != 0 ? Pe[gh * NP + Ph.RESPR] : 0f;
         burned += g * (1f - keep); Pl[(int)Pool.Grass][i] = g * keep;
+        // the nutrient of what burned (2026-11-02, Nutrients.cs): leafy cover, stems and litter at leafy content, live wood at
+        // its own; seed, fruit and nectar hold none, browse and roots are views of the cover
+        burnedN = Nutrients.Leaf * g * (1f - keep);
+        float woodN = 0f;
         float woodIn = 0f, woodyBefore = 0f, woodyLost = 0f;
         for (int k = 1; k < SLOTS; k++)
         {
@@ -954,6 +978,7 @@ public static class Plants
             float killed = b * (1f - surv), re = killed * Pe[o + Ph.RESPR], lost = killed - re;
             float nb = b - lost;
             woodIn += 0.5f * lost; burned += 0.5f * lost;
+            woodN += Nutrients.Leaf * 0.5f * lost; burnedN += Nutrients.Leaf * 0.5f * lost;
             woodyBefore += b; woodyLost += lost;
             if (k == SHRUB) w.Shrub[i] = nb; else if (k == TREE) w.Tree[i] = nb; else w.Sapling[i] = nb;
         }
@@ -963,11 +988,13 @@ public static class Plants
         {
             float lost = lw * MathF.Min(1f, woodyLost / woodyBefore);
             w.LiveWood[i] = lw - lost; woodIn += 0.5f * lost; burned += 0.5f * lost;
+            woodN += Nutrients.Wood * 0.5f * lost; burnedN += Nutrients.Wood * 0.5f * lost;
         }
-        Pl[(int)Pool.Wood][i] += woodIn;
+        Pl[(int)Pool.Wood][i] += woodIn; w.WoodN[i] += woodN;
         for (int s = 0; s < 3; s++) { float b = w.BankM[s * n + i]; burned += b * (1f - K.BANK_FIRE); w.BankM[s * n + i] = b * K.BANK_FIRE; }
         Pl[(int)Pool.Seed][i] = w.BankM[i] + w.BankM[n + i] + w.BankM[2 * n + i];
         burned += Pl[(int)Pool.Browse][i] + Pl[(int)Pool.Litter][i] + Pl[(int)Pool.Nectar][i] + Pl[(int)Pool.Fruit][i];
+        burnedN += Nutrients.Leaf * Pl[(int)Pool.Litter][i];
         Pl[(int)Pool.Browse][i] = 0; Pl[(int)Pool.Litter][i] = 0; Pl[(int)Pool.Nectar][i] = 0; Pl[(int)Pool.Fruit][i] = 0; w.FruitG[i] = 0;
         Pl[(int)Pool.Root][i] *= 0.7f;
         return burned;

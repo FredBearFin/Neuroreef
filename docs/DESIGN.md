@@ -153,7 +153,8 @@ Wetlands (Wetlands.cs; nothing places one):
   take into live wood (World.LiveWood, saved; checkpoint format 24 starts an older save's wood from its woody cover,
   WOOD_INIT 15 kg/m2 per unit, and keeps its land). Live wood dies at the woody plants' stem death rate (age and
   drought) into dead wood (Pool.Wood); it takes WOOD_N 1/10 of leafy growth's nutrient, and the decay of dead wood
-  immobilises the difference from the soil when it dies (Laiho & Prescott 2004). Before, a closed forest's production was
+  immobilises the difference from the soil when it dies, as far as the soil has it (Laiho & Prescott 2004; 2026-11-02:
+  dead wood keeps its own nutrient, World.WoodN, §10.4). Before, a closed forest's production was
   only its leaf turnover (forest NPP 2-3x below the measured).
 - *Water-limited production* (2026-11-01). The water-limited rate is r0 x (0.5 + WUE) x W_SUP x relative soil water,
   W_SUP = E_MAX_ROOT 5 mm/day over PET_REF a day (1.83; the supply/demand ratio of transpiration, Haxeltine & Prentice
@@ -2175,6 +2176,32 @@ The rates are:
 Soil nutrient does not flow between land cells. Water cells mix with water neighbours (N_DIFF), and
 each shore cell loses RUNOFF of its soil nutrient per step into each adjacent water cell (the same
 amount leaves the land and enters the water). Weathering adds c_w·fertility.
+
+**Nutrient budget (2026-11-02, Nutrients.cs).** Nutrient is conserved: every flow moves what it takes from one store to
+another, and the total changes only by explicit inputs and outputs, counted per row in World.NutBook. Before, a unit of
+growth took C_NUTUSE 0.6 and its rot returned C_NUTGAIN 0.7 (0.1 made from nothing per unit of growth that rotted, ~17%
+of every turnover), carrion and dung returned 0.7 per land unit's kilogram whatever they held, fire returned a flat
+0.1 per unit burned, and the clamps at 0 and N_MAX made and destroyed nutrient unseen.
+
+- *Stores.* Soil and water (Nutrient); leafy cover and litter C_NUTUSE per unit (leaves at N_LEAF 2%, Wright et al.
+  2004; resorption is not modelled); live wood WOOD_N x C_NUTUSE; algae and phytoplankton at N_ALGAE 7.9% (Redfield),
+  0.30 per unit (it was 0.6, 16% N); dead wood, detritus, carrion, dung and peat hold what fell into them (WoodN, DetN,
+  CarN, DungN, PeatN; checkpoint format 25); animals N_BODY 3% of live mass, plus the gut's undigested share (GutN).
+  Seed, fruit and nectar are counted as carbon only: the nutrient of a seedling, or of the litter a seed or fruit rots
+  into, is taken from the soil when that tissue forms. Browse and roots are views of the cover.
+- *Plants* take from the soil the change of their cover and live wood plus what fell from them (litter, dead wood);
+  fixation pays its share of an uptake (an input). Tissue the soil cannot supply is not built (the cell's cover loses
+  it, Liebig). Dying live wood immobilises the N wood lacks from the soil as far as the soil has it.
+- *Water producers* take what their kept growth holds, never more than the water has; their deaths carry it to detritus.
+- *Decay* returns the rotted share of each dead pool's nutrient; peat keeps what its litter and wood held.
+- *Animals*: a bite carries the nutrient the pool held in it (or the plants lost); the assimilated share is excreted
+  where the animal is (urine; Haynes & Williams 1993), the rest goes with the dung. Growth and the young draw their N
+  from the gut, then the soil or water. A carcass holds the body's N (the eaten share goes to the killer); a death
+  without a carcass returns it to the soil. A blood meal carries none (the victim loses energy, not mass).
+- *Inputs*: weathering and deposition, fixation, founders' bodies (Book.FOUND). *Outputs*: what a cell holds above
+  N_MAX (leaching and denitrification), FIRE_N_LOSS 0.8 of burned biomass's N (Raison 1979). *Debt*: what had to be made
+  because a store had too little (an animal's growth or birth beyond its gut and its cell), counted
+  (NutrientBalanceTests: ~1.5e-5 of the total over 300 steps). Book.Open = false closes the world (tests).
 
 ### 10.5 Fire (NR-309)
 

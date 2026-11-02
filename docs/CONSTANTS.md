@@ -458,16 +458,18 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | M_A | 0.012175 | /step | algae death into detritus (sloughing, senescence) | ECO: periphyton and littoral turnover of 1-3 weeks, P/B 20-100 /yr (Wetzel 2001); 0.1 /day over STEPS_PER_DAY, giving 300-700 gC/m2/yr at ordinary nutrients and light in the shallows (PlantTests.WaterProductionIsInTheLiteratureRange). Was 0.0015 /step (HT) |
 | R_PH | 0.12175 | /step | phytoplankton growth: specific rate at full nutrient, at T_REF | ECO: phytoplankton grows at up to ~2 /day at 20 C (Eppley 1972) and ~0.5-1.5 /day in lakes (Reynolds 2006); 1 /day over STEPS_PER_DAY. Was 0.003 /step (HT, 0.025 /day: turnover in ~80 days, not days) |
 | M_PH | 0.0060875 | /step | phytoplankton death into detritus (sinking out of the mixed layer, lysis; grazing is the animals') | ECO: sinking at 0.1-1 m/day over a mixed layer of 2-20 m, ~0.05 /day (Reynolds 2006); with R_PH this gives 300-450 gC/m2/yr at ordinary nutrients, lakes 100-500 and eutrophic up to ~1,000 (Wetzel 2001). Was 0.0015 /step (HT) |
-| C_NUTUSE | 0.6 | - | nutrient used per unit plant growth | V1 |
-| C_NUTGAIN | 0.7 | - | rot share that becomes nutrient | V1 |
-| WEATHER | 0.0015 | /step | background weathering | V1 |
+| C_NUTUSE | 0.6 | - | nutrient in a unit of leafy plant cover (live, litter or dead stems): what its growth takes from the soil and its decay gives back (Nutrients.cs). It defines the nutrient unit: a unit is the nitrogen of 1/C_NUTUSE units of leafy cover at N_LEAF | V1; 2026-11-02: also what rot returns (it returned C_NUTGAIN 0.7, so every unit of growth that rotted made 0.1 nutrient from nothing) |
+| N_LEAF | 0.02 | kg/kg | nitrogen share of the dry matter of leafy tissue and its litter | ECO: leaf N 0.5-6%, median ~2% (Wright et al. 2004, GLOPNET). Fixes the nutrient unit in kg N (Nutrients.UnitKgN); resorption before leaf fall (~50%, Aerts 1996) is not modelled, the litter keeps the leaf's N |
+| N_ALGAE | 0.079 | kg/kg | nitrogen share of the dry matter of algae, phytoplankton and their detritus | ECO: Redfield C:N 106:16 molar (5.7 by mass) at ~45% C, ~7.9% N (Redfield 1958; Sterner & Elser 2002). A unit of water producer holds N_ALGAE x WATER_KG_M2 / (N_LEAF x PLANT_KG_M2) x C_NUTUSE = 0.30 nutrient; it was C_NUTUSE (0.6), 16% N |
+| N_BODY | 0.03 | kg/kg | nitrogen share of a live animal's mass (wet) | ECO: ~3% N of wet mass in vertebrates and fish, C:N ~4-6 (Sterner & George 2000; Sterner & Elser 2002). A body holds it while alive and gives it to its carcass |
+| WEATHER | 0.0015 | /step | background weathering and deposition: nutrient a cell gains a step, x its parent material's fertility x 0.1 (the one input besides fixation; Nutrients.Book counts it) | V1 |
 | N_DIFF | 0.05 | /step | nutrient mixing between neighbouring water cells | HT: water mixes, soil does not |
 | ROT_CARRION | 0.0025 | /step | carrion rot | V1 |
 | ROT_DUNG | 0.0015 | /step | dung rot | HT |
 | ROT_LITTER | 0.0006 | /step | litter rot | HT |
 | ROT_WOOD | 0.00015 | /step | wood rot | HT |
 | ROT_DETRITUS | 0.0015 | /step | detritus rot | HT |
-| N_MAX | 1.5 | - | max nutrient | V1 |
+| N_MAX | 1.5 | - | most nutrient a cell's soil or water holds: what is above it is lost to leaching and denitrification (an explicit output, Nutrients.Book) | V1 |
 | RUNOFF | 0.002 | /step | run-off: share of a shore cell's soil nutrient that washes into each adjacent water cell | HT |
 
 ## 27. Plants
@@ -594,7 +596,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 |---|---|---|---|---|
 | LAMBDA_FIRE | 2E-06 | /cell/step | ignition rate per unit dry fuel per land cell | HT: ~1 ignition per 100 steps in the dry season |
 | C_SPREAD | 0.15 | - | spread probability per unit neighbour fuel | ECO: gives a fire return interval of ~2 years with no animals (savanna: 1-5 years) |
-| C_ASH | 0.5 | - | nutrient from burned biomass | HT |
+| FIRE_N_LOSS | 0.8 | - | share of the nutrient in burned biomass lost to the air (the rest returns to the soil as ash) | ECO: fires volatilise 50-90% of the N of the fuel they consume, more in hot fires (Raison 1979; Boerner 1982); 0.8. 2026-11-02: replaces C_ASH, which returned 0.1 nutrient per unit burned whatever it held |
 | FIRE_STEPS | 6 | steps | steps a cell burns | HT |
 | FUEL_MIN | 0.25 | - | fuel below which fire cannot spread | HT |
 | FIRE_KILL | 0.3 | - | probability per step that an animal in a burning cell dies | HT |

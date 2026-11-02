@@ -24,6 +24,13 @@ public static class Life
         if (w.T.LastFullStep != w.Step) { w.T.LastFullStep = w.Step; w.T.FullSteps++; }
     }
 
+    /// <summary>Remove a founder made only to be measured (Simulation): its body's nutrient returns where it was put.</summary>
+    public static void FreeFounder(World w, int i)
+    {
+        Nutrients.FounderOut(w, i);
+        FreeSlot(w, i);
+    }
+
     public static void FreeSlot(World w, int i)
     {
         w.StageOf[i] = St.Dead;
@@ -424,6 +431,7 @@ public static class Life
         w.Energy[c] = K.C_EMAX * w.PM[c] * (0.5f + 0.3f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 7));
         if (adult) { w.Age[c] = w.PMature[c] * (1f + 0.5f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9)); w.Grown[c] = 1f; }
         else { w.Age[c] = w.PMature[c] * 0.8f * Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 9); w.Grown[c] = w.Age[c] / w.PMature[c]; }
+        Nutrients.FounderIn(w, c);   // a founder's body brings its nutrient into the world (2026-11-02; FreeFounder takes it out)
         return c;
     }
 
