@@ -48,6 +48,9 @@ public class VoiceTests
 
     static float Feat(World w, int i, int f) => w.Feat[i * F.N + f];
 
+    /// <summary>m metres in world units (K.M_PER_UNIT a unit).</summary>
+    static float M(float m) => m / K.M_PER_UNIT;
+
     [Fact] // the 400 utterance types are the ordered sequences of 1-3 distinct sounds, numbered both ways
     public void UtteranceTypesRoundTrip()
     {
@@ -113,9 +116,12 @@ public class VoiceTests
     [Fact] // the focal caller is the loudest alike caller, kept while it stays at least FOCAL_KEEP as loud; else a stranger
     public void FocalCallerPrefersKinAndKeepsAttention()
     {
+        // (2026-11-02, the 1 km world) the distances in metres against a full voice's HEAR_R_M (870 m): they were 3, 5, 1,
+        // 2 and 9 units of 54.5 m (164, 273, 55, 109 and 491 m) against HEAR_R 16 units; units of 4 m put every caller
+        // within 5% of the listener's range, all about as loud
         var (w, x, y) = NewWorld(4);
         int L = Org(w, -1, x, y, true, 1);
-        int A = Org(w, L, x + 3f, y, true, 2), B = Org(w, L, x - 5f, y, true, 3), C = Org(w, L, x, y + 1f, true, 4);
+        int A = Org(w, L, x + M(164f), y, true, 2), B = Org(w, L, x - M(273f), y, true, 3), C = Org(w, L, x, y + M(55f), true, 4);
         w.Genome[C * G.LEN + G.B_ARMOUR] = 127; w.Genome[C * G.LEN + G.B_STRIKE] = 127; Body.Express(w, C);   // looks different
         Assert.True(Body.LooksAlike(w, L, A) && Body.LooksAlike(w, L, B) && !Body.LooksAlike(w, L, C));
         Say(w, A, 1); Say(w, B, 2); Say(w, C, 3);
@@ -125,10 +131,10 @@ public class VoiceTests
         Assert.Equal(A, w.IFocal[L]);                                     // the stranger is louder, but kin comes first
         Assert.Equal(1f, Feat(w, L, F.FOC_KIN));
         Assert.Equal(1f, Feat(w, L, F.FOC_POS_0 + 0));
-        Assert.Equal(1f - 1f / w.CallR[C], Feat(w, L, F.HEAR_0 + 2), 4);  // everything is still heard
-        w.X[B] = World.Wrap(x - 2f); Run();                                // B is now louder, A still >= 0.7 of it
+        Assert.Equal(1f - M(55f) / w.CallR[C], Feat(w, L, F.HEAR_0 + 2), 4);  // everything is still heard
+        w.X[B] = World.Wrap(x - M(109f)); Run();                           // B is now louder, A still >= 0.7 of it
         Assert.Equal(A, w.IFocal[L]);
-        w.X[A] = World.Wrap(x + 9f); Run();                                // A falls below 0.7 of B
+        w.X[A] = World.Wrap(x + M(491f)); Run();                           // A falls below 0.7 of B
         Assert.Equal(B, w.IFocal[L]);
         Assert.Equal(1f, Feat(w, L, F.FOC_POS_0 + 1));
         Say(w, A); Say(w, B); Run();                                       // only the stranger calls
@@ -142,17 +148,21 @@ public class VoiceTests
     [Fact] // a caller is heard as far as its voice and body carry it (HEAR_R x voice x M^(1/3), at most MAX_HEAR)
     public void CallRangeIsTheCallers()
     {
+        // (2026-11-02, the 1 km world) A 450 m off: within a full voice's 870 m (HEAR_R_M at M = 1), beyond the weak voice's
+        // (gene -10: 0.46 of it, 400 m). It was 12 units of 54.5 m (654 m), now past half the 1 km test map (the torus would
+        // bring it to 370 m); 12 units of 4 m (48 m) are within any voice
+        float d = M(450f);
         var (w, x, y) = NewWorld(5);
         int L = Org(w, -1, x, y, true, 1);
-        int A = Org(w, L, x + 12f, y, true, 2);
+        int A = Org(w, L, x + d, y, true, 2);
         Say(w, A, 4);
         w.Step = 1; Simulation.BuildFor(w); Decide.Run(w, L, new Decide.ProbeBuf());
         Assert.Equal(K.HEAR_R * w.PVoice[A] * MathK.Cbrt(w.MassOf(A)), w.CallR[A], 4);
         Assert.True(Feat(w, L, F.HEAR_0 + 3) > 0f);
-        w.Genome[A * G.LEN + G.B_VOICE] = -10; Body.Express(w, A);         // a weaker voice: 12 units is out of its range
+        w.Genome[A * G.LEN + G.B_VOICE] = -10; Body.Express(w, A);         // a weaker voice: 450 m is out of its range
         Assert.True(w.PVoice[A] >= K.VOICE_MIN);
         w.Step = 2; Simulation.BuildFor(w); Decide.Run(w, L, new Decide.ProbeBuf());
-        Assert.True(w.CallR[A] < 12f);
+        Assert.True(w.CallR[A] < d);
         Assert.Equal(0f, Feat(w, L, F.HEAR_0 + 3));
     }
 
@@ -275,8 +285,14 @@ public class VoiceTests
     {
         ulong Run(bool feature, bool imit, out long calls)
         {
-            using var sim = new Simulation(8192, 9, 1, evo: new EvoSettings { VocalLearning = feature, MutBody = 0f });   // no mutation can give a newborn the gene back
+            // seed 2 (2026-11-02, the 1 km world): on seed 9 the voiced, big-brained land ancestor is no longer founded (its
+            // home is cool: none of its draws' guts passes FORAGE_MARGIN days of need there, Life.RangeCapacity), so no one
+            // calls. Of seeds 1-12 it is founded on 2, 3, 4, 6, 10, 11 and 12
+            using var sim = new Simulation(8192, 2, 1, evo: new EvoSettings { VocalLearning = feature, MutBody = 0f });   // no mutation can give a newborn the gene back
             var w = sim.W;
+            int voiced = 0;
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.PVoice[i] >= K.VOICE_MIN) voiced++;
+            Assert.True(voiced > 0, "the voiced lineage was not founded");
             for (int i = 0; i < w.Cap; i++)
                 if (w.StageOf[i] != St.Dead && !imit) { w.Genome[i * G.LEN + G.B_IMIT] = -127; Body.Express(w, i); }
             calls = 0;

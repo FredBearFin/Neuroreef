@@ -112,11 +112,16 @@ public static class Fields
         {
             float lim = N / (N + K.K_N);
             float fe = clim ? (temp < 0f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
-            // what a grazer can take at half the room is the growth there less what dies there into detritus (M x 1/2), as
-            // land plants count growth less respiration (Plants.Yield). 2026-11-01: before, the deaths were counted twice,
-            // here and as detritus, and at the old rates the plankton's net growth at half its room was below zero
-            float al = MathF.Max(0f, (K.R_A * plants * lim * 0.25f + 0.0005f * lim) * fe * MathK.Exp(-w.Depth[i] / w.ShallowE) - 0.5f * K.M_A);
-            float ph = MathF.Max(0f, K.R_PH * plants * lim * 0.25f * fe - 0.5f * K.M_PH);
+            // what a grazer can take is the growth less what dies into detritus, as land plants count growth less
+            // respiration (Plants.Yield). With growth r B (1 - B) and deaths M B (Row), the net B (r - M - r B) is greatest
+            // at B = (r - M) / 2r, where it is (r - M)^2 / 4r (Schaefer 1954 with a separate death rate), and nothing when
+            // r <= M. 2026-11-02: it was r/4 - M/2, the net at half the room, which is not the most and is zero for every
+            // r below 2M (at 1 m of water, light 0.61, all of periphyton's growth at ordinary nutrients and climate).
+            // 2026-11-01: before that, the deaths were counted twice, here and as detritus.
+            float light = MathK.Exp(-w.Depth[i] / w.ShallowE);
+            float rA = K.R_A * plants * lim * fe * light, rP = K.R_PH * plants * lim * fe;
+            float al = Msy(rA, K.M_A) + 0.0005f * lim * fe * light;
+            float ph = Msy(rP, K.M_PH);
             y += diet[(int)Pool.Algae] * Pools.ECell[(int)Pool.Algae] * al;
             y += diet[(int)Pool.Phyto] * Pools.ECell[(int)Pool.Phyto] * ph;
             y += diet[(int)Pool.Detritus] * Pools.ECell[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + K.M_PH * Pl[(int)Pool.Phyto][i]);
@@ -125,7 +130,10 @@ public static class Fields
         return Plants.Yield(w, i, diet);
     }
 
-    static readonly float InvKgLand = 1f / Pools.Kg[(int)Pool.Litter];
+    /// <summary>The most a logistic stock growing at r B (1 - B) and dying at m B gives a step, sustained (Yield).</summary>
+    static float Msy(float r, float m) => r > m ? (r - m) * (r - m) / (4f * r) : 0f;
+
+    static readonly float InvKgLand =1f / Pools.Kg[(int)Pool.Litter];
 
     /// <summary>Is this a pool that Yield counts (it grows from plants, or from their fall)?</summary>
     public static bool Grows(int p) => p <= (int)Pool.Phyto || p == (int)Pool.Litter || p == (int)Pool.Detritus;
