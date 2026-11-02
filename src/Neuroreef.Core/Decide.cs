@@ -454,9 +454,13 @@ public static class Decide
         // share of the time the gain says; events (strike, mate, lay, cache, each call) fire with chance g x Dt a step, so
         // they happen g times a reference step on average at any finer step (a count, not the chance of at least one: a
         // hazard of -ln(1 - g) would fire an urge near 1 many times), and a fine step does not multiply strikes, matings
-        // and calls a day; a coarser step fires once at most, with the chance of one in its Dt reference steps. The continuous gains' exploration noise is held for a reference step, and learning sees it x Dt a step, so
-        // a reference step's trace holds one perturbation, as at the reference step. At Dt = 1 this is the old loop
-        float dt = w.Dt;
+        // and calls a day; a coarser step fires once at most, with the chance of one in its Dt reference steps.
+        // A bout (a commitment in time): a state's draw and the continuous gains' exploration noise are held for a
+        // reference step (one draw a K.STEP_H), so an animal keeps eating or resting while its urge stays above the bout's
+        // draw, and learning sees each held choice x Dt a step: a reference step's trace holds one choice and one
+        // perturbation, as at the reference step, and learning an hour does not grow with the number of steps in it.
+        // At Dt = 1 this is the old loop
+        float dt = w.Dt, dl = MathF.Min(dt, 1f);
         var rsHeld = dt == 1f ? rs : new Rng.Seq(Rng.Hash(seed, (uint)w.RefStep(w.Step), (uint)i, Rs.ExploreHeld));
         for (int p = 0; p < P.N; p++)
         {
@@ -467,15 +471,16 @@ public static class Decide
                 {
                     float n = (rsHeld.Next() + rsHeld.Next() + rsHeld.Next() - 1.5f) * 2f;
                     ge = Math.Clamp(g[p] + sigma * n, 0f, 1f);
-                    delta[p] = sigma * n * dt;
+                    delta[p] = sigma * n * dl;
                 }
                 else
                 {
-                    float q = !Event(p) ? g[p] : dt < 1f ? g[p] * dt : w.PStep(g[p]);   // an event: g expected a reference step
-                    bool fire = rs.Next() < q;
+                    bool ev = Event(p);
+                    float q = !ev ? g[p] : dt < 1f ? g[p] * dt : w.PStep(g[p]);   // an event: g expected a reference step
+                    bool fire = (ev ? rs.Next() : rsHeld.Next()) < q;
                     ge = fire ? 1f : 0f;
                     if (fire) { acts |= 1u << (p - P.FIRST_ACTION); metrics?.Attempt(p); }
-                    delta[p] = ge - q;
+                    delta[p] = ev ? ge - q : (ge - q) * dl;
                 }
             }
             else if (p < P.FIRST_ACTION)

@@ -17,6 +17,30 @@ public class OptionsTests
         Assert.Equal(0, Host.StatusRate(true, true, 530, 0, 10, 3.0));         // ... unless paused
     }
 
+    [Fact] // the prehistory and the world have their own steps (2026-11-02), and the prehistory's length is a time
+    public void StepLengthsAndPrehistoryLength()
+    {
+        float h0 = Nature.StepH, w0 = Nature.WorldStepH; int wm0 = Nature.WorldMap;
+        try
+        {
+            var d = Options.Parse(new string[0]);
+            Assert.Equal(K.STEP_H, d.PreStepH); Assert.Equal(K.STEP_H, d.WorldStepH);
+            Assert.Equal(K.PREHISTORY_STEPS, d.PrehistorySettings(false).TotalSteps);   // the default: 500,000 steps
+            Assert.Equal(K.STEP_H, Options.StepHFromMinutes(K.STEP_H * 60f + 0.001f));  // the setup's default comes back exact
+            var o = Options.Parse(new[] { "--world-step-minutes", "10" });
+            Assert.Equal(K.STEP_H, o.PreStepH); Assert.Equal(10f / 60f, o.WorldStepH, 6);
+            o.ApplyNature(prehistory: true);
+            Assert.Equal(K.STEP_H, Nature.StepH); Assert.Equal(10f / 60f, Nature.WorldStepH, 6);
+            o.ApplyNature(prehistory: false);
+            Assert.Equal(10f / 60f, Nature.StepH, 6);
+            var p = Options.Parse(new[] { "--pre-step-minutes", "60", "--prehistory-years", "10" });
+            Assert.Equal(30000, p.PrehistorySteps);                                    // 10 years of reference steps
+            Assert.InRange(p.PrehistorySettings(false).TotalSteps, 87_600, 87_700);    // 10 years of 1-hour steps
+            Assert.Equal(1f / 60f, Options.Parse(new[] { "--step-minutes", "1" }).WorldStepH, 6);
+        }
+        finally { Nature.StepH = h0; Nature.WorldStepH = w0; Nature.WorldMap = wm0; Map.Set(TestWorld.Side); BodySize.Reset(); }
+    }
+
     [Fact] // the default start: a quarter of the memory over the bytes of a slot, in whole blocks, clamped
     public void DefaultSlotsFollowMemory()
     {
