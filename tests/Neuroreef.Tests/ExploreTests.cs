@@ -97,6 +97,26 @@ public class ExploreTests
         Assert.True(loss > 0f);
     }
 
+    [Fact]
+    public void ASmallerPersonReachesLessFarAndWeighsWhatTheConsoleSays()
+    {
+        var (w, i) = One();
+        w.Speed[i] = 0f;
+        float m = 1f / Player.M_PER_UNIT, surface = Player.BodyR(w, i) - 0.1f;
+        var p = PlaceAt(w, w.X[i] + surface + 100f * m, w.Y[i]);   // 100 m off: a full-sized rifle (400 m) reaches
+        Assert.Equal(70f, p.Mass); Assert.Equal(1f, p.Scale);
+        p.Resize(0.1f, 2f);                                         // a tenth of the height: the rifle reaches 40 m
+        Assert.Equal(2f, p.Mass); Assert.Equal(0.1f, p.Scale, 4); Assert.Equal(0.17f, p.EyeM, 4);
+        Assert.Equal(Player.HitResult.OutOfRange, p.Hit(w, "rifle-shot", w.Serial[i], 1f, 0f, out _, out _));
+        p.Place(w.X[i] + surface + 20f * m, w.Y[i], 0f, false);
+        var r = p.Hit(w, "rifle-shot", w.Serial[i], 1f, 0f, out _, out _);
+        Assert.True(r is Player.HitResult.Wounded or Player.HitResult.Killed, r.ToString());
+        // missing values leave the size as it was; out-of-range ones are clamped
+        p.Resize(float.NaN, float.NaN); Assert.Equal(2f, p.Mass); Assert.Equal(0.1f, p.Scale, 4);
+        p.Resize(5f, 1e6f); Assert.Equal(Player.SCALE_MAX, p.Scale); Assert.Equal(Player.MASS_MAX, p.Mass);
+        p.Resize(1e-6f, 1e-6f); Assert.Equal(Player.SCALE_MIN, p.Scale); Assert.Equal(Player.MASS_MIN, p.Mass);
+    }
+
     /// <summary>A brain that only flees the nearest other organism (FLEE_1 ~ 1, every other primitive ~ 0).</summary>
     static void OnlyFlee(World w, int i)
     {
