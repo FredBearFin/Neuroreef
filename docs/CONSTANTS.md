@@ -35,7 +35,7 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 
 | Name | Value | Unit | Meaning | Origin |
 |---|---|---|---|---|
-| STEP_H | 2.922 | h | duration of one step: 365.25 days x 24 h / T_SEASON | derived: T_SEASON = 3000 steps is one year, so a step is 2.92 h (8.2 steps a day). Before 2026-11-01 the notes said ~3 h (water cycle) and ~5 h (pathogens); 5 h was wrong |
+| STEP_H | 2.922 | h | duration of the reference step: 365.25 days x 24 h / T_SEASON. Every rate, probability and duration in this table is per reference step; a world's own step is World.StepH (the setup's Time in a step, --step-minutes; this by default), and it converts them (World.Dt, PStep, Keep, Steps; DESIGN 0c) | derived: T_SEASON = 3000 steps is one year, so a step is 2.92 h (8.2 steps a day). Before 2026-11-01 the notes said ~3 h (water cycle) and ~5 h (pathogens); 5 h was wrong |
 | STEP_S | 10519.2 | s | duration of one step | derived: STEP_H x 3600 = 10,519 s |
 | STEPS_PER_DAY | 8.21355 | steps | steps in a day | derived: 24 / STEP_H = 8.21 |
 | M_PER_UNIT | 4 | m | metres per world unit: a field cell (FCELL units) is GEO_CELL_M | derived (2026-11-01, the 1 km world): 4 m, so the default 256 map is 1.02 km across, 512 is 2.05 km, 1024 4.1 km and 2048 8.2 km. Was 54.5 m (GEO_CELL_M 218 m: the 256 map 14 km, 512 28 km) |
