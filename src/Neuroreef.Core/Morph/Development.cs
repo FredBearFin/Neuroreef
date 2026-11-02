@@ -32,6 +32,7 @@ public sealed class Segment
     public float TissueMass, IntMass, AxMuscle, AppMuscle;  // kg
     public float Area;                   // lateral surface, m²
     public float Volume;                 // m³ (tissue + integument)
+    public float X0;                     // distance of its front from the head (the mouth), m
     public int Gene;                     // which segment gene grew it
 }
 
@@ -96,18 +97,25 @@ public static class Development
     /// (a hydrostat) but cannot then bear much load. 0 for a rigid strut with no joints.</summary>
     public static float Articulation(int joints, float mineral) => 1f - MathK.Exp(-(joints + 1.5f * (1f - mineral)) / 1.2f);
 
-    /// <summary>The mass every body develops to (kg). Segment and appendage genes set proportions; the whole body is then
-    /// scaled to this mass, as the live simulation keeps mass a gene of its own and its shape genes at unit volume
-    /// (Body.Dimensions). So limbs, armour and gills take their mass from the trunk (and its gut and muscle), not on top
-    /// of it. Without it, food capture (~ size^(2/3) x speed) outruns Kleiber's cost (~ M^0.75) by a little and every
-    /// body runs to the largest its genes allow. A mass gene is the obvious next step (docs/BODYPLAN.md §8).</summary>
-    public static float BodyMass = 0.25f;
+    /// <summary>The range of the mass gene (kg), log-mapped. Segment and appendage genes set proportions; the whole body
+    /// is then scaled to the mass its mass gene sets, as the live simulation keeps mass a gene of its own and its shape
+    /// genes at unit volume (Body.Dimensions). So limbs, armour and gills take their mass from the trunk (and its gut
+    /// and muscle), not on top of it. What size pays is decided by the allometry in Physics (Kleiber's metabolism, gut
+    /// throughput ~ M^0.75, skin friction by Reynolds number, predators scaled in a size spectrum, obstacles and food
+    /// items of fixed absolute size), not by a cap.</summary>
+    public const float MASS_LO = 0.001f, MASS_HI = 10f;
+    /// <summary>The reference mass the allometric constants are calibrated at (the old fixed mass).</summary>
+    public const float M_REF = 0.25f;
+    /// <summary>When positive, every body develops to this mass whatever its mass gene (tests and probes).</summary>
+    public static float FixedMass = 0f;
     const float TrunkMass = 0.2f;   // first guess, corrected exactly below (every mass scales as the cube of the scale)
+
+    public static float MassOf(MorphGenome g) => FixedMass > 0f ? FixedMass : LogMap(g.MassG, MASS_LO, MASS_HI);
 
     public static Morphology Grow(MorphGenome g)
     {
         var m1 = GrowAt(g, 1f);
-        var m = GrowAt(g, m1.Mass > 0f ? MathK.Cbrt(BodyMass / m1.Mass) : 1f);
+        var m = GrowAt(g, m1.Mass > 0f ? MathK.Cbrt(MassOf(g) / m1.Mass) : 1f);
         return m;
     }
 
@@ -213,7 +221,7 @@ public static class Development
         float aPrev = 0f, skinT = 0f;
         float rigW = 0f;
         float bodyLen = 0f;
-        foreach (var s in m.Segs) bodyLen += s.L;
+        foreach (var s in m.Segs) { s.X0 = bodyLen; bodyLen += s.L; }
         for (int i = 0; i < m.Segs.Count; i++)
         {
             // exposed ends: the whole face of the first and last segment, and the step where a segment is wider than its neighbour
@@ -265,7 +273,10 @@ public static class Development
         }
         m.SkinThick = m.SkinArea > 0f ? skinT / m.SkinArea : 0f;
         m.Rigidity = m.ExoMass > 0f ? rigW / m.ExoMass : 0f;
-        m.FrontalArea = MathF.PI / 4f * m.MaxW * m.MaxH;
-        m.Fineness = m.Length / MathF.Max(1e-6f, MathK.Sqrt(m.MaxW * m.MaxH));
+        // the largest cross-section of any one segment (MaxW x MaxH from different segments overstated it)
+        float wh = 0f;
+        foreach (var s in m.Segs) wh = MathF.Max(wh, s.W * s.H);
+        m.FrontalArea = MathF.PI / 4f * wh;
+        m.Fineness = m.Length / MathF.Max(1e-6f, MathK.Sqrt(wh));
     }
 }

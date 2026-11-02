@@ -49,6 +49,13 @@ range (logarithmic for sizes).
 | `mineral`, `wall`, `exo` | skeleton: mineral share, share of the cross-section that is skeleton, and the share of that placed as an outer tube (exoskeleton) rather than a central rod (endoskeleton) |
 | `pore`, `invag` | exchange surface on the appendage, as for segments |
 
+| Genome-level gene | Physical meaning |
+|---|---|
+| `MassG` | adult body mass, log 1 g – 10 kg (0.6 is the old fixed 0.25 kg); mutates on 20% of offspring by N(0, 0.04) (×1.45) |
+
+Every segment and appendage gene carries an **innovation number** (`Innov`, NEAT): all founders share the trunk's
+number 1, and each insertion or duplication gives the new module a fresh number from the run's `Innovations` counter.
+
 **Mutation operators** (`Mutate`, `MorphGenome.cs`). These change the *number* of parts as well as their values,
 as gene duplication and loss do in Hox clusters and limb fields (Ohno 1970; Carroll, Grenier & Weatherbee 2005):
 
@@ -68,9 +75,9 @@ Artificial-life precedents. Sims (1994) evolved directed-graph genotypes whose n
 repeat limits. This is the direct ancestor of this design: his "repeat" and "duplicate a node" operators are ours.
 Stanley's NEAT (Stanley & Miikkulainen 2002) shows how to grow a genome by complexification. Historical markings
 (innovation numbers) let homologous genes line up for crossover, and speciation protects new structure while it
-is still poor. CPPNs (Stanley 2007) give a compact way to describe graded, repeating patterns along a body. The
-prototype is asexual. Its `Pair.Gene` and `Segment.Gene` indices are the place where NEAT-style innovation numbers
-would go (§7).
+is still poor. CPPNs (Stanley 2007) give a compact way to describe graded, repeating patterns along a body. Since
+phase 1 the prototype uses both: innovation numbers align homologous modules for crossover (`Homology.Cross`) and
+count unmatched ones in the compatibility distance (`Homology.Distance`), which the search uses to form species (§8).
 
 ## 3. Development: genome to morphology
 
@@ -79,10 +86,11 @@ would go (§7).
 1. Each segment gene grows `repeat` serial copies, each scaled by `taper`. Every appendage gene grows a bilateral
    (or sagittal) pair on every copy, scaled with it. Serial homologues are therefore graded, as Hox expression
    grades them.
-2. The whole body is scaled to a fixed mass (`BodyMass` = 0.25 kg). This works the way today's sim keeps mass as its
-   own gene and its shape genes at unit volume (`Body.Dimensions`). Limbs, armour and gills take mass *from* the
-   trunk and its gut, not on top of it. Without this, food capture (∝ size^(2/3) × speed) slightly outruns Kleiber's
-   cost (∝ M^0.75), and every body ran to the largest its genes allowed.
+2. The whole body is scaled to the mass its mass gene sets (`Development.MassOf`; `FixedMass` overrides it for tests
+   and probes). This works the way today's sim keeps mass as its own gene and its shape genes at unit volume
+   (`Body.Dimensions`). Limbs, armour and gills take mass *from* the trunk and its gut, not on top of it. Phase 0 fixed
+   the mass at 0.25 kg because food capture (∝ size^(2/3) × speed) outran Kleiber's cost (∝ M^0.75) and every body
+   ran to the largest its genes allowed. Phase 1 makes mass a gene again and lets the allometry in §4 decide.
 3. The morphology then holds only physical quantities:
    - segments: L, W, H, integument thickness and mineral, exchange area, muscle mass, gut mass;
    - appendage pairs: length, chord, thickness, angle, joints, muscle mass, the bending moment the skeleton bears,
@@ -105,10 +113,14 @@ Every evaluator reads only the morphology and the medium.
 **Swimming** (Vogel 1994; Lighthill 1975; Webb 1975; Walker & Westneat 2000):
 
 - **Trunk drag.** Skin friction on the wetted area with Hoerner's (1965) form factor,
-  C_D,wet = C_f (1 + 1.5 f^−1.5 + 7 f^−3) for fineness f = length / √(W H). It is capped at a bluff body's 1.2 ×
-  frontal area, plus 0.3 × any steps in cross-section. Least drag for the volume is near f ≈ 4–5, as in fishes and
-  cetaceans (tested). An early version used Hoerner's body-of-revolution formula on *frontal* area; it rewarded
-  sheet-like bodies, because a sheet has a small equivalent diameter but a huge wetted area.
+  C_D,wet = C_f (1 + 1.5 f^−1.5 + 7 f^−3) for fineness f = length / √(W H) of the largest segment section. It is capped
+  at a bluff body's 1.2 × frontal area, plus 0.3 × any steps in cross-section. Least drag for the volume is near
+  f ≈ 4–5, as in fishes and cetaceans (tested). An early version used Hoerner's body-of-revolution formula on
+  *frontal* area; it rewarded sheet-like bodies, because a sheet has a small equivalent diameter but a huge wetted
+  area.
+- **Skin friction by Reynolds number** (phase 1). C_f = 1.328 / √Re below Re = 5×10⁵ (Blasius), and
+  0.074 Re^−0.2 − 1700/Re above (Prandtl–Schlichting; Schlichting 1979), with Re = U × length / ν. Small, slow bodies
+  pay more friction per area than large, fast ones (tested).
 - **Appendage drag.** Edge-on frontal drag (rounded rods worst) plus friction on both faces.
 - **Holding depth.** A body denser than water must be held up: |M − ρV| g. Dynamic lift comes from horizontal flat
   surfaces (and a flattened trunk), costing Prandtl's induced drag L² / (q π b² e). Whatever lift does not cover is
@@ -140,13 +152,71 @@ Taylor, Heglund & Maloiy 1982):
   - Support follows Kram & Taylor: KT · W · U / stride, with KT calibrated to Taylor et al.'s 10.7 M^−0.32 J/(kg m)
     at 0.25 kg.
   - Limb swing: ~4 m_leg U³ / stride.
-  - Whatever the limbs do not hold up slides at μ = 0.7.
-  - A legless body crawls at μ = 0.7 on its weight (at least 10% of its mass pressing down, for adhesion; Denny 1980),
-    powered by axial muscle × trunk flexibility.
-- **Obstacles** of height h: effective speed is × clear / (clear + h), where clear = half the mean height plus what the
-  limbs lift (Watson et al. 2002). Legged gaits also lose speed for lack of a tripod on rough ground.
+  - A legless body crawls (phase 1) at Kram & Taylor's cost of generating force per stride, the stride being a body
+    wave of 0.25 × its length (Gray 1946; Quillin 1999), plus a residual slip and mucus cost of 0.15 × the pressed
+    weight (Denny 1980). At least 10% of its mass presses down, for adhesion. Lateral undulation then costs about what
+    legs of the same mass do (Walton, Jayne & Bennett 1990; tested: 25 against Taylor's 17 J/(kg m) at 0.25 kg).
+    Power comes from axial muscle × trunk flexibility.
+  - Whatever the limbs do not hold up, the trunk crawls under at the crawling cost.
+- **Obstacles** of height h every `ObstacleGap` metres (phase 1, replacing a speed factor that gave tall bodies free
+  clearance):
+  - the centre of mass must rise by h²/(h + clearance), where clearance is what the limbs lift the belly. A crawler
+    lifts its whole weight by h. The muscle does that work at its efficiency, and it is not recovered on the way
+    down;
+  - a step higher than the body can reach up to (its limbs, or half its length draped over the edge if it can bend)
+    forces a detour: speed × 1 / (1 + 0.5 (h / reach)²);
+  - on rough ground (slopes up to tan = 0.5 × roughness), a centre of mass at height z over a base of half-width b
+    topples past slopes steeper than atan(b/z) (static stability margin; McGhee & Frank 1968; Ting, Blickhan & Full
+    1994). Speed × (1 − 0.5 P(topple)). Legged gaits also lose speed for lack of a tripod (Full & Koditschek 1999).
 - **Surge** on the sea floor: a body holds station when μ · weight-in-water + limb hook force ≥ the surge drag on
-  its side area. A swimmer holds by thrust.
+  its side area, and when weight and hooks right it over its base against that drag acting at the side's centroid
+  (toppling). A swimmer holds by thrust.
+
+**Turning and escape** (phase 1; Webb 1983, 1984; Fish 2002; Howland 1974; Domenici & Blake 1997):
+
+- **Control area.** A pair controls by its planform × flat/(flat + 2) × articulation × how far its muscle moment
+  (200 kPa × cross-section × half its thickness) holds it against the hinge moment of its own lift (L × chord/4). The
+  trunk controls by 0.5 × length × mean height × flexibility × axial muscle (saturating at a 10% share).
+- **Least turning radius** R = 2 (M + 0.5 ρ V) / (ρ C_L S) with C_L = 1, and never below 0.1 × body length. Muscled
+  flat pairs turn ~3× tighter than passive ones, and rigid finless bodies turn widest (tested).
+- **Escape** from a predator by Howland's criterion: odds of capture (U_p / U)² × R / R_p, so a slower prey escapes
+  if it turns inside its pursuer. In clutter (structures `Clutter` metres apart) each speed is slowed by
+  gap / (gap + R) (Webb 1984), so manoeuvrability is worth most in structured habitats.
+- **Predators** scale with their prey in a size spectrum (Cohen et al. 1993; Brose et al. 2006): bite ∝ M^(2/3),
+  speed ∝ M^(1/6) (Peters 1983), turning radius 0.3 m × (M / 0.25 kg)^(1/3). In clutter the predator's radius is at
+  most half the gap, since the predators that hunt a structured habitat can manoeuvre in it. So size alone neither
+  armours nor rescues a body (tested).
+
+**Feeding** (phase 1; Holling 1959; Vermeij 1987; Elner & Hughes 1978; Werner 1974; Warner & Jones 1976):
+
+- **Fine food** as before: plankton by swept volume, through 1.7 × the head's frontal area (the old 0.5 V^(2/3) for a
+  fineness-6 fish; Eggers 1977), and floor food by a swath of 0.8 V^(1/3). Detritus on the sea floor assimilates at
+  0.4 (Valiela 1995), plankton and land food at 0.7, and prey flesh at 0.8.
+- **Food items.** A count per m² or m³, each of fixed energy:
+  - on the sea floor, shelled prey, 0.5/m² × 1.5 kJ, with shell strength log-uniform 0.1–300 N;
+  - in open water, evasive prey, 0.05/m³ × 2 kJ, escaping at 0.4 m/s on a 2 cm turning radius.
+- **Crushing force.** A pair crushes with min(muscle force, skeleton), times articulation and reach:
+  - muscle force is 200 kPa × cross-section × a pincer lever ratio of 0.3;
+  - the skeleton bears its moment capacity / (0.5 × length);
+  - articulation enters because a jointless rigid rod cannot close on anything;
+  - reach enters as (length / distance from the mouth)², because the item must be held at the mouth.
+
+  A mouth with no appendages crushes 0.3 N × (M / 0.25 kg)^(2/3). Jaws and mandibles are serial homologues of arches
+  and limbs (Snodgrass 1935), so a strong jaw has to come from appendage genes. Only a stiff, jointed, muscled pair
+  at the mouth crushes hard (tested: 16 N against ≤ 2.4 N for soft, jointless, slack or short versions).
+- **Evasive prey** are detected over 4 × the capture area and caught with Howland's odds, using the body's top speed
+  and turning radius. Its strike reach (the articulated length past the mouth, held out against its weight, at the
+  tip speed one contraction of 50 J/kg gives the appendage and its added water) is added to the prey's turning
+  radius.
+- **Holling's type II disc equation.** Intake = Σ a_i N_i E_i / (1 + Σ a_i N_i h_i). Handling time
+  h = h₀ (1 + 2 F̄/F) (1 + (m_item / (0.1 M))²): slower as shells near the crushing force (Elner & Hughes 1978;
+  Boulding 1984) and as the item nears the eater's size (Werner 1974). Locomotion is paid only in the search share,
+  and the handler's muscle power during handling.
+- **Gut throughput** ∝ M^0.75 (capacity ∝ M, retention ∝ M^0.25; Demment & Van Soest 1985), passing raw food at
+  7.14 W per kg of gut at 0.25 kg, whatever its quality.
+- **Patchy food** (land): 1 m² patches every 4 m. Each patch is eaten out and the body then travels to the next at
+  its best travel speed (Charnov 1976). A bigger gut empties a patch sooner, so its travel share grows with size
+  (tested: 0.2% at 10 g, 28% at 2 kg).
 
 **Flight** (Pennycuick 2008; Ellington 1984; Dickinson, Lehmann & Sane 1999). Flight-muscle power (150 W/kg) times
 lift-based profile efficiency, against the induced power of hovering on the actuator disk of the span:
@@ -184,23 +254,27 @@ A 10 g body with long, flat, muscled appendages flies (tested). Flight is evalua
 **Budget and fitness** (`Evaluate`):
 
 - For each way of moving that the medium allows (swim; walk or crawl on a floor), at 48 speeds:
-  - intake is ASSIM × food × duty × hold, capped by the gut (5 W per kg of gut);
-  - food is swept volume (open water: 0.5 V^(2/3) × U × J/m³) or swept area (floor: 0.8 V^(1/3) × U × J/m²).
-- **Demand** = Kleiber 0.3 W kg^−0.75 on the active mass + locomotion / 0.25 + integument turnover and moult.
+  - intake is the Holling intake of fine food and items × duty × hold, each food assimilated at its own efficiency,
+    with the gut capping raw throughput;
+  - on patchy floors, intake is averaged over a patch and the travel to the next.
+- **Demand** = Kleiber 0.3 W kg^−0.75 on the active mass + locomotion / 0.25 (in the search share) + handling power +
+  integument turnover and moult.
 - **Net** = intake − demand − ventilation − anaerobic debt − surface costs.
 - **Predation.**
-  - Encounters rise with the body's own speed: √(u² + v²)/v (Gerritsen & Strickler 1977).
-  - An attack kills by the armour's kill chance unless the body outruns the predator (top speed against the
-    predator's), and always kills during a moult.
-- **Fitness** = net / basal − pressure × encounters × risk, at the best speed and mode.
+  - Encounters rise with the body's own mean speed: √(u² + v²)/v (Gerritsen & Strickler 1977).
+  - An attack kills by the armour's kill chance (against the size-scaled bite) unless the body escapes by Howland's
+    criterion, and always kills during a moult.
+- **Fitness** = net / basal − pressure × encounters × risk, at the best speed and mode. Both terms are per unit of
+  physiological time (basal turnover), so mass is neutral to first order (Charnov 1993; Peterson & Wroblewski 1984:
+  mortality ∝ M^−0.25 per unit of absolute time) and the second-order physics decides it.
 
 **Environments** (`MorphEnv`). These are the only places the three worlds differ:
 
-| | medium | food | predation (pressure, speed, bite) | floor |
-|---|---|---|---|---|
-| open water | water | plankton 900 J/m³ | 0.5, 1.5 m/s, 10 N | none |
-| sea floor | water | benthic 300 J/m² | 3.0, 1.5 m/s, 10 N | boulders: roughness 1, obstacles 3 cm, surge 0.3 m/s |
-| land | air | 500 J/m² | 0.5, 1.0 m/s, 10 N | roughness 0.5, obstacles 1 cm |
+| | medium | fine food | items | predation (pressure, speed, bite at 0.25 kg) | floor |
+|---|---|---|---|---|---|
+| open water | water | plankton 900 J/m³ | evasive prey 0.05/m³ × 2 kJ, 0.4 m/s | 0.5, 1.5 m/s, 10 N | none |
+| sea floor | water | detritus 300 J/m² (assim. 0.4) | shelled prey 0.5/m² × 1.5 kJ, 0.1–300 N | 3.0, 1.5 m/s, 10 N | boulders: roughness 1, obstacles 3 cm every 0.3 m, clutter 0.3 m, surge 0.3 m/s |
+| land | air | 500 J/m² in 1 m² patches every 4 m | none | 0.5, 1.0 m/s, 10 N | roughness 0.5, obstacles 1 cm every 0.1 m |
 
 ## 5. Brains on a variable body
 
@@ -247,8 +321,9 @@ new form therefore *looks* new, because nothing is drawn from a label.
   - duplication and deletion shift entries within the block.
 
   Checkpoint and `GeneBank` get a version bump, and a v13 file translates through the migration map (§8).
-- **Homology for crossover and distance.** Each module gene carries an innovation number (a `uint` assigned at
-  duplication or insertion and copied with the gene), as in NEAT. Crossover aligns genes by innovation number. Clade
+- **Homology for crossover and distance** (implemented in the prototype in phase 1: `Innov`, `Homology`). Each module
+  gene carries an innovation number (a `uint` assigned at duplication or insertion and copied with the gene), as in
+  NEAT. Crossover aligns genes by innovation number. In the live sim, clade
   distance (`Clades`, `Body.Distance`) is:
   - a NEAT-style compatibility: c1 × unmatched genes / N, plus c2 × mean parameter difference of matched genes;
   - plus a *morphological* distance on the developed body (segment and pair counts, fineness, density, rigidity,
@@ -265,18 +340,89 @@ new form therefore *looks* new, because nothing is drawn from a label.
 
 ## 8. What the prototype evolved (honest report)
 
-**Harness.** `Evolver.Run`: 200 genomes, 1,000 generations, tournament of 3, 2 elites, asexual, all operators. The
-population starts from `MorphGenome.Blob()`, one soft cube-ish segment with no appendages and no exchange surface,
-which breathes through its skin. A run takes about 1 s per environment.
+### Phase 1: mass gene, food handling, turning, obstacle energetics, patchy food, speciation (2026-11-02)
 
-To reproduce:
+**Harness.** `Evolver.Run`: 200 genomes, 1,000 generations, NEAT-style search:
+
+- species by compatibility distance (`Homology.Distance`: unmatched modules, mean parameter difference of matched
+  ones, mass-gene difference), with a threshold that adapts toward 8 species;
+- offspring per species in proportion to its members' mean shifted fitness (fitness sharing; Goldberg & Richardson
+  1987); species that have not improved for 60 generations are dropped unless they hold the best;
+- within a species: its champion kept, then tournament of 3, crossover of homologous modules at 30% (2% across
+  species), and every mutation operator;
+- the overall best is always kept.
+
+The population starts from `MorphGenome.Blob()` at 0.25 kg. A run takes about 2 s.
+
+To reproduce (`NR_MORPH_ENV` = open, floor or land picks one environment; `NR_MORPH_NOSPECIATE=1` turns speciation off;
+`NR_MORPH_FIXMASS`, `NR_MORPH_LANDFOOD` and `NR_MORPH_LANDGAP` are for sensitivity runs):
 
 ```sh
 NR_MORPH_SEEDS=6 NR_MORPH_GENS=1000 dotnet test tests/Neuroreef.Tests -c Release --filter "FullyQualifiedName~MorphTests.EvolutionDemo" --logger "console;verbosity=detailed"
 ```
 
-The run reported here used 6 seeds (the test defaults to 3 seeds and 800 generations); the best of each run is shown
-(2026-11-02):
+Best of each of 6 runs per environment. A pair's *use* is its dominant role in the chosen way of life (`PairUses`):
+the thrust it gives (swim), the weight it bears (support), being the crusher or striker that feeding uses (handle),
+its share of the control area (steer), or passive.
+
+| env | mass | segments | pairs, and for each: length, stiffness, joints, muscle, flatness, use | integument rigidity, moult | exchange surfaces | mode | fitness |
+|---|---|---|---|---|---|---|---|
+| open water | 1 g (5/6), 14 g (1/6) | 1–11 | 0 in 4/6. Seed 3: one lateral pair, 21 mm, soft (mineral 0.1), 4 joints, muscle 0.06, flat 26, **handle** (a raptorial striker). Seed 5: one 26 mm soft, unmuscled pair, swim | soft, 0, no moult | none: skin breathing (0.0005 m² everted in the 14 g run) | undulating swim 0.08–0.20 m/s; 26–28% of intake is evasive prey (catch chance 0.67) | 3.07–3.37 |
+| sea floor | 12–213 g (four runs 41–92 g) | 5–26 | **4/6 grow one pair on the head segment: 2–4 mm, mineral 0.5–0.9, moment 2–20 mN m, 6 joints, muscle 0.10–0.30, round (flat 1–2), sagittal in 3/4 (one blade up, one down: a jaw), handle** | soft (≤ 0.02), no moult | everted 0–0.002 m² (gills), folded-in ≤ 0.0002 | swims slowly along the bottom, 0.01–0.03 m/s. Those with the head pair crush 1.2–2.8 N and take 61–67% of intake as shelled prey | 2.08–2.40 with the head pair, 1.25–1.42 without |
+| land | 1–3 g | 13–23 | 0 (3/6 carry sub-millimetre buds, passive) | **rigid, moulting (rigidity ~1.0, moult 5%) in 3/6**; soft in 3/6; integument 3–7% of mass | none: skin breathing | legless crawl ~0.004 m/s; travel between patches ~1% of time | 2.25–2.51 |
+
+Sensitivity and comparison runs (6 seeds × 1,000 generations each):
+
+- **Sea floor without speciation:** best fitness 1.00–1.56, and 0/6 runs found the handling pair, against 4/6 with
+  speciation.
+- **Land with rich, sparse patches** (5,000 J/m², 1 m² every 10 m): 63–114 g legless crawlers with folded-in lungs
+  (0.0009–0.002 m²), rigid and moulting in 2/6 (rigidity 0.65–0.83). No limbs.
+- **Fixed-mass optima** (open water, 1 seed × 400 generations): 3.24 at 1 g, 3.10 at 10 g, 2.99 at 100 g, 2.91 at
+  1 kg. In water, size is close to neutral, as the size-spectrum design intends, with a slight advantage to small
+  bodies. On land the gradient is steep: 2.44 at 10 g, 1.93 at 100 g, 0.02 at 1 kg.
+
+**What emerged, and why.**
+
+- **A jaw-like handling appendage on the sea floor.** This is the clearest phase-1 result. Shelled prey are richer
+  than detritus, and they are worth more because flesh assimilates at 0.8 against detritus's 0.4. Only a stiff,
+  jointed, muscled pair at the mouth opens them, and evolution found exactly that in 4 of 6 runs: mineral 0.5–0.9,
+  6 joints, the maximum muscle share, on the head segment. Usually the two blades are in the midplane, one above and
+  one below the mouth. Nothing names it a jaw or a mandible. It is the region of parameter space that the crushing
+  physics rewards, and it doubles fitness.
+- **Rigid, moulting armour on land at small size.** Half the land runs evolved a fully mineralised, moulting
+  integument on 1–3 g crawlers. Integument thickness scales with size, and the predator's bite with M^(2/3). At small
+  size a thin skin dries out (evaporation falls e-fold per 0.3 mm), so a thick, hard cuticle pays twice, against
+  desiccation and against predators. This is the exoskeleton-when-small argument, now operating in evolution.
+- **A raptorial striker** appeared once in open water (a muscled, jointed, flat pair at the head, used to catch
+  evasive prey). In a 1 kg fixed-mass run, a 207 mm, mineralised, jointed lateral pair did the same.
+- **A muscled steering surface** appeared on the sea floor in an intermediate calibration: a 244 mm flat lateral
+  pair, 3 joints, muscle 0.04, use "steer", on a 7 kg body. After the clutter-predator fix (below), the bodies
+  shrank and it was not seen again.
+
+**What did not emerge, and why.**
+
+- **Powered fins: no.** At 1 g, axial undulation and skin breathing win. The lift-based efficiency of a paired fin
+  would only matter at sizes the physics does not favour in open water. Turning is worth something (Howland escape,
+  evasive-prey capture), but a small undulating body already turns at about the 0.1 × length floor.
+- **Stiff jointed walking legs: no**, on the sea floor or on land.
+  - In water, weight is ~5% of the body's, so legs pay only through obstacle clearance and surge grip. Swimming
+    along the bottom avoids both.
+  - On land, size runs small, because at a sparse food yield the swath a body sweeps grows only as M^(1/3) against a
+    demand of M^0.75. At 1–3 g, legs carry little and cost gut mass, and the crawling cost is comparable (Walton et al.
+    1990). Legs pay only at larger sizes (walking cost ∝ M^−0.32), which this food does not support.
+  - With rich patches the optimum rises to ~100 g, but a slow, gut-limited body in a rich patch hardly travels, so
+    legs still do not pay.
+- **Crustacean-like armoured walker on the sea floor: no.** The handling appendage arrived on a soft body that swims
+  along the bottom. A body near the minimum size escapes the sea-floor predator by turning tightly in clutter
+  (escape 0.95), which is cheaper than armour plus moulting. The rigid crawler of phase 0 is no longer the optimum.
+- **Mass hit the gene's lower bound (1 g) in open water and on land.** No physics below 1 g is modelled to stop it,
+  such as viscous swimming at Re < 100 or particle size against gape. So the bound, not physics, sets the minimum
+  there. The bound is a gene range (as in the live sim), not a fix.
+
+### Phase 0 (fixed 0.25 kg, asexual tournament), kept for comparison
+
+**Harness.** 200 genomes, 1,000 generations, tournament of 3, 2 elites, asexual, all operators. 6 seeds; the best of
+each run is shown (2026-11-02):
 
 | env | seeds | segments | pairs | fineness | rigidity | integ. % | moult | everted exch. m² | folded-in m² | mode, speed | appendages (AR, flatness, droop, joints, mineral, muscle) | pKill |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -336,31 +482,62 @@ physics, and every fix was a physical correction, not a nudge toward a target fo
 - lungs paying evaporation on capacity rather than use → paid on the oxygen delivered;
 - appendage mass on top of a fixed trunk, and mineral metabolising → whole-body mass and an inert mineral fraction.
 
-**Limits of the prototype:**
+**Phase 1 loopholes found and fixed.** Each is a physics correction, listed with its test:
 
-1. **Fixed size.** The body mass is fixed at 0.25 kg; a mass gene is the obvious next step. All scaling arguments
-   (exoskeletons favoured when small, flight easier when small) are untested in evolution.
-2. **No food handling.** Appendages do not catch, sweep or carry food. Claws, antennae, filter combs, mouthparts and
-   raptorial limbs cannot be favoured.
-3. **No steering, manoeuvring or stability in water.** Paired fins' main real job is absent. Surge holding is the only
-   station-keeping physics.
-4. **One predator** of fixed speed and bite per environment, with no arms race, no ambush model and no refuges.
-5. **One environment per run, asexual, no ontogeny.** Moulting is a constant share of life, not modelled growth
-   stages.
-6. **Hand-set constants.** The supply per area, ventilation shares, evaporation costs, obstacle heights and food
-   yields are order-of-magnitude values from the literature cited. Food yields in particular decide whether walking
-   can pay at all.
-7. **Sagittal orientation is a threshold** on the `roll` parameter (a 0.5 cut), not a continuous rotation.
-8. **Search is weak.** Plain tournament selection, without speciation or diversity protection, found the armoured
-   sea-floor optimum in only 1 of 4 seeds. NEAT-style speciation (§7) is the standard remedy.
+- **A thread taking a fish's catch.** Plankton capture was 0.5 V^(2/3) whatever the shape, so a 2 g thread of
+  fineness 160 took a fish's catch on a frontal area 60× smaller. Fix: capture follows the head's frontal area
+  (`PlanktonCaptureFollowsTheHeadNotTheVolume`).
+- **Small crawlers too cheap.** Crawling cost sliding friction at μ = 0.7 on the whole weight, the same per kg at
+  every size, so a 2 g crawler was 3× cheaper than a 2 g walker. Fix: Kram & Taylor's force-per-stride cost over a
+  body wave, plus slip; lateral undulation now costs about what legs do (Walton et al. 1990;
+  `CrawlingCostsAboutWhatWalkingDoes...`).
+- **A muscle-less stub "walking".** A 1 mm, muscle-less stub counted as "walking", because the unsupported weight
+  slid at the old μ = 0.7, which was cheaper than the new crawl. Fix: the weight the limbs do not hold up is
+  crawled at the crawling cost (`...AndAVestigialLimbIsNoDiscount`).
+- **Turning on a coin.** A fineness-80 "eel" had so much lateral trunk area that it turned in a few millimetres.
+  Fix: the least turning radius is at least 0.1 × body length (Domenici & Blake 1997).
+- **A 100 kg predator stuck in boulders.** Predators were scaled to their prey, but clutter was fixed at 0.3 m, so a
+  100 kg predator could not follow a 10 kg prey between boulders, and sea-floor bodies ran to the 10 kg cap. Fix:
+  the predators that hunt a cluttered habitat turn within half its gap (Webb 1984).
+- **Whole-body lift from one flat segment.** Body lift and frontal area mixed MaxW and MaxH from different
+  segments, so a wide, flat head on a tall, narrow trunk "lifted" along the whole length. Fix: lift per segment, and
+  frontal area from the largest single section.
+- **The tall-body artefact (from phase 0).** Obstacle clearance by half the body height let tall bodies get over
+  obstacles for free. Fix: the centre of mass must be lifted over each obstacle (work at muscle efficiency), a step
+  beyond the body's reach forces a detour, and a high centre of mass on a narrow base topples on rough ground or in
+  surge (`ObstaclesCostTheWorkOfLiftingTheBodyAndHeightGivesNothingForFree`).
+- **Size as armour.** With a fixed 10 N bite, mass alone would armour: integument t² ∝ M^(2/3). Fix, at design time:
+  predators scale with their prey (`PredatorsScaleWithTheirPreySoSizeAloneDoesNotArmour`).
 
-The honest summary: the machinery is real. A variable-length genome grows, duplicates, diverges and deletes parts,
-and the physics alone decides what each part does. Streamlining, gill-like everted exchange in water, lung-like
-folded exchange in air, desiccation-resistant skin and matching exchange area to demand all **emerged without a
-single labelled organ**. Rigid, moulting armour emerged but was rarely found. The crustacean's jointed legs and the
-land walker's stiff limbs did **not** emerge. The probes say the physics as calibrated does not yet favour them:
-these are the next things to model (food handling, a mass gene, steering, realistic obstacles), not things to add
-as labels.
+**Suspect, not yet fixed.** The sea-floor handler bodies are tall, laterally compressed sheets, ~5 mm wide and
+100 mm deep. Lateral area makes them turn at the 0.1 × length floor and escape the predator in clutter (escape
+0.95). Compressed reef fish are indeed manoeuvrable (Webb 1984), but a 20:1 section is extreme. Roll stability and
+the structural cost of a deep, thin, soft body are not modelled (Fish 2002; Weihs 2002), and they are the obvious
+next correction.
+
+**Limits of the prototype, after phase 1:**
+
+1. **No lower size physics.** Open water and land run to the 1 g bound of the mass gene. Viscous swimming at low Re
+   (below ~100), particle size against gape, and diffusion limits inside the body (Krogh) are not modelled.
+2. **No roll or yaw stability.** Fish 2002's stability-against-manoeuvrability trade-off is half modelled. Mobile
+   surfaces add control; passive keels add nothing.
+3. **One predator** per environment, size-scaled, with no ambush model and no refuges to retreat into (clutter only
+   slows pursuit).
+4. **One environment per run, no ontogeny.** Moulting is a constant share of life. The soft-moult hazard and
+   moulting's mass cost do not grow with size, so the exoskeleton's large-size penalty on land (Currey 1967) is only
+   partial.
+5. **Hand-set constants.** Food yields, item densities and strengths, and obstacle heights are order-of-magnitude
+   values. Land food yield in particular decides the size, and so whether legs can pay.
+6. **Sagittal orientation is a threshold** on `roll`, not a continuous rotation.
+7. **Fine food on the floor is still gathered by a swath of the body's size, not by appendages.** Detritus picking,
+   filter combs and antennae cannot be favoured: the 20 cm-arm loophole of phase 0 would return.
+
+The honest summary: phase 1's physics changed what evolves. A **stiff, jointed, muscled appendage at the mouth that
+crushes shelled prey** evolved in 4 of 6 sea-floor runs, and only with speciation. **Rigid, moulting armour**
+evolved on small land crawlers in 3 of 6 runs. In open water, evasive prey drove a **raptorial striker** once.
+**Powered fins, stiff walking legs and an armoured crustacean did not emerge.** The mass gene, which was meant to
+let the size arguments for them operate, sent open water and land to the smallest sizes allowed, where axial
+undulation, skin breathing and crawling win.
 
 ## 9. Migration and phased plan
 
@@ -382,20 +559,55 @@ expressed by the new body:
 
 | phase | work | effort |
 |---|---|---|
-| P0 (done) | prototype, physics, operators, tests, evolution harness | — |
-| P1 | finish the prototype's physics: mass gene, food handling by appendages, steering and manoeuvring, ambush and refuge predation, NEAT speciation and crossover with innovation numbers; until legs, armour and paired fins emerge for physical reasons in the harness | 2–3 weeks |
-| P2 | shadow expression: translate every live genome (table above) and compute Morph capabilities *alongside* `Body.Express`; report both in telemetry; calibrate the module physics until the translated bodies of today's ancestors match today's speeds and costs within ~20% | 1–2 weeks |
-| P3 | storage: a fixed-capacity, variable-count body block in the slot layout; checkpoint, `GeneBank` and AGENTS-format version bumps; a v13 → v14 translator; ICD update | 1 week |
-| P4 | expression from morphology: replace every reader of `PLegs`, `PFins`, `PWings`, `PLegPairs`, `PFinPairs`, `PLungs` and armour (Resolve, Respiration, Heat, Decide, Reflex, Clades, Species, Telemetry) with morphology-derived speeds per medium, O2 supply, armour, moult state and strike force; mutate with the new operators in LIFECYCLE | 3–6 weeks |
-| P5 | recalibration: the ~40 test files that assert body-dependent numbers (Locomotion, Wading, Diving, Respiration, Feeding, FeedingBudget, Founding, Ocean, Ecology, Metabolism, Appearance, StepLength, ...), the founding draw (`Clades.AncestorBody`) and the constants doc; long runs in each world type | 2–4 weeks |
-| P6 | renderer: `body.js` builds from segments and pairs (§6); appearance clustering on the developed body | 1–2 weeks |
-| P7 (optional) | per-module sensors in fixed brain slots (§5) | 2+ weeks |
+| P0 (done) | prototype, physics, operators, tests, evolution harness | ~3 agent-hours |
+| P1a (done) | mass gene and allometry, food handling (Holling, crushing, strikes), turning and Howland escape, obstacle energetics, patchy food, NEAT speciation and crossover; 13 new tests; 7 loopholes fixed | ~2 agent-hours |
+| P1b | finish the prototype: lower-size physics, roll stability, refuges and ambush, a moult hazard that grows with size; iterate until each environment's outcome stops moving between calibrations | 3–6 agent-hours |
+| P2 | shadow expression: translate every live genome (table above) and compute Morph capabilities *alongside* `Body.Express`; report both in telemetry; calibrate the module physics until the translated bodies of today's ancestors match today's speeds and costs within ~20% | 4–8 agent-hours |
+| P3 | storage: a fixed-capacity, variable-count body block in the slot layout (now with innovation numbers and the mass gene); checkpoint, `GeneBank` and AGENTS-format version bumps; a v13 → v14 translator; ICD update | 3–5 agent-hours |
+| P4 | expression from morphology: replace every reader of `PLegs`, `PFins`, `PWings`, `PLegPairs`, `PFinPairs`, `PLungs` and armour (Resolve, Respiration, Heat, Decide, Reflex, Clades, Species, Telemetry) with morphology-derived speeds per medium, O2 supply, armour, moult state, crushing and strike force, and turning radius; mutate and recombine with the new operators in LIFECYCLE | 10–20 agent-hours |
+| P5 | recalibration: the ~40 test files that assert body-dependent numbers (Locomotion, Wading, Diving, Respiration, Feeding, FeedingBudget, Founding, Ocean, Ecology, Metabolism, Appearance, StepLength, ...), the founding draw (`Clades.AncestorBody`) and the constants doc; long runs in each world type | 10–25 agent-hours, plus the wall-clock of long runs |
+| P6 | renderer: `body.js` builds from segments and pairs (§6); appearance clustering on the developed body | 4–8 agent-hours |
+| P7 (optional) | per-module sensors in fixed brain slots (§5) | 5+ agent-hours |
 
-Total: roughly **2.5–4.5 months** of focused work for P1–P6. The largest risks are P4 and P5:
-the live ecology is tuned around today's speeds and costs, and every one of them will move.
+Total: roughly **35–70 agent-hours** for P1b–P6. This is based on the pace so far: P0 and P1a together took about
+5 agent-hours, including several calibration rounds. In calendar terms that is 1–3 weeks once owner review and long
+simulation runs are included. The largest risks are P4 and P5: the live ecology is tuned around today's speeds and
+costs, and every one of them will move. Each phase-1 calibration round also moved the evolved outcome, so P5
+should expect several rounds, not one.
 
 ## References
 
+- Aksnes, D. L. & Giske, J. (1993). A theoretical model of aquatic visual feeding. *Ecol. Model.* 67.
+- Boulding, E. G. (1984). Crab-resistant features of shells of burrowing bivalves. *J. Exp. Mar. Biol. Ecol.* 76.
+- Brose, U. et al. (2006). Consumer-resource body-size relationships in natural food webs. *Ecology* 87.
+- Charnov, E. L. (1976). Optimal foraging, the marginal value theorem. *Theor. Popul. Biol.* 9.
+- Charnov, E. L. (1993). *Life History Invariants*. Oxford.
+- Cohen, J. E., Pimm, S. L., Yodzis, P. & Saldaña, J. (1993). Body sizes of animal predators and animal prey in food webs. *J. Anim. Ecol.* 62.
+- Currey, J. D. (1967). The failure of exoskeletons and endoskeletons. *J. Morphol.* 123.
+- Demment, M. W. & Van Soest, P. J. (1985). A nutritional explanation for body-size patterns of ruminant and nonruminant herbivores. *Am. Nat.* 125.
+- Domenici, P. & Blake, R. W. (1997). The kinematics and performance of fish fast-start swimming. *J. Exp. Biol.* 200.
+- Eggers, D. M. (1977). The nature of prey selection by planktivorous fish. *Ecology* 58.
+- Elner, R. W. & Hughes, R. N. (1978). Energy maximization in the diet of the shore crab, *Carcinus maenas*. *J. Anim. Ecol.* 47.
+- Fish, F. E. (2002). Balancing requirements for stability and maneuverability in cetaceans. *Integr. Comp. Biol.* 42.
+- Goldberg, D. E. & Richardson, J. (1987). Genetic algorithms with sharing for multimodal function optimization. *ICGA* 2.
+- Gray, J. (1946). The mechanism of locomotion in snakes. *J. Exp. Biol.* 23.
+- Holling, C. S. (1959). Some characteristics of simple types of predation and parasitism. *Can. Entomol.* 91.
+- Howland, H. C. (1974). Optimal strategies for predator avoidance: the relative importance of speed and manoeuvrability. *J. Theor. Biol.* 47.
+- Josephson, R. K. (1993). Contraction dynamics and power output of skeletal muscle. *Annu. Rev. Physiol.* 55.
+- McGhee, R. B. & Frank, A. A. (1968). On the stability properties of quadruped creeping gaits. *Math. Biosci.* 3.
+- Peters, R. H. (1983). *The Ecological Implications of Body Size*. Cambridge.
+- Peterson, I. & Wroblewski, J. S. (1984). Mortality rate of fishes in the pelagic ecosystem. *Can. J. Fish. Aquat. Sci.* 41.
+- Quillin, K. J. (1999). Kinematic scaling of locomotion by hydrostatic animals: ontogeny of peristaltic crawling by the earthworm. *J. Exp. Biol.* 202.
+- Schlichting, H. (1979). *Boundary-Layer Theory*, 7th ed. McGraw-Hill.
+- Snodgrass, R. E. (1935). *Principles of Insect Morphology*. McGraw-Hill.
+- Ting, L. H., Blickhan, R. & Full, R. J. (1994). Dynamic and static stability in hexapedal runners. *J. Exp. Biol.* 197.
+- Valiela, I. (1995). *Marine Ecological Processes*, 2nd ed. Springer.
+- Walton, M., Jayne, B. C. & Bennett, A. F. (1990). The energetic cost of limbless locomotion. *Science* 249.
+- Warner, G. F. & Jones, A. R. (1976). Leverage and muscle type in crab chelae. *J. Zool.* 180.
+- Webb, P. W. (1983). Speed, acceleration and manoeuvrability of two teleost fishes. *J. Exp. Biol.* 102.
+- Webb, P. W. (1984). Body form, locomotion and foraging in aquatic vertebrates. *Am. Zool.* 24.
+- Weihs, D. (2002). Stability versus maneuverability in aquatic locomotion. *Integr. Comp. Biol.* 42.
+- Werner, E. E. (1974). The fish size, prey size, handling time relation in several sunfishes. *J. Fish. Res. Board Can.* 31.
 - Alexander, R. McN. (1981). Factors of safety in the structure of animals. *Sci. Prog.* 67.
 - Alexander, R. McN. (1983). *Animal Mechanics*, 2nd ed. Blackwell.
 - Alexander, R. McN. (2003). *Principles of Animal Locomotion*. Princeton.
