@@ -195,6 +195,11 @@ public static class Resolve
             // (2026-11-01) what a step's digestion can absorb is bounded in energy too (C_ABSORB): food richer than the gut's
             // transporters can take up is worth no more a step than food that just saturates them, the denser kept on a tie
             int best = -1; float bv = 0, bestEff = 0, bestBM = 1f, bestRho = 0f;
+            // plankton by the water it sweeps this step, its travel and its dives (Respiration.PlanktonKg, 2026-11-02)
+            float swept = spd * K.M_PER_UNIT + breath.DiveM;
+            float Avail(int p) => !waterCell ? w.Pool[p][cell] * Pools.Kg[p]
+                : p == (int)Pool.Phyto ? Respiration.PlanktonKg(w, i, cell, swept, w.Z[i], w.ZShare[i])
+                : w.Pool[p][cell] * Respiration.Access(w, i, cell, p) * Pools.Kg[p];
             float pass = w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL), bite0 = w.PBite[i] * MathK.Pow(mf, K.EXP_BASAL);
             float absorb = w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL);
             for (int p = 0; p < Pools.NFIELD; p++)
@@ -205,14 +210,14 @@ public static class Resolve
                 if (p <= (int)Pool.Root && !waterCell) { Plants.Taste(w, p, cell, bite0, out em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
                 // in water, what it reaches at its depth: plankton by the light, algae and detritus on the bottom (Respiration.Access)
                 // food in kg (Pools.Kg, 2026-11-01: a unit of a plant pool is its dry matter per m2 over the cell)
-                float here = (waterCell ? w.Pool[p][cell] * Respiration.Access(w, i, cell, p) : w.Pool[p][cell]) * Pools.Kg[p];
+                float here = Avail(p);
                 float v = MathF.Min(absorb, e * Pools.Rho[p] * MathF.Min(pass * bm, here));
                 if (v > bv || (v == bv && v > 0f && e * Pools.Rho[p] > bestRho)) { bv = v; best = p; bestEff = e; bestBM = bm; bestRho = e * Pools.Rho[p]; }
             }
             if (best < 0 && dg != null) dg.EatNone[dgG]++;
             if (best >= 0)
             {
-                float reach = (waterCell ? w.Pool[best][cell] * Respiration.Access(w, i, cell, best) : w.Pool[best][cell]) * Pools.Kg[best];
+                float reach = Avail(best);
                 float bite = MathF.Min(MathF.Min(bite0 * bestBM, reach), gutCap - w.Gut[i]);
                 if (bite > 0)
                 {
@@ -247,7 +252,7 @@ public static class Resolve
                 w.Energy[i] -= K.C_STRIKE * mass;                       // no target, no strike (DESIGN §5)
                 spent += K.C_STRIKE * mass;
                 T.Strikes[s]++;
-                float reachAll = Decide.StrikeReach(w.PReach[i], 0f, MathK.Cbrt(w.ApparentMass(v)));
+                float reachAll = Decide.StrikeReach(w.ReachOf(i), 0f, MathK.Cbrt(w.ApparentMass(v)));
                 // in water they meet only where their depths overlap (Respiration.Overlap; 1 when neither is in water)
                 float meet = Respiration.Overlap(w, i, v);
                 if (dg != null) { dg.StrTry[dgG]++; dg.Strike[dgG] += K.C_STRIKE * mass; }
@@ -275,7 +280,7 @@ public static class Resolve
                 w.Energy[i] -= K.C_STRIKE * mass;
                 spent += K.C_STRIKE * mass;
                 T.Strikes[s]++;
-                float reachAll = Decide.StrikeReach(w.PReach[i], 0f, pl.MassCbrt);
+                float reachAll = Decide.StrikeReach(w.ReachOf(i), 0f, pl.MassCbrt);
                 if (AlongWay(w, i, x0, y0, pl.X, pl.Y) <= reachAll * reachAll && !pl.Airborne) pl.Struck(w, i);   // not a plane in the air
             }
         }
@@ -751,7 +756,7 @@ public static class Resolve
     {
         if (!Decide.Ready(w, i) || w.StageOf[j] == St.Dead || !Decide.ValidPartner(w, i, j)) return 0;
         // both close in: within the sum of their reaches of the way i went this step (2026-11-01; was 2 x i's reach + 0.5 units of where it ended)
-        float rr = w.PReach[i] + w.PReach[j];
+        float rr = w.ReachOf(i) + w.ReachOf(j);
         if (AlongWay(w, i, x0, y0, w.X[j], w.Y[j]) > rr * rr) return 0;
         if (w.FreeTop == 0 && !w.Grow(1)) { Life.Full(w); return 0; }     // no room for young (the world at its memory limit): nothing happens, nothing is paid
         Decide.Metrics?.Allow(P.MATE);

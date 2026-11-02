@@ -131,6 +131,9 @@ public static class Respiration
         /// <summary>Energy per step of keeping its organs working here, beyond ventilation: the gills' osmoregulation
         /// in water (GILL_OSMO) and holding its depth against its lungs' buoyancy (BUOY_COST).</summary>
         public float Extra;
+        /// <summary>Metres it swims down and up this step diving to its depth and back (2026-11-02): paid at swimming's cost
+        /// of transport (in Extra), and water its gape sweeps (PlanktonKg).</summary>
+        public float DiveM;
         public readonly float Uptake => Air + Water + Skin;
     }
 
@@ -148,6 +151,8 @@ public static class Respiration
             // the gills' surface leaks salts (or water) and ion pumps make up for it; air in the lungs pulls up, less
             // as it compresses with depth (Boyle: 1 atmosphere per 10 m), for the share of the step it is down
             b.Extra = basal * (K.GILL_OSMO * (1f - L) + K.BUOY_COST * L * share / (1f + z / 10f));
+            // the dives: swum at swimming's cost of transport (C_MOVE x M^EXP_MOVE a unit of distance; 2026-11-02, before free)
+            b.Extra += b.DiveM / K.M_PER_UNIT * K.C_MOVE * MathK.Pow(MathF.Max(w.MassOf(i), 1e-4f), K.EXP_MOVE) * (1f + K.INS_MOVE * w.PInsul[i]);
         }
         return b;
     }
@@ -217,7 +222,7 @@ public static class Respiration
         }
         float col = ColumnM(w, cell);
         float aW0 = WaterO2(w, cell, 0f);
-        float swim = 0.1f + 0.9f * w.PFins[i];
+        float swim = 0.1f + 0.9f * Body.Propulsor(w.PFins[i], w.PWings[i]);   // fins and wings (2026-11-02)
         if (swim >= K.DEEP_SWIM)
         {
             // a swimmer: its preferred depth, pulled up as it runs out of breath
@@ -226,19 +231,23 @@ public static class Respiration
             float us = basal * (aAir * K.LUNG_SCOPE * L + aW0 * (K.GILL_SCOPE * Gi + skin));
             if (zt <= 0f) { b.Air = basal * aAir * K.LUNG_SCOPE * L; b.Water = basal * aW0 * K.GILL_SCOPE * Gi; b.Skin = basal * aW0 * skin; b.AWater = aW0; return b; }
             float aZ = WaterO2(w, cell, zt), uz = basal * aZ * (K.GILL_SCOPE * Gi + skin);
-            float f = 1f;
+            float f = 1f, tDive = 0f;
             if (uz < need)
             {
                 // a breath-hold dive: no deeper than its store lasts the round trip at DIVE_V, and at depth only for the
                 // share of the step that keeps its oxygen balanced; the rest at the surface
                 float store = K.O2_STORE * K.C_BASAL * m;
-                float zlim = K.DIVE_V * store / MathF.Max(need - uz, 1e-9f) * StepSeconds * w.Dt * 0.5f;
+                tDive = store / MathF.Max(need - uz, 1e-9f) * StepSeconds * w.Dt;   // seconds its store lasts a dive
+                float zlim = K.DIVE_V * tDive * 0.5f;
                 // at most half its store spent travelling: a dive to the limit would leave no time down there
                 if (zt > 0.5f * zlim) { zt = 0.5f * zlim; aZ = WaterO2(w, cell, zt); uz = basal * aZ * (K.GILL_SCOPE * Gi + skin); }
                 f = us > uz ? Math.Clamp((us - need) / (us - uz), 0f, 1f) : 0f;
                 f *= zlim > 0f ? MathF.Max(0f, 1f - zt / zlim) : 0f;
             }
             z = f > 0f ? zt : 0f; share = f > 0f ? f : 0f;
+            // down and up: once a step if it can stay down (it breathes there), else as many breath-hold dives as fill its
+            // share of the step at depth, each lasting what its store lasts
+            if (z > 0f) b.DiveM = 2f * z * (tDive > 0f ? MathF.Max(1f, share * StepSeconds * w.Dt / tDive) : 1f);
             b.Air = (1f - share) * basal * aAir * K.LUNG_SCOPE * L;
             b.Water = basal * K.GILL_SCOPE * Gi * ((1f - share) * aW0 + share * aZ);
             b.Skin = basal * skin * ((1f - share) * aW0 + share * aZ);
@@ -251,7 +260,7 @@ public static class Respiration
         float aB = WaterO2(w, cell, col);
         float headUp = col <= stand ? 1f : 0f;
         float ub = basal * (headUp * aAir * K.LUNG_SCOPE * L + aB * (K.GILL_SCOPE * Gi + skin));
-        float up = MathF.Min(1f, (0.9f * w.PFins[i] + K.LEG_PADDLE * w.PLegs[i]) / K.DEEP_SWIM);   // fins and legs paddle; a limbless body cannot
+        float up = MathF.Min(1f, (0.9f * Body.Propulsor(w.PFins[i], w.PWings[i]) + K.LEG_PADDLE * w.PLegs[i]) / K.DEEP_SWIM);   // fins and legs paddle; a limbless body cannot
         float usf = basal * (up * aAir * K.LUNG_SCOPE * L + aW0 * (K.GILL_SCOPE * Gi + skin));
         if (ub >= usf)
         {
@@ -352,6 +361,23 @@ public static class Respiration
             return (z >= col - K.BOTTOM_BAND ? share : 0f) + (col <= reachM ? 1f - share : 0f);
         }
         return 1f;
+    }
+
+    /// <summary>
+    /// The plankton (kg) body i can take in a step in a water cell (2026-11-02): plankton is spread through the mixed
+    /// layer at the concentration its stock over the cell's area and that depth makes, and a body takes what lies in the
+    /// water its open mouth or filter sweeps, GAPE x its frontal area x the metres it swims (sweptM: its travel and its dives),
+    /// at the depths it is at for their shares of the step (Access: the mixed layer, less below it). Ram filter feeding
+    /// and the clearance rates of suspension feeders (Jorgensen 1966; Hansen, Bjornsen &amp; Hansen 1997). Never more than
+    /// the stock it reaches. Before, a body anywhere in the water could take the whole column's plankton at one bite.
+    /// </summary>
+    public static float PlanktonKg(World w, int i, int cell, float sweptM, float z, float share)
+    {
+        if ((w.Cell[cell] & (byte)Realm.Water) == 0) return 0f;
+        float col = ColumnM(w, cell), h = w.Ocean ? Ocean.MixedM(col) : MathF.Max(0.1f, MathF.Min(col, K.Z_MIX));
+        float stock = w.Pool[(int)Pool.Phyto][cell] * Pools.Kg[(int)Pool.Phyto] * Access(w, cell, (int)Pool.Phyto, z, share);
+        float side = K.BODY_L_M * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-6f));   // its frontal area is about side^2
+        return MathF.Min(stock, stock / (Pools.CellM2 * h) * K.GAPE * side * side * MathF.Max(0f, sweptM));
     }
 
     /// <summary>

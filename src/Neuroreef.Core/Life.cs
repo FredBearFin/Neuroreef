@@ -177,7 +177,9 @@ public static class Life
         if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) return 0f;
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
-        double y = 0, heatNeed = 0, breathCost = 0, actSum = 0; int n = 0;
+        double y = 0, heatNeed = 0, breathCost = 0, actSum = 0, plank = 0; int n = 0;
+        // the water a plankton-eater sweeps in a step: its travel at TRAVEL_SHARE of its top swimming speed (2026-11-02)
+        float sweep = w.PVWater[c] * K.TRAVEL_SHARE * K.M_PER_UNIT;
         Span<double> stock = stackalloc double[Pools.NFIELD];
         Span<float> reached = stackalloc float[Pools.N];
         for (int dy = -rc; dy <= rc; dy++)
@@ -194,7 +196,8 @@ public static class Life
                 // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
                 if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
                 breathCost += bc;
-                float standM = Respiration.StandM(w, c);   // ventilation, osmoregulation and buoyancy there (2026-11-01)
+                float standM = Respiration.StandM(w, c);
+                plank += Respiration.PlanktonKg(w, c, cell, sweep, z, share);   // ventilation, osmoregulation and buoyancy there (2026-11-01)
                 for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share, standM);
                 y += Fields.Yield(w, cell, reached); n++;
                 for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share, standM);   // kg
@@ -236,6 +239,7 @@ public static class Life
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
             float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+            if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));   // what it can clear (Respiration.PlanktonKg)
             rate = MathF.Max(rate, MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         double fed = rate >= margin ? y + an.Detritus : 0;
@@ -521,7 +525,7 @@ public static class Life
     {
         int m = w.MotherOf(i);
         if (m < 0 || w.PCare[m] <= 0 || w.Grown[i] >= K.WEAN) return;
-        float dx = World.Delta1(w.X[m] - w.X[i]), dy = World.Delta1(w.Y[m] - w.Y[i]), reach = w.PReach[m] + w.PReach[i];
+        float dx = World.Delta1(w.X[m] - w.X[i]), dy = World.Delta1(w.Y[m] - w.Y[i]), reach = w.ReachOf(m) + w.ReachOf(i);
         if (dx * dx + dy * dy > reach * reach) return;
         uint mark = (uint)w.Step + 1u;           // 0 = never refreshed
         if (w.CareStep[m] != mark) { w.CareStep[m] = mark; w.CareLeft[m] = K.CARE_RATE * w.PCare[m] * w.PBasal[m]; }

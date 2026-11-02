@@ -34,6 +34,7 @@ public sealed class World
     [PerSlot] public uint[] LastChildSerial;
     // ---- agents: phenotype, expressed from the body genes at creation (Body.Express)
     [PerSlot] public float[] PM, PBasal, PGut, PDig, PAbsorb, PBite, PLife, PMature, PSight, PReach, PTurn, PVmax, PArmour, PStrike;
+    [PerSlot] public float[] PReachLand, PReachSwim;   // reach on the ground and in water (Body.Express, ReachOf; 2026-11-02)
     [PerSlot] public float[] PLen;          // adult body length in metres (Body.LengthM, 2026-11-01); PSight, PReach, PVmax are in units of K.M_PER_UNIT m
     [PerSlot] public byte[] PLitter;
     [PerSlot] public float[] PDiet;            // Cap * Pools.N digestive efficiencies
@@ -357,7 +358,7 @@ public sealed class World
         Gen = new ushort[c]; Serial = new uint[c]; MotherSerial = new uint[c];
         MotherSlot = new int[c]; Children = new int[c]; Matured = new int[c]; LastChildSlot = new int[c]; LastChildSerial = new uint[c];
         PM = new float[c]; PBasal = new float[c]; PGut = new float[c]; PDig = new float[c]; PAbsorb = new float[c]; PBite = new float[c]; PLife = new float[c];
-        PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PLen = new float[c]; PTurn = new float[c]; PVmax = new float[c];
+        PMature = new float[c]; PSight = new float[c]; PReach = new float[c]; PReachLand = new float[c]; PReachSwim = new float[c]; PLen = new float[c]; PTurn = new float[c]; PVmax = new float[c];
         PArmour = new float[c]; PStrike = new float[c]; PLitter = new byte[c];
         PDiet = new float[c * Pools.N]; PCare = new float[c];
         PBirth = new float[c]; PFovCos = new float[c]; PGest = new float[c]; PCool = new float[c];
@@ -662,7 +663,15 @@ public sealed class World
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 
     /// <summary>The deepest water body i can go in, in elevation as Depth is: SHALLOW x (1 + SWIM_DEPTH_RANGE x fins) m.</summary>
-    public float MaxWaterDepth(int i) => ShallowE * (1f + K.SWIM_DEPTH_RANGE * PFins[i]);
+    public float MaxWaterDepth(int i) => ShallowE * (1f + K.SWIM_DEPTH_RANGE * Body.Propulsor(PFins[i], PWings[i]));
+
+    /// <summary>How far body i reaches in a step where it is now (units, 2026-11-02): its chase at its flight speed in the
+    /// air (PReach), at its swimming speed in water, at its running speed on land (Body.ReachM).</summary>
+    public float ReachOf(int i)
+    {
+        if (Airborne(i)) return PReach[i];
+        return (Cell[FIdx(X[i], Y[i])] & (byte)Realm.Water) != 0 ? PReachSwim[i] : PReachLand[i];
+    }
 
     public bool CellAllows(int i, int cell) => CellAllows(i, cell, RealmOf(i));
 
@@ -673,7 +682,7 @@ public sealed class World
         if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return CellAllows(i, cell);
         byte kind = Cell[cell];
         if ((kind & (byte)Realm.Land) != 0) return true;
-        return (kind & (byte)Body.GroundRealm(PLegs[i], PFins[i])) != 0 && Depth[cell] <= MaxWaterDepth(i);
+        return (kind & (byte)Body.GroundRealm(PLegs[i], Body.Propulsor(PFins[i], PWings[i]))) != 0 && Depth[cell] <= MaxWaterDepth(i);
     }
 
     /// <summary>Is flier i in the air? Since 2026-11-01 its last step says (Flag.Aloft, Flag.Landed: Resolve decides, and a

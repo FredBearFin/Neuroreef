@@ -166,7 +166,8 @@ public static class Body
         float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
         float vLand = v0 * LandLoadFactor(m, armour, legs >= K.LIMB_MIN ? legPairs : 1) * (K.CRAWL + (1f - K.CRAWL) * legs);
-        float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
+        float prop = Propulsor(fins, wings);   // fins, and wings stroked under water (2026-11-02)
+        float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * prop);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         float lengthShare = length;   // of the cube of its volume (LengthM)
         const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
@@ -185,20 +186,25 @@ public static class Body
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
         vLand *= WingGroundFactor(wings);   // the flight muscle's dead load on the flat; flapping helps on slopes (World.GroundSpeed, WingInclineGain)
         float vAir = flies ? MathF.Min(K.FLY_V_CAP * dt, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
-        bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
-        bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
+        bool deep = 0.1f + 0.9f * prop >= K.DEEP_SWIM;   // swims well enough to stay up in open water
+        bool settled = legs < K.LIMB_MIN * 0.2f && prop < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
         w.PVLand[i] = vLand; w.PVWater[i] = vWater; w.PVAir[i] = vAir;
         Realm realm = flies ? Realm.Any : Realm.Land | Realm.Shallow | (deep ? Realm.Deep : 0);
-        Loco loco = settled ? Loco.Sessile : flies ? Loco.Fly : vWater > vLand ? (legs >= K.LIMB_MIN ? Loco.Wade : Loco.Swim) : (fins >= K.LIMB_MIN ? Loco.Wade : Loco.Walk);
-        if (settled) realm = fins > legs ? Realm.Water : Realm.Land;
+        Loco loco = settled ? Loco.Sessile : flies ? Loco.Fly : vWater > vLand ? (legs >= K.LIMB_MIN ? Loco.Wade : Loco.Swim) : (prop >= K.LIMB_MIN ? Loco.Wade : Loco.Walk);
+        if (settled) realm = prop > legs ? Realm.Water : Realm.Land;
         // a flier eats where it can land: water-column food only if it also wades or swims (2026-10-31)
-        Realm reach = flies ? GroundRealm(legs, fins) : realm;
+        Realm reach = flies ? GroundRealm(legs, prop) : realm;
         w.PLoco[i] = (byte)loco; w.PRealm[i] = (byte)realm;
         w.PVmax[i] = MathF.Max(vAir, MathF.Max(vLand, vWater));
         // reach in a step (2026-11-01): its body and the distance it sprints in a chase (ReachM)
         w.PLen[i] = LengthM(m, lengthShare);
         w.PReach[i] = ReachM(m, w.PVmax[i] / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
+        // (2026-11-02) a chase runs at the speed of the medium it is in: its swimming speed in water, its running speed on
+        // land, its flight speed only in the air (World.ReachOf). Before, every body chased at its fastest speed anywhere,
+        // so a flier that never flew struck under water as far as it could fly
+        w.PReachLand[i] = ReachM(m, vLand / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
+        w.PReachSwim[i] = ReachM(m, vWater / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
 
         w.PArmour[i] = armour;
         w.PStrike[i] = strike;
@@ -249,8 +255,20 @@ public static class Body
     public static float ReachM(float m, float speedRatio, float lengthM)
         => lengthM + SprintMps(m) * K.T_CHASE * Math.Clamp(speedRatio, 0f, 2f);
 
+    /// <summary>
+    /// What propels a body under water, in fins' worth (2026-11-02): its fins, and its wings stroked as flippers, as auks,
+    /// diving petrels and penguins swim (Johansson &amp; Aldrin 2002; Watanuki et al. 2006). Water is ~800x denser than air,
+    /// so the wing area that best drives a body through it is far smaller than the area that carries it in the air: a
+    /// wing works as a flipper best at half the wing gene (a penguin's flipper; flightless at most masses, FlightMargin)
+    /// and worse as it grows toward a flier's, which a diver must half fold (murres and diving petrels; the flight-versus-
+    /// dive trade-off, Thaxter et al. 2010; Elliott et al. 2013): WING_SWIM x 4 w (1 - w). At most 1.
+    /// </summary>
+    public static float Propulsor(float fins, float wings)
+        => MathF.Min(1f, fins + K.WING_SWIM * 4f * wings * (1f - wings));
+
     /// <summary>Where a flier can stand, perch, feed or rest once landed: land; shallow water if it wades on legs or
     /// swims; open water if it swims well enough to stay up (DEEP_SWIM).</summary>
+    /// <param name="fins">its propulsor under water, fins and wings (Propulsor)</param>
     public static Realm GroundRealm(float legs, float fins)
     {
         bool swims = 0.1f + 0.9f * fins >= K.DEEP_SWIM;
