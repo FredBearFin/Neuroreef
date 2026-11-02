@@ -225,7 +225,8 @@ divided by `metresPerUnit`. `meta.units` and every `status.units` carry:
 | Field | Value | Meaning |
 |---|---|---|
 | `metresPerUnit` | 4 | metres per world unit (positions in AGENTS are units: x · 65536 / WORLD) |
-| `stepHours`, `stepSeconds`, `stepsPerDay`, `stepsPerYear` | 2.922, 10519, 8.21, 3000 | the step's real duration |
+| `stepHours`, `stepSeconds`, `stepsPerDay`, `stepsPerYear` | 2.922, 10519, 8.21, 3000 | the step's real duration: the world's own step (2026-11-02: a world setting, `--step-minutes` and the setup's "Time in a step"; 2.922 h by default, 1 min to 12 h). The console's clock reads it; a client interpolating positions between frames should treat a step as `stepSeconds` of world time |
+| `realTimeRate` | 9.5e-5 | steps a second that play the world at real time (1 / `stepSeconds`): 0.0167 at a 1-minute step, 0.00167 at 10 minutes |
 | `mapWidthM` | WORLD × 4 | the map's side in metres (1.02 km for the default 256 map) |
 | `fieldCellM` | 16 | a field cell's side |
 | `reliefM` | 153 on 256 | the map's vertical scale (Map.ReliefM): a cell stands (e − sea) / (1 − sea) × reliefM m above the lakes; 257 m on 512, 431 on 1024, 725 on 2048. Draw the relief at true scale: RELIEF = reliefM × `fcell` / `fieldCellM` units (38 on 256). `meta.explore.hRelief` is the same |

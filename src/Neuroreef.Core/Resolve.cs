@@ -98,7 +98,7 @@ public static class Resolve
             if (airborne)
             {
                 float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
-                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f)));
+                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f), w.Dt));
             }
             if (!airborne) spd = MathF.Min(spd, vGround);
             w.Flags[i] = (byte)((w.Flags[i] & ~(Flag.Aloft | Flag.Landed)) | (airborne ? Flag.Aloft : Flag.Landed));
@@ -118,13 +118,13 @@ public static class Resolve
         // where in the water column it holds, and the oxygen it draws there (2026-11-01, Respiration.cs)
         var breath = Respiration.Place(w, i, cell, airborne);
 
-        if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < K.FIRE_KILL) { Die(w, i, Cause.Fire, -1); return; }
+        if (w.Fire[cell] > 0 && Rng.U(seed, step, (uint)i, Rs.Death) < w.PStep(K.FIRE_KILL)) { Die(w, i, Cause.Fire, -1); return; }
 
         // ---- 2. drink
         if ((acts & BIT_DRINK) != 0 && w.DistDrink[cell] <= 1.5f && !airborne)
         {
             if (w.Thirst[i] > 0f) metrics?.Allow(P.DRINK);
-            float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE);
+            float rel = MathF.Min(w.Thirst[i], K.DRINK_RATE * w.Dt);
             w.Thirst[i] -= rel; r += K.R_DRINK * rel;
             if (rel > 0f) { metrics?.Apply(P.DRINK); PathMemory.Drank(w, i); Pathogens.Drank(w, i, cell); }   // waterborne pathogens (Revision R)
         }
@@ -306,6 +306,7 @@ public static class Resolve
         float carn = w.PDiet[i * Pools.N + (int)Pool.Meat];   // (not diet: a birth above may have grown the world, reallocating PDiet)
         float scent = K.C_SCENT * carn * ((acts & BIT_MARK) != 0 ? K.MARK_GAIN : 1f);
         if ((acts & BIT_MARK) != 0 && carn <= 0) scent = K.C_SCENT * 0.5f;   // anyone can mark, faintly
+        scent *= w.Dt;   // per reference step (World.Dt)
         float scentBefore = w.Scent[cell];
         if ((acts & BIT_MARK) != 0) metrics?.Allow(P.MARK);
         w.Scent[cell] = MathF.Min(4f, w.Scent[cell] + scent);
@@ -326,7 +327,7 @@ public static class Resolve
         float moveCost = MoveCost(w, i, mass, mf, spd, cell, airborne, canLand);
         // a juvenile runs every unit of its brain from birth, so it pays for all of them; only the body's share scales
         // with its size (audit 2026-10-30: a young brain was charged at body scale; real infant brains cost more, not less)
-        float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF;
+        float brainBasal = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF * w.Dt;   // per step, as PBasal (World.Dt)
         float fullBasal = (w.PBasal[i] - brainBasal) * MathK.Pow(mf, K.EXP_BASAL) + brainBasal;
         // core temperature (Revision P): a cold-blooded body takes its surroundings' temperature and its chemistry runs
         // slower in the cold (Heat.Rate): it burns less and digests less; a warm-blooded one pays to stay at T_BODY
@@ -361,11 +362,11 @@ public static class Resolve
         float thermo = 0f, evap = 0f, shortCold = 0f, shortHot = 0f;
         if (Climate.On)
         {
-            Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core);
+            Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core, w.Dt);
             // a body kept below T_BODY that makes more heat than it loses just runs a little warmer: it need not shed it
             if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
             // a core below freezing is a cold shortfall it cannot make up (2026-11-01: before, a cold-blooded body took any frost)
-            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core);
+            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core, w.Dt);
             // shivering and non-shivering heat are aerobic: a body makes no more heat than its oxygen uptake leaves room for
             // above its other needs; the rest is a cold shortfall, not an oxygen debt (2026-11-02: an endotherm at extreme
             // cold "suffocated" when its heat demand outran its lungs; the summit metabolism of cold-exposed mammals is set
@@ -375,7 +376,7 @@ public static class Resolve
             w.TOp[i] = top;
             w.HeatNeed[i] = MathK.Tanh((thermo + shortCold - evap - shortHot) / fullBasal);
             // what it cannot cover strains it; a body recovers from a little strain each step
-            w.ThermStrain[i] = MathF.Max(0f, w.ThermStrain[i] + K.STRAIN_GAIN * (shortCold + shortHot) / fullBasal - K.STRAIN_REC);
+            w.ThermStrain[i] = MathF.Max(0f, w.ThermStrain[i] + K.STRAIN_GAIN * (shortCold + shortHot) / fullBasal * w.Dt - K.STRAIN_REC * w.Dt);   // per reference step (x Dt)
             T.SpendHeat[s] += thermo;
         }
         // breathing (2026-11-01): what pumping its medium costs, and its oxygen debt from what its organs could not draw
@@ -388,13 +389,13 @@ public static class Resolve
         if (dg != null)
         {
             dg.Basal[dgG] += basal; dg.Move[dgG] += moveCost; dg.Thermo[dgG] += thermo; dg.Breath[dgG] += breathe; dg.Grow[dgG] += grow;
-            dg.Kleiber[dgG] += K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL);
-            dg.Fmr[dgG] += 4.82f * MathK.Pow(mass * 1000f, 0.734f) * 1000f / K.STEPS_PER_DAY / Pools.EnergyJ;   // mammals' FMR, kJ/day (Nagy 1999)
+            dg.Kleiber[dgG] += K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * w.Dt;
+            dg.Fmr[dgG] += 4.82f * MathK.Pow(mass * 1000f, 0.734f) * 1000f / w.StepsPerDay / Pools.EnergyJ;   // mammals' FMR, kJ/day (Nagy 1999)
         }
         float fat0 = w.Fatigue[i];
         float sprint = w.Gain[i * P.N + P.SPRINT];
         if (rest && fat0 > 0f) metrics?.Allow(P.REST);
-        w.Fatigue[i] = Math.Clamp(w.Fatigue[i] + K.C_FATIGUE * sprint * spd / vmax - K.C_RECOVER * (rest ? 3f : 1f), 0f, 1f);
+        w.Fatigue[i] = Math.Clamp(w.Fatigue[i] + K.C_FATIGUE * sprint * spd / vmax * w.Dt - K.C_RECOVER * (rest ? 3f : 1f) * w.Dt, 0f, 1f);
         if (rest && w.Fatigue[i] < fat0) metrics?.Apply(P.REST);
         r += K.R_REST * MathF.Max(0f, fat0 - w.Fatigue[i]);
 
@@ -421,12 +422,12 @@ public static class Resolve
 
         // an organism dries out on land, less on moist ground; in water it does not (DESIGN §9.4)
         // (2026-11-01) gills out of water dry out fast (Respiration.Drying)
-        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * Nature.Thirst * w.PThirstK[i] * Respiration.Drying(w, i) * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]));
+        if (!waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.C_THIRST * Nature.Thirst * w.PThirstK[i] * Respiration.Drying(w, i) * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[cell]) * w.Dt);
         // cooling by evaporation costs water, whatever the kidneys save (Revision O)
         if (evap > 0f && !waterCell) w.Thirst[i] = MathF.Min(1f, w.Thirst[i] + K.EVAP_REL * K.C_THIRST * Nature.Thirst * evap / (K.C_BASAL * mass));
         w.Age[i] += 1;
         if (w.Cooldown[i] > 0) w.Cooldown[i] -= 1;
-        w.Pain[i] = MathF.Max(Pathogens.Malaise(w, i), w.Pain[i] - K.PAIN_DECAY);   // a sick animal feels unwell (immune response, damage)
+        w.Pain[i] = MathF.Max(Pathogens.Malaise(w, i), w.Pain[i] - K.PAIN_DECAY * w.Dt);   // a sick animal feels unwell (immune response, damage)
         // energy spent counts against the reward as energy eaten counts for it (Revision P): the learner feels the net
         // gain, so a habit that costs and earns nothing (calling on 65-80% of steps) is not reinforced for free.
         // Basal cost is not counted: nothing it does changes it
@@ -438,7 +439,7 @@ public static class Resolve
         if (w.Energy[i] <= 0)
         {
             if (dg != null && hurt4 > 1e-6f) dg.StarveHurt[dgG]++;
-            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL), w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
+            if (dg != null) dg.Starved(w, i, dgG, K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * w.Dt, w.PAbsorb[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT, basal, thermo, moveCost, grow, breathe, brainBasal * rateT, rateT, dgDe, w.PDig[i] * MathK.Pow(mf, K.EXP_BASAL) * gutT * (w.Gut[i] > 1e-9f ? w.GutEnergy[i] / w.Gut[i] : 0f));
             // a body whose reserve ran out because it was burning it against the cold died of the cold: hypothermia
             // follows the exhaustion of the fuel for heat (2026-11-02; with the gut's own upkeep a body at -250 C spent
             // its whole reserve in one step before its strain reached 1, and was counted starved)
@@ -451,7 +452,7 @@ public static class Resolve
         if (w.Age[i] > life)
         {
             float a = w.Age[i] / life;
-            if (Rng.U(seed, step, (uint)i, Rs.Death + 1) < 0.002f * a * a) { Die(w, i, Cause.Old, -1); return; }
+            if (Rng.U(seed, step, (uint)i, Rs.Death + 1) < w.PStep(0.002f * a * a)) { Die(w, i, Cause.Old, -1); return; }   // a / reference step
         }
     }
 
@@ -477,13 +478,13 @@ public static class Resolve
             // proportion to the weight (induced power ~W^2 / V, V_mp ~W^(1/2): Pennycuick 1975, 2008) (2026-11-01)
             float wl = (mass + Body.FlightLoad(w, i)) / mass, wlRoot = MathK.Pow(wl, 0.5f), pLoad = wl * wlRoot;
             float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i])) * wlRoot;
-            float pMin = Body.FlightPowerMin(mass) * pLoad;
+            float pMin = Body.FlightPowerMin(mass) * pLoad * w.Dt;   // per step (World.Dt)
             float p = pMin * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
-            float duty = canLand ? MathF.Min(1f, spd / (Body.FlightFullStep(mass) * wlRoot)) : 1f;
+            float duty = canLand ? MathF.Min(1f, spd / (Body.FlightFullStep(mass) * w.Dt * wlRoot)) : 1f;
             // a step in the air that starts or ends on the ground has a take-off and climb-out, dearer than cruising
             // (TAKEOFF_S of least power: Pennycuick 2008; Askew, Marsh & Ellington 2001; Nudds & Bryant 2000)
-            float takeoff = canLand ? pMin * K.TAKEOFF_S / K.STEP_S : 0f;
-            return (MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL)) * duty + takeoff) * coat;
+            float takeoff = canLand ? pMin * K.TAKEOFF_S / w.StepS : 0f;
+            return (MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * w.Dt) * duty + takeoff) * coat;
         }
         if (spd <= 0f) return 0f;
         float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)

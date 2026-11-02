@@ -44,7 +44,7 @@ public static class WaterCycle
     public static float YearFrac => (float)K.WC_EVERY / Nature.SeasonLength;
 
     static float Season(World w, int y) =>
-        MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - Climate.Phase(w, y));
+        MathK.Sin(2f * MathF.PI * w.YearStep / Nature.SeasonLength - Climate.Phase(w, y));
 
     /// <summary>Rain per update (mm) on a cell of pattern 1 in row y now: the mean, x the season by latitude (as the
     /// moisture season always ran), x this year's anomaly.</summary>

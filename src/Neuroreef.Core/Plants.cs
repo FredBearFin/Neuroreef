@@ -434,7 +434,7 @@ public static class Plants
         float[] Li = Pl[(int)Pool.Litter], Wo = Pl[(int)Pool.Wood];
         float[] S = w.Shrub, Tr = w.Tree, Sp = w.Sapling;
         int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW;
-        float psi = 2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - Climate.Phase(w, y);   // the moisture season's phase (2026-11-01: one latitude on a small map)
+        float psi = 2f * MathF.PI * w.YearStep / Nature.SeasonLength - Climate.Phase(w, y);   // the moisture season's phase (2026-11-01: one latitude on a small map)
         float cpsi = MathK.Cos(psi), spsi = MathK.Sin(psi);
         uint seed = w.Seed, step = (uint)w.Step;
         int nbx = NBX, farRow = y * nbx * 3;
@@ -1137,7 +1137,7 @@ public static class Plants
         float fur = w.FurSeed[a];
         if (fur > 0f)
         {
-            float d = fur * K.BURR_DROP;
+            float d = fur * w.PStep(K.BURR_DROP);   // per reference step (World.Dt)
             w.FurSeed[a] = fur - d;
             Deposit(w, cell, w.FurSeedG[a], w.FurSeedDad[a], d, 2);
             if (w.FurSeed[a] < 1e-9f) { w.FurSeed[a] = 0f; w.FurSeedG[a] = 0; w.FurSeedDad[a] = 0; }
@@ -1151,7 +1151,7 @@ public static class Plants
             if (mom == 0) continue;
             float hook = t.P(mom, Ph.HOOK);
             if (hook <= 0f) continue;
-            float m = MathF.Min(0.5f * w.BankM[bo], K.BURR_PICK * hook * w.BankM[bo] * coat);
+            float m = MathF.Min(0.5f * w.BankM[bo], K.BURR_PICK * hook * w.BankM[bo] * coat * w.Dt);
             if (m <= 0f) continue;
             w.BankM[bo] -= m;
             float u = Rng.U(w.Seed, (uint)w.Step, (uint)a, Rs.PlantPick + 11 + (uint)s);

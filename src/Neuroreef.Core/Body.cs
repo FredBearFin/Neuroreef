@@ -143,14 +143,17 @@ public static class Body
         // the gut's upkeep, part of that cost
         float kleiber = K.C_BASAL * mPow;
         float gut = GutScale(kleiber * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF, kleiber, out float basal);
-        w.PBasal[i] = basal;
+        // rates are per step (x World.Dt: the constants are per reference step of K.STEP_H) and durations in steps (/ Dt):
+        // at the default step Dt is 1 and these are the constants' values bit for bit (2026-11-02)
+        float dt = w.Dt;
+        w.PBasal[i] = basal * dt;
         w.PGut[i] = K.C_GUT * m;
-        w.PDig[i] = K.C_DIGEST * mPow * gut;
-        w.PAbsorb[i] = K.C_ABSORB * mPow * gut;   // energy the gut can take up a step (2026-11-01)
-        w.PBite[i] = K.C_BITE * mPow;
+        w.PDig[i] = K.C_DIGEST * mPow * gut * dt;
+        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * dt;   // energy the gut can take up a step (2026-11-01)
+        w.PBite[i] = K.C_BITE * mPow * dt;
         float t = MathK.Pow(m, K.EXP_LIFE);
-        w.PMature[i] = K.C_MATURE * t * devel;
-        w.PLife[i] = K.C_LIFE * t * life * MathK.Pow(devel, K.DEVEL_AGING);
+        w.PMature[i] = K.C_MATURE * t * devel / dt;
+        w.PLife[i] = K.C_LIFE * t * life * MathK.Pow(devel, K.DEVEL_AGING) / dt;
         // a narrow field of view sees further (forward eyes), a wide one sees around but less far. In metres (2026-11-01):
         // C_SIGHT_M = 60 m at 1 kg, eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008)
         w.PSight[i] = MathF.Min(BodySize.MaxSight, K.C_SIGHT * MathK.Pow(m, K.EXP_SIGHT) * fsi * (1.6f - fov / 360f));
@@ -159,7 +162,7 @@ public static class Body
 
         // locomotion: smooth speeds in each medium from the organ sizes. On land the legs carry the body's weight and its
         // armour, and the bones' safety factor limits how fast it can go (BoneLoad). In water and air armour only adds drag
-        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED);   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
+        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * dt;   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
         float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
         float vLand = v0 * LandLoadFactor(m, armour, legs >= K.LIMB_MIN ? legPairs : 1) * (K.CRAWL + (1f - K.CRAWL) * legs);
@@ -181,7 +184,7 @@ public static class Body
         float margin = FlightMargin(wings, m);
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
         vLand *= WingGroundFactor(wings);   // the flight muscle's dead load on the flat; flapping helps on slopes (World.GroundSpeed, WingInclineGain)
-        float vAir = flies ? MathF.Min(K.FLY_V_CAP, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
+        float vAir = flies ? MathF.Min(K.FLY_V_CAP * dt, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
@@ -206,8 +209,8 @@ public static class Body
         w.PSexual[i] = (byte)(gn[G.B_SEX] >= 0 ? 1 : 0);
         w.PLive[i] = (byte)(gn[G.B_LIVE] >= 0 ? 1 : 0);
         // gestation (or incubation) grows with body size and with how big the young are at birth
-        w.PGest[i] = K.C_GEST * t * MathF.Sqrt(birth / 0.1f);
-        w.PCool[i] = K.C_COOL * t;
+        w.PGest[i] = K.C_GEST * t * MathF.Sqrt(birth / 0.1f) / dt;
+        w.PCool[i] = K.C_COOL * t / dt;
         w.PCare[i] = Organ(gn[G.B_CARE]);
         ExpressDiet(w, i, reach, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
         // a meat-eater can feed on a carcass, its own kill's included (Revision L, ecology review: wolves
@@ -403,8 +406,8 @@ public static class Body
     /// leaves it only the speed of least power, sinking (Pennycuick 1975, 2008). The maximum-range speed, 3^(1/4) = 1.32 x
     /// vmp for this power curve (minimum of power / speed), needs a loaded margin of 1.14. At most FLY_V_CAP.
     /// </summary>
-    public static float LoadedTopAirSpeed(float vmp, float mass, float load, float loadedMargin)
-        => MathF.Min(K.FLY_V_CAP, vmp * MathK.Pow((mass + load) / mass, 0.5f) * TopFlightSpeed(loadedMargin));
+    public static float LoadedTopAirSpeed(float vmp, float mass, float load, float loadedMargin, float dt = 1f)
+        => MathF.Min(K.FLY_V_CAP * dt, vmp * MathK.Pow((mass + load) / mass, 0.5f) * TopFlightSpeed(loadedMargin));
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)
     {

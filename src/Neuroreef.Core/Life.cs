@@ -173,7 +173,7 @@ public static class Life
         var diet = w.DietOf(c);
         float need = K.FIELD_METAB * MathF.Max(w.PBasal[c], 1e-6f);
         // a brain the body cannot pay for: more than BRAIN_SHARE_MAX of its basal cost
-        float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[c] / K.BRAIN_REF;
+        float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[c] / K.BRAIN_REF * w.Dt;   // per step, as PBasal
         if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) return 0f;
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
@@ -208,6 +208,13 @@ public static class Life
         // as carrion and their dung (AnimalFood). Before, only growing plant food counted, so an ancestor that eats
         // mostly meat, carrion or dung was never founded: no prey existed when it was tested
         var an = AnimalFood(w, c, hx, hy, r, realm, diet, need);
+        // the plants' yield (Fields.Yield) and the rots are per reference step (the land's clock); the animals' yield is per
+        // this world's step, as is need: both are put per reference step for the count (2026-11-02; nothing at Dt = 1)
+        if (w.Dt != 1f)
+        {
+            double k = 1.0 / w.Dt;
+            an.Meat *= k; an.Carrion *= k; an.Dung *= k; an.Detritus *= k; an.CarrionKg *= k; an.DungKg *= k;
+        }
         // how fast it can eat: one bite a step, of what stands in a cell once grazed to half (the stock of the
         // maximum sustained yield), and no faster than its gut passes food (a Holling type II limit). It must
         // cover FORAGE_MARGIN days of need, as a naive forager spends most steps doing other things than eating.
@@ -235,7 +242,7 @@ public static class Life
             fed += an.Carrion;
         if (an.DungKg > 0 && MathF.Min(absorb, diet[(int)Pool.Dung] * K.RHO_DUNG * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.DungKg / K.ROT_DUNG / n))) >= margin)
             fed += an.Dung;
-        return (float)(fed / need);
+        return (float)(fed / (need / w.Dt));
     }
 
     /// <summary>
@@ -341,8 +348,8 @@ public static class Life
         bool immersed = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
         float top = Heat.Operative(w, cell, w.PInsul[c], immersed), core = Heat.Core(top, w.PEndo[c]);
         float basal = w.PBasal[c] * Heat.Activity(core, w.PEndo[c]);   // its core's temperature and metabolic level (2026-11-01)
-        Heat.Balance(w.PM[c], w.PInsul[c], w.PAppend[c], top, immersed, basal, w.PBasal[c], out float thermo, out _, out float cold, out _, core);
-        cold += Heat.Freeze(w.PM[c], w.PInsul[c], w.PAppend[c], immersed, core);   // a frost a cold-blooded body cannot survive
+        Heat.Balance(w.PM[c], w.PInsul[c], w.PAppend[c], top, immersed, basal, w.PBasal[c], out float thermo, out _, out float cold, out _, core, w.Dt);
+        cold += Heat.Freeze(w.PM[c], w.PInsul[c], w.PAppend[c], immersed, core, w.Dt);   // a frost a cold-blooded body cannot survive
         return K.FIELD_METAB * basal + thermo + cold;   // heat it cannot make counts as a cost too: it must not live there
     }
 

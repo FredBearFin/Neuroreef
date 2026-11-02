@@ -341,9 +341,13 @@ public static class Wire
     /// The world's real units (2026-11-01; ICD §2 status and meta): metres per world unit, the duration of a step, the map's
     /// width in metres, and the allometries the console needs to draw bodies at true size and senses at true range.
     /// </summary>
-    public static object Units() => new
+    public static object Units(World? w = null) => new
     {
-        metresPerUnit = K.M_PER_UNIT, stepHours = K.STEP_H, stepSeconds = K.STEP_S, stepsPerDay = K.STEPS_PER_DAY, stepsPerYear = K.T_SEASON,
+        // the world's own step (World.StepH, 2026-11-02: a world setting, K.STEP_H by default): the console's clock and its
+        // real-time playback (realTimeRate steps a second is one simulated second a second) follow it
+        metresPerUnit = K.M_PER_UNIT, stepHours = w?.StepH ?? Nature.StepH, stepSeconds = w?.StepS ?? Nature.StepH * 3600f,
+        stepsPerDay = w?.StepsPerDay ?? 24f / Nature.StepH, stepsPerYear = Nature.SeasonLength / (w?.Dt ?? Nature.StepH / K.STEP_H),
+        realTimeRate = 1f / (w?.StepS ?? Nature.StepH * 3600f),
         mapWidthM = Map.WidthM, fieldCellM = K.GEO_CELL_M, bodyLenM1kg = K.BODY_L_M, sightM1kg = K.C_SIGHT_M, hearM1kg = K.HEAR_R_M,
         maxSightM = BodySize.MaxSight * K.M_PER_UNIT, senseWaterM = K.SENSE_WATER * K.GEO_CELL_M,
         // the world's body sizes (BodySize, 2026-11-01): record byte 12 is a body's mass on the log scale massMinKg..massMaxKg
@@ -423,7 +427,7 @@ public static class Wire
             probe = new { feat = PR_FEAT, hid = PR_HID, z = PR_Z, gain = PR_GAIN, learn = PR_LEARN, scal = PR_SCAL, scalars = ProbeScalars, phen = PR_PHEN,
                 phenotype = ProbePhenotype, diet = PR_DIET, w1 = PR_W1, w2 = PR_W2, end = PR_END, nh = G.NH, nin = G.NIN },
             landCells = Enumerable.Range(0, Map.FW * Map.FW).Count(i => w.Cell[i] == (byte)Realm.Land),
-            units = Units(),   // 2026-11-01: real units (metres, hours)
+            units = Units(w),   // 2026-11-01: real units (metres, hours)
             latitude = w.LatDeg,   // 2026-11-01: the latitude the world sits at (degrees, < 0 south; World.LatDeg)
             // EXPLORE: the weapons (the server's table is the authority on range and damage) and the person's body
             explore = new

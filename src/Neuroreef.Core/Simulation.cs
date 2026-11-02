@@ -83,6 +83,14 @@ public sealed class Simulation : IDisposable
     /// </summary>
     public void BuildLand(Land? from = null)
     {
+        // the land is made on the reference clock, whatever the world's step (LandTicks)
+        float h = W.StepH;
+        W.SetStepH(K.STEP_H);
+        try { BuildLandRef(from); } finally { W.SetStepH(h); }
+    }
+
+    void BuildLandRef(Land? from)
+    {
         if (from != null && from.Is == Land.Stage.Grown) { from.Into(W); return; }
         var rain = from?.Into(W);
         if (rain != null) Terrain.Finish(W, rain); else Terrain.Build(W);
@@ -361,19 +369,41 @@ public sealed class Simulation : IDisposable
         Life.Run(w, _active);
         Clades.Update(w);
         Lap(3);
-        Weather.Update(w);
-        PlantsStep();
-        Lap(4);
-        Fields.Fire(w);
-        // the water cycle (rows in parallel, then the routing, drinkable water and lakes in order)
-        if (w.Step % K.WC_EVERY == 0 && w.WaterOn) { _pool.Run(_waterJob, Map.FW); WaterCycle.Finish(w); }
+        if (w.Dt == 1f) { Weather.Update(w); PlantsStep(); Lap(4); FireAndWater(); }
+        else { LandTicks(); Lap(4); }
         Lap(5);
         w.Step++;
-        if (w.Step % K.SAMPLE_EVERY == 0) w.T.Take();
+        if (w.Every(K.SAMPLE_EVERY)) w.T.Take();
         Snap.AfterStep();
         w.Reserve();   // grow between steps if the next one could run short of slots (World.Reserve)
         Seen();
         Lap(6);
+    }
+
+    /// <summary>Fire, then the water cycle (rows in parallel, then the routing, drinkable water and lakes in order).</summary>
+    void FireAndWater()
+    {
+        var w = W;
+        Fields.Fire(w);
+        if (w.Step % K.WC_EVERY == 0 && w.WaterOn) { _pool.Run(_waterJob, Map.FW); WaterCycle.Finish(w); }
+    }
+
+    /// <summary>
+    /// The land (weather, fields, plants, fire, the water cycle) of a world whose step is not the reference step
+    /// (2026-11-02): it runs on the reference clock, one tick for each reference step (K.STEP_H) this step ends, as the
+    /// reference world's land runs: a fine step (minutes) runs it once in ~2.92 h of steps, a coarse one more than once a
+    /// step. Each tick sees the reference step number (World.RefStep) and Dt = 1, so the land's rates, stripes and
+    /// seeds are the reference world's whatever the step; the animals see a land that changes in ticks of K.STEP_H.
+    /// </summary>
+    void LandTicks()
+    {
+        var w = W;
+        ulong s = w.Step, l0 = w.RefStep(s), l1 = w.RefStep(s + 1);
+        if (l0 == l1) return;
+        float h = w.StepH;
+        w.SetStepH(K.STEP_H);
+        try { for (ulong l = l0; l < l1; l++) { w.Step = l; Weather.Update(w); PlantsStep(); FireAndWater(); } }
+        finally { w.Step = s; w.SetStepH(h); }
     }
 
     /// <summary>BUILD: counting sort of every visible agent (not embryos) into the HCELL-unit hash grid.</summary>

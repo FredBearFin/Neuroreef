@@ -35,7 +35,7 @@ public static class Clades
         for (int k = 0; k < K.CLADES && slot < 0; k++)
         {
             var c = w.Sp[k];
-            if (!c.Alive && c.Extinct >= 0 && (long)w.Step - c.Extinct >= K.CLADE_RECYCLE) slot = k;
+            if (!c.Alive && c.Extinct >= 0 && (long)w.Step - c.Extinct >= w.Steps(K.CLADE_RECYCLE)) slot = k;
         }
         if (slot < 0) return -1;
         var s = w.Sp[slot];
@@ -197,7 +197,7 @@ public static class Clades
             bool alive = x.Count[s] > 0;
             if (c.Alive && !alive) { c.Alive = false; c.Extinct = (long)w.Step; x.Version++; }
         }
-        if (w.Step > 0 && w.Step % K.SPEC_EVERY == 0)
+        if (w.Step > 0 && w.Every(K.SPEC_EVERY))
             for (int s = 0; s < K.CLADES; s++)
                 if (w.Sp[s].Alive && x.Count[s] >= 2 * K.MIN_SPLIT) TrySplit(w, s, x);
     }

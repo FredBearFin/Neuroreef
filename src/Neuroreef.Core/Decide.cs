@@ -426,7 +426,7 @@ public static class Decide
             }
         }
         // a template fades: its counts halve every TMPL_HALF steps (staggered by slot)
-        if (w.PImit[i] > 0f && ((long)w.Step + i) % K.TMPL_HALF == 0)
+        if (w.PImit[i] > 0f && ((long)w.Step + i) % w.Steps(K.TMPL_HALF) == 0)
             for (int k = i * Voice.NTMPL, ke = k + Voice.NTMPL; k < ke; k++) w.Tmpl[k] >>= 1;
 
         // ---- learning update due from the last step's reward, with the rise in fear its move led to (sensed only now)
