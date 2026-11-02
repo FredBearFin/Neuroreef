@@ -146,6 +146,34 @@ Wetlands (Wetlands.cs; nothing places one):
   waterlogged ground a plant under tolerance 0.5 cannot grow; tolerance costs FLOOD_COST 8% of production at its most
   (Costs: a mid genome is unchanged). Founders are random in it; the wetlands' plants are what recruitment, the lottery
   and mutation leave there.
+- *Canopy production and live wood* (2026-11-01, Plants.RowA). A leafy canopy fixes REPRO_RATE (NPP_MAX of a closed
+  canopy per unit leafy cover) x its environment factor fe x the light it intercepts (Beer's law, CANOPY_KL 2: Monsi &
+  Saeki 1953), whatever room its crown has. Crown growth takes at most that (before, a sward of short-lived herbs could
+  turn its cover over ~10 times a year); a woody plant (woodiness from its height) puts what its crown and seed did not
+  take into live wood (World.LiveWood, saved; checkpoint format 24 starts an older save's wood from its woody cover,
+  WOOD_INIT 15 kg/m2 per unit, and keeps its land). Live wood dies at the woody plants' stem death rate (age and
+  drought) into dead wood (Pool.Wood); it takes WOOD_N 1/10 of leafy growth's nutrient, and the decay of dead wood
+  immobilises the difference from the soil when it dies (Laiho & Prescott 2004). Before, a closed forest's production was
+  only its leaf turnover (forest NPP 2-3x below the measured).
+- *Water-limited production* (2026-11-01). The water-limited rate is r0 x (0.5 + WUE) x W_SUP x relative soil water,
+  W_SUP = E_MAX_ROOT 5 mm/day over PET_REF a day (1.83; the supply/demand ratio of transpiration, Haxeltine & Prentice
+  1996; Sitch et al. 2003), colimited with the carbon-limited rate by a non-rectangular hyperbola of curvature
+  COLIM_THETA 0.95 (Collatz et al. 1991). Before, W_SUP 3 and a rectangular hyperbola made soil at 0.2 of capacity
+  nearly as productive as at 0.4 (desert NPP 2x the measured). Round 2: the demand side, the water-limited rate x
+  e_s(T_REF) / e_s(T) (Climate.Demand: warm air's vapour pressure deficit buys less carbon per water; Tanner & Sinclair 1983).
+- *Round 2 (2026-11-01).* Beer's law over the cell's whole leafy cover (each leaf fixes Intercept(total) / total of a
+  closed canopy's leaf), so a sapling under a closed canopy gets no sparse-leaf boost. Cold: tissue formation is limited
+  by the meristems' temperature, 0 below T_GROW_MIN 5 °C, rising over T_GROW_RAMP 5 K (degree-days above it; Körner &
+  Paulsen 2004; Körner 2012; Rossi et al. 2007); short plants run DT_SHORT 4 K x exp(-h / H_COUPLE 0.5 m) warmer than
+  the air, tall trees at air temperature, so trees stop growing first in the cold (ColdGrowth: limits crown growth, wood
+  and seed, not the losses). Stem life: LIFE_EXP 1 (lifespan ~ M^1/4, M ~ H^4: Marba et al. 2007; Niklas 1994), a 15 m
+  tree 50 years and a 30 m tree 100, the 1-2% a year of mature forests (Stephenson & van Mantgem 2005); was 0.75 (19 years).
+- *Round 3 (2026-11-01).* The sea-level annual mean by latitude is T_EQ 26 - DT_EP 18 sin² - DT_EP4 24 sin⁴ (Climate.
+  SeaLevelMean), through the observed zonal means (Sellers 1965): 14.5 °C at 40°, 7.1 at 50°, 5.5 at 52°, -16 at the pole.
+  The old 27 - 40 sin² made 52° 2.2 °C and held trees there near their cold limit. Geology's deep-time glaciation keeps the
+  old profile, as GEO_T_EQ 27 and GEO_DT_EP 40, and so do Hydrology's mean-year water and Caves' dissolution
+  (Climate.LandMean), so each seed builds the same land as before. Plant maintenance respiration follows the temperature
+  (Q10_RESP 2: Ryan 1991; Atkin & Tjoelker 2003); before, an evergreen respired its 20 °C rate through a -8 °C winter.
 Measured (512 map, seeds 3, 5, 7; a new world and one more year, no animals; WetProbe):
 - Wetlands 0.55 / 0.41 / 1.06% of the land (69 / 54 / 144 cells): marsh 8 / 6 / 8, swamp 16 / 5 / 30, fen 38 / 38 / 95,
   bog 7 / 5 / 11. Settings: lake and sea shores 13 / 13 / 23 cells, river banks 42 / 26 / 59, spring lines away from

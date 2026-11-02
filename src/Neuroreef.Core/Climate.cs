@@ -4,7 +4,7 @@
 // desert ends up, and what body lives there, is what follows.
 //
 // Temperature (°C), per cell, written by FIELDS each step:
-//   T_phys = T_EQ - DT_EP sin²θ + A_SEAS sinθ sin(2π t / year) Cont - LAPSE h,   θ the latitude of the row (SinLat).
+//   T_phys = T_EQ - DT_EP sin²θ - DT_EP4 sin⁴θ + A_SEAS sinθ sin(2π t / year) Cont - LAPSE h,   θ the latitude of the row (SinLat).
 //   2026-11-01 (the 1 km world): a map sits at one latitude, the world's (World.LatDeg, drawn from its terrain seed),
 //   and spans only its true north-south extent about it (Map.LatSpanDeg: 0.03° on the 256 map), so temperature varies
 //   with height, water and the season, not from pole to equator. Nature.LatSpan >= 360 gives back the old torus of
@@ -25,6 +25,10 @@ public static class Climate
 {
     // ---- response tables: TT_N entries of TT_STEP from TT_LO (nearest entry)
     /// <summary>(e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens saturation vapour pressure): how evaporation dries the soil.</summary>
+    /// <summary>Plants' transpiration demand against T_REF, inverted (2026-11-01): e_s(T_REF) / e_s(T). The vapour pressure
+    /// deficit of air at a given humidity follows e_s(T), so warm air demands more water for the same carbon
+    /// (Tanner &amp; Sinclair 1983) and the supply/demand ratio of transpiration falls (Plants.Gross).</summary>
+    public static readonly float[] Demand = Table(t => Es(K.T_REF) / Es(t));
     public static readonly float[] Evap = Table(t => MathK.Pow(Es(t) / Es(K.T_REF), -K.EVAP_BETA));
     /// <summary>Yan & Hunt (1999) growth curves of grass, shrubs and trees, 1 at T_REF, at most PLANT_CAP; 0 outside (Tmin, Tmax).</summary>
     public static readonly float[] FGrass = Beta(K.GRASS_TMIN, K.GRASS_TOPT, K.GRASS_TMAX),
@@ -32,6 +36,8 @@ public static class Climate
     /// <summary>Algae and plankton growth x EPPLEY^(T - T_REF), at the water's temperature (Eppley 1972).</summary>
     public static readonly float[] Algae = Table(t => MathK.Pow(K.EPPLEY, MathF.Max(t, K.T_WATER_MIN) - K.T_REF));
     /// <summary>Decomposition x Q10_ROT^((T - T_REF) / 10) (Lloyd & Taylor 1994).</summary>
+    /// <summary>Plant maintenance respiration x Q10_RESP^((T - T_REF) / 10) (2026-11-01; Ryan 1991).</summary>
+    public static readonly float[] Resp = Table(t => MathK.Pow(K.Q10_RESP, (t - K.T_REF) / 10f));
     public static readonly float[] Rot = Table(t => MathK.Pow(K.Q10_ROT, (t - K.T_REF) / 10f));
 
     internal static float Es(float t) => 0.6108f * MathK.Exp(17.27f * t / (t + 237.3f));
@@ -81,6 +87,13 @@ public static class Climate
     /// else the latitude itself (one phase across a map that sits at one latitude).</summary>
     public static float Phase(World w, float y) => Torus ? 2f * MathF.PI * y / Map.FW : LatRad(w, y);
 
+    /// <summary>Annual mean sea-level temperature at sin(latitude) s (2026-11-01): T_EQ - DT_EP s² - DT_EP4 s⁴, through the
+    /// observed zonal means (Sellers 1965).</summary>
+    public static float SeaLevelMean(float s) { float s2 = s * s; return K.T_EQ - K.DT_EP * s2 - K.DT_EP4 * s2 * s2; }
+
+    /// <summary>Annual mean sea-level temperature of the climate the land is built under (GEO_T_EQ, GEO_DT_EP).</summary>
+    public static float LandMean(float s) => K.GEO_T_EQ - K.GEO_DT_EP * s * s;
+
     /// <summary>Is the climate on? (Climate = 0 is the world without it, bit for bit: every rule below is skipped.)</summary>
     public static bool On => Nature.Climate > 0f;
 
@@ -89,7 +102,7 @@ public static class Climate
     {
         float s = SinLat(w, y), c = Nature.Climate;
         float year = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength);
-        a = K.T_REF + c * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
+        a = K.T_REF + c * (SeaLevelMean(s) - K.T_REF);
         b = c * K.A_SEAS * s * year;
     }
 
@@ -213,7 +226,7 @@ public static class Climate
         for (int y = 0; y < FW; y++)
         {
             float s = SinLat(w, y), phase = Phase(w, y);
-            float a = K.T_REF + Nature.Climate * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
+            float a = K.T_REF + Nature.Climate * (SeaLevelMean(s) - K.T_REF);
             for (int i = y * FW, e = i + FW; i < e; i++)
             {
                 if (w.Cell[i] != (byte)Realm.Land) continue;
@@ -260,7 +273,7 @@ public static class Climate
     {
         if (!On) return K.T_REF;
         float s = SinLat(w, i / Map.FW);
-        return K.T_REF + Nature.Climate * (K.T_EQ - K.DT_EP * s * s - K.T_REF) - w.TLapse[i];
+        return K.T_REF + Nature.Climate * (SeaLevelMean(s) - K.T_REF) - w.TLapse[i];
     }
 
     /// <summary>Water temperature under air temperature t.</summary>

@@ -143,6 +143,7 @@ public sealed class World
     // ---- fields (DESIGN §10): food pools 0..12, then structure layers
     public readonly float[][] Pool;        // [Pools.NFIELD][FW*FW]
     public readonly float[] Shrub, Tree, Sapling;   // cover of the shrub, tree and sapling slots (grass = the herb slot, Pool.Grass), updated in place by Plants
+    public readonly float[] LiveWood;               // live wood of the woody slots (2026-11-01; cover units, PLANT_KG_M2 per m2): fed by the canopy's production beyond its crown growth, dies with the stems into Pool.Wood
     public float[] Nutrient, Scent;
     public float[] NutrientN, ScentN;   // double buffers
     // ---- plants (Revision S, Plants.cs): per land cell the genotype of each slot (herb, shrub, tree, sapling; 0 = empty),
@@ -333,7 +334,7 @@ public sealed class World
         int n = Map.FW * Map.FW;
         Pool = new float[Pools.NFIELD][];
         for (int p = 0; p < Pools.NFIELD; p++) Pool[p] = new float[n];
-        Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; Nutrient = new float[n]; Scent = new float[n];
+        Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; LiveWood = new float[n]; Nutrient = new float[n]; Scent = new float[n];
         NutrientN = new float[n]; ScentN = new float[n];
         POcc = new ushort[4 * n]; BankMom = new ushort[3 * n]; BankDad = new ushort[3 * n]; SeedMom = new ushort[3 * n]; SeedDad = new ushort[3 * n];
         FruitG = new ushort[n]; PollenDad = new ushort[n]; BankM = new float[3 * n]; SeedOut = new float[3 * n]; PFlags = new byte[n];

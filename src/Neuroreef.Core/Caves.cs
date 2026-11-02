@@ -81,7 +81,7 @@ public static class Caves
         for (int y = 0; y < FW; y++)
         {
             float s = Climate.SinLat(w, y);
-            float t0 = K.T_REF + K.CLIMATE * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
+            float t0 = K.T_REF + K.CLIMATE * (Climate.LandMean(s) - K.T_REF);
             for (int i = y * FW; i < (y + 1) * FW; i++)
             {
                 if (w.Carb[i] <= 0f) continue;

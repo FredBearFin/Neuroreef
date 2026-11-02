@@ -94,6 +94,85 @@ public class PlantTests
         }
     }
 
+    [Fact] // 2026-11-01: water-limited production follows the supply/demand ratio and colimits near the lesser limit, so
+           // soil at 0.2 of capacity is much less productive than at 0.4 (desert NPP was 2x the measured)
+    public void DrySoilLimitsProduction()
+    {
+        var mid = Express((PT.HEIGHT, XOfHeight(0.3f)));
+        float n2 = Plants.Net(mid, 0, 0.2f, 0.8f, K.T_REF, 1f), n4 = Plants.Net(mid, 0, 0.4f, 0.8f, K.T_REF, 1f), n9 = Plants.Net(mid, 0, 0.9f, 0.8f, K.T_REF, 1f);
+        Assert.True(n2 < 0.6f * n4, $"net at 0.2 {n2}, at 0.4 {n4}");
+        Assert.True(n4 < n9);
+        // the colimitation is at most the lesser limit and close to it when they differ
+        Assert.True(Plants.Colim(1f, 0.2f) <= 0.2f && Plants.Colim(1f, 0.2f) > 0.18f);
+        Assert.Equal(0f, Plants.Colim(0f, 1f));
+    }
+
+    [Fact] // 2026-11-01: a closed canopy has no room to widen its crown, yet it fixes carbon: a tree puts it into live wood;
+           // a herb sward's production is bounded by what its leaves can fix (REPRO_RATE per unit cover, Beer's law)
+    public void ClosedCanopyGrowsWoodAndProductionIsBounded()
+    {
+        var w = Built();
+        int c = LandWithHerb(w), n = Map.FW * Map.FW, y = c / Map.FW;
+        int tree = Insert(w, Key(8, (PT.HEIGHT, 13), (PT.DECID, 0), (PT.TOPT, 6)));
+        for (int i = y * Map.FW; i < (y + 1) * Map.FW; i++) { w.Moisture[i] = 0.8f; w.Nutrient[i] = 1f; w.Temp[i] = K.T_REF; w.WetDur[i] = 0f; }
+        w.POcc[c * 4] = 0; w.Pool[(int)Pool.Grass][c] = 0f; w.POcc[c * 4 + 1] = 0; w.Shrub[c] = 0f; w.POcc[c * 4 + 3] = 0; w.Sapling[c] = 0f;
+        w.POcc[c * 4 + 2] = (ushort)tree; w.Tree[c] = 1f; w.PFlags[c] = 0x0F; w.LiveWood[c] = 0f;
+        float p0 = w.Flora.CellProd[c];
+        Plants.UpdateRow(w, y);
+        float prod = w.Flora.CellProd[c] - p0, dt = Plants.Every;
+        Assert.True(w.LiveWood[c] > 0f, "no wood in a closed canopy");
+        // the leaf turnover alone is CLIT + LIFE of the cover; with wood the canopy makes several times that
+        float turnover = dt * (w.Flora.P(tree, Ph.CLIT) + w.Flora.P(tree, Ph.LIFE));
+        Assert.True(prod > 2f * turnover, $"production {prod}, leaf turnover {turnover}");
+        Assert.True(prod <= 1.2f * dt * K.REPRO_RATE * 1.2f, $"production {prod} above what a closed canopy fixes");
+        // a sward of tiny, cheap-leaved herbs turns over fast but cannot produce more than its leaves fix
+        int herb = Insert(w, Key(8, (PT.HEIGHT, 0), (PT.LMA, 0), (PT.DECID, 0), (PT.TOPT, 6)));
+        int d = c + 1 < n && w.Cell[c + 1] == (byte)Realm.Land && (c + 1) / Map.FW == y ? c + 1 : c - 1;
+        w.POcc[d * 4] = (ushort)herb; w.Pool[(int)Pool.Grass][d] = 0.8f; w.Shrub[d] = 0f; w.Tree[d] = 0f; w.Sapling[d] = 0f; w.PFlags[d] = 0x0F;
+        for (int k = 1; k < 4; k++) w.POcc[d * 4 + k] = 0;
+        float q0 = w.Flora.CellProd[d];
+        Plants.UpdateRow(w, y);
+        float hp = w.Flora.CellProd[d] - q0;
+        Assert.True(hp <= dt * K.REPRO_RATE * Plants.Intercept(0.8f) * 1.6f, $"herb sward production {hp} per update, canopy bound {dt * K.REPRO_RATE * Plants.Intercept(0.8f)}");
+    }
+
+    [Fact] // 2026-11-01 (round 2): growth stops below ~5 °C at the meristems; short plants run warmer than the air, a tall
+           // tree at air temperature, so in the cold trees stop growing first (the physical treeline, Körner & Paulsen 2004)
+    public void ColdStopsTreesBeforeHerbs()
+    {
+        float tall = 15f, herb = 0.1f;
+        Assert.Equal(0f, Plants.ColdGrowth(K.T_GROW_MIN - 0.5f, tall));
+        Assert.True(Plants.ColdGrowth(K.T_GROW_MIN - 0.5f, herb) > 0.4f, "a short herb near the ground still grows");
+        Assert.Equal(1f, Plants.ColdGrowth(K.T_GROW_MIN + K.T_GROW_RAMP + 0.1f, tall));
+        Assert.True(Plants.ColdGrowth(7f, tall) < Plants.ColdGrowth(9f, tall), "growth rises with warmth above the threshold");
+        // warmth also raises transpiration demand (vapour pressure deficit): the same soil water buys less growth when hot
+        var mid = Express((PT.HEIGHT, XOfHeight(0.3f)));
+        Assert.True(Plants.Net(mid, 0, 0.25f, 0.8f, 28f, 1f) < Plants.Net(mid, 0, 0.25f, 0.8f, K.T_REF, 1f));
+    }
+
+    [Fact] // 2026-11-01 (round 2): stems live as long as mature forests' mortality says, 1-2% a year (Stephenson & van Mantgem 2005)
+    public void TreeLifeMatchesForestMortality()
+    {
+        float Years(float h) => 1f / (Express((PT.HEIGHT, XOfHeight(h)))[Ph.LIFE] * K.T_SEASON);
+        Assert.InRange(Years(15f), 40f, 70f);
+        Assert.InRange(Years(30f), 80f, 130f);
+        Assert.InRange(Years(0.3f), 0.5f, 1.5f);   // the reference herb: a year
+    }
+
+    [Fact] // 2026-11-01: a new world (and a save from before the wood stock) starts its live wood from the woody cover
+    public void LiveWoodStartsFromWoodyCover()
+    {
+        var w = Built();
+        int withTrees = 0;
+        for (int i = 0; i < Map.FW * Map.FW; i++)
+        {
+            if (w.Cell[i] != (byte)Realm.Land) { Assert.Equal(0f, w.LiveWood[i]); continue; }
+            Assert.Equal(Plants.WoodFromCover(w, i), w.LiveWood[i], 4);
+            if (w.Tree[i] > 0.3f && w.POcc[i * 4 + 2] != 0) { withTrees++; Assert.True(w.LiveWood[i] * K.PLANT_KG_M2 > 1f, $"wood {w.LiveWood[i] * K.PLANT_KG_M2} kg/m2 under tree cover {w.Tree[i]}"); }
+        }
+        Assert.True(withTrees > 0);
+    }
+
     [Fact] // crossing reaction norms: each strategy wins somewhere and pays elsewhere
     public void TraitsTradeOffAcrossConditions()
     {
@@ -327,6 +406,7 @@ public class PlantTests
             Checkpoint.LoadWorld(r, path);
             Assert.Equal(w.POcc, r.POcc); Assert.Equal(w.BankM, r.BankM); Assert.Equal(w.Flora.KeyLo, r.Flora.KeyLo);
             Assert.Equal(w.Flora.Phe, r.Flora.Phe); Assert.Equal(w.Flora.Hash, r.Flora.Hash); Assert.Equal(w.Flora.Live, r.Flora.Live);
+            Assert.Equal(w.LiveWood, r.LiveWood);
             Assert.Equal(PlantHash(w), PlantHash(r));
         }
         finally { File.Delete(path); File.Delete(path + ".tmp"); }
