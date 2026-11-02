@@ -125,6 +125,7 @@ public sealed class Simulation : IDisposable
         var w = W;
         _pool.Run(_fieldsJob, Map.FW);
         Fields.Swap(w);
+        if (w.Ocean) Ocean.Drift(w);   // the sea's plankton drifts with the water (2026-11-02)
         Plants.BeginStep(w);
         _pool.Run(_plantJob, Plants.StripeRows);
         Plants.Commit(w);

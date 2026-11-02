@@ -81,6 +81,7 @@ export class Look {
     v.renderer.setClearColor(this.fogColor);
     const down = Math.max(0, -this._fwd.y);
     fog.near = 0.75 * fog.far * (1 + 4 * down * down) * (1 - 0.55 * (this.light.rainI || 0));   // read as the haze's e-folding length (sky.js); rain thickens it
+    this._underwater(v, fog);
     this.sky.update(cam, this.fogColor, now / 1000);
     this.veg.setTime(now / 1000);
     // rain or snow round the camera (weather.js), as the season gives; snow where the air at the view centre freezes
@@ -91,6 +92,25 @@ export class Look {
       if (k >= 0 && v.W) { const d = f.d, cs = v.W / d, fx = ((Math.floor(t.x / cs) % d) + d) % d, fz = ((Math.floor(t.z / cs) % d) + d) % d; tempC = f.data[k * d * d + fz * d + fx] / 255 * 90 - 40; }
       this.weather.update(cam, this.light.rainI || 0, tempC, camD, alt, now / 1000);
     }
+  }
+
+  /** Under the sea (an ocean world, 2026-11-02): the light falls off with depth (Beer-Lambert, K_LIGHT_SEA 0.06 /m, red
+   *  first: k ~0.35 /m red, 0.07 green, 0.03 blue in clear seawater; Jerlov 1976), the haze is the water's colour at that
+   *  depth, and the sky is not seen. Above the surface nothing changes. */
+  _underwater(v, fog) {
+    const dm = v.ocean && v.camDepthM ? v.camDepthM() : 0;
+    this.sky.mesh.visible = !(dm > 0);
+    if (!(dm > 0)) return;
+    const upm = v.scale.upm, I = Math.exp(-0.06 * dm);
+    // the water's colour lit from above at this depth: scattered light, its red gone first
+    this.fogColor.setRGB(0.10 * Math.exp(-0.35 * dm) + 0.012, 0.34 * Math.exp(-0.07 * dm) + 0.02, 0.46 * Math.exp(-0.03 * dm) + 0.04);
+    fog.color.copy(this.fogColor);
+    if (v.wrapU) v.wrapU.uWrapBg.value.copy(this.fogColor);
+    v.renderer.setClearColor(this.fogColor);
+    // seeing ~25 m in clear tropical water: haze by e per 9 m, all of it at 45 m (the far plane is the fog's)
+    fog.near = Math.max(1, 9 * upm); fog.far = 45 * upm;
+    this.light.sun.intensity *= 0.25 + 0.75 * I; this.light.hemi.intensity *= 0.35 + 0.65 * I;
+    this.light.sun.color.setRGB(Math.exp(-0.35 * dm) * 0.8 + 0.2, Math.exp(-0.07 * dm) * 0.5 + 0.5, 1);
   }
 
   render() { this.post.render(this.v.scene, this.v.camera); }

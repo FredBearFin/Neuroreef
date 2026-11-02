@@ -137,6 +137,39 @@ public static class Ocean
         return f > 0f ? MathF.Min(f, MathF.Max(0f, even)) : MathF.Max(f, MathF.Min(0f, even));
     }
 
+    [ThreadStatic] static float[]? _ph, _h;
+
+    /// <summary>
+    /// FIELDS, after the swap (an ocean world, serial): the plankton drifts with the water. Neighbouring water exchanges
+    /// its plankton by concentration over the shallower mixed layer, at the rate its nutrient mixes (N_DIFF; Fields
+    /// SeaTransport), so a reef flat's few metres of water hold the plankton of the sea around them, as a flat whose water is
+    /// renewed in hours does, not a bloom of its own (2026-11-02: before, plankton stayed in its cell, and a 2 m flat held
+    /// as much per m2 as 40 m of open water, outgrowing the benthic algae for the flat's nutrient). Its nutrient goes with it.
+    /// </summary>
+    public static void Drift(World w)
+    {
+        int FW = Map.FW, n = FW * FW;
+        if (_ph == null || _ph.Length != n) { _ph = new float[n]; _h = new float[n]; }
+        float[] Ph = w.Pool[(int)Pool.Phyto], ph = _ph, hh = _h!;
+        for (int i = 0; i < n; i++) { ph[i] = Ph[i]; hh[i] = (w.Cell[i] & (byte)Realm.Water) != 0 ? MixedM(Respiration.ColumnM(w, i)) : 0f; }
+        for (int y = 0; y < FW; y++)
+        {
+            int yu = World.WrapI(y - 1, FW) * FW, yd = World.WrapI(y + 1, FW) * FW, row = y * FW;
+            for (int x = 0; x < FW; x++)
+            {
+                int i = row + x;
+                float hi = hh[i];
+                if (hi <= 0f) continue;
+                int xl = row + (x == 0 ? FW - 1 : x - 1), xr = row + (x == FW - 1 ? 0 : x + 1);
+                float ci = ph[i] / hi, d = 0f;
+                d += Ex(xl); d += Ex(xr); d += Ex(yu + x); d += Ex(yd + x);
+                Ph[i] = MathF.Max(0f, ph[i] + d);
+
+                float Ex(int j) { float hj = hh[j]; return hj > 0f ? 0.25f * K.N_DIFF * (ph[j] / hj - ci) * MathF.Min(hi, hj) : 0f; }
+            }
+        }
+    }
+
     /// <summary>The nitrogen the sea gains a reference step in a cell (SEA_N_IN), in nutrient units.</summary>
     public static readonly float NIn = K.SEA_N_IN * 1e-3f * Pools.CellM2 / Nutrients.UnitKgN / K.T_SEASON;
 
