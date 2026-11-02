@@ -58,7 +58,7 @@ public static class K
     // 50 days, 50 days, each x M^0.25): until then it was V1's steps (1.07 years, 30 days, 18 days, 18 days), which let a
     // 0.14 kg body reach maturity in 19 days and breed every 11, an intrinsic rate of increase ~10x Fenchel's (1974) line.
     // A 5-hour step (an old pathogen note) would make the year 1.7 years long.
-    [K("Units", "duration of one step: 365.25 days x 24 h / T_SEASON", "h", "derived: T_SEASON = 3000 steps is one year, so a step is 2.92 h (8.2 steps a day). Before 2026-11-01 the notes said ~3 h (water cycle) and ~5 h (pathogens); 5 h was wrong")] public const float STEP_H = 8766f / T_SEASON;
+    [K("Units", "duration of the reference step: 365.25 days x 24 h / T_SEASON. Every rate, probability and duration in this table is per reference step; a world's own step is World.StepH (the setup's Time in a step, --step-minutes; this by default), and it converts them (World.Dt, PStep, Keep, Steps; DESIGN 0c)", "h", "derived: T_SEASON = 3000 steps is one year, so a step is 2.92 h (8.2 steps a day). Before 2026-11-01 the notes said ~3 h (water cycle) and ~5 h (pathogens); 5 h was wrong")] public const float STEP_H = 8766f / T_SEASON;
     [K("Units", "duration of one step", "s", "derived: STEP_H x 3600 = 10,519 s")] public const float STEP_S = STEP_H * 3600f;
     [K("Units", "steps in a day", "steps", "derived: 24 / STEP_H = 8.21")] public const float STEPS_PER_DAY = 24f / STEP_H;
     [K("Units", "metres per world unit: a field cell (FCELL units) is GEO_CELL_M", "m", "derived (2026-11-01, the 1 km world): 4 m, so the default 256 map is 1.02 km across, 512 is 2.05 km, 1024 4.1 km and 2048 8.2 km. Was 54.5 m (GEO_CELL_M 218 m: the 256 map 14 km, 512 28 km)")] public const float M_PER_UNIT = GEO_CELL_M / FCELL;

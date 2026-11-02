@@ -1399,6 +1399,89 @@ a mating reaches along that way (Resolve.AlongWay). The bodies' hash cell (HCELL
 largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call (both wider in a world of bigger bodies: Map.HCell, Map.HCellCall). docs/CONSTANTS.md group Units has every
 value and its source; docs/ICD.md §2.1 what the console gets.
 
+## 0c. The length of a step: a world setting (2026-11-02, phase 1)
+
+The owner: "why not have speed be just totally customizable, isn't it theoretically just decimals/fractions of steps?"
+A step is now `World.StepH` hours, a world setting (`Nature.StepH` when the world is built; `--step-minutes`, the setup
+screen's "Time in a step": 1 min, 10 min, 1 h, 2.92 h; saved in the checkpoint header from format 26, older saves 2.92 h).
+The default is K.STEP_H = 8766 h / T_SEASON = 2.922 h exactly, and the default world is the old run **bit for bit**
+(StepLengthTests.DefaultStepIsBitIdenticalToBefore pins a hash of a world with animals, climate on, 300 steps, taken on
+the code before the change; ClimateTests' no-climate hash and the determinism tests are unchanged).
+
+**How.** `Dt = StepH / K.STEP_H` (exactly 1 at the default). Every constant keeps its meaning *per reference step*
+(K.STEP_H); the world converts it: a rate x Dt, a probability p by `World.PStep(p) = 1 - (1 - p)^Dt`, a share kept a step
+f by `World.Keep(f) = f^Dt`, a duration in steps / Dt, an interval of n reference steps `World.Steps(n)` / `World.Every(n)`,
+a diffusion SD x sqrt(Dt). Each returns its argument unchanged at Dt = 1 (multiplying or dividing by 1f is exact), which
+is what keeps the default bit-identical. Step counters (Age, Cooldown, Timer, floats) still count steps; the thresholds
+they are compared with (PLife, PMature, PGest, PCool) are in this world's steps (/ Dt). A float counts whole steps exactly
+up to 16.7 million (31 years at a minute a step). The energy unit stays 8.9 MJ (BMR_W x K.STEP_S / C_BASAL): flows per
+step change, stocks do not.
+
+**The land runs on the reference clock** (Simulation.LandTicks): weather, fields, plants, fire, nutrients, wetlands and the
+water cycle run one tick for each reference step the world's step ends (once in ~17.5 steps at 10 minutes, 1-4 times a
+step at coarser steps), with `Step` set to the reference step (World.RefStep) and Dt = 1, so the land's rates, stripes,
+seeds and intervals are the reference world's: after the same time a fine-step world's fields are the default world's bit
+for bit (StepLengthTests.PlantsAndFieldsGrowTheSameAtAFineStep). The land is built (terrain, water and plant spin-up) at
+Dt = 1 too. The price: at a fine step animals see the land change in jumps every 2.92 h (plants, water, scent decay, fire).
+
+**Audit.** "Physical" = follows the step by itself (derived from converted per-slot rates); "converted" = done in this
+change; "open" = still tied to the step; "problem" = scaling alone does not fix it.
+
+| Quantity | Where | Kind | Status |
+|---|---|---|---|
+| STEP_H, STEP_S, STEPS_PER_DAY | Constants 1b | definitions | the world's own copies: World.StepH, StepS, StepsPerDay (diagnostic FMR, take-off, Respiration) |
+| T_SEASON / Nature.SeasonLength | seasons, weather year, fire, wetlands | year in reference steps | converted: World.YearStep, World.Year (the land sees reference steps) |
+| C_SPEED (DMD_M / STEPS_PER_DAY / TRAVEL_SHARE) -> PVLand, PVWater, PVAir, PVmax, PReach | Body.Express | distance a step | converted (x Dt at v0Ref; PReach is a ratio and a sprint in seconds); FLY_V_CAP x Dt (Express, LoadedTopAirSpeed) |
+| C_MOVE (per unit distance), LEG_SWING | Resolve.MoveCost | energy per distance | physical (the distance a step scales) |
+| FlightPowerMin, FlightFullStep, TAKEOFF_S / STEP_S | Resolve.MoveCost | power a step, distance a step | converted (x Dt, / the world's StepS) |
+| C_BASAL -> PBasal; brain cost COST_BRAIN x C_BASAL | Body, Resolve, Life.Found, Respiration.OrganBase | energy a step | converted (x Dt); stocks built on C_BASAL (DEBT_MAX, O2_STORE, C_EMAX, TISSUE_E) stay stocks |
+| C_DIGEST, C_ABSORB, C_BITE -> PDig, PAbsorb, PBite | Body, Resolve, Life.Found | mass or energy a step | converted (x Dt) |
+| CARE_RATE x PBasal (milk a step) | Life | energy a step | physical (through PBasal) |
+| Heat: K_COND x C_BASAL; SUMMIT, EVAP_MAX x basal | Heat.Conductance, Balance, Freeze | energy a step per K | converted (a dt argument); the caps are x basal (physical) |
+| STRAIN_GAIN, STRAIN_REC | Resolve | per step | converted (x Dt) |
+| C_THIRST, DRINK_RATE; EVAP_REL thirst | Resolve | per step | converted (x Dt); evaporative thirst physical (through evap) |
+| C_FATIGUE, C_RECOVER | Resolve | per step | converted (x Dt) |
+| PAIN_DECAY | Resolve | per step | converted (x Dt) |
+| Oxygen uptake, debt, dive limit (Respiration.StepSeconds) | Respiration | per step | converted (OrganBase and skin x Dt, StepSeconds x Dt); DebtMax a stock |
+| Juvenile growth (tissue / PMature) | Resolve | per step | physical (PMature / Dt) |
+| C_LIFE, C_MATURE, C_GEST, C_COOL -> PLife, PMature, PGest, PCool; REFRACT | Body, Life, Resolve | steps | converted (/ Dt): Age, Cooldown, the gestation and incubation Timer count steps |
+| Old-age mortality 0.002 a^2 | Resolve | probability a step | converted (PStep) |
+| FIRE_KILL | Resolve | probability a step | converted (PStep); FIRE_STEPS (how long a cell burns) is land: reference clock |
+| Pathogens in a host: PG_REP (growth), PG_KILL, PG_RISE, PG_E_DECAY, PG_DMG, PG_REPAIR, PG_MEM_DECAY | Pathogens.Host | per step | converted: load L exp((r(1-L) - kill) Dt), effector and damage explicit Euler x Dt, memory Keep |
+| PG_SHED (and the contact dose from it), PG_TOUCH, PG_EAT, PG_DRINK | Pathogens | per step, per bite | converted (x Dt, PStep) |
+| Infection hazard per dose (PG_INF) | Pathogens.Expose | per dose | physical (the dose a step scales); a contact is still drawn once a step (small problem) |
+| Reservoir decay, river flow, PG_DRY | Pathogens.Field | per step | land clock |
+| C_SCENT (deposit) | Resolve | per step | converted (x Dt); D_SCENT (decay) land clock |
+| BURR_PICK, BURR_DROP | Plants.Burrs | per step | converted (x Dt, PStep) |
+| PI_DIFF (path-integration drift at rest) | PathMemory | SD a step | converted (x sqrt Dt); PI_ERR is per distance (physical) |
+| Plants (R_G .. D_POLL, RESP, DROUGHT_M, REPRO_RATE, LIFE_HERB), PLANT_EVERY stripes, PLANT_CENSUS | Plants | per step, steps | land clock |
+| Water producers R_A, M_A, R_PH, M_PH; WEATHER, N_DIFF, ROT_*, RUNOFF, PEAT_FORM | Fields, Nutrients, Wetlands | per step | land clock |
+| Water cycle, WC_EVERY, FLOOD_MIX | WaterCycle, Hydrology | every N steps | land clock |
+| LAMBDA_FIRE, FIRE_STEPS | Fields | per step, steps | land clock |
+| Weather years; TreeMean every 32 steps | Weather | year, interval | land clock |
+| SPEC_EVERY, CLADE_RECYCLE | Clades | steps | converted (World.Every, World.Steps) |
+| TMPL_HALF (a song template's halving) | Decide | steps | converted (World.Steps) |
+| SAMPLE_EVERY (telemetry) | Simulation | steps | converted (World.Every: a sample every 32 reference steps, ~93 h); the rings count samples |
+| Telemetry traits T_LIFE, T_MATURE | Telemetry | steps | converted (reported in reference steps) |
+| Life.Found capacity: plant yield per reference step against need and animal yield per world step | Life | mixed | converted (animal yield and need put per reference step) |
+| FORAGE_MARGIN, FED_WELL, SATIETY, FIELD_METAB (a bite against a step's basal) | Decide, Life, Resolve | ratio of two flows a step | physical |
+| One decision a step: STRIKE (P0_STRIKE, C_STRIKE), MATE, CALL (C_CALL, CALL_SYL), MARK, CACHE, LAY; turn rate C_TURN | Decide, Resolve | per decision | **problem**: a fine step decides 17-175x more often a day, so strikes, matings and calls a day rise unless brains learn otherwise; strike and call costs are per act. C_TURN stays per decision (turning is fast; finer steps just turn more often) |
+| Brain: ETA, LAMBDA (traces), SIGMA, KAPPA_HI, RBAR_RATE, IMIT_RBAR, the 1/(1+Age) reward mean; rewards a step (R_INTAKE x intake a step, R_SPEND, R_PAIN) | Brain, Resolve | per decision | **problem**, not converted: rewards a step shrink with Dt (intake a step is x Dt) while learning happens once a decision; traces decay per decision, so credit spans 17-175x less time. Needs a brain-rate design (decide every k steps, or time constants in seconds) |
+| Perception along the way; MAX_PERCEIVE, HCELL, HCELL_CALL | Decide, Map | distance a step | physical at finer steps (the path shrinks); at steps coarser than 2.92 h the travelled band can outrun the 7x7 hash neighbourhood (problem for coarse steps) |
+| Explicit integration at large Dt | Pathogens (effector Euler), heat strain, fatigue, energy | stability | fine at Dt <= 1 (every decay x Dt < 1); above ~3 (8.8 h) PG_RISE and PG_KILL can overshoot and energy can cross zero in one step: coarse steps (to 12 h) are allowed but untested |
+| PREHISTORY_STEPS, YEARS_PER_STEP | Prehistory, server | steps | open: a prehistory is a count of steps, not of years; one step setting serves both prehistory and world (a coarse prehistory with a fine watched world needs a second setting) |
+| EcoWatch and Headless UNITS reports (K.T_SEASON, K.STEP_S) | server diagnostics | steps | open: they report as if a step were 2.92 h |
+| Console clock and interpolation | wwwroot/js | display | `units` (status and meta) carry the world's stepHours, stepSeconds, stepsPerDay, stepsPerYear and realTimeRate (ICD §2.1); the clock reads them. Positions are interpolated between frames by wall time (world3d.js), not by step length, so a fine step's small moves are drawn smoothly; a "real time" speed button is not yet there |
+
+**Invariance** (StepLengthTests; 2.92 h against 10 min; climate off unless said): a resting adult's energy an hour (within
+2%), ground covered an hour at a set share of top speed (within 5%; top speed in m/h equal), a fed juvenile's growth over two
+days (within 3%), survival over a day under a probability per reference step (exact) and old-age deaths through RESOLVE
+(within sampling error), and the land's fields after 75 reference steps (bit for bit). A 10-minute world with animals and
+climate runs a simulated day.
+
+**Cost.** A fine step costs about what a default step costs (the animals' phases dominate; the land runs once a reference
+step), so a simulated day costs ~17.5x more at 10 minutes and ~175x more at 1 minute.
+
 ## 1. The idea in one page
 
 Neuroreef is an ecosystem in which **only the rules of physics and physiology are designed**.
