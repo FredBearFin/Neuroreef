@@ -207,10 +207,10 @@ public static class Nutrients
     /// <summary>The world's nutrient by store (double sums).</summary>
     public struct Totals
     {
-        public double Soil, Water, Plants, Litter, DeadWood, Peat, Detritus, Producers, Carrion, Dung, Animals;
-        public readonly double All => Soil + Water + Plants + Litter + DeadWood + Peat + Detritus + Producers + Carrion + Dung + Animals;
+        public double Soil, Water, Deep, Plants, Litter, DeadWood, Peat, Detritus, Producers, Carrion, Dung, Animals;
+        public readonly double All => Soil + Water + Deep + Plants + Litter + DeadWood + Peat + Detritus + Producers + Carrion + Dung + Animals;
         public override readonly string ToString() =>
-            $"soil {Soil:F4} water {Water:F4} plants {Plants:F4} litter {Litter:F4} deadwood {DeadWood:F4} peat {Peat:F4} detritus {Detritus:F4} producers {Producers:F4} carrion {Carrion:F6} dung {Dung:F6} animals {Animals:F6} = {All:F4}";
+            $"soil {Soil:F4} water {Water:F4} deep {Deep:F4} plants {Plants:F4} litter {Litter:F4} deadwood {DeadWood:F4} peat {Peat:F4} detritus {Detritus:F4} producers {Producers:F4} carrion {Carrion:F6} dung {Dung:F6} animals {Animals:F6} = {All:F4}";
     }
 
     public static Totals Total(World w)
@@ -221,6 +221,7 @@ public static class Nutrients
         for (int i = 0; i < n; i++)
         {
             if (w.Cell[i] == (byte)Realm.Land) t.Soil += w.Nutrient[i]; else t.Water += w.Nutrient[i];
+            t.Deep += w.DeepN[i];   // an ocean world's deep water (Ocean.cs; 0 elsewhere)
             t.Plants += Plants(w, i);
             t.Litter += Leaf * Li[i];
             t.DeadWood += w.WoodN[i]; t.Peat += w.PeatN[i]; t.Detritus += w.DetN[i];

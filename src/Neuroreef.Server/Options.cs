@@ -34,6 +34,9 @@ public sealed class Options
     public float MatingDrive = 1f, MutBrainX = 1f, MutBodyX = 1f;
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
     public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f, Climate = K.CLIMATE;
+    // the ocean (2026-11-02, Ocean.cs): --ocean puts the whole world under the sea (every ancestor in the water); --islands X
+    // leaves that share of it standing above the sea (0 by default: no land)
+    public bool Ocean; public float Islands;
     public int SeasonLength = K.T_SEASON;
     // the length of a step in hours (2026-11-02; Nature.StepH): the prehistory's (--pre-step-minutes) and the watched world's
     // (--world-step-minutes); --step-minutes sets both. Both K.STEP_H (2.92 h) by default: a coarse prehistory evolves fast
@@ -59,6 +62,7 @@ public sealed class Options
     {
         Nature.Plants = Plants; Nature.Seasons = Seasons; Nature.SeasonLength = SeasonLength; Nature.Drought = Drought;
         Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap;
+        Nature.Ocean = Ocean; Nature.Islands = Islands;
         Nature.StepH = prehistory ? PreStepH : WorldStepH; Nature.WorldStepH = WorldStepH;
         Nature.Clamp();
         BodySize.Set(MassMin, MassMax, Floors);   // before the map: its hash cells follow the largest body
@@ -90,6 +94,7 @@ public sealed class Options
         if (BigBrainUnits > 0) e.BigBrainUnits = BigBrainUnits;
         if (Founders > 0) e.Founders = Founders;
         e.AncestorsLand = AncestorsLand; e.AncestorsWater = AncestorsWater; e.MatingDrive = MatingDrive;
+        if (Ocean) e.AllWater();   // an ocean world has no land to found on
         e.MutRate *= MutBrainX; e.MutBody *= MutBodyX;
         return e;
     }
@@ -157,6 +162,9 @@ public sealed class Options
   --pre-step-minutes X, --world-step-minutes X   the same for the prehistory or the watched world alone (a coarse
                         prehistory and a fine world: --world-step-minutes 10)
   --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
+  --ocean               an ocean world: the whole map under the sea (banks and reef flats, slopes and deep basins as
+                        deep as the map's relief), seawater, and every ancestor in the water
+  --islands X           an ocean world with this share of the map above the sea as islands (default 0: no land)
   --climate X           climate strength 0..2: how strongly sun, height and seasons change temperature
                         (default 0.6; 0 = everywhere 20 °C and no body-heat budget)
   --bodies normal|giants|tiny   body sizes: 0.1-40 kg (default), 100 kg-20 t, or 1 g-1 kg
@@ -246,6 +254,8 @@ public sealed class Options
                 case "--thirst": o.Thirst = F(Next()); break;
                 case "--water": o.Water = F(Next()); break;
                 case "--ponds": o.Ponds = F(Next()); break;
+                case "--ocean": o.Ocean = true; break;
+                case "--islands": o.Islands = Math.Clamp(F(Next()), 0f, 0.5f); o.Ocean = true; break;
                 case "--climate": o.Climate = F(Next()); break;
                 case "--world-mutation": o.WorldMut = F(Next()); break;
                 case "--bodies": (o.MassMin, o.MassMax) = BodyPreset(Next()); o.Floors = null; break;

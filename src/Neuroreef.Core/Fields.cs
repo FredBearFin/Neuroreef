@@ -44,6 +44,8 @@ public static class Fields
             if (landCell && w.WetDur[i] > 0f) { float an = Wetlands.Anoxic(w.WetDur[i]); rL *= an; rW *= an; }
             int xl = row + (x == 0 ? FW - 1 : x - 1), xr = row + (x == FW - 1 ? 0 : x + 1), up = yu + x, dn = yd + x;
             float N = w.Nutrient[i];
+            // the sea of an ocean world (2026-11-02, Ocean.cs): its own column, light and nutrient
+            if (w.Ocean && w.Cell[i] != (byte)Realm.Land) { SeaCell(w, y, i, xl, xr, up, dn, N, temp, ti, clim, season, rC, rD, rL, rW, rT); continue; }
 
             // nutrient transport: water cells mix with water neighbours; each land-water pair carries run-off
             // from the land cell into the water cell (the same amount leaves one and enters the other)
@@ -101,6 +103,81 @@ public static class Fields
     }
 
     /// <summary>
+    /// FIELDS for a water cell of an ocean world (Ocean.cs; the same row-local reads and writes as Row). The nutrient of
+    /// the mixed layer (w.Nutrient, h = min(column, Z_MIX_SEA) deep) mixes with its neighbours' by concentration; plankton
+    /// grows by the mixed layer's mean light and benthic algae by the light on the bottom, both Monod in its nitrate;
+    /// where the bottom lies below the mixed layer, the detritus there rots into the deep water (World.DeepN), the
+    /// plankton's deaths sink there at E_RATIO and the rest is remineralised in the mixed layer, and the two layers
+    /// exchange across the thermocline (Ocean.Upwell). Inputs SEA_N_IN; the deep water above C_DEEP_MAX is an output.
+    /// </summary>
+    static void SeaCell(World w, int y, int i, int xl, int xr, int up, int dn, float N, float temp, int ti, bool clim, float season,
+        float rC, float rD, float rL, float rW, float rT)
+    {
+        var Pl = w.Pool;
+        float[] Al = Pl[(int)Pool.Algae], Ph = Pl[(int)Pool.Phyto];
+        float[] Ca = Pl[(int)Pool.Carrion], Du = Pl[(int)Pool.Dung], Li = Pl[(int)Pool.Litter], Wo = Pl[(int)Pool.Wood], De = Pl[(int)Pool.Detritus];
+        float[] CN = w.CarN, DN = w.DungN, WN = w.WoodN, EN = w.DetN;
+        var book = w.NutBook; double[] bk = book.Row; int bo = y * Nutrients.Book.NK;
+        float col = Respiration.ColumnM(w, i), h = Ocean.MixedM(col);
+        bool deepFloor = col > h + 0.5f;   // the bottom lies below the mixed layer
+
+        float Nn = N + SeaTransport(w, i, xl, h) + SeaTransport(w, i, xr, h) + SeaTransport(w, i, up, h) + SeaTransport(w, i, dn, h);
+        float sc = w.Scent[i], sb = 0.25f * (w.Scent[xl] + w.Scent[xr] + w.Scent[up] + w.Scent[dn]);
+        w.ScentN[i] = MathF.Max(0f, (sc + 0.1f * (sb - sc)) * (1f - K.D_SCENT));
+
+        // decomposition: what lies on a floor below the mixed layer rots into the deep water
+        float rotN = CN[i] * rC + DN[i] * rD + Nutrients.Leaf * Li[i] * rL + WN[i] * rW, rotDet = EN[i] * rT;
+        CN[i] -= CN[i] * rC; DN[i] -= DN[i] * rD; WN[i] -= WN[i] * rW; EN[i] -= EN[i] * rT;
+        Ca[i] -= Ca[i] * rC; Du[i] -= Du[i] * rD; Li[i] -= Li[i] * rL; Wo[i] -= Wo[i] * rW; De[i] -= De[i] * rT;
+        if (deepFloor) w.DeepN[i] += rotDet; else rotN += rotDet;
+        float nin = book.Open ? Ocean.NIn : 0f;   // fixation and deposition (instead of weathering)
+        bk[bo + Nutrients.Book.IN] += nin;
+        Nn += rotN + nin;
+        w.Poll[i] *= 1f - K.D_POLL;
+
+        // producers: Monod in the mixed layer's nitrate, by the light on the bottom (algae) or through the mixed layer (plankton)
+        float lim = Ocean.Lim(N, h), lightB = Ocean.BottomLight(col), lightP = Ocean.MixedLight(h);
+        float ga = (K.R_A * Nature.Plants * lim * Al[i] * (1f - Al[i]) + 0.0005f * lim) * lightB;
+        float gp = K.R_PH * Nature.Plants * lim * lightP * (1f + 0.5f * season) * (Ph[i] + 0.002f) * (1f - Ph[i]);
+        if (clim)
+        {
+            float fe = temp < -1.9f ? 0f : Climate.Algae[ti];   // seawater freezes at -1.9 °C
+            ga *= fe; gp *= fe;
+        }
+        float need = (ga + gp) * Nutrients.Water;
+        if (need > Nn) { float f = MathF.Max(0f, Nn) / need; ga *= f; gp *= f; }
+        float da = K.M_A * Al[i], dp = K.M_PH * Ph[i];
+        float al0 = Al[i], ph0 = Ph[i];
+        Al[i] = Math.Clamp(al0 + ga - da, 0f, 1f);
+        Ph[i] = Math.Clamp(ph0 + gp - dp, 0f, 1f);
+        // over a deep floor E_RATIO of the plankton's deaths sinks as detritus; the rest is remineralised in the mixed layer
+        float sink = deepFloor ? K.E_RATIO * dp : dp;
+        De[i] += da + sink;
+        EN[i] += (da + sink) * Nutrients.Water;
+        Nn += (dp - sink) * Nutrients.Water;
+        Nn -= (Al[i] - al0 + da + Ph[i] - ph0 + dp) * Nutrients.Water;
+
+        // the deep water: exchange across the thermocline, and what is above C_DEEP_MAX lost to the sediment
+        if (deepFloor)
+        {
+            float f = Ocean.Upwell(MathF.Max(0f, Nn), w.DeepN[i], h, col, clim ? Climate.Water(temp) : K.T_REF);
+            Nn += f; w.DeepN[i] -= f;
+            float dmax = Ocean.DeepMax(col);
+            if (w.DeepN[i] > dmax && book.Open) { bk[bo + Nutrients.Book.OUT] += w.DeepN[i] - dmax; w.DeepN[i] = dmax; }
+        }
+        w.NutrientN[i] = Nutrients.Cap(w, y, Nn);
+    }
+
+    /// <summary>The nutrient a sea cell i (mixed layer h m) gains from neighbour j: water exchanges concentration, over the
+    /// shallower of the two mixed layers; a land neighbour (an island) washes in its run-off as in Transport.</summary>
+    static float SeaTransport(World w, int i, int j, float h)
+    {
+        if (w.Cell[j] == (byte)Realm.Land) return K.RUNOFF * w.Nutrient[j];
+        float hj = Ocean.MixedM(Respiration.ColumnM(w, j));
+        return 0.25f * K.N_DIFF * (w.Nutrient[j] / hj - w.Nutrient[i] / h) * MathF.Min(h, hj);
+    }
+
+    /// <summary>
     /// The energy per step that an animal with this diet could take from cell i, year in and year out, without eating the
     /// plants down: each pool's growth from Row at the stock where it grows fastest (half of the room it can fill, the
     /// maximum sustained yield of logistic growth, Schaefer 1954), seasonal pools at their yearly mean (1/pi of the
@@ -120,6 +197,19 @@ public static class Fields
             temp = MathF.FusedMultiplyAdd(tb, w.Cont[i], ta) - w.TLapse[i];
         }
         float y = 0f;
+        if (w.Cell[i] != (byte)Realm.Land && w.Ocean)
+        {
+            // the sea (SeaCell): Monod in the mixed layer's nitrate, light on the bottom and through the mixed layer
+            float col = Respiration.ColumnM(w, i), h = Ocean.MixedM(col);
+            float lim = Ocean.Lim(N, h), lightB = Ocean.BottomLight(col), lightP = Ocean.MixedLight(h);
+            float fe = clim ? (temp < -1.9f ? 0f : Climate.Algae[Climate.Idx(Climate.Water(temp))]) : 1f;
+            float rA = K.R_A * plants * lim * fe * lightB, rP = K.R_PH * plants * lim * fe * lightP;
+            float sink = col > h + 0.5f ? K.E_RATIO : 1f;
+            y += diet[(int)Pool.Algae] * Pools.ECell[(int)Pool.Algae] * (Msy(rA, K.M_A) + 0.0005f * lim * fe * lightB);
+            y += diet[(int)Pool.Phyto] * Pools.ECell[(int)Pool.Phyto] * Msy(rP, K.M_PH);
+            y += diet[(int)Pool.Detritus] * Pools.ECell[(int)Pool.Detritus] * (K.M_A * Pl[(int)Pool.Algae][i] + sink * K.M_PH * Pl[(int)Pool.Phyto][i]);
+            return y;
+        }
         if (w.Cell[i] != (byte)Realm.Land)
         {
             float lim = N / (N + K.K_N);

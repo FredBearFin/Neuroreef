@@ -27,13 +27,19 @@ public sealed class EvoSettings
         MutRate = o.MutRate; MutBody = o.MutBody; BigBrains = o.BigBrains; BigBrainUnits = o.BigBrainUnits; Founders = o.Founders; AncestorsLand = o.AncestorsLand; AncestorsWater = o.AncestorsWater; MatingDrive = o.MatingDrive; MutSmall = o.MutSmall; MutBigShare = o.MutBigShare; MutBig = o.MutBig; TotalSteps = o.TotalSteps; VocalLearning = o.VocalLearning;
     }
 
+    /// <summary>An ocean world (Ocean.cs) has no land to found on: every ancestor is a water ancestor (as many in all).</summary>
+    public void AllWater()
+    {
+        AncestorsWater = System.Math.Clamp(AncestorsLand + AncestorsWater, 1, 16); AncestorsLand = 0;
+    }
+
     /// <summary>Keep every knob inside a sensible range.</summary>
     public void Clamp()
     {
         MutRate = System.Math.Clamp(MutRate, 0.00005f, 0.05f);
         MutBody = System.Math.Clamp(MutBody, 0f, 0.2f);
         AncestorsLand = System.Math.Clamp(AncestorsLand, 0, 16); AncestorsWater = System.Math.Clamp(AncestorsWater, 0, 16 - AncestorsLand);
-        if (AncestorsLand + AncestorsWater == 0) AncestorsLand = 1;
+        if (AncestorsLand + AncestorsWater == 0) { if (Nature.Ocean) AncestorsWater = 1; else AncestorsLand = 1; }
         MatingDrive = System.Math.Clamp(MatingDrive, 0f, 3f);
         BigBrains = System.Math.Clamp(BigBrains, 0, AncestorsLand + AncestorsWater);
         BigBrainUnits = System.Math.Clamp(BigBrainUnits, K.BRAIN_MIN, G.NH);

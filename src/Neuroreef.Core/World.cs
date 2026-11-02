@@ -232,6 +232,8 @@ public sealed class World
     public readonly float[] TLapse, Cont;
     public float ClimateZ = 1f;                    // normaliser of the evaporation factor: the land as moist over a year as with no climate
     public float SeaLevel;
+    /// <summary>An ocean world (Nature.Ocean when it was built; Ocean.cs): the whole map under the sea, with seawater's physics.</summary>
+    public bool Ocean = Nature.Ocean;
     /// <summary>Elevation (0..1) per metre at the game's vertical scale: 1 - SeaLevel above the lakes is H_RELIEF m. A height
     /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
     public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / Map.ReliefM;
@@ -285,6 +287,8 @@ public sealed class World
     // tube (-1 none) and the spring the karst water of a cell resurges at (-1 none: not on the karst network); feature bits
     // (Caves.Karst, Lava, Sinkhole, Entrance, Spring, Losing, Ponor)
     public readonly float[] Carb, CaveVoid, CaveDepth, CaveFlow, CaveSink;
+    /// <summary>Nutrient in the deep water of a cell, below its mixed layer (an ocean world only, Ocean.cs; 0 elsewhere).</summary>
+    public readonly float[] DeepN;
     public readonly int[] CaveNext, CaveSpring;
     public readonly byte[] CaveKind;
     // ---- wetlands (Wetlands.cs, 2026-11-01): fixed at WaterCycle.Init: the topographic wetness index ln(a / tan b) and its
@@ -406,6 +410,7 @@ public sealed class World
         SoilWater = new float[n]; Snow = new float[n]; Ground = new float[n]; Deep = new float[n]; PondWater = new float[n]; Runoff = new float[n];
         Discharge = new float[n]; DischargeMean = new float[n]; Seep = new float[n]; LakeLevel = new float[n]; LakeIn = new float[n];
         WcRow = new double[Map.FW * WaterCycle.NSUM];
+        DeepN = new float[n];
         Carb = new float[n]; CaveVoid = new float[n]; CaveDepth = new float[n]; CaveFlow = new float[n]; CaveSink = new float[n];
         CaveNext = new int[n]; Array.Fill(CaveNext, -1); CaveSpring = new int[n]; Array.Fill(CaveSpring, -1); CaveKind = new byte[n];
         Twi = new float[n]; Hand = new float[n]; WetDur = new float[n]; WetMin = new float[n]; Peat = new float[n];

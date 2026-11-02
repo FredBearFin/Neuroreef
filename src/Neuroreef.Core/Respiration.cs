@@ -76,6 +76,7 @@ public static class Respiration
     public static float WaterT(World w, int cell, float z)
     {
         float ts = Climate.Water(AirT(w, cell));
+        if (w.Ocean) return Ocean.WaterT(ts, z);   // the sea's mixed layer and permanent thermocline (2026-11-02)
         if (z <= K.Z_MIX || Flowing(w, cell)) return ts;
         return K.T_DEEP + (ts - K.T_DEEP) * MathK.Exp(-(z - K.Z_MIX) / K.Z_THERMO);
     }
@@ -88,6 +89,8 @@ public static class Respiration
     public static float WaterO2(World w, int cell, float z)
     {
         float ta = AirT(w, cell), ts = Climate.Water(ta);
+        // the sea (2026-11-02): salt holds less oxygen (Weiss 1970), and the deep water keeps most of it (Ocean.O2Kept)
+        if (w.Ocean) return Ocean.DissolvedO2(Ocean.WaterT(ts, z), K.SALINITY) / DoRef * AirO2(SurfaceM(w, cell), ta) * Ocean.O2Kept(ts, z);
         float a = DissolvedO2(WaterT(w, cell, z)) / DoRef * AirO2(SurfaceM(w, cell), ta);
         if (z > K.Z_MIX && !Flowing(w, cell))
         {
@@ -323,7 +326,12 @@ public static class Respiration
     public static float Access(World w, int cell, int pool, float z, float share)
     {
         if ((w.Cell[cell] & (byte)Realm.Water) == 0) return 1f;
-        if (pool == (int)Pool.Phyto) return (1f - share) + share * MathK.Exp(-K.K_LIGHT * z);
+        if (pool == (int)Pool.Phyto)
+        {
+            // the sea's plankton lies through its mixed layer, and below it by the light there (2026-11-02: K_LIGHT_SEA)
+            if (w.Ocean) return (1f - share) + share * (z <= K.Z_MIX_SEA ? 1f : MathK.Exp(-K.K_LIGHT_SEA * (z - K.Z_MIX_SEA)));
+            return (1f - share) + share * MathK.Exp(-K.K_LIGHT * z);
+        }
         if (pool == (int)Pool.Algae || pool == (int)Pool.Detritus)
         {
             float col = ColumnM(w, cell);
