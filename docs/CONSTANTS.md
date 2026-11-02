@@ -936,6 +936,29 @@ Origin codes: **V1** taken from Neuroreef v1; **ECO** ecological rule or exponen
 | BOTTOM_BAND | 2 | m | an animal within this height of the bottom reaches what lies on it (attached algae, detritus) | HT |
 | STRIKE_DZ | 5 | m | two animals in water reach each other only when their depths are within this | HT: a lunge or bite; a step is hours, so this stands for how often they meet in the column |
 
-## 39. Organisms
+## 39. Ocean
+
+| Name | Value | Unit | Meaning | Origin |
+|---|---|---|---|---|
+| OCEAN_BANKS | 0.25 | fraction | share of an ocean world's seafloor on the banks and reef flats, between OCEAN_CREST and OCEAN_SHELF deep (the rest slopes down to the basins, Map.ReliefM deep) | HT: a world's choice of seascape, as LAKE_SHARE is of landscape; shelves and banks shallower than ~30-50 m are ~7% of the world ocean (Menard & Smith 1966) and much more of a reef or shelf sea |
+| OCEAN_CREST | 1 | m | depth of the highest seafloor of an ocean world with no islands: the crest of its banks and reef flats | ECO: reef flats lie 0.5-2 m below low water (Hopley 2011) |
+| OCEAN_SHELF | 30 | m | depth of the edge of the banks: below it the seafloor slopes to the basins | ECO: the shelf break and the foot of reef fronts lie at 30-150 m; the photic bottom of clear water reaches ~30-80 m (Kirk 2011; Hopley 2011) |
+| SALINITY | 35 | PSU | salinity of the sea | ECO: the open ocean's mean, 34.7 (Millero 2006) |
+| K_LIGHT_SEA | 0.06 | 1/m | light attenuation of seawater (PAR, Beer-Lambert): the benthic algae's light, the plankton's light through the mixed layer and its place in the column | ECO: Kd(PAR) 0.02-0.04 /m in the clearest ocean, 0.05-0.15 /m in coastal and shelf water (Kirk 2011; Morel 1988); 1% of the light at 77 m |
+| Z_MIX_SEA | 40 | m | depth of the sea's wind-mixed surface layer: as warm as the surface, saturated with oxygen, where the plankton grows and its nutrient is | ECO: the global mean mixed layer is 30-60 m, 10-20 m in summer and 100+ m in winter at high latitudes (de Boyer Montegut et al. 2004) |
+| Z_THERMO_SEA | 200 | m | below the mixed layer the sea cools toward T_DEEP_SEA by e per this depth (the permanent thermocline) | ECO: the main thermocline spans ~100-1,000 m; tropical water 27 C at the surface is ~10 C at 400 m (Levitus 1982; Talley et al. 2011) |
+| T_DEEP_SEA | 4 | °C | temperature of the deep sea | ECO: water below the thermocline is 2-4 °C nearly everywhere (Levitus 1982) |
+| O2_LOSS_SEA | 0.5 | fraction | the most of its saturation the sea's oxygen loses below the mixed layer under warm, stratified surface water (it approaches this by e per Z_HYPOX_SEA); the deep sea is ventilated by water that sank cold at the poles, so it is not anoxic | ECO: apparent oxygen utilisation is ~40-60% of saturation at 200-1,000 m (Garcia et al. 2010, World Ocean Atlas), most in the oxygen minimum zones (Keeling, Kortzinger & Gruber 2010) |
+| Z_HYPOX_SEA | 200 | m | below the mixed layer of the sea, its oxygen loss approaches O2_LOSS_SEA by e per this depth | ECO: oxygen falls through the upper thermocline to its minimum at 200-1,000 m (Garcia et al. 2010) |
+| SEA_I_IK | 3 | - | light at the surface over the light that half-saturates plankton and algae photosynthesis (Monod light response, I / (I + I_K)), a day's mean | ECO: I_K ~50-200 umol photons/m2/s against a daytime mean of ~400-800 at the sea surface (Platt & Jassby 1976; Kirk 2011) |
+| K_N_SEA | 0.5 | umol/L | nitrate concentration that half-saturates the growth of marine plankton and algae (Monod) | ECO: 0.1-1 umol/L for oceanic phytoplankton, up to ~5 for coastal and kelp (Eppley, Rogers & McCarthy 1969; MacIsaac & Dugdale 1969; Gerard 1982) |
+| E_RATIO | 0.2 | fraction | share of the plankton's deaths that sinks out of the mixed layer as detritus (marine snow) to the bottom; the rest is remineralised where it died (lysis, the microbial loop) | ECO: the export (pe or ef) ratio is 0.1 in warm oligotrophic seas to 0.5 in cold productive ones, ~0.2 globally (Eppley & Peterson 1979; Laws et al. 2000; Dunne et al. 2005) |
+| K_Z | 3E-05 | m2/s | diapycnal diffusivity across the thermocline: the mixing that brings the deep water's nutrient up into the mixed layer | ECO: 0.3 cm2/s (3e-5 m2/s) in the upper ocean of Bryan & Lewis (1979)'s profile, which ocean models use; 1e-5 m2/s in the quiet interior (Ledwell, Watson & Law 1993), 1e-4 and more over rough topography and on shelves (Polzin et al. 1997) |
+| K_Z_CONV | 0.001 | m2/s | the further mixing across the thermocline when the surface is no warmer than the deep water (winter convection, as cold lakes mix); none when it is T_DEEP_SEA + 16 °C warmer | ECO: convective and wind mixing of 1e-4 to 1e-2 m2/s (Denman & Gargett 1983); the winter overturn that feeds the spring bloom of temperate and polar seas (Sverdrup 1953) |
+| C_DEEP0 | 20 | umol/L | nitrate concentration of the deep water an ocean world starts with | ECO: 15-25 umol/L at 200-1,000 m in the Atlantic, 30-45 in the Pacific (Garcia et al. 2010, World Ocean Atlas) |
+| C_DEEP_MAX | 45 | umol/L | the most nitrate the deep water holds: above it, denitrification and burial in the sediment take it out (an explicit output, Nutrients.Book) | ECO: the oldest deep water, in the North Pacific, holds ~45 umol/L (Garcia et al. 2010) |
+| SEA_N_IN | 0.5 | gN/m2/yr | nitrogen the sea gains a year: fixation by plankton (Trichodesmium and others) and deposition from the air (replaces WEATHER at sea) | ECO: marine N2 fixation ~140 TgN/yr and deposition ~40-70 TgN/yr over 3.6e14 m2 (Gruber & Galloway 2008) |
+
+## 40. Organisms
 
 There are no designed species (Revision F). Life starts from 10 land and 6 water ancestors with random bodies (Clades.AncestorBody), and every organism's body is expressed from its own genes on the ranges above (DESIGN §6.3).

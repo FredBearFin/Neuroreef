@@ -29,6 +29,10 @@ public static class Nature
     // of a degree), 360 or more = the old torus of latitudes (equator, pole, equator, pole: tests of the latitude laws).
     // Not saved: a world's latitude follows from its seed, and tests set these and put them back
     public static float Latitude = float.NaN;
+    // the ocean (2026-11-02, Ocean.cs): the whole world under the sea, and the share of it that stands above the sea as
+    // islands (0: none). A world takes Ocean when it is built (World.Ocean); checkpoints keep both in their header
+    public static bool Ocean = false;
+    public static float Islands = 0f;
     public static float LatSpan = 0f;
 
     public static void Clamp()
@@ -39,6 +43,7 @@ public static class Nature
         Thirst = System.Math.Clamp(Thirst, 0.1f, 4f); Water = System.Math.Clamp(Water, 0.02f, 0.6f);
         Ponds = System.Math.Clamp(Ponds, 0f, 1f); Climate = System.Math.Clamp(Climate, 0f, 2f);
         StepH = ClampStep(StepH); WorldStepH = ClampStep(WorldStepH);
+        Islands = System.Math.Clamp(Islands, 0f, 0.5f);
     }
 
     // for checkpoints and saved worlds: the map side and every setting, in a fixed order
@@ -60,5 +65,5 @@ public static class Nature
     public static string Describe() =>
         $"{Map.Name} map ({Map.W} units), plants x{Plants:0.##}, seasons x{Seasons:0.##} over {SeasonLength:N0} steps, " +
         $"droughts x{Drought:0.##}, fire x{Fire:0.##}, disease x{Disease:0.##}, thirst x{Thirst:0.##}, water {Water:P0}, ponds {Ponds:P0}, climate x{Climate:0.##}" +
-        (StepH == K.STEP_H ? "" : $", a step {StepH * 60f:0.##} min") + (WorldStepH == StepH ? "" : $", the world's step {WorldStepH * 60f:0.##} min");
+        (Ocean ? $", an ocean world ({(Islands > 0f ? $"{Islands:P0} islands" : "no land")})" : "") + (StepH == K.STEP_H ? "" : $", a step {StepH * 60f:0.##} min") + (WorldStepH == StepH ? "" : $", the world's step {WorldStepH * 60f:0.##} min");
 }

@@ -31,6 +31,7 @@ public sealed class Simulation : IDisposable
         W = new World(capacity, seed, terrainSeed);
         if (maxCapacity > 0) W.MaxCap = Math.Clamp(maxCapacity, capacity, World.MaxSlots);
         if (evo != null) W.Evo.CopyFrom(evo);   // before founding: it says how many ancestors are big-brained
+        if (W.Ocean && !restore) W.Evo.AllWater();   // an ocean world: every ancestor in the water (2026-11-02)
         _pool = new Workers(Math.Max(1, threads));
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
         _waterJob = (lo, hi) => { for (int y = lo; y < hi; y++) WaterCycle.Row(W, y); };
@@ -124,6 +125,7 @@ public sealed class Simulation : IDisposable
         var w = W;
         _pool.Run(_fieldsJob, Map.FW);
         Fields.Swap(w);
+        if (w.Ocean) Ocean.Drift(w);   // the sea's plankton drifts with the water (2026-11-02)
         Plants.BeginStep(w);
         _pool.Run(_plantJob, Plants.StripeRows);
         Plants.Commit(w);

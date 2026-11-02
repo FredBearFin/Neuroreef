@@ -38,7 +38,7 @@ public static class Setup
             metresPerUnit = K.M_PER_UNIT,   // 2026-11-01: the map sizes in km (256 units = 1 km)
             v = new
             {
-                preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds, climate = o.Climate,
+                preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ocean = o.Ocean, islands = o.Islands, ponds = o.Ponds, climate = o.Climate,
                 plants = o.Plants, seasons = o.Seasons, seasonLength = o.SeasonLength, preStepMinutes = o.PreStepH * 60f, worldStepMinutes = o.WorldStepH * 60f, drought = o.Drought, fire = o.Fire, disease = o.Disease, thirst = o.Thirst,
                 ancestorsLand = o.AncestorsLand, ancestorsWater = o.AncestorsWater, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
                 bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
@@ -56,12 +56,14 @@ public static class Setup
             var e = doc.RootElement;
             int I(string k, int lo, int hi, int dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (int)Math.Clamp(Math.Round(x), lo, hi) : dflt;
             float F(string k, float lo, float hi, float dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (float)Math.Clamp(x, lo, hi) : dflt;
-            o.PreMap = I("preMap", 256, 2048, o.PreMap); o.WorldMap = I("worldMap", 256, 2048, o.WorldMap); o.Water = F("water", 0.02f, 0.6f, o.Water); o.Ponds = F("ponds", 0f, 1f, o.Ponds); o.Climate = F("climate", 0f, 2f, o.Climate);
+            o.PreMap = I("preMap", 256, 2048, o.PreMap); o.WorldMap = I("worldMap", 256, 2048, o.WorldMap); o.Water = F("water", 0.02f, 0.6f, o.Water); o.Ponds = F("ponds", 0f, 1f, o.Ponds);
+            o.Ocean = e.TryGetProperty("ocean", out var oc) ? oc.ValueKind == JsonValueKind.True : o.Ocean; o.Islands = F("islands", 0f, 0.5f, o.Islands); o.Climate = F("climate", 0f, 2f, o.Climate);
             o.Plants = F("plants", 0.1f, 4f, o.Plants); o.Seasons = F("seasons", 0f, 2.2f, o.Seasons); o.SeasonLength = I("seasonLength", 1000, 100000, o.SeasonLength);
             o.PreStepH = Options.StepHFromMinutes(F("preStepMinutes", 1f, 720f, o.PreStepH * 60f));
             o.WorldStepH = Options.StepHFromMinutes(F("worldStepMinutes", 1f, 720f, o.WorldStepH * 60f));
             o.Drought = F("drought", 0f, 4f, o.Drought); o.Fire = F("fire", 0f, 10f, o.Fire); o.Disease = F("disease", 0f, 5f, o.Disease); o.Thirst = F("thirst", 0.1f, 4f, o.Thirst);
             o.AncestorsLand = I("ancestorsLand", 0, 16, o.AncestorsLand); o.AncestorsWater = I("ancestorsWater", 0, 16, o.AncestorsWater);
+            if (o.Ocean) { o.AncestorsWater = Math.Min(16, o.AncestorsLand + o.AncestorsWater); o.AncestorsLand = 0; }   // no land to found on
             o.Founders = I("founders", 20, 5000, K.ANCESTOR_COUNT);
             o.BigBrains = I("bigBrains", 0, 16, K.BIG_BRAINS); o.BigBrainUnits = I("bigBrainUnits", K.BRAIN_MIN, G.NH, K.BIG_BRAIN_UNITS);
             o.MatingDrive = F("matingDrive", 0f, 3f, o.MatingDrive);
@@ -76,7 +78,7 @@ public static class Setup
                 o.Floors = fl.EnumerateArray().Select(v => v.TryGetDouble(out double d) ? (float)d : float.NaN).ToArray();
             Console.WriteLine($"setup: prehistory on a {o.PreMap}-unit map, {o.Branches} branches x {o.BranchSlots:N0} slots, " +
                 $"{o.AncestorsLand} land + {o.AncestorsWater} water ancestors x {o.Founders} founders, {o.BigBrains} big-brained ({o.BigBrainUnits} units), " +
-                $"{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}; world {o.WorldMap}-unit map, {o.Capacity:N0} slots; bodies {BodySize.Kg(o.MassMin)}-{BodySize.Kg(o.MassMax)}");
+                $"{(o.Ocean ? "an ocean world, " : "")}{(o.PrehistorySteps == 0 ? "until you begin the world" : o.PrehistorySteps.ToString("N0") + " steps")}; world {o.WorldMap}-unit map, {o.Capacity:N0} slots; bodies {BodySize.Kg(o.MassMin)}-{BodySize.Kg(o.MassMax)}");
             done.Set();
             return Results.Json(new { ok = true });
         });

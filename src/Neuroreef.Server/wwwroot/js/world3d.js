@@ -66,6 +66,9 @@ export class World3D {
   constructor(canvas, meta) {
     this.meta = meta;
     this.W = meta.world;
+    // an ocean world (2026-11-02, meta.ocean, Ocean.cs): the camera goes under the water, which is drawn from below too,
+    // with the sea's light and haze by depth (underwater()); the opening view is under the surface among the animals
+    this.ocean = !!meta.ocean;
     setRelief(meta);                  // the relief at true scale, from the server (2026-11-01)
     // how big bodies and plants are drawn: true size x the view's magnification (js/scale.js)
     this.scale = new Scale(meta.explore && meta.explore.metresPerUnit);
@@ -263,6 +266,7 @@ export class World3D {
     // lake level never flicker through it
     const lm = new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, shininess: 90, specular: 0x6688aa, depthWrite: false,
                                              polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });
+    if (this.ocean) lm.side = THREE.DoubleSide;   // the sea's surface seen from below
     patchLakeMaterial(lm, WU); wrapPatch(lm, this.wrapU, 'nr-lake-1');
     // (it writes depth: where a wide ribbon folds over itself at a tight bend, the second layer fails the depth test
     // instead of blending twice)
@@ -357,7 +361,7 @@ export class World3D {
     const hd = Math.hypot(cam.x - c.x, cam.z - c.z), m = 0.03 * Math.max(hd, Math.abs(cam.y - c.y));
     let y = -Infinity;
     for (let i = 1; i <= 10; i++) {
-      const f = i / 10, g = this.heightAt(c.x + (cam.x - c.x) * f, c.z + (cam.z - c.z) * f);
+      const f = i / 10, g = this.floorAt(c.x + (cam.x - c.x) * f, c.z + (cam.z - c.z) * f);
       y = Math.max(y, c.y + (g + m * f - c.y) / f);
     }
     return y;
@@ -367,7 +371,7 @@ export class World3D {
   _meanLand() {
     if (this._meanH !== undefined) return this._meanH;
     let s = 0, n = 0; const H = this.cellH, w = this.world;
-    for (let i = 0; i < H.length; i += 7) if (w.cell[i] === 1) { s += H[i]; n++; }
+    for (let i = 0; i < H.length; i += 7) if (w.cell[i] === 1 || (this.ocean && this.surfH[i] === this.surfH[i])) { s += this.ocean && w.cell[i] !== 1 ? this.surfH[i] : H[i]; n++; }
     return (this._meanH = n ? s / n : 0);
   }
 
@@ -402,6 +406,21 @@ export class World3D {
     const h = this.ground ? this.ground.heightAt(x, y, this.camera.position) : this._ground(x, y), sf = this.surfH[this._cellOf(x, y)];
     if (sf === sf) return swim ? Math.max(h, sf - 0.25) : Math.max(h, sf - 0.6);   // sf === sf: not NaN, a water cell
     return h;
+  }
+
+  /** The ground under any water (the seabed), drawn. */
+  bedAt(x, y) { return !this.world ? 0 : this.ground ? this.ground.heightAt(x, y, this.camera.position) : this._ground(x, y); }
+
+  /** The standing water's surface at a world position (NaN where there is none). */
+  surfAt(x, y) { return this.world ? this.surfH[this._cellOf(x, y)] : NaN; }
+
+  /** What the camera may not go below: the ground, or in an ocean world the seabed (it dives). */
+  floorAt(x, y) { return this.ocean ? this.bedAt(x, y) : this.heightAt(x, y); }
+
+  /** Metres of water above the camera (0 above the surface). */
+  camDepthM() {
+    const p = this.camera.position, sf = this.surfAt(p.x, p.z);
+    return sf === sf && p.y < sf ? (sf - p.y) * this.scale.mpu : 0;
   }
 
   setFields(f) { this.fields = f; this._paint(f); this._plants(true); }
@@ -636,9 +655,10 @@ export class World3D {
     for (const b of bins.values()) {
       const e0 = b.list[0], cs = new Map(); let sx = 0, sy = 0;
       for (const e of b.list) { sx += e.x - W * Math.round((e.x - e0.x) / W); sy += e.y - W * Math.round((e.y - e0.y) / W); cs.set(e.sp, (cs.get(e.sp) || 0) + 1); }
-      const x = sx / b.n, y = sy / b.n; let r2 = 0;
+      const x = sx / b.n, y = sy / b.n; let r2 = 0, zs = 0;
+      for (const e of b.list) zs += (e.depth || 0) * (e.atDepth === undefined ? 1 : e.atDepth);
       for (const e of b.list) { const dx = e.x - W * Math.round((e.x - x) / W) - x, dy = e.y - W * Math.round((e.y - y) / W) - y; r2 += dx * dx + dy * dy; }
-      out.push({ n: b.n, x: ((x % W) + W) % W, y: ((y % W) + W) % W, r: Math.sqrt(r2 / b.n) * this.scale.mpu, sp: [...cs].sort((p, q) => q[1] - p[1])[0][0] });
+      out.push({ n: b.n, z: zs / b.n, x: ((x % W) + W) % W, y: ((y % W) + W) % W, r: Math.sqrt(r2 / b.n) * this.scale.mpu, sp: [...cs].sort((p, q) => q[1] - p[1])[0][0] });
     }
     return out.sort((p, q) => q.n - p.n);
   }
@@ -655,8 +675,12 @@ export class World3D {
     const off = this.camera.position.clone().sub(c); off.y = 0;
     if (off.lengthSq() < 1e-12) off.set(0, 0, 1);
     off.normalize().multiplyScalar(d * Math.cos(el)); off.y = d * Math.sin(el);
-    const gy = this.world ? this.heightAt(x, z) : 0, c1 = new THREE.Vector3(x, gy, z), p1 = c1.clone().add(off);
+    let gy = this.world ? this.heightAt(x, z) : 0;
+    // an ocean world: the view centre at the group's mean depth, and the camera beside it under the surface
+    if (this.ocean && this.world) { const sf = this.surfAt(x, z); if (sf === sf) gy = Math.max(this.bedAt(x, z), sf - Math.max(4, g.z || 0) * this.scale.upm); off.y *= 0.35; }
+    const c1 = new THREE.Vector3(x, gy, z), p1 = c1.clone().add(off);
     if (this.world) p1.y = Math.max(p1.y, this._sightY(c1, p1));
+    if (this.ocean && this.world) { const sf = this.surfAt(p1.x, p1.z); if (sf === sf) { p1.y = Math.min(p1.y, sf - 0.5 * this.scale.upm); this.controls.maxPolarAngle = Math.PI * 0.92; } }
     this.controls.maxDistance = Math.max(this.controls.maxDistance, d * 2);
     this._flyTo(c1, p1, dur);
   }
@@ -987,6 +1011,7 @@ export class World3D {
   }
 
   render(probe) {
+    this._camUnder = this.ocean && this.camDepthM() > 0;
     if (!this.tiles) { this.look.update(); this.look.render(); return; }   // [look]
     const now = performance.now();
     const alpha = Math.min(1, (now - this.frameT) / this.frameDt);
@@ -1014,10 +1039,10 @@ export class World3D {
       if (this.mode === 'follow') {
         const L = sz * MODEL_LEN, dist = L * 6.5, up = L * 2.2;
         const want = new THREE.Vector3(selP[0] - hx * dist, gh + up, selP[1] - hz * dist);
-        want.y = Math.max(want.y, this.heightAt(want.x, want.z) + sz * 0.8);
+        want.y = Math.max(want.y, this.floorAt(want.x, want.z) + sz * 0.8);
         this.camera.position.lerp(want, ease(0.12));
         // on its way there (from the overview, or round a hill the animal walked past) the camera never goes into the ground
-        const cp = this.camera.position, floor = this.heightAt(cp.x, cp.z) + sz * 0.5;
+        const cp = this.camera.position, floor = this.floorAt(cp.x, cp.z) + sz * 0.5;
         if (cp.y < floor) cp.y = floor;
         this.camera.lookAt(selP[0], gh + sz * 0.6, selP[1]);
       } else {
@@ -1050,13 +1075,18 @@ export class World3D {
       {
         const dd = this.camera.position.distanceTo(c);
         this.controls.maxPolarAngle = Math.min(Math.PI * 0.47, Math.asin(Math.min(1, 0.7 * W / Math.max(1, dd))));
+        // under the sea the camera may look up at what swims above it (2026-11-02)
+        if (this.ocean && this.camDepthM() > 0) this.controls.maxPolarAngle = Math.PI * 0.92;
       }
       this.controls.update();
       // the view centre stays on the ground (zooming toward the cursor moves it over a flat plane), and the camera above it
       if (!this._fly && this.world) {
-        const g = this.heightAt(c.x, c.z), dy = (g - c.y) * 0.2;
+        // (an ocean world: the view centre may be anywhere in the water column, between the bed and the surface)
+        let g = this.heightAt(c.x, c.z);
+        if (this.ocean) { const b = this.bedAt(c.x, c.z), sf = this.surfAt(c.x, c.z); g = Math.max(b, sf === sf ? Math.min(c.y, sf) : c.y); }
+        const dy = (g - c.y) * 0.2;
         c.y += dy; this.camera.position.y += dy;
-        const cam = this.camera.position, clear = this.heightAt(cam.x, cam.z) + Math.max(0.006, 0.08 * cam.distanceTo(c));
+        const cam = this.camera.position, clear = this.floorAt(cam.x, cam.z) + Math.max(0.006, 0.08 * cam.distanceTo(c));
         if (cam.y < clear) cam.y = clear;
         // and the view centre is in sight: no ridge between them (leaving Explore on a slope, or orbiting low across
         // the hills, put the camera inside a hillside looking at the inside of the ground). The line from the centre to
@@ -1299,7 +1329,7 @@ export class World3D {
     }
     // lost from view over a few metres in clear water, sooner where algae and plankton cloud it
     const murk = this._murkAt(ci), vis = 6 / (1 + 3 * murk), dd = (sf - y0) / this.scale.upm;
-    if (y0 < sf - 0.45 * sc) e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));   // (wading: its back is dry)
+    if (y0 < sf - 0.45 * sc && !this._camUnder) e.under = Math.min(15, Math.round(15 * 0.92 * (1 - Math.exp(-dd / vis))));   // (wading: its back is dry)
     return y0;
   }
 

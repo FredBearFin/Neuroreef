@@ -78,6 +78,7 @@ public static class Terrain
         Hydrology.Erode(w.Elev, w.SeaLevel, rain0, w.Alluvium, K.ERODE_ITERS, kRock: Geology.Erodibility(w), sc: Geology.CriticalDrop(w),
             scRock: Geology.CriticalDrops(w, crust), cover: cover);
         Geology.Expose(w, crust, cover);
+        if (w.Ocean) Ocean.Drown(w);   // an ocean world (2026-11-02): the worked relief under the sea (Ocean.cs)
         return rain0;
     }
 
@@ -216,6 +217,7 @@ public static class Terrain
             }
         // the first plants' genes (Revision S): random founders, each cell taking the best growers for its site
         Plants.Found(w);
+        if (w.Ocean) Ocean.InitDeep(w);   // the deep water below the mixed layer (2026-11-02)
     }
 
     /// <summary>Multi-source distance (in cells, 8-connected chamfer) on the torus to the nearest cell with any bit of mask.</summary>

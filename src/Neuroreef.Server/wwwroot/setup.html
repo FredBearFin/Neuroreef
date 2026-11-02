@@ -41,7 +41,7 @@
     world that grows from it. Choose the land, how harsh nature is, and how life starts. Nothing is created until you press
     Start. 1× on a nature setting is the documented law; the rest is your choice.</p>
   <div class="presets"><span class="k" style="color:var(--dim)">Presets:</span>
-    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (4 km)">Light (4 km)</a><a data-p="normal" data-name="Normal (8 km, default)">Normal (8 km, default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a></div>
+    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (4 km)">Light (4 km)</a><a data-p="normal" data-name="Normal (8 km, default)">Normal (8 km, default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a><a data-p="ocean" data-name="Ocean (4 km, under the sea)">Ocean</a></div>
   <div id="groups"></div>
 </main>
 <div class="est"><div class="in">
@@ -279,9 +279,14 @@ const PRESETS = {
   big: { preMap: 1024, worldMap: 1024, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.5 },
   // one supercontinent (2048 x 2048, 4 continents of land): one branch, so its slots fit in ~7 GB
   huge: { preMap: 2048, worldMap: 2048, branches: 1, branchSlots: 32768, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 32768, rate: 3, climate: 0.3 },
+  // the ocean (2026-11-02, Ocean.cs): the whole map under the sea, banks and reef flats over basins ~430 m deep on the
+  // 4 km map; every ancestor in the water (the server makes them so whatever the rows say)
+  ocean: { ocean: true, preMap: 1024, worldMap: 1024, branches: 1, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 128, worldSlots: 16384, rate: 3, climate: 0.3, ancestorsLand: 4, ancestorsWater: 12 },   // (the rows go to 12 each: the server makes all 16 water ancestors)
 };
+let oceanOn = false;   // an ocean world (the Ocean preset, or --ocean: info.v.ocean; not a row)
 for (const a of document.querySelectorAll('[data-p]')) a.onclick = () => {
-  const p = PRESETS[a.dataset.p]; for (const k in p) setv(k, p[k]);
+  const p = PRESETS[a.dataset.p]; for (const k in p) if (k !== 'ocean') setv(k, p[k]);
+  oceanOn = !!p.ocean;
   for (const b of document.querySelectorAll('[data-p]')) b.classList.toggle('on', b === a);
   estimate();
 };
@@ -290,6 +295,7 @@ $('go').onclick = async () => {
   $('go').disabled = true; $('msg').textContent = 'Creating the prehistory…';
   const body = {}; for (const r of rows) body[r.key] = r.get();
   delete body.floor1; delete body.floor2; delete body.floor3;
+  body.ocean = oceanOn;
   if (floorsEdited) body.floors = [body.massMin, val('floor1'), val('floor2'), val('floor3')];   // else the server's own proportions
   await fetch('api/setup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (info.evolve) {
@@ -308,7 +314,7 @@ $('go').onclick = async () => {
 };
 
 fetch('api/setup-info').then((r) => r.json()).then((j) => {
-  info = j; build(); labelPresets();
+  info = j; oceanOn = !!(j.v && j.v.ocean); build(); labelPresets();
   // the defaults are the normal preset's: light it when nothing differs
   const n = PRESETS.normal; if (Object.keys(n).every((k) => !has(k) || Math.abs(val(k) - n[k]) < 1e-6)) document.querySelector('[data-p=normal]').classList.add('on');
   if (info.evolve) { $('title').textContent = 'NEUROREEF · NEW PREHISTORY (NO GRAPHICS)'; $('go').textContent = 'Start'; }

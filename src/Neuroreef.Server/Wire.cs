@@ -414,7 +414,7 @@ public static class Wire
         var species = Clades(w);
         var o = new
         {
-            type = "meta", version = 1, world = Map.W, fw = Map.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
+            type = "meta", version = 1, world = Map.W, ocean = w.Ocean, fw = Map.FW, fd = FD, seed = w.Seed, capacity = w.Cap, prehistory = w.Prehistory, bankSource = h.BankSource,
             sampleEvery = K.SAMPLE_EVERY, species, features = F.Names, primitives = P.Names, firstAction = P.FIRST_ACTION, callFirst = P.CALL_0, nSound = F.NSOUND, maxSyl = F.MAX_SYL, ctxNames = Telemetry.CtxNames, respNames = Telemetry.RespNames,
             meaning = new { high = Meaning.High, low = Meaning.Low, keysHigh = Meaning.KeysHigh, keysLow = Meaning.KeysLow, verbs = Meaning.Verbs, minN = Meaning.MIN_N }, pools = Pools.Names, causes = Cause.Names, traitNames = Telemetry.TraitNames,
             fieldLayers = FieldLayers, telemetry = new { names = w.T.Names, offSpecies = w.T.OffSpecies, perSpecies = w.T.PerSpecies, offKill = w.T.OffKill,
