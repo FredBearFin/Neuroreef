@@ -201,7 +201,8 @@ public class LocomotionTests
     public void FlightMuscleRaisesBasalLikeABirds()
     {
         var w = new World(16, 1);
-        w.Genome[G.B_LEGS] = 60; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127; Body.Express(w, 0);
+        w.Genome[G.B_LEGS] = 60; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127;
+        w.Genome[G.B_ENDO] = 127; Body.Express(w, 0);   // warm-blooded, as birds and mammals (2026-11-02: the level, Heat.Level, scales a cold body's cost)
         float mammal = w.PBasal[0];
         foreach (float organ in new[] { 0.5f, 0.6f, 0.8f })
         {
