@@ -387,6 +387,16 @@ export class Explore {
       this.pos.y += this.vy * dt;
       if (this.pos.y <= s.feet) { this.pos.y = s.feet; this.vy = 0; this.onGround = true; }
     }
+    // under the sea (an ocean world, 2026-11-02): the person dives and swims in three dimensions, Space up and C down,
+    // and forward along where it looks; never through the bed nor above the surface. (The server senses the person at
+    // the surface: its depth is not sent yet.)
+    if (this.world.ocean && s.swim) {
+      const v = (k.has('Space') ? 1 : 0) - (k.has('KeyC') ? 1 : 0), maxDive = Math.max(0, s.feet - s.ground - 0.2 * m);
+      let d = (this.dive || 0) - v * 0.8 * sk * m * dt;
+      if (fwd) d -= Math.sin(this.pitch) * fwd * speed * sk * m * dt;
+      this.dive = Math.max(0, Math.min(maxDive, d));
+      this.pos.y = s.feet - this.dive; this.onGround = true; this.vy = 0;
+    } else this.dive = 0;
     // camera at the eye
     const cam = this.world.camera, eye = this.pos.y + EYE_M * m;
     const cp = Math.cos(this.pitch);
@@ -397,7 +407,7 @@ export class Explore {
     if (now - this.lastSend > SEND_MS) this._send(false);
     if (now - this.targetT > 100) { this.targetT = now; this._target(); }
     // the speed the person moves at now (nothing while it stands), and how
-    const gait = s.swim ? 'swimming' : s.depth > 0.05 ? 'wading' : (fast ? speed / FAST : speed) >= RUN * 0.9 ? 'running' : 'walking';
+    const gait = s.swim ? (this.dive > 0.05 * m ? `diving ${(this.dive / m).toFixed(1)} m` : 'swimming') : s.depth > 0.05 ? 'wading' : (fast ? speed / FAST : speed) >= RUN * 0.9 ? 'running' : 'walking';
     const tv = speed * sk * this.ps;   // true m/s
     this.hud.info(`${fwd || side ? `${gait} ${tv.toFixed(tv < 1 ? 2 : 1)} m/s` : s.swim ? 'treading water' : 'standing'}${fast ? ' · <b>×10 travel</b>' : ''} · ${this.sizeText()}<br>${this.killed} hunted · ${(this.state && this.state.deaths) || 0} deaths`);
   }
