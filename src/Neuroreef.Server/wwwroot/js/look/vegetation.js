@@ -269,9 +269,13 @@ function rockModels() {
 
 const U_TIME = { value: 0 };
 
-// fade: plants within a few units of the camera dissolve (a screen-door stipple), so the camera is never inside a
-// crown and a tree right in front of it does not hide the animals behind (their shadows stay)
-function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, fade = false } = {}) {
+// fade: a plant the camera is inside dissolves (a screen-door stipple), so the camera never looks out through the
+// inside of a crown (their shadows stay). fade is the plant's reach from its axis, a share of its height (2026-11-02:
+// it was the distance to the plant's FOOT under 0.9 of its height, so from the ground every tree within 0.9 of its
+// height, 18 m for a 20 m tree, and every bush and rock within a body's length or so was stippled to a dark, dithered
+// ghost, and the animals among them seemed stippled too, or vanished: docs/art/scale3/explore-default.png. Now only
+// within the plant's own volume: the distance to the segment from its foot to its top under fade x its height.)
+function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, fade = 0 } = {}) {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side, flatShading: flat });
   wrap(mat);
   const inner = mat.onBeforeCompile;
@@ -300,7 +304,9 @@ function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, f
           #ifdef USE_INSTANCING
             vec3 io = (modelMatrix * vec4(instanceMatrix[3].xyz, 1.0)).xyz;
             float sz = length(instanceMatrix[1].xyz);
-            vNearFade = smoothstep(0.5 * sz + 0.004, 0.9 * sz + 0.012, distance(io, cameraPosition));
+            vec3 rel = cameraPosition - io;
+            float axD = length(vec2(length(rel.xz), rel.y - clamp(rel.y, 0.0, sz)));   // to the axis, foot to top
+            vNearFade = smoothstep(${(0.8 * fade).toFixed(3)} * sz + 0.0005, ${fade.toFixed(3)} * sz + 0.001, axD);
           #endif
         }`);
     if (fade) sh.fragmentShader = 'varying float vNearFade;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
@@ -310,7 +316,7 @@ function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, f
         }`);
     inner(sh, r);
   };
-  mat.customProgramCacheKey = () => 'neuroreef-plant-' + sway + (flat ? 'f' : '') + (fade ? 'n' : '') + side;
+  mat.customProgramCacheKey = () => 'neuroreef-plant-' + sway + (flat ? 'f' : '') + (fade ? 'n' + fade : '') + side;
   return mat;
 }
 
@@ -328,8 +334,9 @@ export class Vegetation {
       m.frustumCulled = false; m.count = 0; m.castShadow = shadows && cast; m.receiveShadow = shadows;
       scene.add(m); return m;
     };
-    const mTree = plantMaterial(wrap, { fade: true }), mFar = plantMaterial(wrap, { sway: 0 }), mBush = plantMaterial(wrap, { sway: 0.5, fade: true });
-    const mGrass = plantMaterial(wrap, { side: THREE.DoubleSide, sway: 4 }), mRock = plantMaterial(wrap, { sway: 0, flat: true, fade: true });
+    // (fade: the crown's reach from the axis as a share of the height: a tree's ~0.3, a bush's or a rock's ~0.6)
+    const mTree = plantMaterial(wrap, { fade: 0.32 }), mFar = plantMaterial(wrap, { sway: 0 }), mBush = plantMaterial(wrap, { sway: 0.5, fade: 0.65 });
+    const mGrass = plantMaterial(wrap, { side: THREE.DoubleSide, sway: 4 }), mRock = plantMaterial(wrap, { sway: 0, flat: true, fade: 0.6 });
     // near trees: a share of the cap per form (sized to how often each is picked, with slack)
     this.near = T.near.map((g) => mk(g, mTree, NEAR_CAP, true));
     this.far = T.far.map((g) => mk(g, mFar, FAR_CAP, true));
