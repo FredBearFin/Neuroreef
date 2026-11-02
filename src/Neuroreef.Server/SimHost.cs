@@ -265,6 +265,8 @@ public sealed class SimHost : IDisposable
         Pre = null;
         pre.Dispose();
         if (Map.W != Nature.WorldMap) { Map.Set(Nature.WorldMap); Console.WriteLine($"the world is a {Map.Name} ({Map.W} units)"); }
+        // and its own step (2026-11-02: a coarse prehistory, a fine world to watch)
+        if (Nature.StepH != Nature.WorldStepH) { Nature.StepH = Nature.WorldStepH; Console.WriteLine($"the world's step is {Nature.StepH * 60f:0.##} minutes"); }
         var clock = Stopwatch.StartNew();
         var live = new Simulation(_o.Capacity, _o.Seed, _o.Threads, bank, prehistory: false, terrainSeed: _o.Seed, evo: _o.WorldSettings(), land: land, maxCapacity: _o.MaxCapacity);
         Console.WriteLine($"the world was built in {clock.Elapsed.TotalSeconds:F1} s" + (land != null && land.Fits(live.W) ? " (on the prehistory's land)" : ""));

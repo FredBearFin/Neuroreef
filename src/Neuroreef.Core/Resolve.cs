@@ -181,6 +181,9 @@ public static class Resolve
         // eating another organism is attacking it (DESIGN §9.3, Revision K): the same strike, chosen by hunger
         bool strikeAttempt = (acts & BIT_STRIKE) != 0;
         bool preyEat = (acts & BIT_EAT) != 0 && w.IEatPrey[i] != 0 && (acts & BIT_STRIKE) == 0 && w.PStrike[i] > 0;
+        // eating is a state, a strike an event (Decide.Event): an attack while eating is made at most once a reference
+        // step on average, so a fine step does not multiply them (2026-11-02; at Dt = 1 every eating step, as before)
+        if (preyEat && w.Dt != 1f && Rng.U(seed, step, (uint)i, Rs.PreyEat) >= w.Dt) preyEat = false;
         if (preyEat) { acts |= BIT_STRIKE; metrics?.Allow(P.EAT); }
         else if ((acts & BIT_EAT) != 0 && scanning && metrics != null) metrics.Add(ref metrics.ScanBlockedEats);
         if (!preyEat && (acts & BIT_EAT) != 0 && !scanning && w.Gut[i] < gutCap && !airborne)   // a flier eats landed (2026-10-31)

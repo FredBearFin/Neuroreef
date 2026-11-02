@@ -66,7 +66,7 @@ public static class Headless
             double d = Math.Max(1, m.Decisions), mpu = Player.M_PER_UNIT;
             Console.WriteLine($"UNITS: alive {w.AliveCount}  lineages {lineages}  conceptions {conc}  matings {mat}  strikes {strikes}  kills {kills}  starved {starve}  thirst {thirst}");
             Console.WriteLine($"UNITS: decisions {m.Decisions:N0}  other in sight {m.SeeOther / d:P1}  kin in sight {m.SeeKin / d:P1}  ready partner in sight {m.SeeMate / d:P1}  strike target in reach {m.InReach / d:P1}");
-            Console.WriteLine($"UNITS: moved per animal-step {moved / Math.Max(1, animalSteps) * mpu:F0} m (top speed {movedMax / Math.Max(1, animalSteps) * mpu:F0} m), x{24.0 * K.T_SEASON / 8766.0:F2} steps a day");
+            Console.WriteLine($"UNITS: moved per animal-step {moved / Math.Max(1, animalSteps) * mpu:F0} m (top speed {movedMax / Math.Max(1, animalSteps) * mpu:F0} m), x{w.StepsPerDay:F2} steps a day (a step {w.StepH * 60:0.#} min)");
         }
         if (o.ReportTxt != null) { File.WriteAllText(o.ReportTxt, summary); Console.WriteLine("report written: " + o.ReportTxt); }
         if (o.SaveBank != null) { GeneBank.Save(w, o.SaveBank); Console.WriteLine("gene bank saved: " + o.SaveBank); }

@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(26, Checkpoint.Version);   // 26: the world's step length (World.StepH); 25: nutrient per dead pool and gut; 24: live wood per field cell (World.LiveWood); 23: the world's body sizes after the nature settings (BodySize); 22: respiration (genes, sense, depth and oxygen debt per slot, causes suffocated and drowned); 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
+            Assert.Equal(27, Checkpoint.Version);   // 27: the step of the world a prehistory founds; 26: the world's step length (World.StepH); 25: nutrient per dead pool and gut; 24: live wood per field cell (World.LiveWood); 23: the world's body sizes after the nature settings (BodySize); 22: respiration (genes, sense, depth and oxygen debt per slot, causes suffocated and drowned); 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Assert.True(w.GenomeOf(i).SequenceEqual(restored.GenomeOf(i)), $"genome of slot {i}");

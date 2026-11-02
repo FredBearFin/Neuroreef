@@ -35,7 +35,9 @@ public sealed class Options
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
     public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f, Climate = K.CLIMATE;
     public int SeasonLength = K.T_SEASON;
-    public float StepH = K.STEP_H;   // the length of a step in hours (--step-minutes, 2026-11-02; Nature.StepH)
+    // the length of a step in hours (2026-11-02; Nature.StepH): the prehistory's (--pre-step-minutes) and the watched world's
+    // (--world-step-minutes); --step-minutes sets both. Both K.STEP_H (2.92 h) by default: a coarse prehistory evolves fast
+    public float PreStepH = K.STEP_H, WorldStepH = K.STEP_H;
 
     /// <summary>A step of mn minutes in hours, clamped to Nature's range; the default (175.3 min, within a hundredth of a
     /// minute) is K.STEP_H exactly, so the default world is the reference run bit for bit.</summary>
@@ -56,7 +58,8 @@ public sealed class Options
     public void ApplyNature(bool prehistory)
     {
         Nature.Plants = Plants; Nature.Seasons = Seasons; Nature.SeasonLength = SeasonLength; Nature.Drought = Drought;
-        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap; Nature.StepH = StepH;
+        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap;
+        Nature.StepH = prehistory ? PreStepH : WorldStepH; Nature.WorldStepH = WorldStepH;
         Nature.Clamp();
         BodySize.Set(MassMin, MassMax, Floors);   // before the map: its hash cells follow the largest body
         Map.Set(prehistory ? PreMap : WorldMap);
@@ -77,7 +80,11 @@ public sealed class Options
 
     public EvoSettings PrehistorySettings(bool stepsAreLength)
     {
-        long n = stepsAreLength && StepsSet ? Steps : PrehistorySteps;
+        // PrehistorySteps is a time, in reference steps (K.STEP_H; --prehistory-years x the seasons' year): at another
+        // prehistory step it is that many hours of steps (2026-11-02; the default is the same 500,000 steps). --steps (the
+        // headless prehistory's length) stays a count of its own steps
+        long n = stepsAreLength && StepsSet ? Steps
+            : PreStepH == K.STEP_H || PrehistorySteps <= 0 ? PrehistorySteps : (long)Math.Round(PrehistorySteps * (double)K.STEP_H / PreStepH);
         var e = new EvoSettings { TotalSteps = n <= 0 || n > int.MaxValue ? int.MaxValue : (int)n };   // 0 = until stopped
         if (BigBrains >= 0) e.BigBrains = BigBrains;
         if (BigBrainUnits > 0) e.BigBrainUnits = BigBrainUnits;
@@ -107,7 +114,9 @@ public sealed class Options
   --random-brains       skip the prehistory: the world with random brains (most species will die out)
   --load-bank FILE      begin the world with the brains in this gene bank
   --branches N          prehistory branches (default 1)
-  --prehistory-steps N  length of the prehistory (default 500000 steps = 500 million symbolic years)
+  --prehistory-steps N  length of the prehistory in reference steps of 2.92 h (default 500000 = 167 years of world time,
+                        500 million symbolic years); at another --pre-step-minutes it is the same time in that step's steps
+  --prehistory-years Y  the same, in years (Y x the seasons' year)
   --seed N              world and run seed: the same N gives the same map, ancestors and names
                         (default: a new random seed every time; it is printed at start)
   --capacity N          agent slots the world starts with (default: a quarter of the memory, 4,096-32,768;
@@ -142,8 +151,11 @@ public sealed class Options
   --mating-drive X      strength of the breeding instinct (default 1)
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
   --season-length N     reference steps per year (default 3000)   --water X   share of the map under water (default 0.10)
-  --step-minutes X      the length of a step in minutes, 1..720 (default 175.3 = 2.92 h: 3000 steps a year). Fine steps
-                        (1-10 min) let animals move at watchable real speeds; the default and coarser run evolution fast
+  --step-minutes X      the length of a step in minutes, 1..720, for the prehistory and the world (default 175.3 = 2.92 h:
+                        3000 steps a year). Fine steps (1-10 min) let animals move at watchable real speeds; the default
+                        and coarser run evolution fast
+  --pre-step-minutes X, --world-step-minutes X   the same for the prehistory or the watched world alone (a coarse
+                        prehistory and a fine world: --world-step-minutes 10)
   --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
   --climate X           climate strength 0..2: how strongly sun, height and seasons change temperature
                         (default 0.6; 0 = everywhere 20 °C and no body-heat budget)
@@ -180,7 +192,7 @@ public sealed class Options
     public static Options Parse(string[] a)
     {
         var o = new Options();
-        bool worldMapSet = false;
+        bool worldMapSet = false; double years = 0;
         for (int i = 0; i < a.Length; i++)
         {
             string s = a[i];
@@ -199,6 +211,7 @@ public sealed class Options
                 case "--load-bank": o.LoadBank = Next(); break;
                 case "--save-bank": o.SaveBank = Next(); break;
                 case "--prehistory-steps": o.PrehistorySteps = int.Parse(Next()); break;
+                case "--prehistory-years": years = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--branches": o.Branches = Math.Clamp(int.Parse(Next()), 1, 8); o.NoSetup = true; break;
                 case "--headless": o.Headless = true; break;
                 case "--empty": o.Empty = true; break;
@@ -224,7 +237,9 @@ public sealed class Options
                 case "--plants": o.Plants = F(Next()); break;
                 case "--seasons": o.Seasons = F(Next()); break;
                 case "--season-length": o.SeasonLength = int.Parse(Next()); break;
-                case "--step-minutes": o.StepH = StepHFromMinutes(float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture)); break;
+                case "--step-minutes": o.PreStepH = o.WorldStepH = StepHFromMinutes(float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture)); break;
+                case "--pre-step-minutes": o.PreStepH = StepHFromMinutes(float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture)); break;
+                case "--world-step-minutes": o.WorldStepH = StepHFromMinutes(float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture)); break;
                 case "--drought": o.Drought = F(Next()); break;
                 case "--fire": o.Fire = F(Next()); break;
                 case "--disease": o.Disease = F(Next()); break;
@@ -248,6 +263,7 @@ public sealed class Options
         // every new world is different: its map, its ancestors' bodies and brains and their names all come from the
         // seed, so with no --seed it is drawn at random (a saved world or prehistory resumes with its own seed)
         if (o.BranchSlots == 0) o.BranchSlots = World.DefaultSlots(o.Branches);
+        if (years > 0) o.PrehistorySteps = (int)Math.Clamp(Math.Round(years * o.SeasonLength), 1000, int.MaxValue);   // after --season-length
         while (o.Seed == 0) o.Seed = (uint)System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, int.MaxValue);
         if (o.Evolve)
         {
