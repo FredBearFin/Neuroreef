@@ -63,8 +63,10 @@ public class EcologyTests
             }
             // the ancestor's own body, made where its first founder stands, breathes there, and its home range feeds at
             // FOUND_FILL at least its breeding group and at least as many as were founded (the ranges were measured on the
-            // animals then living; the clades founded since mostly add prey, carrion and dung)
-            int a = Life.Found(w, s, anc, true, 0xA0000u + (uint)s, w.X[first[s]], w.Y[first[s]], realm);
+            // animals then living; the clades founded since only add prey, carrion and dung). It is the ancestor's own body,
+            // unmutated, as the founding judged it (2026-11-02: both were mutants drawn by their keys, and on seed 7 a flier
+            // founded with 600 re-measured at 593.7, its mutant 2% heavier)
+            int a = Life.Found(w, s, anc, true, 0xA0000u + (uint)s, w.X[first[s]], w.Y[first[s]], realm, mutate: false);
             Assert.True(a >= 0);
             Assert.True(Respiration.Breathable(w, a, World.FIdx(w.X[a], w.Y[a])), $"ancestor {s} cannot breathe where its founders stand");
             var c = w.Sp[s];
@@ -73,11 +75,7 @@ public class EcologyTests
             Life.FreeSlot(w, a); w.T.Created[s]--;
             int fedN = Simulation.FoundersFed(cap, group, w.Evo.Founders);
             Assert.True(fedN >= group, $"ancestor {s}: its range feeds {K.FOUND_FILL * cap:F1} at FOUND_FILL, a breeding group is {group}");
-            // (2026-11-02) within 2%: the animal foods are not strictly additive. Each kind counts only if its gate passes,
-            // and a meat-eater's gate uses the MEAN carcass of its prey, so a clade founded later (an animal-food eater
-            // tested after the others, Simulation.WaitedClades) can lower it. Seed 7 after the gut change (Body.GutScale):
-            // a flier founded with 600 re-measured at 593.7, clade 3 founded after it
-            Assert.True(K.FOUND_FILL * cap >= 0.98f * founders[s], $"ancestor {s}: its range feeds {K.FOUND_FILL * cap:F1} at FOUND_FILL, {founders[s]} were founded");
+            Assert.True(fedN >= founders[s], $"ancestor {s}: its range feeds {K.FOUND_FILL * cap:F1} at FOUND_FILL, {founders[s]} were founded");
         }
         Assert.True(nFounded > 0);
         // the ancestors differ from each other: their bodies are random, not designed

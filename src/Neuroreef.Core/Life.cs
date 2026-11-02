@@ -394,7 +394,9 @@ public static class Life
     /// and a random land ancestor's body (tests). With a group centre (gx, gy), it is placed within the home range of its
     /// body around it (HomeRangeR), as a group shares a range and populations are clustered. The genome given is mutated, so founders vary.
     /// </summary>
-    public static int Found(World w, int clade, ReadOnlySpan<sbyte> genome, bool adult, uint key, float gx = float.NaN, float gy = 0f, Realm habitat = Realm.Any)
+    /// <param name="mutate">false to make the genome given exactly (2026-11-02): the founding's probe of an ancestor
+    /// (Simulation.ProbeCapacity) must judge the ancestor's own body, not a mutant of it drawn by the probe's key</param>
+    public static int Found(World w, int clade, ReadOnlySpan<sbyte> genome, bool adult, uint key, float gx = float.NaN, float gy = 0f, Realm habitat = Realm.Any, bool mutate = true)
     {
         int c = NewSlot(w);
         if (c < 0) return -1;
@@ -404,7 +406,7 @@ public static class Life
             Clades.AncestorBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, clade % (K.ANCESTORS_LAND + K.ANCESTORS_WATER), true);
             Clades.VaryBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, key);
         }
-        else { genome.CopyTo(w.GenomeOf(c)); Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
+        else { genome.CopyTo(w.GenomeOf(c)); if (mutate) Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
         Body.Express(w, c);
         var realm = w.RealmOf(c) & habitat;
         if (realm == 0) { FreeSlot(w, c); return -1; }
