@@ -107,8 +107,11 @@ export class Look {
     fog.color.copy(this.fogColor);
     if (v.wrapU) v.wrapU.uWrapBg.value.copy(this.fogColor);
     v.renderer.setClearColor(this.fogColor);
-    // seeing ~25 m in clear tropical water: haze by e per 9 m, all of it at 45 m (the far plane is the fog's)
-    fog.near = Math.max(1, 9 * upm); fog.far = 45 * upm;
+    // the haze from the water's clarity where the camera is (World3D.seaC: beam attenuation c): contrast falls by e per
+    // 1/c, and nothing is seen beyond ~4.8 / c (Davies-Colley 1988); eased so it does not flicker from cell to cell
+    const c = v.seaC ? v.seaC(v.camera.position.x, v.camera.position.z) : 0.15;
+    this._seaC = this._seaC ? this._seaC + (c - this._seaC) * 0.05 : c;
+    fog.near = Math.max(0.05, upm / this._seaC); fog.far = 1.25 * 4.8 * upm / this._seaC;
     this.light.sun.intensity *= 0.25 + 0.75 * I; this.light.hemi.intensity *= 0.35 + 0.65 * I;
     this.light.sun.color.setRGB(Math.exp(-0.35 * dm) * 0.8 + 0.2, Math.exp(-0.07 * dm) * 0.5 + 0.5, 1);
   }

@@ -44,8 +44,11 @@ export class Link {
         let elev16 = null;
         if (buf.byteLength >= 16 + 10 * n) { elev16 = new Uint16Array(n); for (let i = 0, o = 16 + 8 * n; i < n; i++, o += 2) elev16[i] = dv.getUint16(o, true); }
         const ro = 16 + 10 * n;
+        let depthDm = null;   // the depth in decimetres after the rivers (2026-11-02; null from an older server: the u8 plane, to 254 m)
         if (buf.byteLength >= ro + 8) {
           const R = dv.getUint32(ro, true), V = dv.getUint32(ro + 4, true), po = ro + 8 + 16 * R;
+          const dq = po + 16 * V;
+          if (buf.byteLength >= dq + 2 * n) { depthDm = new Uint16Array(n); for (let i = 0; i < n; i++) depthDm[i] = dv.getUint16(dq + 2 * i, true); }
           if (buf.byteLength >= po + 16 * V) {
             riverPaths = [];
             for (let r = 0; r < R; r++) {
@@ -61,7 +64,7 @@ export class Link {
             }
           }
         }
-        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse, riverPaths, elev16 });
+        this.emit('world', { step, fw, sea, elev: new Uint8Array(buf, 16, n), cell: new Uint8Array(buf, 16 + n, n), depth: new Uint8Array(buf, 16 + 2 * n, n), river, surf, caves, caveCourse, riverPaths, elev16, depthDm });
         break;
       }
       case T_AGENTS: {

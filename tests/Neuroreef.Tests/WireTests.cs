@@ -100,7 +100,7 @@ public class WireTests
         var b = Neuroreef.Server.Wire.EncodeWorld(w);
         int n = Map.FW * Map.FW, o = 16 + 10 * n;
         int R = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o)), V = (int)BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o + 4));
-        Assert.Equal(o + 8 + 16 * R + 16 * V, b.Length);
+        Assert.Equal(o + 8 + 16 * R + 16 * V + 2 * n, b.Length);   // then the depth in decimetres (2026-11-02)
         var lines = Hydrology.Lines(w);
         Assert.Equal(lines.Count, R);
         Assert.True(R > 20, $"{R} rivers");

@@ -232,4 +232,30 @@ public class OceanTests
             Assert.True(lineages >= 3, $"seed {seed}: {lineages} lineages");
         }
     }
+
+    [Fact] // the WORLD frame's depth in decimetres after the rivers (2026-11-02): past the u8 plane's 254 m
+    public void WorldFrameCarriesDeepDepths()
+    {
+        Map.Set(2048);
+        try
+        {
+            Sea(() =>
+            {
+                var w = new World(16, 3);
+                Terrain.Build(w);
+                var b = Neuroreef.Server.Wire.EncodeWorld(w);
+                int n = Map.FW * Map.FW, o = b.Length - 2 * n; float max = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    float m = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(b.AsSpan(o + 2 * i)) / 10f;
+                    Assert.True(MathF.Abs(m - Respiration.ColumnM(w, i)) <= 0.051f, $"cell {i}: {m} m against {Respiration.ColumnM(w, i)}");
+                    max = MathF.Max(max, m);
+                }
+                _out.WriteLine($"deepest {max:F1} m (relief {Map.ReliefM:F0} m)");
+                Assert.True(max > 600f, "the 2048 ocean is deeper than the u8 plane's 254 m");
+                return 0;
+            });
+        }
+        finally { Map.Set(TestWorld.Side); }
+    }
 }
