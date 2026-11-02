@@ -244,7 +244,9 @@ public sealed class Simulation : IDisposable
     {
         range = K.HOME_R * Map.W; animalFood = false; group = 2;
         if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
-        int c = Life.Found(w, clade, genome, true, key, gx, gy, realm);
+        // the ancestor's own body, unmutated (2026-11-02: Found mutated it by the probe's key, so the founding judged a
+        // mutant nobody was given, and FoundedAncestors held a body whose range fed up to ~2% fewer than were founded)
+        int c = Life.Found(w, clade, genome, true, key, gx, gy, realm, mutate: false);
         if (c < 0) return 0f;
         animalFood = EatsAnimalFood(w, c); group = Life.BreedingGroup(w, c);
         // it must breathe where its founders are put, in the realm it is founded in (2026-11-01: a gill-breather founded

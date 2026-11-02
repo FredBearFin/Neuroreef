@@ -242,6 +242,24 @@ Now (no caps, no population terms):
 - C_ABSORB = 7 x C_BASAL (x M^0.75, PAbsorb): digestion passes rich digesta only as fast as their energy is absorbed
   (Karasov & Diamond 1983; Diamond 1991), and the forager values a food at most at that rate (denser kept on a tie).
   Life.RangeCapacity uses the same bound.
+- (2026-11-02) The gut is built to its body's basal cost (Body.GutScale). Before, absorption was 7 x Kleiber's basal
+  for the mass alone, while the founding need was FIELD_METAB x the body's own basal cost (organs, wings, brain, armour
+  included) x FORAGE_MARGIN = 4.5 x it: any body costing over 1.56 x Kleiber failed, and only ~5% of random ancestor
+  draws (0-3% of big-brained ones) passed the gut test. Measured guts follow demand instead: their mass and absorptive
+  capacity rise 1.5-2x under lactation, cold or migratory fattening (Hammond & Diamond 1997; McWilliams & Karasov
+  2001), so sustained intake is a multiple (~4-7x) of an animal's own basal rate, the sustained metabolic scope; and
+  gut tissue is dear (~5-10% of mass, ~20-25% of oxygen uptake; Huntington & Reynolds 1987; Cant et al. 1996). Now a
+  reference gut costs GUT_SHARE = 0.25 of a Kleiber body's basal cost, a gut of g references costs g times that, and g is
+  set so absorption C_ABSORB x M^0.75 x g is 7x the whole basal cost, the gut's own upkeep included: g = rest /
+  ((1 - GUT_SHARE) x Kleiber), at most GUT_FLEX_MAX = 2.5. Digestion (PDig) scales with g too; gut volume (PGut) does not.
+  A Kleiber body is unchanged; every other cost is raised by 1 / (1 - GUT_SHARE), the gut that feeds it, so a costly body
+  can eat what it needs but pays a third more for each costly organ. COST_WING is the wings' own share (0.45) of the
+  whole bird's measured +30-50%. No energy is made: the gut passes only food eaten, and its upkeep is in PBasal.
+  Without climate the gut test (absorption >= 4.5 x basal) now passes by construction below the cap; it still bites
+  through heat and breathing costs (not in basal) and above GUT_FLEX_MAX (no random ancestor draw reached it). Founding
+  only, seeds 1-10, 256 map, two big-brained ancestors (tools/FoundProbe): land clades 93/100 -> 100/100, water 9/60 ->
+  60/60, big-brained land 5/10 -> 10/10, big-brained water 0/10 -> 10/10. Most water lineages start small (median ~80
+  founders of 600: their ranges feed few), so whether they last is a question for runs, not for this test.
 - The clock in days (x M^0.25): maturity 120 days, gestation 50 days at a newborn of a tenth of adult mass (x sqrt of
   the share, as before), cooldown 50 days, lifespan 730 days at 1 kg (sources in CONSTANTS.md). A 0.14 kg body's
   time-limited r with a litter of 6 is 2.7x Fenchel's line (EcologyTests.LifeHistoryIsInDays); energy limits it below.
