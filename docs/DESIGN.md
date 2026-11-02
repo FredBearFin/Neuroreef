@@ -3,6 +3,86 @@
 Document NR-DD-001, Revision O. It implements NR-RQ-001 Revision G (`REQUIREMENTS.md`). The values of every
 constant named here are in `CONSTANTS.md`, which is generated from the code.
 
+**The 1 km world: one length scale, a valley at one latitude** (2026-11-01; Constants GEO_CELL_M, Map.ReliefM,
+Geology.Tectonics/Refine, Climate.Lat*/Rainfall, Hydrology.WidthM, Decide hash search, Wire units,
+world3d.js setRelief, js/scale.js, Options, setup.html; tools/ScaleProbe; images docs/art/scale2/). The owner: a default
+world ~1 km across, one valley with a stream, hills and a pond, several hundred animals at true size (first asked for
+~3.5 km; GEO_CELL_M was 55 m for a day). Now:
+- *One length scale.* GEO_CELL_M = 16 m a field cell (was 218): a unit is 4 m (M_PER_UNIT), the default map (now 256,
+  the valley; Options, setup's normal preset) is 1.02 km, 512 is 2.05 km, 1024 4.1 km, 2048 8.2 km; the grids keep their
+  sizes. Derived from it: CELL_M (plants' dispersal, was a separate 25 m; growth per m2 is the plant agent's), Map.CellKm2
+  (the hydrology's areas: RIVER_ACC 0.01 km2, CHANNEL_A_MIN 0.0028 km2, RIVER_Q1 0.028 km2, CAVE_Q_MIN 0.00038 km2, no
+  longer "x map cells / 65,536"), channel heads at (A / b) S^2 >= CHANNEL_C = 50 m (Montgomery & Dietrich 1988), the
+  rain's distances in km (RAIN_L 500 km, RAIN_EVAP, RAIN_RECYCLE per km, RAIN_FALL 10 km), L_MAR 1.3 km, SENSE_WATER
+  1.74 km (109 cells), MEM_NEAR and PI_DIFF from metres, FLY_V_CAP 7 km, CAVE_ENTR_GAP and LAVA_LEN in metres, the
+  valley-floor heights RIVER_BANK, FLOOD_HAND, MEANDER_HAND, LAKE_MIN_DEPTH, BASIN_MIN, ALLUV_D (x GEO_CELL_M), the
+  spatial hashes (HCELL 128 units, HCELL_CALL 512: the same 1.5 km of perception and 3 km of hearing; a hash cell may be
+  the whole map, and a grid narrower than its search ring is searched whole, Decide.Visits). The animals' allometries
+  were already metres and stand: a 1 kg walker's top step (632 m) crosses half the 1 km map and a flier's (up to 7 km)
+  goes round it; positions wrap and distances between animals are the shortest way round the torus.
+- *Relief from the size of the piece.* A 1 km map is a piece of a larger landscape. Its vertical scale is Map.ReliefM =
+  H_RELIEF (8 km, an orogen) x (width / RELIEF_L_KM 200 km)^RELIEF_HURST 0.75 (self-affine relief): 153 m on 256, 257 on
+  512, 433 on 1024, 728 on 2048. Every height in metres reads through it (Climate's lapse rate, Hydrology, Caves,
+  Explore, vehicles, World.ElevPerM, Wire meta `units.reliefM` / `explore.hRelief`). The plates' pattern stands for the
+  pattern of rock uplift and rock the piece is cut from (fault blocks, warps, rift basins): its heights, cover and
+  limestone x VScale = ReliefM / H_RELIEF, its uplift rates x sqrt(VScale) (relief over hillslopes goes as U L^2 / D, so a
+  small piece needs tens of m/Myr to stand its hills; with VScale alone they stood 16-69 m). Stream power (km2), creep
+  (km2/Myr), rock-strength failure and talus run at true scale. Creep dominates below ~1 km: the valley is a smooth
+  hollow between hills of 10-25°. The last steps of deep time run on at most 128 cells a side (DEEP_MAX: 32 and 64 m cells
+  on the 1024 and 2048 maps, upsampled with roughness) and the coarse grid on half that, at least 32: on 16 m cells creep
+  needs ~600 sub-steps a step. Glaciers form only where the world's snowline is below its hills (none on a 1 km map).
+- *One latitude.* A map sits at the world's latitude (World.LatDeg: from the terrain seed, 10-55° in either hemisphere;
+  Nature.Latitude sets it) and spans its true extent (Map.LatSpanDeg, 0.01° on 256), smoothly closed on the torus.
+  Every place that read latitude from the row reads Climate.SinLat / Phase / AbsLatDeg (RowParams, Rainfall, Normalise,
+  AnnualMean, Fields' and WaterCycle's moisture season, Plants' flowering phase, World.SeasonAt, Hydrology.AnnualWater,
+  Caves, Geology.Snowline). Nature.LatSpan >= 360 gives back the old torus of latitudes (tests of the latitude laws).
+- *Rain at this scale.* The background rain falls off over hundreds of km, so not across a map; orographic condensation
+  (RAIN_OROG 0.15 per km of lift) falls out over RAIN_FALL = 10 km downwind (Smith & Barstad 2004); rain grows 5% per
+  100 m (RAIN_ZGRAD).
+- *Rivers at true width.* Hydrology.WidthM(Q) = RIVER_W 5 x sqrt(mean m3/s), at least 1.2 m (the hydrology agent's; it
+  replaced this note's RIVER_WK 12, a bankfull width, at the merge).
+  The RIVERS lines carry that width in field cells (under 1); World.RivW is the cells it covers (1 for any stream
+  narrower than a cell).
+- *Console.* RELIEF = reliefM x fcell / fieldCellM from meta (world3d.js setRelief, on every meta; 38 units on 256);
+  creature size defaulted to x1 (true size; the control stays; x100 since 2026-11-02, below); metres per unit from the
+  server everywhere.
+Measured (256 map, seeds 3 / 5 / 7; tools/ScaleProbe):
+- width 1.02 km; top 153 / 153 / 97 m above the lakes, land p50 42 / 41 / 31 m; slopes p50 14 / 12 / 9°, p90 23 / 21 / 16°,
+  p99 30 / 28 / 23°; land rock crystalline 25-32%, sedimentary 66-71% (regolith and colluvium mantle the hills), volcanic
+  2-6%, limestone 0 (the 15 m bed stays under its cover); one lake of 10% of the map (two lobes on the torus).
+- streams: 0.1 / 0.2 / 1.8% of the map; the largest catchment off the lake is only 0.12 / 0.10 / 0.09 km2, so they are
+  0.3 m wide at ~1 L/s. A 1-5 m stream needs 1-20 km2 upstream, which a 1 km torus cannot hold: a stream that runs
+  through the valley from a larger landscape needs an inflow at the map's edge (the hydrology agent's; not done).
+  1024 map: 433 m of relief, streams to 2.1 m wide and 5.8 km2; 2048: 728 m, to 4.3 m and 19 km2.
+- Populations (random brains, 6,000 steps, 256 map, food per field cell not rescaled: the plant agent's per-m2 growth is
+  to come): seed 3 916 -> 474 (1 lineage of 16 left), seed 5 884 -> 0 (all extinct by step 3,000), seed 7 884 -> 653 (1
+  lineage). On the old scale (14 km, same map and seeds): 186 (5 lineages), 11,576 at step 5,000 (10), 1,581 (10); at
+  3.5 km: 121 (3), a boom to 8,174 (4), 340 (3). Populations stay in the hundreds, but lineages no longer found viably:
+  on a 1 km torus every animal's step (a 1 kg walker's 632 m, a strike's reach of ~0.1-1 km) spans the homelands
+  (HOME_R x map side = 120 m), so all lineages meet at once and one excludes the rest; killed, starved and lost dominate
+  the deaths. Founding (HOME_R, HOME_R_MAX as shares of the map, FOUND_FILL) and the prehistory's branches need the
+  ecologist's look at this scale (a prehistory branch on the 256 map had 12 of 16 lineages gone by step 500).
+Size sweep after the plant productivity merge (2026-11-01; random brains, 2,000 steps = 8 months, --threads 2, seeds
+3 / 5 / 7; densities against Krebs's herbivorous mammals, log10 D/km2 = 1.30 - 0.66 log10 M kg: 20 at 1 kg, 2.6 at 21 kg):
+- 2 km (512 map, 16 m cells): clades alive 16 -> 11-13 / 9-11 / 14-16 (mid/end), with 50 or more animals 6 / 4 / 12; 1,330-
+  7,183 animals; median clade density 5-26 x Krebs (best 29-83 x); herbivore offtake 7-39% of NPP (0.65-1.04 kg/m2/yr);
+  5-16 steps/s; ~2.3 GB.
+- 4 km (1024, 16 m): 9 / 7 / 12 clades of 50+ (13 / 9 / 15 alive); 4,635-10,708 animals; median 2-11 x Krebs (best 18-32 x);
+  offtake 6-17%; 5-10 steps/s; 2.9-3.6 GB.
+- 8 km (2048, 16 m): 7 / 8 / 13 clades of 50+ (12 / 10 / 16 alive); 5,774-13,838 animals (still spreading from 8,500
+  founders); median 0.4-3.9 x Krebs (best 4-9 x); offtake 1.4-5%; 4-10 steps/s; 3.5-4.1 GB; the 16,384-slot cap bound on
+  62 steps of seed 7; built in 80 s.
+- Coarser cells at the same width: 2 km on 32 m cells (256 map): 9 / 10 / 13 clades of 50+, 3,330-8,894 animals, median
+  6-20 x Krebs, 4-10 steps/s, 1.8-2.2 GB (no faster: the cost is the animals, not the cells); 4 km on 64 m cells: 15-16
+  clades but ~16,400 animals, held by the slot cap (249 / 783 steps full), 1.3-1.7 steps/s, 3.8 GB: a coarser cell feeds
+  more animals per km2 and resolves less relief and fewer streams.
+So every size from 2 km keeps 5+ lineages over the run on most seeds, but only the 8 km map comes near the Damuth density
+(30-100 km2 for 5+ lineages at it, the reference's estimate; 8 km is 67 km2). Recommended: 16 m cells; the 8 km map (2048)
+where realistic density matters, 4 km (1024) as the lighter choice (2-11 x too dense). Not equilibrium: 2,000 steps.
+Not done: a stream's inflow from beyond the map; a regional-uplift generator for small maps (the plates' pattern drawn
+small makes Y-shaped ridges); contour-parallel steps of a cell on some hillsides (from the failure passes: visible in
+docs/art/scale2/relief_256_*.png); the console's river ribbons should be drawn at the RIVERS width x FCELL.
+
 **Water depths in metres, and wetlands from the water table** (2026-11-01; Hydrology.Waters and Bathymetry, Wetlands.cs,
 WaterCycle.cs, Fields.Row, Plants.cs, Wire.cs; tools/WetProbe; images docs/art/wetlands/: depth_before_*, depth_after_*
 (water by depth, log scale; the shallow realm outlined) and wetlands_* (kinds and peat, the share of the year
@@ -67,6 +147,35 @@ Wetlands (Wetlands.cs; nothing places one):
   waterlogged ground a plant under tolerance 0.5 cannot grow; tolerance costs FLOOD_COST 8% of production at its most
   (Costs: a mid genome is unchanged). Founders are random in it; the wetlands' plants are what recruitment, the lottery
   and mutation leave there.
+- *Canopy production and live wood* (2026-11-01, Plants.RowA). A leafy canopy fixes REPRO_RATE (NPP_MAX of a closed
+  canopy per unit leafy cover) x its environment factor fe x the light it intercepts (Beer's law, CANOPY_KL 2: Monsi &
+  Saeki 1953), whatever room its crown has. Crown growth takes at most that (before, a sward of short-lived herbs could
+  turn its cover over ~10 times a year); a woody plant (woodiness from its height) puts what its crown and seed did not
+  take into live wood (World.LiveWood, saved; checkpoint format 24 starts an older save's wood from its woody cover,
+  WOOD_INIT 15 kg/m2 per unit, and keeps its land). Live wood dies at the woody plants' stem death rate (age and
+  drought) into dead wood (Pool.Wood); it takes WOOD_N 1/10 of leafy growth's nutrient, and the decay of dead wood
+  immobilises the difference from the soil when it dies, as far as the soil has it (Laiho & Prescott 2004; 2026-11-02:
+  dead wood keeps its own nutrient, World.WoodN, §10.4). Before, a closed forest's production was
+  only its leaf turnover (forest NPP 2-3x below the measured).
+- *Water-limited production* (2026-11-01). The water-limited rate is r0 x (0.5 + WUE) x W_SUP x relative soil water,
+  W_SUP = E_MAX_ROOT 5 mm/day over PET_REF a day (1.83; the supply/demand ratio of transpiration, Haxeltine & Prentice
+  1996; Sitch et al. 2003), colimited with the carbon-limited rate by a non-rectangular hyperbola of curvature
+  COLIM_THETA 0.95 (Collatz et al. 1991). Before, W_SUP 3 and a rectangular hyperbola made soil at 0.2 of capacity
+  nearly as productive as at 0.4 (desert NPP 2x the measured). Round 2: the demand side, the water-limited rate x
+  e_s(T_REF) / e_s(T) (Climate.Demand: warm air's vapour pressure deficit buys less carbon per water; Tanner & Sinclair 1983).
+- *Round 2 (2026-11-01).* Beer's law over the cell's whole leafy cover (each leaf fixes Intercept(total) / total of a
+  closed canopy's leaf), so a sapling under a closed canopy gets no sparse-leaf boost. Cold: tissue formation is limited
+  by the meristems' temperature, 0 below T_GROW_MIN 5 °C, rising over T_GROW_RAMP 5 K (degree-days above it; Körner &
+  Paulsen 2004; Körner 2012; Rossi et al. 2007); short plants run DT_SHORT 4 K x exp(-h / H_COUPLE 0.5 m) warmer than
+  the air, tall trees at air temperature, so trees stop growing first in the cold (ColdGrowth: limits crown growth, wood
+  and seed, not the losses). Stem life: LIFE_EXP 1 (lifespan ~ M^1/4, M ~ H^4: Marba et al. 2007; Niklas 1994), a 15 m
+  tree 50 years and a 30 m tree 100, the 1-2% a year of mature forests (Stephenson & van Mantgem 2005); was 0.75 (19 years).
+- *Round 3 (2026-11-01).* The sea-level annual mean by latitude is T_EQ 26 - DT_EP 18 sin² - DT_EP4 24 sin⁴ (Climate.
+  SeaLevelMean), through the observed zonal means (Sellers 1965): 14.5 °C at 40°, 7.1 at 50°, 5.5 at 52°, -16 at the pole.
+  The old 27 - 40 sin² made 52° 2.2 °C and held trees there near their cold limit. Geology's deep-time glaciation keeps the
+  old profile, as GEO_T_EQ 27 and GEO_DT_EP 40, and so do Hydrology's mean-year water and Caves' dissolution
+  (Climate.LandMean), so each seed builds the same land as before. Plant maintenance respiration follows the temperature
+  (Q10_RESP 2: Ryan 1991; Atkin & Tjoelker 2003); before, an evergreen respired its 20 °C rate through a -8 °C winter.
 Measured (512 map, seeds 3, 5, 7; a new world and one more year, no animals; WetProbe):
 - Wetlands 0.55 / 0.41 / 1.06% of the land (69 / 54 / 144 cells): marsh 8 / 6 / 8, swamp 16 / 5 / 30, fen 38 / 38 / 95,
   bog 7 / 5 / 11. Settings: lake and sea shores 13 / 13 / 23 cells, river banks 42 / 26 / 59, spring lines away from
@@ -170,6 +279,24 @@ Now (no caps, no population terms):
 - C_ABSORB = 7 x C_BASAL (x M^0.75, PAbsorb): digestion passes rich digesta only as fast as their energy is absorbed
   (Karasov & Diamond 1983; Diamond 1991), and the forager values a food at most at that rate (denser kept on a tie).
   Life.RangeCapacity uses the same bound.
+- (2026-11-02) The gut is built to its body's basal cost (Body.GutScale). Before, absorption was 7 x Kleiber's basal
+  for the mass alone, while the founding need was FIELD_METAB x the body's own basal cost (organs, wings, brain, armour
+  included) x FORAGE_MARGIN = 4.5 x it: any body costing over 1.56 x Kleiber failed, and only ~5% of random ancestor
+  draws (0-3% of big-brained ones) passed the gut test. Measured guts follow demand instead: their mass and absorptive
+  capacity rise 1.5-2x under lactation, cold or migratory fattening (Hammond & Diamond 1997; McWilliams & Karasov
+  2001), so sustained intake is a multiple (~4-7x) of an animal's own basal rate, the sustained metabolic scope; and
+  gut tissue is dear (~5-10% of mass, ~20-25% of oxygen uptake; Huntington & Reynolds 1987; Cant et al. 1996). Now a
+  reference gut costs GUT_SHARE = 0.25 of a Kleiber body's basal cost, a gut of g references costs g times that, and g is
+  set so absorption C_ABSORB x M^0.75 x g is 7x the whole basal cost, the gut's own upkeep included: g = rest /
+  ((1 - GUT_SHARE) x Kleiber), at most GUT_FLEX_MAX = 2.5. Digestion (PDig) scales with g too; gut volume (PGut) does not.
+  A Kleiber body is unchanged; every other cost is raised by 1 / (1 - GUT_SHARE), the gut that feeds it, so a costly body
+  can eat what it needs but pays a third more for each costly organ. COST_WING is the wings' own share (0.45) of the
+  whole bird's measured +30-50%. No energy is made: the gut passes only food eaten, and its upkeep is in PBasal.
+  Without climate the gut test (absorption >= 4.5 x basal) now passes by construction below the cap; it still bites
+  through heat and breathing costs (not in basal) and above GUT_FLEX_MAX (no random ancestor draw reached it). Founding
+  only, seeds 1-10, 256 map, two big-brained ancestors (tools/FoundProbe): land clades 93/100 -> 100/100, water 9/60 ->
+  60/60, big-brained land 5/10 -> 10/10, big-brained water 0/10 -> 10/10. Most water lineages start small (median ~80
+  founders of 600: their ranges feed few), so whether they last is a question for runs, not for this test.
 - The clock in days (x M^0.25): maturity 120 days, gestation 50 days at a newborn of a tenth of adult mass (x sqrt of
   the share, as before), cooldown 50 days, lifespan 730 days at 1 kg (sources in CONSTANTS.md). A 0.14 kg body's
   time-limited r with a litter of 6 is 2.7x Fenchel's line (EcologyTests.LifeHistoryIsInDays); energy limits it below.
@@ -225,6 +352,56 @@ should be easy to see the whole thing", "we don't need worlds that reach 60k pop
 - Swimmers are drawn under the water's surface at their depth (AGENTS format 7: depth in m, at true scale), fading
   into the water's colour with depth and its murk (algae, plankton); an air-breather that spends only part of each step
   at depth dives for that share of an 8 s cycle and is at the surface for the rest. Never below the bed.
+
+**Creature display size, and the animals that vanished in Explore** (2026-11-02; js/scale.js, js/world3d.js,
+js/main.js, js/explore/explore.js, index.html, style.css; images docs/art/scale3/). The owner: "the realistic sizes,
+you just cannot see them at all. You basically need to have it in 100x size", and "in the vehicle mode or in the
+explore mode, all the animals just disappear". Display only; the simulation is untouched.
+- Cause of the second: Explore (and the vehicles, which run inside it) forced the creature size to x1 (scale.trueSize),
+  and the smallest-on-screen rule applied only to the overview. At true size a 0.1-40 kg animal is 5-34 cm long: the
+  person, dropped 8 m from one, saw a body of ~10 px in the grass, and every animal farther off was under a pixel. The
+  server sends every animal (no area of interest), the frustum test uses the drawn size, the clip planes are fine
+  (near 0.004, far 1,200 units), so the animals were drawn, only too small to see.
+- Two remembered settings (localStorage, new keys, so the old x1 default is not kept): the overview and animal cameras
+  (default x100: a 1 kg animal drawn 10 m long, 40 kg 34 m), and Explore with the vehicles (default x10: a 1 kg animal
+  as big as a dog beside the 1.7 m person; x100 there would put the person inside it). Steps true, x3, x10, x30, x100,
+  x300 on the slider, presets true / x10 / x30 / x100 / x300 beside it, keys [ and ] (in Explore too).
+- No body is drawn shorter than DOT_PX = 3 px in any view, so on an 8 km map or from a plane the animals stay specks.
+- Hit areas follow the drawn size (pick reach, Explore's aim ray, the selection ring, fight marks, call rings, eggs).
+  The person is placed beside an animal at its drawn size's distance plus 8-45 m. A far body drawn longer than ~1 m
+  is sheared to the slope like a near one, so a magnified animal stands on a hillside rather than half in it. Plants
+  in Explore stay true size. The server still checks weapon range from the true centre.
+
+**True size by default: the cameras reworked instead** (2026-11-02, later; js/world3d.js, scale.js, explore/explore.js,
+explore/vehicles/index.js, look/vegetation.js, Player.cs). The owner: "why do they need to be 100x size? maybe the view
+is WAY too far out? maybe in explore WE are too big?" and "if we are 1.7 m tall, shouldn't the 50 t animals be HUGE?"
+Display and cameras only, except the person's own size and reach.
+- *Overview.* It opens low over the densest group of animals (40 m bins), framed 30-80 m across at ~20° above the
+  ground, after showing the map for a moment; it zooms from ~1 m to the whole map (wheel, Q / E), pans with W A S D or
+  the arrows at a share of the view's distance per second, and N / Shift+N go to the next group (most numerous first),
+  Tab / Shift+Tab to the next clade (lineage) at its densest group, as in Explore. Near and far planes follow the zoom.
+- *Follow camera.* 6.5 body lengths behind and 2.2 above (drawn length); near plane 0.3 of the body, far plane at the
+  fog, for depth precision with bodies a few cm long.
+- *Explore: the person's size* (Z, the menu in the size box): animal-sized by default (as tall as the median living
+  animal is long, as heavy as the median), human (1.7 m, 70 kg) or tiny (5 cm, 30 g). Its eye, reach, weapons' ranges
+  and flights, vehicles, near plane and the distance it is put from an animal all scale with its height; it walks at
+  sqrt of it (Froude). The server has the person's size (ICD §3 `player` scale, mass; Player.Resize): the animals sense
+  a body of that mass, strike it against that mass, and the hit check, line of sight, blast radius and a boat's least
+  depth use the scale. Damage and health are not scaled. An older console sends no size: the 70 kg person, as before.
+- *Defaults.* True size in every view (new localStorage keys, -v2, so a saved x100 / x10 does not override it). The
+  multiplier is now "at least this visible": a body up to 10 cm is drawn x times longer, a longer one grows only as the
+  fourth root beyond that and never below its true length (x100: 5 cm -> 5 m, 1 kg -> 10 m, 40 kg -> 14 m, a 20 t
+  giant -> 23 m where a plain x100 made it 270 m; x10: a giant at true size). Each body's factor rides in the body
+  shader's action word, so the shader still reads its true mass (legs, feathers) from the drawn size; the minimum-pixel
+  size uses the same path (a far speck no longer turned into a stubby-legged heavyweight).
+- *Giants.* Bodies decode on the world's mass range (status units massMinKg..massMaxKg) on every path; a change of
+  range (a giants world after the prehistory) now decodes every body again (it kept each animal's old-range mass). A
+  20 t animal is drawn its true length, BODY_L_M x M^(1/3) x its length gene (2.7 m for a cube-shaped body, up to ~7 m
+  elongated) - the sim's own length, not changed here.
+- *Plants stippled the animals away.* The plants' near fade dissolved every tree within 0.9 of its height of the
+  camera's foot (18 m for a 20 m tree), and every bush and rock close by: from the ground, Explore was full of dark,
+  dithered trees, and the animals behind them read as stippled ghosts. Now only a plant the camera is inside fades.
+  Explore's shadow map also shrinks with the person (a 10 cm body over a 5 cm texel shaded itself into acne).
 
 **High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
 Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and
@@ -772,12 +949,57 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   brain and diet: the range's sustained plant yield (Fields.Yield: each pool's growth at the stock where it grows
   fastest, seasonal pools at their yearly mean) over a day of living, FIELD_METAB = 1.5 x basal (measured in this world:
   basal 0.92, moving 0.12, growth 0.16, breeding 0.15, heat 0.10). The setup's "founders" is now only an upper limit.
-  A large body's home range widens (up to HOME_R_MAX) until it can feed FOUND_MIN founders, as home ranges grow with
-  body mass.
+  A home range widens (up to HOME_R_MAX) until it can feed that limit (until 2026-11-01: FOUND_MIN = 50 founders), as
+  home ranges grow with body mass.
 - *Ancestors that can live where they live.* Of up to ANCESTOR_TRIES random bodies, an ancestor is the first whose home
-  range can feed FOUND_MIN founders and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
+  range can feed a breeding group (below) and whose gut can eat fast enough: one bite a step of a half-grazed cell, or its
   digestion rate, must give FORAGE_MARGIN days' need (a Holling type II limit). Nothing chooses a diet or a size: a
   20-unit nectar eater, a water animal with a grass diet or a meat-eater with nothing to eat is simply never an ancestor.
+- *Founding on the food animals make (2026-11-01).* Only growing plant food was counted, and no animal existed when an
+  ancestor was tested, so a body that eats mostly meat, carrion or dung could never be founded. Now:
+  - *Order, not quota.* The ancestors are tested in turn as before. If a draw gets the most energy per kilogram from
+    animal food (meat, blood, carrion or dung: Simulation.EatsAnimalFood) and cannot be fed yet, that ancestor waits;
+    once every other ancestor is founded it is tested again, the same draws in the same order, on the animals now living
+    in its range. Prey before predators, as food webs are built from the bottom. Nothing forces a diet, a draw or a
+    carnivore clade; if the test feeds none, none is founded.
+  - *What the animals make* (Life.AnimalFood, over the animals of other clades in its range, in cells it can live and
+    breathe in). Each animal's production is the body it makes from its own life history (Life.BodyMade): a juvenile
+    grows the rest of its adult mass over its maturation, an adult that bears young makes a litter of its birth share
+    of its mass each breeding cycle (gestation plus cooldown), at TISSUE_E a kilogram. Live prey count only if the
+    eater strikes and digests meat, and only while its strike power (strike·M) is not less than the prey's counterblow:
+    all of a weaker prey's production, of a stronger one the share it makes while still small enough (power over the
+    adult's counterblow). It eats, at its meat efficiency, the intake that would turn TROPHIC_EFF (10%: Lindeman 1942;
+    Pauly & Christensen 1995) of that production into its own production at its own production efficiency (the young a
+    population of adults like it bears, against that plus its day's need; 1-5% for the founders' bodies, as mammals'
+    1-3%), and never more than that production's edible tissue (CarcassKg). For a warm-blooded predator this bound is
+    the edible tissue itself: it can eat all the production of what it can catch, as vertebrate predators take 50-100% of
+    vertebrate prey production (Begon, Townsend & Harper). Carrion: in a steady population as much dies as is made
+    (Allen 1971), so the edible tissue of that production falls as carrion on land, detritus in water, counted at its
+    inflow as plant litter is. Dung: what each animal's gut leaves of the food that pays its day (FIELD_METAB × basal at
+    its best food), dung on land, detritus in water.
+  - *Each kind of food counts only if it could live on it.* The gut-rate test (FORAGE_MARGIN days' need a step) is made
+    for plant food, prey (a kill goes into the gut whole: digestion rate, gut and carcass bound it), carrion and dung
+    (bites of their steady stock, inflow over rot) separately, and only the kinds that pass are counted. Before, the
+    energy of every food was counted once any one passed, so a meat-eater could have been founded on plants it cannot
+    eat fast enough to live on.
+  - *A range that feeds none is widened too* (Life.RangeFor, up to HOME_R_MAX): homes are placed far apart, so a
+    meat-eater's prey live in the other lineages' ranges.
+  Measured (valley map, seeds 3, 5, 7, 2,000 steps): two ancestors waited in each world; none of them was founded as a
+  meat-, carrion- or dung-eater: each was retested and its first viable draw was again a plant eater. The plant yield
+  of a range is thousands of times a plant eater's founders, so the gut-rate test decides; the prey present at
+  founding are the other lineages' founders (at most Founders each, far below their capacity, in their own parts of the
+  map), and their production (P/B ~0.3 a year from their genes, about what Carbone &amp; Gittleman 2002's ~1 kg of
+  predator per 111 kg of prey implies) feeds a founding group of FOUND_MIN only for meat-eaters of about a kilogram or
+  less, with a gut that passes meat at three days' need a step. No such draw came up first on these seeds.
+- *No fixed founding minimum (2026-11-01, the owner's choice).* FOUND_MIN = 50 (the 50 of the 50/500 rule) is gone. A
+  draw is viable when FOUND_FILL of its range's capacity is at least the smallest group that can breed (Life.BreedingGroup):
+  one for a body that reproduces alone, a pair otherwise (hermaphrodites here still mate with a partner). Single pairs
+  and single gravid females do found island lineages (Darwin's finches' "Big Bird" lineage on Daphne Major from one
+  immigrant male; Lamichhaney et al. 2018), though most such groups die out by chance (Allee effects; Courchamp et al.
+  1999); nothing here rescues them, and with separate sexes a pair's sexes are drawn at random. A lineage starts with as
+  many founders as its food feeds, up to Founders (Simulation.FoundersFed); the old floor of GROUP_SIZE founders for the
+  best-fed draw when none was viable is gone too (no viable draw, no lineage), and a gene-bank clade its new range cannot
+  feed a breeding group of is not founded. Founders are placed in groups of up to GROUP_SIZE.
 - *Food sensed as worth to the eater.* FOOD_HERE (and the food gradient) was the cell's food against the best food the
   diet could ever give, so a nectar eater in a meadow sensed ~0.02 and its eating instinct hardly fired: hungry
   founders stood on food and starved. It is now one bite's energy against a step's need, 1 - exp(-bite/need).
@@ -800,7 +1022,10 @@ step 3,000, 70% of deaths were starvation, and 3 of 10 lineages were left at ste
   (water for a swimmer, land for a walker, both and shallows for a wader, anything for a flier); a day costs FIELD_METAB
   x basal at its core temperature plus the heat it must make there (Heat.Balance); and a brain may take at most
   BRAIN_SHARE_MAX = 25% of the basal cost (humans ~20%; Aiello & Wheeler 1995): the 256-unit brain drew 0.1-0.4 bodies
-  it could not pay for and died in 9 worlds of 9.
+  it could not pay for and died in 9 worlds of 9. (2026-11-01: 60%, the measured vertebrate maximum, the elephantnose
+  fish's (Nilsson 1996); the brain's energy is in the founding need in full, so a body that cannot feed its brain fails
+  on food, not on the share. On seeds 1-10 the change founded no further lineage: every big-brained draw the 25% share
+  had rejected also failed the gut's rate, its absorption C_ABSORB x M^0.75 below FORAGE_MARGIN days of its need.)
 - *The young grow continuously.* A juvenile grew only from energy above half its reserve, and the young lived near 40%
   full: at 400 steps they had built 12% of their adult tissue. It now grows at its top rate times its reserve density
   (a dynamic energy budget, Kooijman 2010), keeping GROW_RESERVE = 20% against starving.
@@ -861,7 +1086,26 @@ saves load with the default. With the default range a run is bit for bit what it
 of these sizes and warns that giants need a much bigger map; the map is never resized for you. One law had to be mended
 for giants: the leg-load term of walking speed (LOAD_DRAG x M^(1/3) x ...) is negative for bodies whose legs share the
 load better than the reference, and above ~14 t with three or four leg pairs made the speed negative or infinite; the
-gain is now at most twice the plain body's speed (it never binds up to 1.7 t).
+gain was held to at most twice the plain body's speed. (2026-11-01, later: that floor is gone; the load model is now
+the bones' safety factor, §9.2b, positive and finite for any mass and leg count.)
+
+**Small founders in a world of tiny bodies** (2026-11-01, the owner saw no founder below 41 g in a 1 g-1 kg world, seed 7,
+at step 120). Measured on founding alone (256 map, 60 founders, seeds 1-20, no step): 19 of the 20 seeds founded bodies
+below 41 g (the smallest 1.0 g), so seed 7 was largely chance: ancestor mass is log-uniform from the class floor to
+BodySize.Max, and two of its three random smallest-class ancestors happened to draw ~41 g on their first, viable, draw.
+But the founding test did thin small bodies, for a reason that was not physics: a random ancestor's brain was drawn at
+2-24 units whatever its body, while a unit costs the same in any body (energy per neuron is about constant) and the brain
+may take at most BRAIN_SHARE_MAX = 25% of basal cost. Basal cost falls as M^0.75, so most draws under ~10 g failed the
+brain share, and the redraw drew a new mass too: of the draws under 10 g (not counting the big-brained ancestor), about 5
+in 56 were viable. Seed 7's third smallest-class ancestor was redrawn from small bodies to 320 g this way. Now a random
+ancestor's brain is drawn up to what its body can surely pay for (Body.UnitsAffordable: 25% of the basal cost of the
+cheapest body of its mass; ~30 units at 0.1 kg, ~5 at 10 g, ~1 at 1 g), as small animals have small brains; above ~0.07 kg
+it never binds, so the default range founds exactly as before. After it, no random ancestor fails the brain share, about
+19 in 40 draws under 10 g are viable, all 20 seeds found bodies below 21 g and 9 of them reach 1.0-1.3 g (seed 7: 1.0 g).
+What still thins the smallest bodies is physics: below ~1.5 g even the smallest brain (BRAIN_MIN = 2 units) is more than
+25% of basal cost; a small body loses heat fast, which raises its day's need against what its bite and gut pass
+(FORAGE_MARGIN); and it must breathe where it is founded. The big-brained ancestor (BigBrainUnits, 256 by default, which is
+ancestor 0 and so in the smallest class) cannot be small at all: 256 units need about 0.7 kg or more.
 
 **Big brains fixed** (2026-10-30, found after the user saw the big-brained founders kill each other at once): the
 brain size was stored in a byte, so a 256-unit brain ran with 0 memory units while paying for 256; it is now a ushort.
@@ -1076,7 +1320,9 @@ reviewed by the ecologist)
 - The strength of nature is a setting (Nature: plants, seasons, season length, droughts, fire, disease,
   thirst, water, ponds), multipliers on the documented constants; 1 = the law. Saved in every checkpoint.
 - Hunger senses prey: an animal that can digest meat or blood sees the value of the animal in reach as food
-  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants.
+  (FOOD_HERE, CLIMB_FOOD), and EAT on prey is a strike. Before this hunger pointed only at plants. (2026-11-01:
+  prey and plants are compared by the energy a bite of each gives, not by their worths, which saturate at ~1 for
+  any food; the way to food leads to prey only for what it would give beyond the food underfoot.)
 - Ancestors' diet preferences are sparse and random: good at 1-3 of all 15 foods, poor at the rest. Revision P: a
   guaranteed staple (grass on land, plankton in water) was tried and removed, as it put every ancestor in the same
   niche; an ancestor is instead a body its home range can feed. Drain or kill is a share (PDrain), not a switch.
@@ -1188,6 +1434,98 @@ sight of the way it travelled (Decide.Perceive: the disc of the band's area, Ger
 a mating reaches along that way (Resolve.AlongWay). The bodies' hash cell (HCELL = 8, 7x7 cells) is sized from the
 largest perception, the callers' (HCELL_CALL = 32, 5x5) from the loudest call (both wider in a world of bigger bodies: Map.HCell, Map.HCellCall). docs/CONSTANTS.md group Units has every
 value and its source; docs/ICD.md §2.1 what the console gets.
+
+## 0c. The length of a step: a world setting (2026-11-02, phase 1)
+
+The owner: "why not have speed be just totally customizable, isn't it theoretically just decimals/fractions of steps?"
+A step is now `World.StepH` hours, a world setting (`Nature.StepH` when the world is built; `--step-minutes`, the setup
+screen's "Time in a step": 1 min, 10 min, 1 h, 2.92 h; saved in the checkpoint header from format 26, older saves 2.92 h).
+The default is K.STEP_H = 8766 h / T_SEASON = 2.922 h exactly, and the default world is the old run **bit for bit**
+(StepLengthTests.DefaultStepIsBitIdenticalToBefore pins a hash of a world with animals, climate on, 300 steps, taken on
+the code before the change; ClimateTests' no-climate hash and the determinism tests are unchanged).
+
+**How.** `Dt = StepH / K.STEP_H` (exactly 1 at the default). Every constant keeps its meaning *per reference step*
+(K.STEP_H); the world converts it: a rate x Dt, a probability p by `World.PStep(p) = 1 - (1 - p)^Dt`, a share kept a step
+f by `World.Keep(f) = f^Dt`, a duration in steps / Dt, an interval of n reference steps `World.Steps(n)` / `World.Every(n)`,
+a diffusion SD x sqrt(Dt). Each returns its argument unchanged at Dt = 1 (multiplying or dividing by 1f is exact), which
+is what keeps the default bit-identical. Step counters (Age, Cooldown, Timer, floats) still count steps; the thresholds
+they are compared with (PLife, PMature, PGest, PCool) are in this world's steps (/ Dt). A float counts whole steps exactly
+up to 16.7 million (31 years at a minute a step). The energy unit stays 8.9 MJ (BMR_W x K.STEP_S / C_BASAL): flows per
+step change, stocks do not.
+
+**The land runs on the reference clock** (Simulation.LandTicks): weather, fields, plants, fire, nutrients, wetlands and the
+water cycle run one tick for each reference step the world's step ends (once in ~17.5 steps at 10 minutes, 1-4 times a
+step at coarser steps), with `Step` set to the reference step (World.RefStep) and Dt = 1, so the land's rates, stripes,
+seeds and intervals are the reference world's: after the same time a fine-step world's fields are the default world's bit
+for bit (StepLengthTests.PlantsAndFieldsGrowTheSameAtAFineStep). The land is built (terrain, water and plant spin-up) at
+Dt = 1 too. The price: at a fine step animals see the land change in jumps every 2.92 h (plants, water, scent decay, fire).
+
+**Audit.** "Physical" = follows the step by itself (derived from converted per-slot rates); "converted" = done in this
+change; "open" = still tied to the step; "problem" = scaling alone does not fix it.
+
+| Quantity | Where | Kind | Status |
+|---|---|---|---|
+| STEP_H, STEP_S, STEPS_PER_DAY | Constants 1b | definitions | the world's own copies: World.StepH, StepS, StepsPerDay (diagnostic FMR, take-off, Respiration) |
+| T_SEASON / Nature.SeasonLength | seasons, weather year, fire, wetlands | year in reference steps | converted: World.YearStep, World.Year (the land sees reference steps) |
+| C_SPEED (DMD_M / STEPS_PER_DAY / TRAVEL_SHARE) -> PVLand, PVWater, PVAir, PVmax, PReach | Body.Express | distance a step | converted (x Dt at v0Ref; PReach is a ratio and a sprint in seconds); FLY_V_CAP x Dt (Express, LoadedTopAirSpeed) |
+| C_MOVE (per unit distance), LEG_SWING | Resolve.MoveCost | energy per distance | physical (the distance a step scales) |
+| FlightPowerMin, FlightFullStep, TAKEOFF_S / STEP_S | Resolve.MoveCost | power a step, distance a step | converted (x Dt, / the world's StepS) |
+| C_BASAL -> PBasal; brain cost COST_BRAIN x C_BASAL | Body, Resolve, Life.Found, Respiration.OrganBase | energy a step | converted (x Dt); stocks built on C_BASAL (DEBT_MAX, O2_STORE, C_EMAX, TISSUE_E) stay stocks |
+| C_DIGEST, C_ABSORB, C_BITE -> PDig, PAbsorb, PBite | Body, Resolve, Life.Found | mass or energy a step | converted (x Dt) |
+| CARE_RATE x PBasal (milk a step) | Life | energy a step | physical (through PBasal) |
+| Heat: K_COND x C_BASAL; SUMMIT, EVAP_MAX x basal | Heat.Conductance, Balance, Freeze | energy a step per K | converted (a dt argument); the caps are x basal (physical) |
+| STRAIN_GAIN, STRAIN_REC | Resolve | per step | converted (x Dt) |
+| C_THIRST, DRINK_RATE; EVAP_REL thirst | Resolve | per step | converted (x Dt); evaporative thirst physical (through evap) |
+| C_FATIGUE, C_RECOVER | Resolve | per step | converted (x Dt) |
+| PAIN_DECAY | Resolve | per step | converted (x Dt) |
+| Oxygen uptake, debt, dive limit (Respiration.StepSeconds) | Respiration | per step | converted (OrganBase and skin x Dt, StepSeconds x Dt); DebtMax a stock |
+| Juvenile growth (tissue / PMature) | Resolve | per step | physical (PMature / Dt) |
+| C_LIFE, C_MATURE, C_GEST, C_COOL -> PLife, PMature, PGest, PCool; REFRACT | Body, Life, Resolve | steps | converted (/ Dt): Age, Cooldown, the gestation and incubation Timer count steps |
+| Old-age mortality 0.002 a^2 | Resolve | probability a step | converted (PStep) |
+| FIRE_KILL | Resolve | probability a step | converted (PStep); FIRE_STEPS (how long a cell burns) is land: reference clock |
+| Pathogens in a host: PG_REP (growth), PG_KILL, PG_RISE, PG_E_DECAY, PG_DMG, PG_REPAIR, PG_MEM_DECAY | Pathogens.Host | per step | converted: load L exp((r(1-L) - kill) Dt), effector and damage explicit Euler x Dt, memory Keep |
+| PG_SHED (and the contact dose from it), PG_TOUCH, PG_EAT, PG_DRINK | Pathogens | per step, per bite | converted (x Dt, PStep) |
+| Infection hazard per dose (PG_INF) | Pathogens.Expose | per dose | physical (the dose a step scales); a contact is still drawn once a step (small problem) |
+| Reservoir decay, river flow, PG_DRY | Pathogens.Field | per step | land clock |
+| C_SCENT (deposit) | Resolve | per step | converted (x Dt); D_SCENT (decay) land clock |
+| BURR_PICK, BURR_DROP | Plants.Burrs | per step | converted (x Dt, PStep) |
+| PI_DIFF (path-integration drift at rest) | PathMemory | SD a step | converted (x sqrt Dt); PI_ERR is per distance (physical) |
+| Plants (R_G .. D_POLL, RESP, DROUGHT_M, REPRO_RATE, LIFE_HERB), PLANT_EVERY stripes, PLANT_CENSUS | Plants | per step, steps | land clock |
+| Water producers R_A, M_A, R_PH, M_PH; WEATHER, N_DIFF, ROT_*, RUNOFF, PEAT_FORM | Fields, Nutrients, Wetlands | per step | land clock |
+| Water cycle, WC_EVERY, FLOOD_MIX | WaterCycle, Hydrology | every N steps | land clock |
+| LAMBDA_FIRE, FIRE_STEPS | Fields | per step, steps | land clock |
+| Weather years; TreeMean every 32 steps | Weather | year, interval | land clock |
+| SPEC_EVERY, CLADE_RECYCLE | Clades | steps | converted (World.Every, World.Steps) |
+| TMPL_HALF (a song template's halving) | Decide | steps | converted (World.Steps) |
+| SAMPLE_EVERY (telemetry) | Simulation | steps | converted (World.Every: a sample every 32 reference steps, ~93 h); the rings count samples |
+| Telemetry traits T_LIFE, T_MATURE | Telemetry | steps | converted (reported in reference steps) |
+| Life.Found capacity: plant yield per reference step against need and animal yield per world step | Life | mixed | converted (animal yield and need put per reference step) |
+| FORAGE_MARGIN, FED_WELL, SATIETY, FIELD_METAB (a bite against a step's basal) | Decide, Life, Resolve | ratio of two flows a step | physical |
+| Decisions: STRIKE (P0_STRIKE, C_STRIKE), MATE, CALL (C_CALL, CALL_SYL), LAY, CACHE (events); EAT, DRINK, REST, MARK (states); the attack made while eating prey; turn rate C_TURN | Decide, Resolve | per decision | converted (phase 2): a brain's output for an act is its expectation a reference step. Events fire with chance g x Dt a step (a count: g a reference step at any finer step); states are bouts, the draw held a reference step, so an animal keeps eating or resting while its urge stays above the bout's draw; the attack while eating is made with chance Dt a step. C_TURN stays per decision (turning is fast; finer steps steer more often) |
+| Brain: ETA, LAMBDA (traces), SIGMA (exploration), KAPPA_HI (relax), RBAR_RATE, recurrent memory; rewards a step (R_INTAKE x intake a step, R_SPEND, R_PAIN; R_MATE, R_BIRTH per event) | Brain, Decide | per decision | converted (phase 2): traces decay Keep(lambda) a step, the baseline moves PStep(RBAR_RATE) a step, Relax every Steps(32), the memory units are leaky integrators with a time constant of one reference step, the exploration noise of the continuous gains is held a reference step, and learning sees each held choice and perturbation x Dt a step. Rewards need no scale: flow rewards are already x Dt a step and event rewards happen as often an hour. ETA, NLMS and IMIT_RBAR (per utterance) unchanged. Learning an hour (|learned - genome| an hour) matches within ~15% |
+| Perception along the way; MAX_PERCEIVE, HCELL, HCELL_CALL | Decide, Map | distance a step | physical at finer steps (the path shrinks); at steps coarser than 2.92 h the travelled band can outrun the 7x7 hash neighbourhood (problem for coarse steps) |
+| Explicit integration at large Dt | Pathogens (effector Euler), heat strain, fatigue, energy | stability | fine at Dt <= 1 (every decay x Dt < 1); above ~3 (8.8 h) PG_RISE and PG_KILL can overshoot and energy can cross zero in one step: coarse steps (to 12 h) are allowed but untested |
+| PREHISTORY_STEPS, YEARS_PER_STEP | Options, Prehistory | steps | converted (phase 2): the prehistory's length is a time (reference steps; `--prehistory-years`), its count of steps follows its own step; YEARS_PER_STEP stays symbolic. The prehistory and the world have their own steps (`--pre-step-minutes`, `--world-step-minutes`, two setup fields; Nature.WorldStepH, checkpoint format 27): the world founded after a prehistory or from a gene bank takes the world's step |
+| EcoWatch and Headless UNITS reports | server diagnostics | steps | converted (phase 2): steps a year and a day from the world (SeasonLength / Dt, StepsPerDay); not checked at a fine step |
+| Console clock, speed and interpolation | wwwroot/js | display | `units` (status and meta) carry the world's stepHours, stepSeconds, stepsPerDay, stepsPerYear and realTimeRate (ICD §2.1); the clock reads them. The speed bar has a "real" button (realTimeRate steps a second: one second of world time a second); positions glide between frames over the whole of a slow step (world3d.setAgents: up to 1.25 steps, at most 10 minutes; before, 0.7 s and then still) |
+
+**Invariance** (StepLengthTests; 2.92 h against 10 min; climate off unless said): a resting adult's energy an hour (within
+2%), ground covered an hour at a set share of top speed (within 5%; top speed in m/h equal), a fed juvenile's growth over two
+days (within 3%), survival over a day under a probability per reference step (exact) and old-age deaths through RESOLVE
+(within sampling error), and the land's fields after 75 reference steps (bit for bit). A 10-minute world with animals and
+climate runs a simulated day.
+
+**Phase 2 (decisions and learning in real time).** Acts in a world of animals (seed 7, 5,140 founders, one day; the founders'
+brains as evolved, learning on), per animal-hour, at 2.92 h / 10 min / 1 min (12 h): strikes 0.0080 / 0.0076 / 0.0070,
+matings 0.0129 / 0.0100 / 0.0096, lays 0.085 / 0.091 / 0.106, calls 0.029 / 0.026 / 0.024; share of time eating 59% / 55% /
+65%, resting 2.6% / 2.5% / 2.5%; learning an hour 0.157 / 0.135 / 0.155 (StepLengthTests.ActsAndLearningAnHourAreTheSameAtAFineStep,
+AOneMinuteWorldActsAsTheReferenceWorld). Before phase 2 a fine step fired every act once a decision: 17x (10 min) and 175x
+(1 min) the strikes, matings and calls a day. Still open: a contact (infection) is drawn once a step; a mating needs the
+partner within reach of a step's way, which is shorter at a fine step (matings run ~20-25% fewer an hour); perception and
+the hash grid are sized for 2.92 h steps (coarser steps truncate it); steps coarser than the default are untested.
+
+**Cost.** A fine step costs about what a default step costs (the animals' phases dominate; the land runs once a reference
+step), so a simulated day costs ~17.5x more at 10 minutes and ~175x more at 1 minute.
 
 ## 1. The idea in one page
 
@@ -1590,7 +1928,8 @@ no hand wiring, and tests assert that founder genomes depend only on the RNG and
 start low.
 
 **Groups.** Real populations are clustered, and a lone animal cannot find a mate (the Allee effect).
-Founders therefore start in groups of GROUP_SIZE = 8 within GROUP_SPREAD = 10 units of one site.
+Founders therefore start in groups of GROUP_SIZE = 8 within GROUP_SPREAD = 10 units of one site (a lineage its food
+feeds fewer starts as one smaller group, down to a breeding pair; 2026-11-01).
 
 **Elite archive.** Each species keeps a record of the ARCHIVE = 64 best genomes of its dead. A genome
 enters it when its owner dies, if it beats the weakest. The score counts offspring that grew up most:
@@ -1763,7 +2102,7 @@ because its genes differ moves to the nearest allowed cell, or dies.
 | movement cost | on the ground C_MOVE·C_SPEED·M^EXP_MOVE·speed·(1 − LEG_SWING + LEG_SWING·legs·pairs/LEG_PAIRS_REF·speed/vmax) (cost of transport ~M^0.7 × speed, Taylor et al. 1982; leg swing, Marsh et al. 2004; no swing swimming); airborne FlightPowerMin(M)·(3/u + u³)/4 − basal, u = speed/v_mp ≥ FLY_U_MIN (§9.2b); all × (1 + INS_MOVE·fur) |
 | fatigue | +c_F·g_SPRINT·speed/vmax; −c_rec (×3 resting) |
 | thirst | +c_θ·(1 − SOIL_WATER·moisture) per step on land cells; 0 in water |
-| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, C_CARC·M·(1 − Birth)/A_m·ρ_meat/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15) |
+| growth | a juvenile spends min(energy above GROW_RESERVE·Emax, M·(1 − Birth)/A_m·TISSUE_E/GROWTH_EFF) per step on tissue and matures on reaching adult mass (Revision D, §15). Since 2026-11-01 the whole body is built at the energy of wet tissue (TISSUE_E = 7 MJ/kg), ~9 MJ per kg with GROWTH_EFF; it was C_CARC·M·ρ_meat (18 MJ/kg), 2.5x the cost of real growth |
 | reserve | Emax = C_EMAX·M^EXP_EMAX (Body.Emax): the energy of the body's fat, FAT_KG·M^1.19 kg at LIPID_KJ_G = 39.3 kJ/g (Calder 1984), C_EMAX = 0.331 E; a body fasts 10.1·M^0.44 days at basal (Lindstedt & Boyce 1985). Until 2026-11-01 C_EMAX·M with C_EMAX = 2 |
 
 ### 9.2 Movement and realm
@@ -1779,8 +2118,8 @@ because its genes differ moves to the nearest allowed cell, or dies.
 
 ### 9.2b Locomotion physics (2026-10-31)
 
-- **Who flies.** Power available from flight muscle ~ wings·M^0.7, least power required ~ M^(7/6)
-  (Pennycuick 1968, 2008; Ellington 1991). A body flies when the margin wings·(FLY_M_MAX/M)^(7/6 − 0.7) ≥ 1:
+- **Who flies.** Power available from flight muscle ~ wings·M^(2/3), least power required ~ M^(7/6)
+  (Pennycuick 1968, 2008; Ellington 1991). A body flies when the margin wings·(FLY_M_MAX/M)^(7/6 − 2/3) ≥ 1:
   nothing above FLY_M_MAX = 16 flies (M = 1 is taken as ~1 kg; the heaviest fliers are 12-18 kg). Takeoff also
   needs wings ≥ FLY_WING_MIN at any size (flight muscle ≥ ~16% of body mass, Marden 1987).
 - **Flight costs by the hour.** The least power of flight is FlightPowerMin(M) = FLIGHT_MULT·C_BASAL·M^(7/6)
@@ -1796,6 +2135,52 @@ because its genes differ moves to the nearest allowed cell, or dies.
   cannot land where it is pays the whole step's power, moving or not. Walking's cost per step at top speed is
   ~1.0-1.3× basal net, below Taylor et al. 1982 for continuous walking (~4.7× BMR at 1.5 m/s for 1 kg), as befits a
   step's average travel: locomotion is ~8% of this world's spending, as in field energy budgets.
+- **Taking off (2026-11-01).** A landed flier takes off only if its flight muscle can lift it now (Body.CanTakeOff):
+  muscle power falls with core temperature as the body's chemistry does (Heat.Rate, Q10 ~2.3; muscle power Q10 2-3,
+  Bennett 1984, 1985), so its effective muscle is wings·Rate(core) and must reach FLY_WING_MIN (Marden 1987) and the
+  power margin times Rate(core) must reach 1. A cold ectotherm cannot fly until it is warm (Heinrich 1974, 1993);
+  sun on open ground warms it, endothermy (B_ENDO) keeps it warm. Once in the air its muscle's heat keeps it warm.
+  A load (gut contents, a live-bearer's young at half birth mass on average; Body.FlightLoad) lowers the muscle share
+  by body/(body + load) and raises the least power as ((body + load)/body)^(3/2), its speed as the square root
+  (Pennycuick 1975, 2008): a full gut makes flight dearer and can ground a weak flier. Each airborne step that starts
+  or ends on the ground pays a take-off and climb-out of TAKEOFF_S = 15 s of least power (Askew et al. 2001; Nudds &
+  Bryant 2000), small against a step of hours.
+- **Wings on the ground (2026-11-01).** Flight muscle (FLY_MUSCLE_MAX·w of its mass, 35% at w = 1) is tissue that
+  is not leg (Heers & Dial 2015): on flat ground every winged body, flier or not, walks at (1 − FLY_MUSCLE_MAX·w).
+  Flapping helps only on slopes: × (1 + WAIR_GAIN·w·sin slope), the steepest slope of the cell (World.SlopeSin: rise
+  in metres over GEO_CELL_M) (wing-assisted incline running, Dial 2003; Tobalske & Dial 2007; controlled flapping
+  descent, Dial, Jackson & Segre 2008). Small wings (0.4) are a net gain above ~31°, full wings above ~42°: the
+  physical way up to flight is steep ground. One continuous function of w (no jump at the flight threshold); the
+  slope is not directional (ascents and descents both use the wings; the speed limit is per cell, not per heading).
+- **In the water, not in the air.** Resolve records each flier's state (Flag.Aloft, Flag.Landed) and World.Airborne
+  reads it. A flier over water it cannot stand in that cannot fly (a newborn, one too cold, too heavy, or whose loaded
+  margin falls below 1 in the air) is in the water: it paddles at its speed there, is immersed and breathes as its
+  organs let it, until it reaches ground it can stand on or can take off. (Before, being over such water counted as
+  flying, so a newborn placed there escaped the fledging rule.)
+- **Fledging.** A juvenile's flight-muscle share is the adult's × (mass/adult mass)^FLY_MUSCLE_ALLO (1.2; Ricklefs
+  1979, Choi et al. 1993), and its take-off test (muscle share, power margin at its own mass) uses it: with full wings
+  it flies from ~52% of adult mass, with w = 0.6 from ~79%, at the smallest flying wing only as an adult.
+- **Load and top speed.** In the air its top speed is the loaded speed of least power (× √(W/W0)) times where the power
+  curve meets the loaded margin (Body.LoadedTopAirSpeed; Pennycuick 1975, 2008): a load lowers it wherever power binds
+  and leaves only v_mp when the loaded margin is below 1. Where FLY_X_MAX binds (a big margin) a load raises it with
+  √W, as in real birds. Climb is not modelled as height; a loaded margin ≥ 1 at take-off is a positive rate of climb.
+- **Flight muscle upkeep.** COST_WING = 0.6 × basal per unit wing: +27-48% over Kleiber's mammal for wings 0.45-0.8,
+  as bird BMR is ~30-50% above mammals' (McKechnie & Wolf 2004; Londoño et al. 2015). It is basal, so a cold core
+  lowers it (Heat.Rate) and an endothermic flier pays it in full.
+- **Raptors land on the kill.** A flier that kills prey on the ground from the air comes down on it (its position is
+  the kill's, speed 0) when it can stand there, and must take off again (warm muscle, the meal as load). Prey taken in
+  the air, or over water it cannot stand in, is eaten on the wing.
+- **Proposal, not built (2026-11-01): a daily temperature cycle.** There is none: a cell's temperature is its daily
+  mean and SOLAR is the day-averaged sun (Climate.cs). With ~8.2 steps a day a cycle could be sampled: the operative
+  temperature an animal feels (Heat.Operative only; plants, soil and water keep the daily means they integrate) would
+  add A·Cont·cos(2π(phase − peak)) for air, A the half diurnal range (~5-7 K inland under clear skies, damped by water
+  through Cont, and by cloud and moist soil, Dai, Trenberth & Karl 1999), and the sun by day only (~2.5 x SOLAR at
+  midday, 0 at night), the phase from Step mod STEPS_PER_DAY (one MathK.Cos per step). Bodies above ~10 kg should feel
+  it damped by their thermal inertia (Bakken 1976). Cheap in code, but it moves every animal's heat budget every step:
+  night cold strain (ThermStrain) for marginal endotherms, founder viability (Life.DayNeed) and FIELD_METAB measured on
+  daily means, the AIR_T sense and heat-gradient moves oscillating, and no time-of-day sense for brains to use. It needs
+  the owner's world runs to calibrate, so it is written up, not built. With it, a cold-blooded flier would fly by day
+  where the daily mean is too cold.
 - **Landed.** There is no "take off" output. A flier that rests, eats food that is here, drinks water within
   reach, or goes no faster than it walks,
   lands wherever it can stand (land; shallow water if it has legs or swims; deep water if it swims well enough)
@@ -1806,9 +2191,13 @@ because its genes differ moves to the nearest allowed cell, or dies.
   of transport every walker pays, the swing share grows with leg size × pairs (against LEG_PAIRS_REF = 2) and with
   speed against its top speed. On rough ground (the largest rise to a neighbour cell, ROUGH_REF fully rough) a body
   walks at 1/(1 + ROUGH_SLOW·rough·M^(−1/3)·(1 − stability)), stability = LEG_STAB·legs·(pairs − 1)/3: many legs
-  steady a small body (Ting, Blickhan & Full 1994). The legs carry the body's weight: land speed is divided by
-  1 + LOAD_DRAG·M^(1/3)·((1 + armour)/√pairs − 1/√2) (bone stress ~M^(1/3), Biewener 1989), so more legs help most
-  a heavy or armoured body; in water and air armour adds ARMOUR_DRAG·armour/√2 of drag.
+  steady a small body (Ting, Blickhan & Full 1994). The legs carry the body's weight (2026-11-01, Body.LandLoadFactor):
+  peak bone stress ~ (1 + armour)·M^(1/3)/EMA/(pairs/2), the posture (EMA) straightening as M^0.26 up to POSTURE_M =
+  300 kg and no further (Biewener 1989, 1990), so stress is nearly constant up to ~300 kg and rises as M^(1/3) above.
+  Muscles and bones each limit speed; the two limits add as 1/v = 1/v0 + 1/v_bone, v_bone ~ allowed/static stress
+  (the safety factor kept at 2-4; Alexander 1977, Biewener 1990): v = v0·(1 + BONE_LOAD)/(1 + BONE_LOAD·s), s the
+  stress against an unarmoured two-pair 1 kg body. Positive and finite for any mass and leg count, with no floor;
+  above the limit a body is held to a slow walk. In water and air armour adds ARMOUR_DRAG·armour/√2 of drag.
 
 ### 9.3 Gut, digestion and intake (NR-302)
 
@@ -1841,9 +2230,9 @@ A body's own mass is its first defence: a small striker rarely hurts a large ani
 
 | Case | Result |
 |---|---|
-| Hit | The victim loses C_DAMAGE·power energy and feels pain. It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space; the rest becomes CARRION (DETRITUS in water). |
+| Hit | The victim loses min(1, power/defence)·WOUND·Emax_v energy and feels pain (2026-11-01: the wound grows with the weapon's force against the body resisting it, so a predator matched to its prey kills what it catches; it was C_DAMAGE·power, ~4 landed hits for a fed prey of the striker's size). It dies only when its energy reaches 0 (cause: killed-by-attacker-clade). Then the attacker eats immediately as MEAT, up to its gut space, the carcass: the energy of C_CARC·M_v of wet tissue (TISSUE_E, 7 MJ/kg; it was C_CARC·M_v kg of meat at RHO_MEAT, 5x that) and the victim's reserve before the hit, in kg of meat at RHO_MEAT; the rest becomes CARRION (DETRITUS in water). |
 | Parasite attacker | It drains BLOOD, min(c_drain·M_a, host energy). The host dies only if its energy reaches 0 (cause: parasitism). |
-| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. |
+| Miss | The victim's PAIN rises. If the victim's own weapon power strike_v·M_v exceeds the attacker's, the attacker loses c_retal·(difference) energy; eggs and unarmed bodies do not hit back. An attacker this leaves without reserve is killed by the victim's clade (2026-11-01: it was counted as starved). |
 
 ### 9.6 Disease (Revision C, NR-329; Revision G)
 
@@ -1960,6 +2349,14 @@ ALGAE += r_A·Nw/(Nw + K_N)·(depth < shallow)·(1 − ALGAE) − m_A·ALGAE    
 PHYTO += r_Ph·Nw/(Nw + K_N)·(1 + 0.5·SEASON)·(1 − PHYTO) − m_Ph·PHYTO
 ```
 
+The rates are measured specific rates a day over STEPS_PER_DAY (2026-11-01; they were hand-tuned per step, ~0.07, 0.012,
+0.025 and 0.012 a day): periphyton grows at 0.5 /day and sloughs at 0.1 /day (Bothwell 1989; Wetzel 2001), phytoplankton
+grows at 1 /day and sinks out at 0.05 /day (Eppley 1972; Reynolds 2006). A shallow cell ~1 m deep at nutrient K_N and
+T_REF makes ~360 gC/m2/yr of plankton and ~650 in all (PlantTests.WaterProductionIsInTheLiteratureRange; lakes 100-500,
+littoral 300-1,500, Wetzel 2001); before, ~10 and ~60. Ungrazed, the plankton stands near its room (~40 g dry/m2, the
+self-shading ceiling); grazed, it doubles in under 2 days. The founding (Fields.Yield) counts a water producer's growth at
+half its room less what dies there, as land plants count growth less respiration.
+
 ### 10.4 Decomposition and run-off (NR-310)
 
 Each dead pool X rots at rate c_rot,X. Of the rotted amount, the fraction c_nutGain becomes NUTRIENT.
@@ -1976,6 +2373,32 @@ The rates are:
 Soil nutrient does not flow between land cells. Water cells mix with water neighbours (N_DIFF), and
 each shore cell loses RUNOFF of its soil nutrient per step into each adjacent water cell (the same
 amount leaves the land and enters the water). Weathering adds c_w·fertility.
+
+**Nutrient budget (2026-11-02, Nutrients.cs).** Nutrient is conserved: every flow moves what it takes from one store to
+another, and the total changes only by explicit inputs and outputs, counted per row in World.NutBook. Before, a unit of
+growth took C_NUTUSE 0.6 and its rot returned C_NUTGAIN 0.7 (0.1 made from nothing per unit of growth that rotted, ~17%
+of every turnover), carrion and dung returned 0.7 per land unit's kilogram whatever they held, fire returned a flat
+0.1 per unit burned, and the clamps at 0 and N_MAX made and destroyed nutrient unseen.
+
+- *Stores.* Soil and water (Nutrient); leafy cover and litter C_NUTUSE per unit (leaves at N_LEAF 2%, Wright et al.
+  2004; resorption is not modelled); live wood WOOD_N x C_NUTUSE; algae and phytoplankton at N_ALGAE 7.9% (Redfield),
+  0.30 per unit (it was 0.6, 16% N); dead wood, detritus, carrion, dung and peat hold what fell into them (WoodN, DetN,
+  CarN, DungN, PeatN; checkpoint format 25); animals N_BODY 3% of live mass, plus the gut's undigested share (GutN).
+  Seed, fruit and nectar are counted as carbon only: the nutrient of a seedling, or of the litter a seed or fruit rots
+  into, is taken from the soil when that tissue forms. Browse and roots are views of the cover.
+- *Plants* take from the soil the change of their cover and live wood plus what fell from them (litter, dead wood);
+  fixation pays its share of an uptake (an input). Tissue the soil cannot supply is not built (the cell's cover loses
+  it, Liebig). Dying live wood immobilises the N wood lacks from the soil as far as the soil has it.
+- *Water producers* take what their kept growth holds, never more than the water has; their deaths carry it to detritus.
+- *Decay* returns the rotted share of each dead pool's nutrient; peat keeps what its litter and wood held.
+- *Animals*: a bite carries the nutrient the pool held in it (or the plants lost); the assimilated share is excreted
+  where the animal is (urine; Haynes & Williams 1993), the rest goes with the dung. Growth and the young draw their N
+  from the gut, then the soil or water. A carcass holds the body's N (the eaten share goes to the killer); a death
+  without a carcass returns it to the soil. A blood meal carries none (the victim loses energy, not mass).
+- *Inputs*: weathering and deposition, fixation, founders' bodies (Book.FOUND). *Outputs*: what a cell holds above
+  N_MAX (leaching and denitrification), FIRE_N_LOSS 0.8 of burned biomass's N (Raison 1979). *Debt*: what had to be made
+  because a store had too little (an animal's growth or birth beyond its gut and its cell), counted
+  (NutrientBalanceTests: 1-3e-5 of the total over 300 steps). Book.Open = false closes the world (tests).
 
 ### 10.5 Fire (NR-309)
 

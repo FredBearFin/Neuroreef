@@ -4,9 +4,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Build the exe without running the test suite (quick download)'
+        type: boolean
+        default: false
 
 jobs:
   test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_tests) }}
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +27,8 @@ jobs:
         run: dotnet test tests/Neuroreef.Tests -c Release
 
   publish:
-    needs: test
+    # runs alongside the tests, not after them, so a download is ready in ~15 minutes; check the test jobs' result
+    # before trusting a build (the owner, 2026-11-01: "I want a download as soon as possible")
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +38,10 @@ jobs:
       - name: Publish single-file Windows executable
         run: dotnet publish src/Neuroreef.Server -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o dist
       - name: Smoke test (headless, 300 steps)
-        run: dist\Neuroreef.exe --headless --steps 300 --report 100 --capacity 16384
+        run: dist\Neuroreef.exe --headless --world-map valley --steps 300 --report 100 --capacity 16384
       - name: Smoke test (evolve, 600 steps)
         run: |
-          dist\Neuroreef.exe --evolve --no-setup --steps 600 --capacity 16384
+          dist\Neuroreef.exe --evolve --no-setup --map valley --steps 600 --capacity 16384
           if (!(Test-Path dist\evolved.nrbank)) { throw 'evolved.nrbank not written' }
           Remove-Item dist\evolved.nrbank, dist\evolve-report.*
       - name: Add run instructions

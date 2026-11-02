@@ -4,8 +4,11 @@
 // desert ends up, and what body lives there, is what follows.
 //
 // Temperature (°C), per cell, written by FIELDS each step:
-//   T_phys = T_EQ - DT_EP sin²θ + A_SEAS sinθ sin(2π t / year) Cont - LAPSE h,   θ = 2π y / FW (latitude on the torus:
-//   equator, north pole, equator, south pole; the hemispheres' seasons are opposite by the sign of sinθ)
+//   T_phys = T_EQ - DT_EP sin²θ - DT_EP4 sin⁴θ + A_SEAS sinθ sin(2π t / year) Cont - LAPSE h,   θ the latitude of the row (SinLat).
+//   2026-11-01 (the 1 km world): a map sits at one latitude, the world's (World.LatDeg, drawn from its terrain seed),
+//   and spans only its true north-south extent about it (Map.LatSpanDeg: 0.03° on the 256 map), so temperature varies
+//   with height, water and the season, not from pole to equator. Nature.LatSpan >= 360 gives back the old torus of
+//   latitudes, θ = 2π y / FW (equator, north pole, equator, south pole; the hemispheres' seasons opposite by sinθ).
 //   T = T_REF + Climate (T_phys - T_REF)
 // There is no daily cycle: a step is hours, and the day-averaged sun is in SOLAR.
 //
@@ -22,6 +25,10 @@ public static class Climate
 {
     // ---- response tables: TT_N entries of TT_STEP from TT_LO (nearest entry)
     /// <summary>(e_s(T) / e_s(T_REF))^-EVAP_BETA (Tetens saturation vapour pressure): how evaporation dries the soil.</summary>
+    /// <summary>Plants' transpiration demand against T_REF, inverted (2026-11-01): e_s(T_REF) / e_s(T). The vapour pressure
+    /// deficit of air at a given humidity follows e_s(T), so warm air demands more water for the same carbon
+    /// (Tanner &amp; Sinclair 1983) and the supply/demand ratio of transpiration falls (Plants.Gross).</summary>
+    public static readonly float[] Demand = Table(t => Es(K.T_REF) / Es(t));
     public static readonly float[] Evap = Table(t => MathK.Pow(Es(t) / Es(K.T_REF), -K.EVAP_BETA));
     /// <summary>Yan & Hunt (1999) growth curves of grass, shrubs and trees, 1 at T_REF, at most PLANT_CAP; 0 outside (Tmin, Tmax).</summary>
     public static readonly float[] FGrass = Beta(K.GRASS_TMIN, K.GRASS_TOPT, K.GRASS_TMAX),
@@ -29,6 +36,8 @@ public static class Climate
     /// <summary>Algae and plankton growth x EPPLEY^(T - T_REF), at the water's temperature (Eppley 1972).</summary>
     public static readonly float[] Algae = Table(t => MathK.Pow(K.EPPLEY, MathF.Max(t, K.T_WATER_MIN) - K.T_REF));
     /// <summary>Decomposition x Q10_ROT^((T - T_REF) / 10) (Lloyd & Taylor 1994).</summary>
+    /// <summary>Plant maintenance respiration x Q10_RESP^((T - T_REF) / 10) (2026-11-01; Ryan 1991).</summary>
+    public static readonly float[] Resp = Table(t => MathK.Pow(K.Q10_RESP, (t - K.T_REF) / 10f));
     public static readonly float[] Rot = Table(t => MathK.Pow(K.Q10_ROT, (t - K.T_REF) / 10f));
 
     internal static float Es(float t) => 0.6108f * MathK.Exp(17.27f * t / (t + 237.3f));
@@ -55,15 +64,45 @@ public static class Climate
         return k < 0 ? 0 : k >= K.TT_N ? K.TT_N - 1 : k;
     }
 
+    // ---- latitude (2026-11-01)
+    /// <summary>Is the map the old torus of latitudes (Nature.LatSpan >= 360)? Else it sits at w.LatDeg.</summary>
+    public static bool Torus => Nature.LatSpan >= 360f;
+
+    /// <summary>Latitude (radians, &lt; 0 south) of field row y (fractional rows allowed): the world's latitude, plus half the
+    /// map's span x sin(2π y / FW) so the torus closes smoothly. On the old torus, 2π y / FW folded to -π/2..π/2.</summary>
+    public static float LatRad(World w, float y)
+    {
+        float th = 2f * MathF.PI * y / Map.FW;
+        if (Torus) { float s = MathK.Sin(th), ph = ((th % MathF.PI) + MathF.PI) % MathF.PI; return (s < 0f ? -1f : 1f) * MathF.Min(ph, MathF.PI - ph); }
+        return (w.LatDeg + 0.5f * Map.LatSpanDeg * MathK.Sin(th)) * (MathF.PI / 180f);
+    }
+
+    /// <summary>sin(latitude) of field row y (the temperature's pole-to-equator term and the seasons' sign).</summary>
+    public static float SinLat(World w, float y) => Torus ? MathK.Sin(2f * MathF.PI * y / Map.FW) : MathK.Sin(LatRad(w, y));
+
+    /// <summary>|latitude| of field row y in degrees (the rain belts and the prevailing winds).</summary>
+    public static float AbsLatDeg(World w, float y) => MathF.Abs(LatRad(w, y)) * (180f / MathF.PI);
+
+    /// <summary>The phase of the moisture season at field row y: 2π y / FW on the old torus (wet seasons by latitude),
+    /// else the latitude itself (one phase across a map that sits at one latitude).</summary>
+    public static float Phase(World w, float y) => Torus ? 2f * MathF.PI * y / Map.FW : LatRad(w, y);
+
+    /// <summary>Annual mean sea-level temperature at sin(latitude) s (2026-11-01): T_EQ - DT_EP s² - DT_EP4 s⁴, through the
+    /// observed zonal means (Sellers 1965).</summary>
+    public static float SeaLevelMean(float s) { float s2 = s * s; return K.T_EQ - K.DT_EP * s2 - K.DT_EP4 * s2 * s2; }
+
+    /// <summary>Annual mean sea-level temperature of the climate the land is built under (GEO_T_EQ, GEO_DT_EP).</summary>
+    public static float LandMean(float s) => K.GEO_T_EQ - K.GEO_DT_EP * s * s;
+
     /// <summary>Is the climate on? (Climate = 0 is the world without it, bit for bit: every rule below is skipped.)</summary>
     public static bool On => Nature.Climate > 0f;
 
     /// <summary>Row constants of the temperature: T = a + b x Cont - TLapse (TLapse already holds Climate x LAPSE x height).</summary>
     public static void RowParams(World w, int y, out float a, out float b)
     {
-        float s = MathK.Sin(2f * MathF.PI * y / Map.FW), c = Nature.Climate;
-        float year = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength);
-        a = K.T_REF + c * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
+        float s = SinLat(w, y), c = Nature.Climate;
+        float year = MathK.Sin(2f * MathF.PI * w.YearStep / Nature.SeasonLength);
+        a = K.T_REF + c * (SeaLevelMean(s) - K.T_REF);
         b = c * K.A_SEAS * s * year;
     }
 
@@ -81,50 +120,88 @@ public static class Climate
         int n = Map.FW * Map.FW;
         if (!On) { Array.Fill(w.Temp, K.T_REF); Array.Clear(w.TLapse); Array.Fill(w.Cont, 1f); w.ClimateZ = 1f; return; }
         float sea = w.SeaLevel;
+        // continentality (2026-11-01, the 1 km world): the water damps the seasons by how much of it the air has crossed,
+        // the share of standing water within ~L_MAR (a Gaussian of that width, three box blurs on the torus), so a pond or
+        // a small lake damps its shore a little and the open sea fully: WATER_DAMP x min(1, 2 x share), the share being 1/2
+        // at a straight shore of open water (oceanity indices measure the sea within a radius; a lake of a few hundred m
+        // barely shifts the air's seasons). Before, any water at all, a lake of 0.4 km2 on 16 m cells, damped its shore as
+        // the ocean does, so the valley floors had cooler summers than the hills and the treeline ran upside down
+        var share = new float[n]; var tmp = new float[n];
+        for (int i = 0; i < n; i++) share[i] = w.LakeOf[i] >= 0 ? 1f : 0f;
+        int r = Math.Clamp((int)MathF.Round(K.L_MAR), 1, Map.FW / 2);
+        for (int k = 0; k < 3; k++) BoxBlur(share, tmp, Map.FW, r);
         for (int i = 0; i < n; i++)
         {
-            float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea) * K.H_RELIEF;      // m above the lakes
+            float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea) * Map.ReliefM;     // m above the lakes (the map's vertical scale)
             w.TLapse[i] = Nature.Climate * K.LAPSE * h * 0.001f;
-            w.Cont[i] = 1f - K.WATER_DAMP * MathK.Exp(-w.DistWater[i] / K.L_MAR);
+            w.Cont[i] = 1f - K.WATER_DAMP * MathF.Min(1f, 2f * share[i]);
         }
         for (int y = 0; y < Map.FW; y++) TempRow(w, y);
     }
 
+    /// <summary>Box blur of radius r on a torus of side W, in place (Climate.Build's water share).</summary>
+    static void BoxBlur(float[] a, float[] tmp, int W, int r)
+    {
+        float inv = 1f / (2 * r + 1);
+        for (int y = 0; y < W; y++)
+        {
+            int row = y * W; float s = 0f;
+            for (int k = -r; k <= r; k++) s += a[row + World.WrapI(k, W)];
+            for (int x = 0; x < W; x++) { tmp[row + x] = s * inv; s += a[row + World.WrapI(x + r + 1, W)] - a[row + World.WrapI(x - r, W)]; }
+        }
+        for (int x = 0; x < W; x++)
+        {
+            float s = 0f;
+            for (int k = -r; k <= r; k++) s += tmp[World.WrapI(k, W) * W + x];
+            for (int y = 0; y < W; y++) { a[y * W + x] = s * inv; s += tmp[World.WrapI(y + r + 1, W) * W + x] - tmp[World.WrapI(y - r, W) * W + x]; }
+        }
+    }
+
     /// <summary>
     /// Where rain falls (Revision P), relative to the land's mean (1): air takes up water over lakes and seas, the
-    /// prevailing wind of its latitude carries it over land, and it rains out as it goes, the more where the ground
-    /// rises under it (orographic rain: wet windward slopes, dry rain shadows behind) and less far inland; the land
-    /// gives some back (RAIN_RECYCLE). The belts of the general circulation set how much falls at each latitude: wet
-    /// where air rises at the equator and near 55°, dry where it sinks near 30° and at the poles (Hadley, Ferrel and
-    /// polar cells; trade winds from the east below 30°, westerlies to 60°, polar easterlies above). Rows are
-    /// latitudes on the torus; each row is marched twice around so the air arriving at its start is already settled.
+    /// prevailing wind of its latitude carries it over land, and it rains out as it goes; the land gives some back
+    /// (RAIN_RECYCLE). The belts of the general circulation set how much falls at each latitude: wet where air rises at
+    /// the equator and near 55°, dry where it sinks near 30° and at the poles (Hadley, Ferrel and polar cells; trade
+    /// winds from the east below 30°, westerlies to 60°, polar easterlies above). Rows are latitudes; each row is marched
+    /// around the torus until the air arriving at its start is settled.
+    /// 2026-11-01 (the 1 km world): every distance in km, so the rain does not depend on the grid. The background rain
+    /// falls off over RAIN_L (hundreds of km), not across a map; ground that lifts the air condenses RAIN_OROG of its
+    /// water per km of rise, which falls out over RAIN_FALL downwind (Smith &amp; Barstad 2004), so a hill a few km wide
+    /// gets a little more rain on its windward side and in its lee than far upwind, not many times more; and rain grows by
+    /// RAIN_ZGRAD per km of height (seeder-feeder). On a map at one latitude every row has the same belt and wind.
     /// </summary>
     public static void Rainfall(World w, float[] rain)
     {
         int FW = Map.FW;
-        float sea = w.SeaLevel;
+        float sea = w.SeaLevel, dx = K.GEO_CELL_M * 1e-3f, mapKm = FW * dx, zKm = Map.ReliefM * 1e-3f / MathF.Max(1e-6f, 1f - sea);
+        float bg = 1f - MathK.Exp(-dx / K.RAIN_L), ev = 1f - MathK.Exp(-dx * K.RAIN_EVAP), rec = 1f - MathK.Exp(-dx * K.RAIN_RECYCLE);
+        float fall = 1f - MathK.Exp(-dx / K.RAIN_FALL);
+        // laps of the torus until the air and its condensate have forgotten where the march began: three of the longer of
+        // the fallout length and the air's own relaxation over land, and one more that is kept
+        float settle = 3f * MathF.Max(K.RAIN_FALL, 1f / (1f / K.RAIN_L + K.RAIN_RECYCLE));
+        int laps = 1 + Math.Max(1, (int)MathF.Ceiling(settle / mapKm));
         double sum = 0; int nLand = 0;
         for (int y = 0; y < FW; y++)
         {
-            float s = MathF.Abs(MathK.Sin(2f * MathF.PI * y / FW));
-            // asin(|sin p|) is the distance of p to the nearest multiple of pi: exact, and the same on every machine (NR-104)
-            float ph = 2f * MathF.PI * y / FW % MathF.PI, lat = MathF.Min(ph, MathF.PI - ph) * (180f / MathF.PI);
+            float lat = AbsLatDeg(w, y);
             int dir = lat < 30f ? -1 : lat < 60f ? 1 : -1;
             float belt = K.RAIN_DRY + (1f - K.RAIN_DRY) * MathK.Exp(-lat * lat / (K.RAIN_BELT * K.RAIN_BELT))
                        + K.RAIN_MID * MathK.Exp(-(lat - 55f) * (lat - 55f) / (K.RAIN_BELT * K.RAIN_BELT));
-            float q = 0f; int x = 0; float hPrev = 0f;
-            for (int k = 0; k < 2 * FW; k++, x = World.WrapI(x + dir, FW))
+            float q = 0.5f, cond = 0f; int x = 0; float hPrev = 0f;
+            for (int k = 0, last = (laps - 1) * FW; k < laps * FW; k++, x = World.WrapI(x + dir, FW))
             {
                 int i = y * FW + x;
-                float h = MathF.Max(0f, w.Elev[i] - sea) / (1f - sea) * (K.H_RELIEF * 1e-3f);   // km above the lakes (2026-11-01: RAIN_OROG is per km)
+                float h = MathF.Max(0f, w.Elev[i] - sea) * zKm;   // km above the lakes
+                float drop = cond * fall; cond -= drop;
                 // open water: the air takes up moisture at the water's own height (2026-10-31: a river or a lake above sea level
                 // is not sea level, so the land beyond it is not lifted from 0)
-                if (w.Cell[i] != (byte)Realm.Land) { q += (1f - q) * K.RAIN_EVAP; hPrev = h; continue; }
-                float lift = MathF.Max(0f, h - hPrev) * K.RAIN_OROG;
-                float r = MathF.Min(q, q * (1f / K.RAIN_L + lift));
-                q += (1f - q) * K.RAIN_RECYCLE - r;
+                if (w.Cell[i] != (byte)Realm.Land) { q += (1f - q) * ev; hPrev = h; continue; }
+                float lift = MathF.Min(q, q * MathF.Max(0f, h - hPrev) * K.RAIN_OROG);
+                q -= lift; cond += lift;
+                float r = q * bg;
+                q += (1f - q) * rec - r;
                 hPrev = h;
-                if (k >= FW) { rain[i] = r * belt; sum += rain[i]; nLand++; }
+                if (k >= last) { rain[i] = (r + drop) * belt * (1f + K.RAIN_ZGRAD * h); sum += rain[i]; nLand++; }
             }
         }
         float mean = nLand > 0 ? (float)(sum / nLand) : 1f;
@@ -148,15 +225,15 @@ public static class Climate
         double target = 0; int q = 0;
         for (int y = 0; y < FW; y++)
         {
-            float s = MathK.Sin(2f * MathF.PI * y / FW);
-            float a = K.T_REF + Nature.Climate * (K.T_EQ - K.DT_EP * s * s - K.T_REF);
+            float s = SinLat(w, y), phase = Phase(w, y);
+            float a = K.T_REF + Nature.Climate * (SeaLevelMean(s) - K.T_REF);
             for (int i = y * FW, e = i + FW; i < e; i++)
             {
                 if (w.Cell[i] != (byte)Realm.Land) continue;
                 for (int p = 0; p < PH; p++)
                 {
                     float ph = 2f * MathF.PI * (p + 0.5f) / PH;
-                    float season = MathK.Sin(ph - 2f * MathF.PI * y / FW);                 // as Fields: the moisture season by latitude
+                    float season = MathK.Sin(ph - phase);                                 // as Fields: the moisture season by latitude
                     float b = Nature.Climate * K.A_SEAS * s * MathK.Sin(ph);
                     float m = w.MoistBase[i] * (1f + K.A_SEASON * Nature.Seasons * season);
                     mb[q] = m; ev[q] = Evap[Idx(MathF.FusedMultiplyAdd(b, w.Cont[i], a) - w.TLapse[i])];
@@ -175,7 +252,7 @@ public static class Climate
                 if (w.Cell[i] != (byte)Realm.Land) continue;
                 for (int p = 0; p < PH; p++, q++)
                 {
-                    float season = MathK.Sin(2f * MathF.PI * (p + 0.5f) / PH - 2f * MathF.PI * y / FW);
+                    float season = MathK.Sin(2f * MathF.PI * (p + 0.5f) / PH - Phase(w, y));
                     float m0 = (reference == null ? w.MoistBase[i] : reference[i]) * (1f + K.A_SEASON * Nature.Seasons * season);
                     target += 0.5 * (Math.Clamp(m0 * (1f - sd), 0f, 1f) + Math.Clamp(m0 * (1f + sd), 0f, 1f));
                 }
@@ -195,8 +272,8 @@ public static class Climate
     public static float AnnualMean(World w, int i)
     {
         if (!On) return K.T_REF;
-        float s = MathK.Sin(2f * MathF.PI * (i / Map.FW) / Map.FW);
-        return K.T_REF + Nature.Climate * (K.T_EQ - K.DT_EP * s * s - K.T_REF) - w.TLapse[i];
+        float s = SinLat(w, i / Map.FW);
+        return K.T_REF + Nature.Climate * (SeaLevelMean(s) - K.T_REF) - w.TLapse[i];
     }
 
     /// <summary>Water temperature under air temperature t.</summary>
@@ -231,15 +308,16 @@ public static class Heat
         return t + Nature.Climate * K.SOLAR * open / (1f + 0.5f * K.R_INS * ins);
     }
 
-    /// <summary>Dry conductance of a body (energy per step per K): least (cold, vasoconstricted) and most (warm, vasodilated).</summary>
-    public static void Conductance(float mass, float ins, float app, bool immersed, out float cmin, out float cmax)
+    /// <summary>Dry conductance of a body (energy per step per K): least (cold, vasoconstricted) and most (warm, vasodilated).
+    /// dt: the step in reference steps (World.Dt; heat lost a step is x dt).</summary>
+    public static void Conductance(float mass, float ins, float app, bool immersed, out float cmin, out float cmax, float dt = 1f)
     {
         float c = MathK.Cbrt(mass), ac = c * c;
         float ie = ins * MathF.Min(1f, c);                 // a small body cannot carry a thick coat
         float kw = 1f;
         if (immersed) { ie *= K.FUR_WET; kw = K.K_WATER; }
         float core = ac / (1f + K.R_INS * ie);
-        float g = kw * K.K_COND * K.C_BASAL;
+        float g = kw * K.K_COND * K.C_BASAL * dt;
         cmin = g * (core + K.APP_LEAK * app * ac);
         cmax = g * (K.VASO * core + app * ac);
     }
@@ -250,9 +328,9 @@ public static class Heat
     /// (none under water), and the shortfalls beyond the caps (cold, hot).
     /// </summary>
     public static void Balance(float mass, float ins, float app, float top, bool immersed, float h, float basal,
-        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY)
+        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY, float dt = 1f)
     {
-        Conductance(mass, ins, app, immersed, out float cmin, out float cmax);
+        Conductance(mass, ins, app, immersed, out float cmin, out float cmax, dt);
         float dT = core - top;
         thermo = 0; evap = 0; cold = 0; hot = 0;
         float lossMin = cmin * dT;
@@ -277,6 +355,31 @@ public static class Heat
     {
         const float kB = 8.617e-5f;   // Boltzmann's constant, eV/K
         return MathK.Exp(K.E_ACT / kB * (1f / (K.T_BODY + 273.15f) - 1f / (MathF.Max(t, K.T_CORE_MIN) + 273.15f)));
+    }
+
+    /// <summary>
+    /// Metabolic level of a body with endothermy e against a warm-blooded one at the same core temperature (2026-11-01):
+    /// ECTO_LEVEL + (1 - ECTO_LEVEL) e. Endothermy is not only a warm core: it is tissue built to burn 5-10x faster
+    /// (mitochondria, leaky membranes; Hulbert &amp; Else 2000), which costs that much at rest and gives that much aerobic
+    /// capacity and endurance. Resting cost and the respiratory organs' capacity scale with Rate(core) x Level(e)
+    /// (Activity); digestion (gut enzymes) and muscle power for a burst follow the core's temperature alone.
+    /// </summary>
+    public static float Level(float e) => K.ECTO_LEVEL + (1f - K.ECTO_LEVEL) * e;
+
+    /// <summary>The pace of a body's chemistry at core temperature t and endothermy e against a warm-blooded body at
+    /// T_BODY: Rate(t) x Level(e). 1 with no climate (no heat budget).</summary>
+    public static float Activity(float t, float e) => Climate.On ? Rate(t) * Level(e) : 1f;
+
+    /// <summary>
+    /// Heat a body would have to make to keep its core from freezing (2026-11-01): its least dry conductance x how far its
+    /// core is below T_FREEZE. A cold-blooded body cannot make it, so it is all shortfall (strain, death by cold): on land
+    /// in a frost an ectotherm freezes, in water (never below T_WATER_MIN) it does not.
+    /// </summary>
+    public static float Freeze(float mass, float ins, float app, bool immersed, float core, float dt = 1f)
+    {
+        if (core >= K.T_FREEZE) return 0f;
+        Conductance(mass, ins, app, immersed, out float cmin, out _, dt);
+        return cmin * (K.T_FREEZE - core);
     }
 
     /// <summary>Lower and upper critical temperatures (operative, °C) of a body making heat h: the thermoneutral zone.</summary>

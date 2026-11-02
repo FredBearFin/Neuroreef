@@ -71,7 +71,7 @@ public class ExploreTests
     public void OutOfRangeAndUnknownHitsAreRejected()
     {
         var (w, i) = One();
-        var p = PlaceAt(w, 40f, 20f);   // 20 units (over a km) away
+        var p = PlaceAt(w, 20f + 400f / Player.M_PER_UNIT, 20f);   // 400 m away, past a bow's 160 m (2026-11-01: in metres, not units)
         float e0 = w.Energy[i];
         Assert.Equal(Player.HitResult.OutOfRange, p.Hit(w, "spear-thrust", w.Serial[i], 1f, 0f, out _, out _));
         Assert.Equal(Player.HitResult.OutOfRange, p.Hit(w, "bow-shot", w.Serial[i], 1f, 0f, out _, out _));
@@ -95,6 +95,26 @@ public class ExploreTests
         var near = p.Hit(w, "spear-thrust", w.Serial[i], 1f, 0f, out _, out float loss);
         Assert.True(near is Player.HitResult.Wounded or Player.HitResult.Killed, near.ToString());
         Assert.True(loss > 0f);
+    }
+
+    [Fact]
+    public void ASmallerPersonReachesLessFarAndWeighsWhatTheConsoleSays()
+    {
+        var (w, i) = One();
+        w.Speed[i] = 0f;
+        float m = 1f / Player.M_PER_UNIT, surface = Player.BodyR(w, i) - 0.1f;
+        var p = PlaceAt(w, w.X[i] + surface + 100f * m, w.Y[i]);   // 100 m off: a full-sized rifle (400 m) reaches
+        Assert.Equal(70f, p.Mass); Assert.Equal(1f, p.Scale);
+        p.Resize(0.1f, 2f);                                         // a tenth of the height: the rifle reaches 40 m
+        Assert.Equal(2f, p.Mass); Assert.Equal(0.1f, p.Scale, 4); Assert.Equal(0.17f, p.EyeM, 4);
+        Assert.Equal(Player.HitResult.OutOfRange, p.Hit(w, "rifle-shot", w.Serial[i], 1f, 0f, out _, out _));
+        p.Place(w.X[i] + surface + 20f * m, w.Y[i], 0f, false);
+        var r = p.Hit(w, "rifle-shot", w.Serial[i], 1f, 0f, out _, out _);
+        Assert.True(r is Player.HitResult.Wounded or Player.HitResult.Killed, r.ToString());
+        // missing values leave the size as it was; out-of-range ones are clamped
+        p.Resize(float.NaN, float.NaN); Assert.Equal(2f, p.Mass); Assert.Equal(0.1f, p.Scale, 4);
+        p.Resize(5f, 1e6f); Assert.Equal(Player.SCALE_MAX, p.Scale); Assert.Equal(Player.MASS_MAX, p.Mass);
+        p.Resize(1e-6f, 1e-6f); Assert.Equal(Player.SCALE_MIN, p.Scale); Assert.Equal(Player.MASS_MIN, p.Mass);
     }
 
     /// <summary>A brain that only flees the nearest other organism (FLEE_1 ~ 1, every other primitive ~ 0).</summary>
@@ -130,7 +150,11 @@ public class ExploreTests
         Assert.True(f[F.O1_ARMED] > 0f, "and armed");
         Assert.Equal(Player.MEAT, f[F.O1_MEAT]);
         Assert.True(f[F.O2_CLOSE] > 0f, "the biggest in view too");
-        // it turns away and runs: a few steps later it is further off
+        // it turns away and runs: a few steps later it is further off. (2026-11-01, the 1 km world: a step's run is hundreds
+        // of metres, over half the 256 map, so after a few steps the torus brings it round again: it is checked on the way
+        // it heads, away from the person, every step, and its distance after the first)
+        float awayX = World.Delta1(w.X[i] - p.X), awayY = World.Delta1(w.Y[i] - p.Y);
+        int away = 0;
         for (int t = 0; t < 12; t++)
         {
             w.Step++;
@@ -139,8 +163,11 @@ public class ExploreTests
             Simulation.BuildFor(w);
             Decide.Run(w, i, new Decide.ProbeBuf());
             Resolve.Run(w, 1, 0);
+            if (MathF.Cos(w.Heading[i]) * awayX + MathF.Sin(w.Heading[i]) * awayY > 0f) away++;
+            if (t == 0) Assert.True(Dist() > d0 + 1f, $"fled from {d0:F2} to {Dist():F2} units");
+            awayX = World.Delta1(w.X[i] - p.X); awayY = World.Delta1(w.Y[i] - p.Y);
         }
-        Assert.True(Dist() > d0 + 1f, $"fled from {d0:F2} to {Dist():F2} units");
+        Assert.True(away >= 6, $"headed away from the person on {away} of 12 steps");   // (7 measured: the torus turns "away" round)
     }
 
     [Fact]

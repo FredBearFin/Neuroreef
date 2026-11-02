@@ -81,7 +81,7 @@ public class CavesTests
         // the network converges: far fewer springs than cells, and every spring marked as one gathers a passage's discharge
         Assert.True(net > 0 && gathered.Count < net / 10, $"{gathered.Count} outlets for {net} cells");
         for (int i = 0; i < n; i++)
-            if ((w.CaveKind[i] & Caves.Spring) != 0) Assert.True(w.CaveFlow[i] >= K.CAVE_Q_MIN * n / 65536f && w.CaveSpring[i] == i);
+            if ((w.CaveKind[i] & Caves.Spring) != 0) Assert.True(w.CaveFlow[i] >= K.CAVE_Q_MIN / Map.CellKm2 && w.CaveSpring[i] == i);
     }
 
     // the water cycle's stores and fluxes, to run one update twice from the same state
@@ -184,12 +184,13 @@ public class CavesTests
            // out of the sun, so a body in it is spared most of a summer's heat and a winter's cold
     public void CaveShelterBuffersTemperature()
     {
-        float old = Nature.Climate;
+        float old = Nature.Climate, lat0 = Nature.Latitude;
         Nature.Climate = 1f;
+        Nature.Latitude = 30f;   // strong seasons about a mild mean (2026-11-01: a map sits at one latitude, set here)
         try
         {
             var w = new World(16, 3);
-            int y = Map.FW / 12, cave = y * Map.FW + 5, open = cave + 1;   // 30° of latitude: strong seasons about a mild mean
+            int y = Map.FW / 12, cave = y * Map.FW + 5, open = cave + 1;
             Array.Fill(w.Cell, (byte)Realm.Land); Array.Fill(w.Cont, 1f);
             w.CaveKind[cave] = Caves.Entrance;
             float mean = Climate.AnnualMean(w, cave);
@@ -215,6 +216,6 @@ public class CavesTests
             Array.Fill(w.Temp, K.T_REF);
             Assert.Equal(Heat.Operative(w, open, 0.3f, false), Heat.Operative(w, cave, 0.3f, false));
         }
-        finally { Nature.Climate = old; }
+        finally { Nature.Latitude = lat0; Nature.Climate = old; }
     }
 }

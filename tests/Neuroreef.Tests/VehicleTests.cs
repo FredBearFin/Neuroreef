@@ -53,7 +53,7 @@ public class VehicleTests
         var bomb = Weapons.Mode("bomb")!;
         float R = bomb.RadiusM;
         int centre = Animal(w, X, Y), half = Animal(w, X + U(0.4f * R), Y), edge = Animal(w, X, Y + U(0.93f * R));
-        int outside = Animal(w, X + U(1.3f * R), Y), far = Animal(w, X + 5f, Y + 5f);
+        int outside = Animal(w, X + U(1.3f * R), Y), far = Animal(w, X + U(272f), Y + U(272f));   // (2026-11-01: metres, not units)
         w.Energy[edge] = 500f;   // a big reserve, so the little the edge of the blast takes shows
         float eOut = w.Energy[outside], eFar = w.Energy[far], eEdge = w.Energy[edge];
         uint sCentre = w.Serial[centre], sHalf = w.Serial[half];
@@ -148,19 +148,21 @@ public class VehicleTests
         var p = InVehicle(w, "plane", X, Y, 400f);
         int rounds = p.Rounds["bomb"];
         // flown a long way since: the launch point (where it was 60 s ago) is not on its recent path
-        p.Clock = 60.0; p.Place(X + 10f, Y, 0f, false);
+        p.Clock = 60.0; p.Place(X + U(545f), Y, 0f, false);   // (2026-11-01: metres, not units)
         Assert.Equal(Player.BlastResult.LaunchFar, p.Blast(w, "bomb", X, Y, 0f, X, Y, 5f, out var rep));
         Assert.True(rep.LaunchErrM > rep.LaunchLimitM);
         // a flight longer than a bomb can fall
-        Assert.Equal(Player.BlastResult.BadTime, p.Blast(w, "bomb", X, Y, 0f, X + 10f, Y, 100f, out _));
+        Assert.Equal(Player.BlastResult.BadTime, p.Blast(w, "bomb", X, Y, 0f, X + U(545f), Y, 100f, out _));
         // beyond its range of the launch point (58 units: over 3 km)
-        Assert.Equal(Player.BlastResult.OutOfRange, p.Blast(w, "bomb", X + 10f + 58f, Y, 0f, X + 10f, Y, 30f, out _));
+        // (2026-11-01, the 1 km world: a bomb's 3 km range is more than half the 256 map, so nothing on it is out of range by
+        // the shortest way round; checked on maps wide enough)
+        if (Map.WidthM > 2f * 3200f) Assert.Equal(Player.BlastResult.OutOfRange, p.Blast(w, "bomb", X + U(545f) + U(3161f), Y, 0f, X + U(545f), Y, 30f, out _));
         // within range but faster than a bomb travels: 545 m in 1 s
-        Assert.Equal(Player.BlastResult.TooFast, p.Blast(w, "bomb", X, Y, 0f, X + 10f, Y, 1f, out _));
+        Assert.Equal(Player.BlastResult.TooFast, p.Blast(w, "bomb", X, Y, 0f, X + U(545f), Y, 1f, out _));
         // a torpedo from a plane, an unknown weapon, a rifle shot reported as an explosion
-        Assert.Equal(Player.BlastResult.WrongVehicle, p.Blast(w, "torpedo", X + 10f, Y, 2f, X + 10f, Y, 5f, out _));
-        Assert.Equal(Player.BlastResult.UnknownWeapon, p.Blast(w, "nuke", X + 10f, Y, 0f, X + 10f, Y, 5f, out _));
-        Assert.Equal(Player.BlastResult.UnknownWeapon, p.Blast(w, "rifle-shot", X + 10f, Y, 0f, X + 10f, Y, 5f, out _));
+        Assert.Equal(Player.BlastResult.WrongVehicle, p.Blast(w, "torpedo", X + U(545f), Y, 2f, X + U(545f), Y, 5f, out _));
+        Assert.Equal(Player.BlastResult.UnknownWeapon, p.Blast(w, "nuke", X + U(545f), Y, 0f, X + U(545f), Y, 5f, out _));
+        Assert.Equal(Player.BlastResult.UnknownWeapon, p.Blast(w, "rifle-shot", X + U(545f), Y, 0f, X + U(545f), Y, 5f, out _));
         Assert.Equal(e0, w.Energy[a]);
         Assert.Equal(St.Adult, w.StageOf[a]);
         Assert.Equal(rounds, p.Rounds["bomb"]);
@@ -174,10 +176,10 @@ public class VehicleTests
         Assert.Null(b.Spawn(boatWorld, "boat", 5f, 5f));
         b.Board("boat", 0f); b.Place(5f, 5f, 0f, false);
         Assert.Equal(Player.BlastResult.NotInWater, b.Blast(boatWorld, "torpedo", 5f + U(600f), 5f, 2f, 5f, 5f, 25f, out _));
-        Assert.Equal(Player.BlastResult.BadDepth, b.Blast(boatWorld, "torpedo", 5f + U(100f), 5f, 80f, 5f, 5f, 5f, out _));
+        Assert.Equal(Player.BlastResult.BadDepth, b.Blast(boatWorld, "torpedo", 5f + U(10f), 5f, 80f, 5f, 5f, 5f, out _));   // (in the water cell: 2026-11-01, 4 m a unit)
         // and when the rounds are spent there are no more
         b.Rounds["torpedo"] = 0;
-        Assert.Equal(Player.BlastResult.NoAmmo, b.Blast(boatWorld, "torpedo", 5f + U(100f), 5f, 2f, 5f, 5f, 5f, out _));
+        Assert.Equal(Player.BlastResult.NoAmmo, b.Blast(boatWorld, "torpedo", 5f + U(10f), 5f, 2f, 5f, 5f, 5f, out _));
         // an unspawned vehicle cannot be boarded
         var q = new Player(); q.Place(1f, 1f, 0f, false); q.Board("plane", 100f);
         Assert.Null(q.Vehicle);

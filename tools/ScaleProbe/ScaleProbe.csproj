@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The scale probe (2026-11-01, the 3.5 km world): builds worlds and prints their width, relief, slopes, rivers,
+       rain, temperature, glaciers and rock; dumps planes for tools/ScaleProbe/render.py. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Neuroreef.Core\Neuroreef.Core.csproj" />
+  </ItemGroup>
+</Project>

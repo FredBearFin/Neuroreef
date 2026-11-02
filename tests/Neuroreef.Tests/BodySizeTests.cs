@@ -33,14 +33,17 @@ public class BodySizeTests
         Assert.Equal(K.MAX_SIGHT, BodySize.MaxSight);
         Assert.Equal(K.MAX_HEAR, BodySize.MaxHear);
         Assert.Equal(K.NEWBORN_MIN, BodySize.NewbornMin);
-        Assert.Equal(K.HCELL, Map.HCell);
-        Assert.Equal(K.HCELL_CALL, Map.HCellCall);
-        Assert.Equal(K.MAX_PERCEIVE, Map.MaxPerceive);
+        // (2026-11-01, the 1 km world: the default cells are 128 and 512 units, 1.5 and 2 km at 4 m a unit, so on a map
+        // narrower than a cell the cell is the whole map: 512 callers' units on the 2048 and 1024 maps, the side below)
         foreach (int side in Map.Sizes)
         {
             Map.Set(side);
-            Assert.Equal(side / K.HCELL, Map.GW); Assert.Equal(side / K.HCELL_CALL, Map.CGW);
+            Assert.Equal(Math.Min(K.HCELL, side), Map.HCell); Assert.Equal(Math.Min(K.HCELL_CALL, side), Map.HCellCall);
+            Assert.Equal(3f * Math.Min(K.HCELL, side), Map.MaxPerceive);
+            Assert.Equal(Math.Max(1, side / K.HCELL), Map.GW); Assert.Equal(Math.Max(1, side / K.HCELL_CALL), Map.CGW);
         }
+        Map.Set(2048);
+        Assert.Equal(K.HCELL, Map.HCell); Assert.Equal(K.HCELL_CALL, Map.HCellCall); Assert.Equal(K.MAX_PERCEIVE, Map.MaxPerceive);
         Map.Set(TestWorld.Side);
         // the default walker's perception fits the default cells, as UnitsTests checks with its own formula
         Assert.True(BodySize.WalkerPerceive(K.MASS_HI) <= K.MAX_PERCEIVE);
@@ -61,9 +64,11 @@ public class BodySizeTests
             Assert.Equal(10f, BodySize.NewbornMin, 3);
             Assert.Equal(K.MAX_SIGHT * MathK.Pow(500f, K.EXP_SIGHT), BodySize.MaxSight, 3);
             Assert.Equal(K.MAX_HEAR * MathK.Cbrt(500f), BodySize.MaxHear, 2);
-            // the cells hold the largest perception and the loudest call, and divide the side
-            Assert.True(Map.MaxPerceive >= BodySize.WalkerPerceive(20000f));
-            Assert.True(2 * Map.HCellCall >= BodySize.MaxHear);
+            // the cells hold the largest perception and the loudest call, and divide the side; or a cell is the whole map,
+            // whose search then holds all of it (2026-11-01, the 1 km world: a 20 t walker perceives ~3.4 km in a step,
+            // more than the 256 map's 1 km)
+            Assert.True(Map.MaxPerceive >= BodySize.WalkerPerceive(20000f) || Map.HCell == Map.W);
+            Assert.True(2 * Map.HCellCall >= BodySize.MaxHear || Map.HCellCall == Map.W);
             Assert.True(Map.HCellCall >= Map.HCell);
             Assert.Equal(0, Map.W % Map.HCell); Assert.Equal(0, Map.W % Map.HCellCall);
             return 0;
@@ -119,6 +124,43 @@ public class BodySizeTests
         });
     }
 
+    [Fact] // a random ancestor's brain is drawn within what its body can pay for (Body.UnitsAffordable), so in a world of tiny
+    // bodies the founding test's brain share does not reject the small ones (2026-11-01: 2-24 units drawn whatever the body
+    // thinned the founders under ~10 g); at the default range the draw is the old one, bit for bit
+    public void AnAncestorsBrainFitsItsBody()
+    {
+        var body = new sbyte[G.NBODY];
+        int B = G.BODY;
+        // the default range: the brain gene is the old draw, BRAIN_MIN + U x (BRAIN_START - BRAIN_MIN), for every class
+        for (int a = 0; a < 400; a++)
+        {
+            Clades.AncestorBody(body, 7, a, true, floorClass: a % K.FLOOR_CLASSES);
+            float u = Rng.U(7, (uint)a, 19u, Rs.Founder + 7000u);
+            Assert.Equal(Body.UnitsGene(K.BRAIN_MIN + u * (K.BRAIN_START - K.BRAIN_MIN)), body[G.B_BRAIN - B]);
+        }
+        Assert.True(Body.UnitsAffordable(K.MASS_LO) >= K.BRAIN_START);
+        With(0.001f, 1f, () =>
+        {
+            var w = new World(1024, 7);
+            var g = new sbyte[G.LEN];
+            int small = 0;
+            for (int a = 0; a < 400; a++)
+            {
+                Brain.RandomGenome(g, 7, 0, 0x700000u + (uint)a);
+                Clades.AncestorBody(new Span<sbyte>(g, G.BODY, G.NBODY), 7, a, true, floorClass: a % K.FLOOR_CLASSES);
+                g.CopyTo(w.GenomeOf(0));
+                Body.Express(w, 0);
+                float m = w.PM[0];
+                if (Body.UnitsAffordable(m) < K.BRAIN_MIN + 0.5f) continue;   // ~1-1.5 g: even the smallest brain is dear (real physics)
+                if (m < 0.01f) small++;
+                float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[0] / K.BRAIN_REF;
+                Assert.True(brainCost <= K.BRAIN_SHARE_MAX * w.PBasal[0], $"ancestor {a}: {m * 1000:F1} g with {w.PBrain[0]} units");
+            }
+            Assert.True(small > 8, $"{small} draws under 10 g");
+            return 0;
+        });
+    }
+
     [Fact] // a world of giants (100 kg - 20 t) founds bodies inside its range and runs without NaN or a crash
     public void AGiantsWorldFoundsAndRuns() => RunWorld("giants", 100f, 20000f, 300, 200);
 
@@ -155,15 +197,21 @@ public class BodySizeTests
             w.Speed[i] = 3f * w.PVmax[i];   // as far as it may go this step: the perception the neighbourhood must hold at its largest
             float R = Decide.Perceive(w.PSight[i], true, w.Speed[i]);
             Assert.True(R > 2 * Map.HCell, $"R {R} within 5x5 cells of {Map.HCell}");
-            Assert.True(R > K.MAX_PERCEIVE, $"R {R}: no farther than a default world's");
-            // the other at 97% of that, diagonally (across cells in both axes), from a giant near a cell corner
-            w.X[i] = 3.5f * Map.HCell + 0.2f; w.Y[i] = 2.5f * Map.HCell - 0.3f; w.Heading[i] = 0.7f;
-            float d = share * R;
+            // farther than a default world's, where the default cells fit inside the map (2026-11-01, the 1 km world: on the
+            // 256 and 128 maps a default cell, 128 units, is half or all of the side, and both are held by the map)
+            if (side > 2 * K.HCELL) Assert.True(R > K.MAX_PERCEIVE, $"R {R}: no farther than a default world's");
+            else Assert.True(R >= Map.MaxPerceive - 1e-3f, $"R {R}: not to the map's own neighbourhood {Map.MaxPerceive}");
+            // the other at 97% of that, diagonally (across cells in both axes), from a giant near a cell corner. (2026-11-01:
+            // a giant's perception, ~3 km, is wider than a 1 km map, so the other stands at that share of the farthest the
+            // torus allows along the diagonal, 0.45 of the side, and is sensed at 1 - d / R)
+            // (on the torus: a cell may be the whole map, 2026-11-01, so 3.5 cells is wrapped back onto it)
+            w.X[i] = World.Wrap(3.5f * Map.HCell + 0.2f); w.Y[i] = World.Wrap(2.5f * Map.HCell - 0.3f); w.Heading[i] = 0.7f;
+            float d = share * MathF.Min(R, 0.45f * Map.W);
             w.X[j] = World.Wrap(w.X[i] + d * MathK.Cos(0.7f)); w.Y[j] = World.Wrap(w.Y[i] + d * MathK.Sin(0.7f));
             Simulation.BuildFor(w);
             Decide.Run(w, i, new Decide.ProbeBuf());
             float close = w.Feat[i * F.N + F.O1_CLOSE];
-            Assert.Equal(1f - share, close, 3);
+            Assert.Equal(1f - d / R, close, 3);
             Assert.Equal(MathK.Tanh(close), w.Feat[i * F.N + F.OTHERS], 5);   // one other, counted once
             return 0;
         });

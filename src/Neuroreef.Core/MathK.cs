@@ -58,6 +58,11 @@ public static class MathK
 
     public static float Cbrt(float x) => x <= 0f ? 0f : Exp(Log(x) * (1f / 3f));
 
+    /// <summary>Square root, 0 for x &lt;= 0 (2026-11-01). IEEE 754 requires it correctly rounded, so it is the same on
+    /// every machine (unlike the transcendental functions above), and the hardware instruction is fast.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Sqrt(float x) => x <= 0f ? 0f : MathF.Sqrt(x);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Sin(float x)
     {

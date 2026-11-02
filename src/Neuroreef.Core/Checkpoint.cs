@@ -41,7 +41,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 23;   // 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 27;   // 27: the step of the world a prehistory founds after its own (Nature.WorldStepH; older saves: the save's own step; 2026-11-02); 26: the length of a step after the body sizes (World.StepH, a world setting; older saves ran at K.STEP_H = 2.92 h; 2026-11-02); 25: nutrient held by dead wood, detritus, carrion, dung and peat per cell and by each gut (World.WoodN.., GutN; older saves start them from the pools' mass, Nutrients.InitPools; 2026-11-02); 24: live wood per cell (World.LiveWood; older saves start it from their woody cover, Plants.InitWood, and keep their land; 2026-11-01); 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     /// <summary>The oldest save format this program can read. A save is continued only if its genome length (G.LEN) is this
     /// program's, which it has not been for saves before 22 (GeneBank.Version 13 changed the genome layout): those are refused
     /// by that check.</summary>
@@ -66,7 +66,7 @@ public static class Checkpoint
     public static readonly HashSet<string> LandFields = new(StringComparer.Ordinal)
     {
         // fields and plants
-        "Pool", "Shrub", "Tree", "Sapling", "Nutrient", "Scent", "NutrientN", "ScentN",
+        "Pool", "Shrub", "Tree", "Sapling", "LiveWood", "Nutrient", "Scent", "NutrientN", "ScentN", "WoodN", "DetN", "CarN", "DungN", "PeatN",
         "POcc", "BankMom", "BankDad", "SeedMom", "SeedDad", "FruitG", "PollenDad", "BankM", "SeedOut", "PFlags",
         "WindAcc", "WindDist", "RowFar", "RowFarBest", "WindAccMom", "WindAccDad", "WindDistMom", "WindDistDad", "RowFarMom", "RowFarDad",
         "Flora", "Moisture", "Poll", "Temp", "Fire", "FireN", "TreeMean",
@@ -84,6 +84,10 @@ public static class Checkpoint
         // the pathogen reservoir in the ground and water
         "ResLoad", "ResGene", "ResKey", "ResRecv", "ResOrder", "ResRivers", "ResNet",
     };
+
+    /// <summary>Land fields an older save may lack without its land being rebuilt: they are made from the land it holds
+    /// (AfterMigration). LiveWood (2026-11-01): from the woody cover (Plants.InitWood).</summary>
+    static readonly HashSet<string> FromCover = new(StringComparer.Ordinal) { "LiveWood", "WoodN", "DetN", "CarN", "DungN", "PeatN" };
 
     /// <summary>Per-slot arrays written for slots in use only: each is written whole when a slot is born (the genome before
     /// Life.Place, the rest by Life.Place and Brain.InitLife), so what a dead slot holds is never read again. (The paged
@@ -155,7 +159,13 @@ public static class Checkpoint
     static void ReadBodySize(BinaryReader br, int version)
     {
         if (version >= BodySizeVersion) BodySize.Read(br); else BodySize.Reset();
+        // the length of a step (format 26 on; before, every world ran at K.STEP_H), applied to Nature so the world is
+        // rebuilt at it; a world already built is set to it by the load (World.SetStepH)
+        Nature.StepH = version >= StepVersion ? br.ReadSingle() : K.STEP_H;
+        Nature.WorldStepH = version >= WorldStepVersion ? br.ReadSingle() : Nature.StepH;
     }
+    const ushort WorldStepVersion = 27;   // the first version with the world's step after it
+    const ushort StepVersion = 26;   // the first version with the length of a step after the body sizes
     const ushort BodySizeVersion = 23;   // the first version with the body sizes after the nature settings
 
     // ------------------------------------------------------------------ a prehistory
@@ -167,7 +177,7 @@ public static class Checkpoint
         using (var bw = new BinaryWriter(fs))
         {
             bw.Write("NRCK"u8.ToArray()); bw.Write(Version);
-            bw.Write(G.LEN); bw.Write(pre.B.Length); bw.Write(pre.B.Max(b => b.W.Cap)); bw.Write(pre.B[0].W.Seed); Nature.Write(bw); BodySize.Write(bw);
+            bw.Write(G.LEN); bw.Write(pre.B.Length); bw.Write(pre.B.Max(b => b.W.Cap)); bw.Write(pre.B[0].W.Seed); Nature.Write(bw); BodySize.Write(bw); bw.Write(pre.B[0].W.StepH); bw.Write(Nature.WorldStepH);
             foreach (var s in pre.B) { bw.Write(s.W.Cap); Write(bw, s.W, s.W, landOnly: false); }   // each branch grows on its own
             fs.Flush(true);
         }
@@ -212,6 +222,7 @@ public static class Checkpoint
         int side = br.ReadInt32(); br.BaseStream.Seek(-4, SeekOrigin.Current);
         if (side != Map.W) throw new InvalidDataException($"checkpoint map is {side} units, this run's is {Map.W}");
         Nature.Read(br); ReadBodySize(br, v);
+        foreach (var s in pre.B) s.W.SetStepH(Nature.StepH);
         if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
         if (n != pre.B.Length || seed != pre.B[0].W.Seed)
             throw new InvalidDataException($"checkpoint has {n} branches, seed {seed}; start with the same --branches and --seed");
@@ -249,7 +260,7 @@ public static class Checkpoint
         using (var bw = new BinaryWriter(fs))
         {
             bw.Write("NRWK"u8.ToArray()); bw.Write(Version);
-            bw.Write(G.LEN); bw.Write(w.Cap); bw.Write(w.Seed); bw.Write(w.TerrainSeed); Nature.Write(bw); BodySize.Write(bw);
+            bw.Write(G.LEN); bw.Write(w.Cap); bw.Write(w.Seed); bw.Write(w.TerrainSeed); Nature.Write(bw); BodySize.Write(bw); bw.Write(w.StepH); bw.Write(w.StepH);
             Write(bw, w, w, landOnly: false);
             fs.Flush(true);
         }
@@ -287,6 +298,7 @@ public static class Checkpoint
         using var br = new BinaryReader(fs);
         ushort v = ReadVersion(br, "NRWK", "saved world"); br.ReadInt32(); br.ReadInt32(); br.ReadUInt32(); br.ReadUInt32();
         Nature.Read(br); ReadBodySize(br, v);
+        w.SetStepH(Nature.StepH);
         var m = new Migration { From = v };
         if (v == Version) { Read(new Ctx(br, v, m, apply: true), w); Summarise(m, w); return m; }
         long start = fs.Position;
@@ -332,6 +344,8 @@ public static class Checkpoint
         }
         m.Reexpressed = phenotype;
         if (Lost("SlotsUsed")) w.SlotsUsed = SlotsUsedOf(w);
+        if (Lost("LiveWood") && !m.LandRebuilt) Plants.InitWood(w);   // a rebuilt land founded its plants with their wood
+        if (Lost("WoodN") && !m.LandRebuilt) Nutrients.InitPools(w);   // the dead pools' nutrient from their mass (2026-11-02)
         if (m.LandRebuilt)
         {
             Pathogens.Seed(w);   // the founding pathogen strains in the rebuilt ground and water, as a new world has them
@@ -612,7 +626,7 @@ public static class Checkpoint
             {
                 string p = path + f.Name;
                 m.Missing.Add(p);
-                if (land || (o is World && LandFields.Contains(f.Name))) m.LandMissingOrChanged = true;
+                if (land || (o is World && LandFields.Contains(f.Name) && !FromCover.Contains(f.Name))) m.LandMissingOrChanged = true;
             }
     }
 

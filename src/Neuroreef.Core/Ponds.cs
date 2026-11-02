@@ -29,21 +29,24 @@ public static class Ponds
             if ((w.Cell[i] & (byte)Realm.Water) != 0) v = 1;
             else if (on && w.Temp[i] >= 0f)
             {
-                // 2026-11-01: and a waterlogged wetland, whose water stands shallow among its plants (Wetlands)
-                if ((w.PondSite[i] != 0 && w.PondWater[i] >= K.POND_WET) || w.Seep[i] >= springMin || (w.Wetland[i] != 0 && (w.WetNow[i] & 1) != 0)) v = 2;
-                else if (w.FloodFrom[i] >= 0)
+                // 2026-11-01: and a waterlogged wetland, whose water stands shallow among its plants (Wetlands). A flood comes
+                // before the waterlogging (2026-11-01, the 1 km world): the river's water over a riparian wetland is a flood (it
+                // brings the river's nutrient and soaks the soil from the river); on 16 m cells nearly every floodplain cell
+                // beside a brook is waterlogged (its water table held up by the brook, HAND < 1 m), and with the wetland first
+                // no floodplain ever flooded
+                bool standing = (w.PondSite[i] != 0 && w.PondWater[i] >= K.POND_WET) || w.Seep[i] >= springMin;
+                bool logged = w.Wetland[i] != 0 && (w.WetNow[i] & 1) != 0;
+                if (standing) v = 2;
+                else if (w.FloodFrom[i] >= 0 && w.DischargeMean[w.FloodFrom[i]] > 0f && w.Discharge[w.FloodFrom[i]] >= w.FloodWet[i] * w.DischargeMean[w.FloodFrom[i]])
                 {
                     // the river's stage reaches the cell: FLOOD_MIX of the nutrient difference passes from the river cell
                     // to the soil, the same amount leaving one and entering the other
                     int r = w.FloodFrom[i];
-                    float qm = w.DischargeMean[r];
-                    if (qm > 0f && w.Discharge[r] >= w.FloodWet[i] * qm)
-                    {
-                        v = 3;
-                        float give = K.FLOOD_MIX * MathF.Max(0f, w.Nutrient[r] - w.Nutrient[i]);
-                        w.Nutrient[r] -= give; w.Nutrient[i] += give;
-                    }
+                    v = 3;
+                    float give = K.FLOOD_MIX * MathF.Max(0f, w.Nutrient[r] - w.Nutrient[i]);
+                    w.Nutrient[r] -= give; w.Nutrient[i] += give;
                 }
+                else if (logged) v = 2;
             }
             if (w.Wet[i] != v) { w.Wet[i] = v; changed = true; }
         }

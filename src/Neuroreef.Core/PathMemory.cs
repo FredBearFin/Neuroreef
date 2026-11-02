@@ -30,7 +30,8 @@ public static class PathMemory
         if (w.MemHas[i] == 0) return;
         float d = MathF.Sqrt(dx * dx + dy * dy);
         uint seed = w.Seed, step = (uint)w.Step;
-        float sd = (K.PI_ERR * d + K.PI_DIFF) * MathF.Sqrt(K.BRAIN_START / (float)Math.Max(1, (int)w.PBrain[i]));
+        float sd = (K.PI_ERR * d + K.PI_DIFF * MathK.Sqrt(w.Dt)) *   // drift at rest: a diffusion, SD ~ sqrt(time) (World.Dt)
+                   MathF.Sqrt(K.BRAIN_START / (float)Math.Max(1, (int)w.PBrain[i]));
         float ex = dx + sd * Rng.N(seed, step, (uint)i, Rs.PathX), ey = dy + sd * Rng.N(seed, step, (uint)i, Rs.PathY);
         // on the torus the remembered place is kept as the nearest copy of itself
         if ((w.MemHas[i] & Mem.Drink) != 0) { w.MemDrinkX[i] = World.Delta1(w.MemDrinkX[i] - ex); w.MemDrinkY[i] = World.Delta1(w.MemDrinkY[i] - ey); }

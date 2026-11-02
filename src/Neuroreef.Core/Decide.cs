@@ -46,6 +46,7 @@ public static class Decide
         return l.ToArray();
     }
 
+
     /// <summary>
     /// For a hash grid of side g: true for each Ring offset that lands on a cell an earlier offset already gave (2026-11-01).
     /// Only a grid narrower than the 7x7 neighbourhood has such offsets (a world of big bodies on a small map, or the
@@ -81,6 +82,10 @@ public static class Decide
     /// Revision S: with taste (FOOD_HERE: food at the mouth) the plants' defences count, as when it bites; food further
     /// away (FOOD_GRAD) is judged by how much there is, as it cannot taste it.
     public static float FoodValue(World w, ReadOnlySpan<float> diet, float bite, float need, int cell, bool taste = false)
+        => Worth(FoodGain(w, diet, bite, cell, taste), need);
+
+    /// <summary>The energy of one bite of the best food in the cell it can digest (FoodValue before its worth is taken).</summary>
+    public static float FoodGain(World w, ReadOnlySpan<float> diet, float bite, int cell, bool taste = false)
     {
         float v = 0;
         bool land = w.Cell[cell] == (byte)Realm.Land;
@@ -92,7 +97,7 @@ public static class Decide
             if (taste && land && p <= (int)Pool.Root) { Plants.Taste(w, p, cell, bite, out float em, out bm); e = MathF.Min(e * em, MathF.Max(e, Pools.DigMax[p])); }
             v = MathF.Max(v, e * Pools.Rho[p] * MathF.Min(bite * bm, w.Pool[p][cell] * Pools.Kg[p]));   // kg of food (Pools.Kg)
         }
-        return Worth(v, need);
+        return v;
     }
 
     /// <summary>The worth of an energy gain against a step's need: 1 - exp(-gain / need).</summary>
@@ -269,17 +274,25 @@ public static class Decide
         float meatEff = diet[(int)Pool.Meat];
         float mfp = MathK.Pow(w.MassOf(i) / w.PM[i], K.EXP_BASAL);
         float bite = w.PBite[i] * mfp, need = MathF.Max(1e-7f, K.FIELD_METAB * w.PBasal[i] * mfp);
-        float fh = FoodValue(w, diet, bite, need, cell, taste: true);
+        float plantHere = FoodGain(w, diet, bite, cell, taste: true);
+        float fh = Worth(plantHere, need);
         float fgx = FoodValue(w, diet, bite, need, CellAt(cell, 2, 0)) - FoodValue(w, diet, bite, need, CellAt(cell, -2, 0));
         float fgy = FoodValue(w, diet, bite, need, CellAt(cell, 0, 2)) - FoodValue(w, diet, bite, need, CellAt(cell, 0, -2));
         byte eatPrey = 0;
         if ((o1.J >= 0 || o1.J == Player.Slot) && meatEff > 0)
         {
             // value of eating it: a bite of its edible tissue, on the same scale as the plants
-            float prey = Worth(meatEff * K.RHO_MEAT * MathF.Min(bite, K.C_CARC * (o1.J >= 0 ? w.ApparentMass(o1.J) : Player.MASS)), need);
+            float preyGain = meatEff * K.RHO_MEAT * MathF.Min(bite, Resolve.CarcassKg(o1.J >= 0 ? w.ApparentMass(o1.J) : w.Player!.Mass, 0f));   // its edible tissue (2026-11-01)
+            float prey = Worth(preyGain, need);
+            // (2026-11-01) prey and plants are compared by the energy a bite of each gives, and the way to food leads to
+            // prey only for what it would give beyond the food underfoot. Both were compared as worths, which saturate:
+            // a bite of either pays for 10-25 steps, so both read 1.0 and prey never beat any plant (a meat specialist on
+            // grass never hunted), while every hungry grazer's way to food led to the nearest other animal (plants are
+            // ~1.0 in every cell, so their gradient is ~0), whatever little meat its gut could take
+            float pull = Worth(MathF.Max(0f, preyGain - plantHere), need);
             float close = 1f - o1.D / R;
-            fgx += prey * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += prey * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
-            if (o1.J == strike.J && prey > fh) { fh = prey; eatPrey = 1; }                         // in reach and worth more than the plants
+            fgx += pull * close * o1.Dx / MathF.Max(o1.D, 1e-3f); fgy += pull * close * o1.Dy / MathF.Max(o1.D, 1e-3f);
+            if (o1.J == strike.J && preyGain > plantHere) { fh = prey; eatPrey = 1; }              // in reach and worth more than the plants
         }
         w.IEatPrey[i] = eatPrey;
         f[F.FOOD_HERE] = fh;
@@ -413,14 +426,14 @@ public static class Decide
             }
         }
         // a template fades: its counts halve every TMPL_HALF steps (staggered by slot)
-        if (w.PImit[i] > 0f && ((long)w.Step + i) % K.TMPL_HALF == 0)
+        if (w.PImit[i] > 0f && ((long)w.Step + i) % w.Steps(K.TMPL_HALF) == 0)
             for (int k = i * Voice.NTMPL, ke = k + Voice.NTMPL; k < ke; k++) w.Tmpl[k] >>= 1;
 
         // ---- learning update due from the last step's reward, with the rise in fear its move led to (sensed only now)
         w.Reward[i] -= K.R_FEAR * MathF.Max(0f, f[F.FEAR] - w.LastFear[i]);
         w.LastFear[i] = f[F.FEAR];
         Brain.Learn(w, i);
-        if (((int)w.Step + i) % 32 == 1) Brain.Relax(w, i);
+        { int rx = w.Steps(32); if (((int)w.Step + i) % rx == 1 % rx) Brain.Relax(w, i); }   // every 32 reference steps of time (kappa per reference step)
 
         // ---- brain
         Span<float> yv = stackalloc float[G.NIN];
@@ -436,10 +449,41 @@ public static class Decide
         // exploration: perturb continuous gains, sample discrete actions (DESIGN §7.2)
         float sigma = Brain.Sigma(w, i);
         uint acts = 0;
+        // decisions in real time (2026-11-02, DESIGN 0c): a brain's output for an act is its chance in a reference step
+        // (K.STEP_H). States (eating, drinking, resting, marking: their effects are per unit time, x Dt) are held for the
+        // share of the time the gain says; events (strike, mate, lay, cache, each call) fire with chance g x Dt a step, so
+        // they happen g times a reference step on average at any finer step (a count, not the chance of at least one: a
+        // hazard of -ln(1 - g) would fire an urge near 1 many times), and a fine step does not multiply strikes, matings
+        // and calls a day; a coarser step fires once at most, with the chance of one in its Dt reference steps.
+        // A bout (a commitment in time): a state's draw and the continuous gains' exploration noise are held for a
+        // reference step (one draw a K.STEP_H), so an animal keeps eating or resting while its urge stays above the bout's
+        // draw, and learning sees each held choice x Dt a step: a reference step's trace holds one choice and one
+        // perturbation, as at the reference step, and learning an hour does not grow with the number of steps in it.
+        // At Dt = 1 this is the old loop
+        float dt = w.Dt, dl = MathF.Min(dt, 1f);
+        var rsHeld = dt == 1f ? rs : new Rng.Seq(Rng.Hash(seed, (uint)w.RefStep(w.Step), (uint)i, Rs.ExploreHeld));
         for (int p = 0; p < P.N; p++)
         {
             float ge;
-            if (p < P.FIRST_ACTION)
+            if (dt != 1f)
+            {
+                if (p < P.FIRST_ACTION)
+                {
+                    float n = (rsHeld.Next() + rsHeld.Next() + rsHeld.Next() - 1.5f) * 2f;
+                    ge = Math.Clamp(g[p] + sigma * n, 0f, 1f);
+                    delta[p] = sigma * n * dl;
+                }
+                else
+                {
+                    bool ev = Event(p);
+                    float q = !ev ? g[p] : dt < 1f ? g[p] * dt : w.PStep(g[p]);   // an event: g expected a reference step
+                    bool fire = (ev ? rs.Next() : rsHeld.Next()) < q;
+                    ge = fire ? 1f : 0f;
+                    if (fire) { acts |= 1u << (p - P.FIRST_ACTION); metrics?.Attempt(p); }
+                    delta[p] = ev ? ge - q : (ge - q) * dl;
+                }
+            }
+            else if (p < P.FIRST_ACTION)
             {
                 // learning sees the noise drawn, not the clamped change: near 0 the clamp cuts the downward half, and its
                 // mean would credit a gain with rewards it did not cause (audit 2026-10-30: +0.06 at sigma 0.16, g 0.02)
@@ -524,6 +568,11 @@ public static class Decide
         // a correlated random walk: a compass direction drawn every 16 steps, blended into the next. (It was an offset to
         // the current heading held for 16 steps, so the animal turned the same way each step and walked in circles.)
         uint wb = (step + (uint)i) / 16u; float wt = ((step + (uint)i) & 15u) / 16f;
+        if (w.Dt != 1f)   // every 16 reference steps of time (2026-11-02)
+        {
+            double tw = w.Step * (double)w.Dt + i;
+            wb = (uint)(long)(tw / 16.0); wt = (float)(tw / 16.0 - Math.Floor(tw / 16.0));
+        }
         float wa0 = Rng.U(seed, wb, (uint)i, Rs.Wander) * 2f * MathF.PI, wa1 = Rng.U(seed, wb + 1u, (uint)i, Rs.Wander) * 2f * MathF.PI;
         Add(g[P.WANDER], (1f - wt) * MathK.Cos(wa0) + wt * MathK.Cos(wa1), (1f - wt) * MathK.Sin(wa0) + wt * MathK.Sin(wa1));
         if (loud > 0) { Add(g[P.TOWARD_CALL], callDx, callDy); Add(g[P.AWAY_CALL], -callDx, -callDy); }
@@ -730,6 +779,10 @@ public static class Decide
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static void Bump(byte[] t, int k) { if (t[k] < 255) t[k]++; }
 
+    /// <summary>Is primitive p an event (an act that happens at an instant: strike, mate, lay, cache, a call), not a state
+    /// held over time (eat, drink, rest, mark)? Events fire at a hazard per unit time (Run, 2026-11-02).</summary>
+    public static bool Event(int p) => p == P.STRIKE || p == P.MATE || p == P.LAY || p == P.CACHE || p >= P.CALL_0;
+
     public static bool Ready(World w, int i)
     {
         if (w.StageOf[i] != St.Adult) return false;
@@ -768,15 +821,15 @@ public static class Decide
         f[k + 4] = active ? w.Carnivory(j) : 0f;
     }
 
-    /// <summary>EXPLORE: the same raw senses of the person (Player.cs): a 70 kg, armed omnivore moving as the console moves it.</summary>
+    /// <summary>EXPLORE: the same raw senses of the person (Player.cs): an armed omnivore of the person's mass (70 kg, or the console's player size: Player.Resize) moving as the console moves it.</summary>
     static void OtherPlayer(World w, int i, Near o, float R, float vmax, float fx, float fy, float myMass, Span<float> f, int k)
     {
         var pl = w.Player!;
         f[k] = 1f - o.D / R;
-        f[k + 1] = MathK.Tanh(MathK.Log(Player.MASS / MathF.Max(myMass, 1e-4f)));
+        f[k + 1] = MathK.Tanh(MathK.Log(pl.Mass / MathF.Max(myMass, 1e-4f)));
         float rvx = pl.Speed * MathK.Cos(pl.Heading) - w.Speed[i] * fx, rvy = pl.Speed * MathK.Sin(pl.Heading) - w.Speed[i] * fy;
         f[k + 2] = Math.Clamp(-(rvx * o.Dx + rvy * o.Dy) / MathF.Max(o.D, 1e-3f) / MathF.Max(vmax, 0.05f), -1f, 1f);
-        f[k + 3] = MathK.Tanh(Player.STRIKE * MathK.Cbrt(Player.MASS / MathF.Max(myMass, 1e-4f)));
+        f[k + 3] = MathK.Tanh(Player.STRIKE * MathK.Cbrt(pl.Mass / MathF.Max(myMass, 1e-4f)));
         f[k + 4] = Player.MEAT;
     }
 
@@ -796,10 +849,10 @@ public static class Decide
         float close = 1f - d / R;
         crowd += close; otherSum += close;
         if (d < o1.D) o1 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
-        if (Player.MASS > o2Mass) { o2Mass = Player.MASS; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
+        if (pl.Mass > o2Mass) { o2Mass = pl.Mass; o2 = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
         float reachJ = StrikeReach(reach, vmax, pl.MassCbrt);
         if (d <= reachJ && d < strike.D) strike = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot };
-        if (d <= reachJ && Player.MASS > strikeBigMass) { strikeBigMass = Player.MASS; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
+        if (d <= reachJ && pl.Mass > strikeBigMass) { strikeBigMass = pl.Mass; strikeBig = new Near { D = d, Dx = ddx, Dy = ddy, J = Player.Slot }; }
     }
 
     public static float Weakness(World w, int j)
@@ -817,4 +870,8 @@ public static class Decide
 public static class Flag
 {
     public const byte Carrying = 1, Newborn = 2, Immigrant = 8;
+    /// <summary>A flier's state after its last step (2026-11-01, Resolve; World.Airborne reads it): Aloft in the air, Landed
+    /// on the ground or in the water (a newborn, or one too cold or too heavy to fly, over water it cannot stand in).
+    /// Neither before its first step.</summary>
+    public const byte Landed = 16, Aloft = 32;
 }

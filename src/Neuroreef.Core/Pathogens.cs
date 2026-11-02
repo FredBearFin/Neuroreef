@@ -13,7 +13,9 @@
 //   det  = PG_DETECT + (1 - PG_DETECT) q                how well the immune system sees it
 //   E'   = E + PG_RISE imm det L/(L + PG_HALF) (PG_NAIVE + E) - PG_E_DECAY E   clonal expansion
 //   L'   = L exp(r fit (1 - L) - PG_KILL E det)         r: replication less persistence and breadth costs
-//   D'   = D + PG_DMG toxin mode L - PG_REPAIR reserve  death when D >= 1
+//   D'   = D + PG_DMG (toxin mode + PG_EXPLOIT r/PG_REP_HI) L - PG_REPAIR reserve   death when D >= 1
+// Replication (r) thus raises both transmission (through the load it sheds) and harm (the tissue it consumes and the
+// load the toxin acts on): the transmission-virulence trade-off (Anderson & May 1982; Alizon et al. 2009).
 // Shedding PG_SHED L mode (1 + PG_TOX_SHED toxin) is split by the route genes: contact (to animals in reach, DECIDE),
 // the ground of the host's cell, its dung, and water (the cell's or a neighbouring water cell's). The reservoir
 // (World.ResLoad) decays by the strain's persistence, faster on dry land, and runs downstream along rivers.
@@ -176,7 +178,7 @@ public static class Pathogens
     }
 
     /// <summary>Host i bit food from cell c (RESOLVE): it swallows what lies there.</summary>
-    public static void Ate(World w, int i, int c) => Pick(w, i, c, K.PG_EAT, S_EAT);
+    public static void Ate(World w, int i, int c) => Pick(w, i, c, w.PStep(K.PG_EAT), S_EAT);   // a bite is x Dt (World.Dt)
 
     /// <summary>Host i drank at cell c (RESOLVE): from c's water, or the neighbouring water cell holding the most pathogens.</summary>
     public static void Drank(World w, int i, int c)
@@ -192,7 +194,7 @@ public static class Pathogens
                     if (WetCell(w, n) && w.ResLoad[n] > best) { best = w.ResLoad[n]; wc = n; }
                 }
         }
-        if (wc >= 0) Pick(w, i, wc, K.PG_DRINK, S_DRINK);
+        if (wc >= 0) Pick(w, i, wc, w.PStep(K.PG_DRINK), S_DRINK);
     }
 
     /// <summary>Put amount of the strain at (gene[go..], key[ko..]) into cell c. A cell holds one strain: the newcomer takes
@@ -235,18 +237,18 @@ public static class Pathogens
     {
         float L = w.PgLoad[i];
         float reserve = Math.Clamp(w.Energy[i] / w.EmaxOf(i), 0f, 1f);
-        if (w.ImmMem[i] > 0f) w.ImmMem[i] *= 1f - K.PG_MEM_DECAY;
+        if (w.ImmMem[i] > 0f) w.ImmMem[i] *= w.Keep(1f - K.PG_MEM_DECAY);   // rates per reference step, x World.Dt (2026-11-02)
         if (L <= 0f)
         {
-            if (w.PgDamage[i] > 0f) w.PgDamage[i] = MathF.Max(0f, w.PgDamage[i] - K.PG_REPAIR * reserve);
-            if (w.ImmEff[i] > 0f) { w.ImmEff[i] -= K.PG_E_DECAY * w.ImmEff[i]; if (w.ImmEff[i] < 1e-3f) w.ImmEff[i] = 0f; }
+            if (w.PgDamage[i] > 0f) w.PgDamage[i] = MathF.Max(0f, w.PgDamage[i] - K.PG_REPAIR * reserve * w.Dt);
+            if (w.ImmEff[i] > 0f) { w.ImmEff[i] -= K.PG_E_DECAY * w.ImmEff[i] * w.Dt; if (w.ImmEff[i] < 1e-3f) w.ImmEff[i] = 0f; }
             int src = w.IStrainSrc[i];
             if (w.IDose[i] > 0f && src >= 0 && src != i && w.PgLoad[src] > 0f)
                 Expose(w, i, w.IDose[i], w.PgGene, src * PG.N, w.Strain, src * G.NMHC, S_CONTACT);
             if (w.PgLoad[i] <= 0f)
             {
                 int cell = World.FIdx(w.X[i], w.Y[i]);
-                if (w.ResLoad[cell] > 0f) Pick(w, i, cell, K.PG_TOUCH, S_TOUCH);
+                if (w.ResLoad[cell] > 0f) Pick(w, i, cell, w.PStep(K.PG_TOUCH), S_TOUCH);
             }
             return false;
         }
@@ -258,11 +260,12 @@ public static class Pathogens
         float E = w.ImmEff[i];
         float imm = (K.PG_IMM_BASE + w.PImmune[i]) * (1f + K.PG_MHC_DIV * w.D.MhcDiv[i]);   // Diversity(w, i), cached at Body.Express
         float r = Growth(g, o) * w.PgFit[i];
-        float L1 = MathF.Min(1f, L * MathK.Exp(r * (1f - L) - K.PG_KILL * E * det));
+        float L1 = MathF.Min(1f, L * MathK.Exp((r * (1f - L) - K.PG_KILL * E * det) * w.Dt));
         // clonal expansion (Antia, Levin & May 1994); the bound of 10 is a numerical guard only (killing at E = 10 is far
         // above any strain's growth, so a response clears its strain well before it)
-        w.ImmEff[i] = MathF.Min(10f, E + K.PG_RISE * imm * det * L / (L + K.PG_HALF) * (K.PG_NAIVE + E) - K.PG_E_DECAY * E);
-        float D = MathF.Max(0f, w.PgDamage[i] + K.PG_DMG * tox * mode * L - K.PG_REPAIR * reserve);
+        w.ImmEff[i] = MathF.Min(10f, E + K.PG_RISE * imm * det * L / (L + K.PG_HALF) * (K.PG_NAIVE + E) * w.Dt - K.PG_E_DECAY * E * w.Dt);
+        // tissue damage: the toxin it expresses and the host tissue its replication consumes (PG_EXPLOIT, 2026-11-02), against repair
+        float D = MathF.Max(0f, w.PgDamage[i] + K.PG_DMG * (tox * mode + K.PG_EXPLOIT * r * (1f / K.PG_REP_HI)) * L * w.Dt - K.PG_REPAIR * reserve * w.Dt);
         w.PgDamage[i] = D;
         if (D >= 1f) { Resolve.Die(w, i, Cause.Disease, -1); return true; }
         if (L1 < K.PG_CLEAR)
@@ -299,7 +302,7 @@ public static class Pathogens
         if (L <= 0f) return 0f;
         int o = i * PG.N;
         float q = Quorum(L, QsT[w.PgGene[o + PG.QS]]);
-        return K.PG_SHED * L * (K.PG_STEALTH + (1f - K.PG_STEALTH) * q) * (1f + K.PG_TOX_SHED * U8(w.PgGene[o + PG.TOX]));
+        return K.PG_SHED * L * (K.PG_STEALTH + (1f - K.PG_STEALTH) * q) * (1f + K.PG_TOX_SHED * U8(w.PgGene[o + PG.TOX])) * w.Dt;
     }
 
     // ------------------------------------------------------------------ the reservoir

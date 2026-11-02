@@ -45,6 +45,15 @@
 // headwalls, arêtes and horns (the glacial buzzsaw: Brozović, Burbank & Meigs 1997; Egholm et al. 2009). A glacier
 // carries its load to its snout. The relief is no longer scaled down to 3 km: it stands as high as uplift against all
 // this leaves it, up to H_RELIEF (the game's vertical scale).
+// The 1 km world (2026-11-01): a field cell is GEO_CELL_M = 16 m and the default map 1 km, far smaller than a plate or
+// an orogen. A map is a piece of a larger landscape: its vertical scale is Map.ReliefM (the relief a window of its width
+// holds, ~ width^0.75: 153 m on the 256 map, 725 m on 2048), and the plates' pattern stands for the pattern of rock
+// uplift and rock the piece is cut from (fault blocks, warps, rifts as basins): its heights, cover and limestone x VScale
+// = ReliefM / H_RELIEF, its uplift rates x sqrt(VScale) (relief over hillslopes goes as U L^2 / D). The land surface's
+// processes (stream power on km2, creep in km2/Myr, failure at each rock's critical slope; glaciers only where the
+// world's snowline is below its hills: none on a 1 km map) run at their true scale. At these scales creep dominates:
+// a 1 km map is a valley and its hills, smooth slopes of 10-25°, with crags only where hard rock is cut. The last steps
+// of deep time run on at most DEEP_MAX = 128 cells a side (32 and 64 m on the 1024 and 2048 maps), upsampled.
 // Simplifications: plate boundaries are held fixed over the deep time (a kinematic steady state, not plate motion);
 // the scales of this world (the plates' GEO_KM, the land surface's GEO_CELL_M, the climate's pole-to-pole rows, the
 // animals' walking distances) are not one; the field grid's flexural rebound is the coarse grid's, as rock uplift.
@@ -87,12 +96,18 @@ public static class Geology
         public readonly float Km;          // km per coarse cell, as the plates see it (GEO_KM)
         public float Dx;                   // km per coarse cell, as the land surface sees it (GEO_CELL_M a field cell)
         public float Scale = 1f;           // the field grid's relief against this coarse one's (Refine: at most H_RELIEF)
+        public float UScale = 1f;          // the plates' rock uplift rates as the map sees them: sqrt(VScale) (2026-11-01; Tectonics)
+        public float VScale = 1f;          // the plates' vertical lengths (uplift, Airy heights, cover) as the map's relief sees them: Map.ReliefM / H_RELIEF
         public float Top;                  // km: the highest ground above the lakes on the field grid, at the end
-        public readonly byte[] Plate, Bound, Bed;        // nearest plate, boundary kind within its belt, bedrock kind
+        public readonly byte[] Plate, Bound;             // nearest plate, boundary kind within its belt
+        public byte[] Bed;                               // bedrock kind
         public readonly bool[] Arc, Collision;           // convergent cells on an arc (over a sinking plate) or in a collision belt
-        public readonly float[] H, Sed, Uplift, Thick;   // km: relief, sedimentary cover; km/Myr: rock uplift; km: crust as the plates thickened or thinned it (not counting erosion)
-        public readonly float[] Lime;                    // km: limestone under the sedimentary cover (the carbonate base of a platform's cover)
-        public readonly float[] Ice;                     // km: glacier ice at the last step of deep time (0: none, or frozen to its bed)
+        public float[] H, Sed;                           // km: relief, sedimentary cover
+        public readonly float[] Uplift, Thick;           // km/Myr: rock uplift; km: crust as the plates thickened or thinned it (not counting erosion)
+        public float[] Lime;                             // km: limestone under the sedimentary cover (the carbonate base of a platform's cover)
+        public float[] Ice;                              // km: glacier ice at the last step of deep time (0: none, or frozen to its bed)
+        /// <summary>Replace the surface arrays with a field grid's (Geology.Upsample, 2026-11-01).</summary>
+        internal void SetArrays(float[] h, float[] sed, float[] lime, float[] ice, byte[] bed) { H = h; Sed = sed; Lime = lime; Ice = ice; Bed = bed; }
         public readonly float[] Conv, Rel;               // km/Myr at the nearest boundary: closing speed (< 0: opening), relative speed
         public readonly float[] Rebound;                 // km/Myr: flexural rock uplift (isostatic rebound) over the last tenth of deep time
         public float Sea;                                // km: lake level on the coarse relief
@@ -114,7 +129,10 @@ public static class Geology
             H = new float[n]; Sed = new float[n]; Uplift = new float[n]; Thick = new float[n]; Conv = new float[n]; Rel = new float[n];
             Rebound = new float[n]; Lime = new float[n]; Ice = new float[n];
         }
-        public byte Surface(int i) => Sed[i] > K.GEO_SED_MIN ? Rock.Sedimentary : Lime[i] > K.GEO_SED_MIN ? Rock.Limestone : Bed[i];
+        /// <summary>Strata thicker than this hide what lies below (km): GEO_SED_MIN, or on a small map's thin strata a third of
+        /// its limestone bed (2026-11-01, the 1 km world: 15 m of limestone, so 4.6 m; else no limestone could show)</summary>
+        public float SedMin = K.GEO_SED_MIN;
+        public byte Surface(int i) => Sed[i] > SedMin ? Rock.Sedimentary : Lime[i] > SedMin ? Rock.Limestone : Bed[i];
         /// <summary>Erosion of depth d off cell i strips it top down: clastic strata, then limestone, then bedrock.</summary>
         public void Strip(int i, float d)
         {
@@ -123,8 +141,15 @@ public static class Geology
         }
     }
 
-    /// <summary>Coarse grid side for the field grid: half of it, at least 64 cells (or the whole of a smaller grid).</summary>
-    public static int CoarseSide(int fw) => Math.Max(fw / 2, Math.Min(fw, 64));
+    /// <summary>The grid the last steps of deep time run on (Refine): the field grid, at most DEEP_MAX a side; a bigger field
+    /// grid gets its relief upsampled from it, with sub-grid roughness (2026-11-01, the 1 km world: on 16 m cells creep is
+    /// stable only in ~600 sub-steps a step of deep time, so the 1024 and 2048 maps' last steps run on 32 and 64 m cells).</summary>
+    public static int DeepSide(int fw) => Math.Min(fw, DEEP_MAX);
+    const int DEEP_MAX = 128;
+
+    /// <summary>Coarse grid side: half the deep grid's, at least 32 cells (2026-11-01: 64 before, when the 256 map's 64
+    /// cells were coarse and fine at once; at 16 m a cell that cost ~10 s).</summary>
+    public static int CoarseSide(int fw) => Math.Max(DeepSide(fw) / 2, Math.Min(DeepSide(fw), 32));
 
     /// <summary>
     /// The deep-time genesis of world w: sets Elev (0..1), SeaLevel (the Nature.Water quantile) and Rock at the field grid,
@@ -136,7 +161,15 @@ public static class Geology
     internal static Crust Form(World w, bool glaciers)
     {
         int FW = Map.FW, CW = CoarseSide(FW);
-        var c = new Crust(CW) { Dx = K.GEO_CELL_M * 1e-3f * FW / CW };
+        var c = new Crust(CW) { Dx = K.GEO_CELL_M * 1e-3f * FW / CW, VScale = Map.ReliefM / K.H_RELIEF };
+        c.UScale = MathF.Sqrt(c.VScale);
+        // glaciers only where the world's latitude puts the snowline below the hills it can hold (2026-11-01: none on a
+        // 1 km map below ~58°: its hills stand ~150 m, the Earth-like snowline at 55° ~340 m above the lakes)
+        var ela0 = new float[CW]; var tSea0 = new float[CW];
+        Snowline(w, CW, ela0, tSea0);
+        float elaMin = float.MaxValue; foreach (var e in ela0) elaMin = MathF.Min(elaMin, e);
+        glaciers &= elaMin < Map.ReliefM * 1e-3f;
+        c.SedMin = MathF.Min(K.GEO_SED_MIN, 0.3f * K.GEO_LIME * c.VScale);
         uint seed = w.TerrainSeed * 2654435761u + 0x6E01u;
         MakePlates(c, seed);
         var rw = new Rng.Seq(seed + 1u);
@@ -246,12 +279,20 @@ public static class Geology
                 if (dist < belt) kind = MathF.Abs(conv) < K.GEO_OBLIQUE * rel ? Transform : conv > 0f ? Convergent : Divergent;
 
                 c.Plate[i] = (byte)a; c.Bound[i] = kind; c.Bed[i] = bed; c.Arc[i] = arc && kind == Convergent; c.Collision[i] = coll && kind == Convergent;
-                c.Uplift[i] = K.GEO_AIRY * rate; c.Conv[i] = conv; c.Rel[i] = rel;
+                // 2026-11-01 (the 1 km world): a map smaller than an orogen is a piece of a larger landscape. The plates'
+                // pattern stands for the pattern of rock uplift and rock it is cut from (fault blocks and warps on a small map),
+                // and its vertical lengths (uplift, the plates' Airy heights, the platform's cover) are as the map's relief sees
+                // them, x VScale = Map.ReliefM / H_RELIEF (0.059 on the 256 map: uplift of tens of m/Myr, ~90 m of cover)
+                // rock uplift rates fall less than heights, x UScale = sqrt(VScale) (0.14 on the 1 km map): relief over a
+                // window of hillslopes goes as U L^2 / D (creep), so a small piece of land needs a regional uplift of tens
+                // of m/Myr to stand its hills (and Refine's ToRelief brings what is too high down to ReliefM)
+                float vs = c.VScale;
+                c.Uplift[i] = K.GEO_AIRY * rate * c.UScale; c.Conv[i] = conv; c.Rel[i] = rel;
                 c.Thick[i] = Ta;
-                c.H[i] = K.GEO_AIRY * (Ta - tRef);                                  // Airy height of the plate's crust
+                c.H[i] = K.GEO_AIRY * (Ta - tRef) * vs;                             // Airy height of the plate's crust
                 // young platforms carry cover (carbonate below, clastic strata above); shields and lavas do not
                 bool cover = Ta < K.GEO_T_CRATON && !volc;
-                c.Sed[i] = cover ? K.GEO_COVER - K.GEO_LIME : 0f; c.Lime[i] = cover ? K.GEO_LIME : 0f;
+                c.Sed[i] = cover ? (K.GEO_COVER - K.GEO_LIME) * vs : 0f; c.Lime[i] = cover ? K.GEO_LIME * vs : 0f;
             }
         });
     }
@@ -271,7 +312,7 @@ public static class Geology
         var sorted = new float[n]; var hStep = new float[n]; var tmp = new float[n]; var low = new float[n]; var slid = new float[n];
         var drop = new float[n]; var cov = new float[n]; var isc = new float[n]; var iceQ = new float[n]; var lat = new float[n];
         var ela = new float[CW]; var tSea = new float[CW];
-        Snowline(CW, ela, tSea);
+        Snowline(w, CW, ela, tSea);
         int flexR = Math.Max(1, (int)MathF.Round(K.GEO_FLEX / c.Km));
         float carry = K.CARRY_K / K.ERODE_K;   // capacity against erodibility, as at the fine passes
         // hillslope diffusion, explicit: sub-stepped so the steepest (most nonlinear) link stays stable
@@ -289,8 +330,8 @@ public static class Geology
             for (int i = 0; i < n; i++)
             {
                 float u = c.Uplift[i] * dt;
-                if (u < 0f) { float room = (c.Thick[i] - K.GEO_T_MIN) * K.GEO_AIRY; u = MathF.Max(u, -MathF.Max(0f, room)); }
-                c.H[i] += u; c.Thick[i] += u / K.GEO_AIRY;
+                if (u < 0f) { float room = (c.Thick[i] - K.GEO_T_MIN) * K.GEO_AIRY * c.UScale; u = MathF.Max(u, -MathF.Max(0f, room)); }
+                c.H[i] += u; c.Thick[i] += u / (K.GEO_AIRY * c.UScale);   // the crust in the plates' km
             }
             Array.Copy(c.H, hStep, n);
             // critical-slope failure: where uplift or incision has steepened a slope past its rock's critical slope the
@@ -299,7 +340,7 @@ public static class Geology
             // what falls stays at the crag's foot as talus; the rivers carry the rest. Before the routing, so the drainage
             // is that of the ground as it stands after the slides
             Array.Clear(slid);
-            for (int i = 0; i < n; i++) { drop[i] = Rock.Sc[c.Lime[i] > K.GEO_SED_MIN ? Rock.Limestone : c.Bed[i]] * dx; cov[i] = c.Sed[i]; }
+            for (int i = 0; i < n; i++) { drop[i] = Rock.Sc[c.Lime[i] > c.SedMin ? Rock.Limestone : c.Bed[i]] * dx; cov[i] = c.Sed[i]; }
             Fail(c.H, slid, c.Sea, drop, CW, K.GEO_SC * dx, cov);
             Talus(c, slid, dx, iceQ);
 
@@ -416,7 +457,7 @@ public static class Geology
         // how near the steady state: |dh/dt| against U over the last tenth, in the uplifting belts
         double du = 0, uu = 0; float span = (iters - mark) * dt;
         for (int i = 0; i < n; i++)
-            if (c.Uplift[i] > 0.1f * K.GEO_AIRY && c.H[i] > c.Sea) { du += MathF.Abs(c.H[i] - hMark[i]) / span; uu += c.Uplift[i]; }
+            if (c.Uplift[i] > 0.1f * K.GEO_AIRY * c.UScale && c.H[i] > c.Sea) { du += MathF.Abs(c.H[i] - hMark[i]) / span; uu += c.Uplift[i]; }
         c.Residual = uu > 0 ? (float)(du / uu) : 0f;
     }
 
@@ -462,15 +503,15 @@ public static class Geology
     }
 
     /// <summary>The deep-time snowline (ELA, km above the lakes) and the Earth-like sea-level annual mean temperature (°C)
-    /// of each row of a grid of side W: T_EQ - DT_EP sin² latitude falls by LAPSE per km and reaches GEO_T_ELA at the
+    /// of each row of a grid of side W: GEO_T_EQ - GEO_DT_EP sin² latitude (Climate.LandMean) falls by LAPSE per km and reaches GEO_T_ELA at the
     /// ELA (the latitude of a row as Climate has it on the field grid). Climate-setting free, so a seed makes one land.</summary>
-    internal static void Snowline(int W, float[] ela, float[] tSea)
+    internal static void Snowline(World w, int W, float[] ela, float[] tSea)
     {
         int FW = Map.FW;
         for (int y = 0; y < W; y++)
         {
-            float s = MathK.Sin(2f * MathF.PI * ((y + 0.5f) * FW / W - 0.5f) / FW);
-            tSea[y] = K.T_EQ - K.DT_EP * s * s;
+            float s = Climate.SinLat(w, (y + 0.5f) * FW / W - 0.5f);   // the world's latitude (2026-11-01: one band on a small map)
+            tSea[y] = Climate.LandMean(s);
             ela[y] = MathF.Max(0f, (tSea[y] - K.GEO_T_ELA) / K.LAPSE);
         }
     }
@@ -614,7 +655,7 @@ public static class Geology
     {
         float top = float.MinValue;
         foreach (var v in h) top = MathF.Max(top, v);
-        float f = MathF.Min(1f, K.H_RELIEF * 1e-3f / MathF.Max(0.01f, top - sea));
+        float f = MathF.Min(1f, Map.ReliefM * 1e-3f / MathF.Max(0.01f, top - sea));
         for (int i = 0; i < h.Length; i++) { h[i] = sea + (h[i] - sea) * f; u[i] *= f; }
         return f;
     }
@@ -651,7 +692,7 @@ public static class Geology
         int FW = Map.FW, CW = c.CW, f = FW / CW;
         MinMax(c.H, out float mn, out float mx);
         // at the game's vertical scale (H_RELIEF above the lakes, as Refine puts it), so Rainfall reads heights in metres
-        float sc = 1f / MathF.Max(1e-6f, (c.Sea - mn) + MathF.Max(mx - c.Sea, K.H_RELIEF * 1e-3f));
+        float sc = 1f / MathF.Max(1e-6f, (c.Sea - mn) + MathF.Max(mx - c.Sea, Map.ReliefM * 1e-3f));
         Sample(c.H, CW, w.Elev, FW, false);
         for (int i = 0; i < FW * FW; i++) w.Elev[i] = (w.Elev[i] - mn) * sc;
         w.SeaLevel = (c.Sea - mn) * sc;
@@ -709,8 +750,8 @@ public static class Geology
     // ---- onto the field grid: the worked relief, sub-grid roughness, rock; then the last of deep time at full resolution
     static void Refine(World w, Crust c, uint seed, bool glaciers)
     {
-        int FW = Map.FW, n = FW * FW, CW = c.CW, f = Math.Max(1, FW / CW);
-        var g = new Crust(FW) { Dx = K.GEO_CELL_M * 1e-3f, Sea = c.Sea, Plates = c.Plates };
+        int FF = Map.FW, FW = DeepSide(FF), n = FW * FW, CW = c.CW, f = Math.Max(1, FW / CW);
+        var g = new Crust(FW) { Dx = K.GEO_CELL_M * 1e-3f * FF / FW, Sea = c.Sea, Plates = c.Plates, VScale = c.VScale, UScale = c.UScale, SedMin = c.SedMin };
         Sample(c.H, CW, g.H, FW, true);
         Sample(c.Sed, CW, g.Sed, FW, false); Sample(c.Lime, CW, g.Lime, FW, false);
         Sample(c.Uplift, CW, g.Uplift, FW, false); Sample(c.Thick, CW, g.Thick, FW, false);
@@ -751,24 +792,58 @@ public static class Geology
         // the last GEO_FINE_ITERS steps of deep time on the field grid: the same uplift, rivers and hillslopes, now
         // resolving the valleys and ridges the coarse grid could not
         Erode(w, g, K.GEO_FINE_ITERS, true, glaciers);
+        if (FW < FF) Upsample(g, FF, seed + 7u);   // the deep grid onto a bigger field grid (DeepSide)
+        n = FF * FF;
         c.Scale = g.Scale; c.FineIce = g.Ice; c.FineSed = g.Sed; c.FineBed = new byte[n];
-        for (int i = 0; i < n; i++) c.FineBed[i] = g.Lime[i] > K.GEO_SED_MIN ? Rock.Limestone : g.Bed[i];
+        for (int i = 0; i < n; i++) c.FineBed[i] = g.Lime[i] > c.SedMin ? Rock.Limestone : g.Bed[i];
         // onto 0..1 at the game's vertical scale: H_RELIEF above the lakes is 1 - SeaLevel, so heights and slopes are as
         // the deep time made them (the highest ground stands at most H_RELIEF above the lakes; on a small map, less)
         float mn = float.MaxValue, top = float.MinValue;
         for (int i = 0; i < n; i++) { mn = MathF.Min(mn, g.H[i]); top = MathF.Max(top, g.H[i]); }
         var sorted = (float[])g.H.Clone(); Array.Sort(sorted);
         float sea = sorted[(int)(Nature.Water * n)];
-        float range = (sea - mn) + MathF.Max(top - sea, K.H_RELIEF * 1e-3f);
+        float range = (sea - mn) + MathF.Max(top - sea, Map.ReliefM * 1e-3f);
         c.Top = top - sea;
         for (int i = 0; i < n; i++) { w.Elev[i] = (g.H[i] - mn) / range; w.Rock[i] = g.Surface(i); }
         Array.Copy(w.Elev, sorted, n); Array.Sort(sorted);
         w.SeaLevel = sorted[(int)(Nature.Water * n)];
     }
 
+    /// <summary>The deep grid g (side G) onto the field grid of side F (2026-11-01, DeepSide): relief by Catmull-Rom with
+    /// sub-grid roughness as Refine adds it (GEO_ROUGH of the relief between a cell and its neighbours), cover, limestone
+    /// and ice bilinear, bedrock nearest. Replaces g's arrays in place (g.CW stays the deep side: only its arrays are read).</summary>
+    static void Upsample(Crust g, int F, uint seed)
+    {
+        int G = g.CW, n = F * F, f = F / G;
+        var H = new float[n]; var Sed = new float[n]; var Lime = new float[n]; var Ice = new float[n]; var Bed = new byte[n];
+        Sample(g.H, G, H, F, true); Sample(g.Sed, G, Sed, F, false); Sample(g.Lime, G, Lime, F, false); Sample(g.Ice, G, Ice, F, false);
+        var relief = new float[G * G];
+        for (int y = 0; y < G; y++)
+            for (int x = 0; x < G; x++)
+            {
+                int i = y * G + x; float h = g.H[i], m = 0f;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++) m = MathF.Max(m, MathF.Abs(g.H[World.WrapI(y + dy, G) * G + World.WrapI(x + dx, G)] - h));
+                relief[i] = K.GEO_ROUGH * m;
+            }
+        var amp = new float[n];
+        Sample(relief, G, amp, F, false);
+        var r = new Rng.Seq(seed);
+        var rough = Terrain.Fbm(ref r, G, 3);
+        for (int y = 0; y < F; y++)
+            for (int x = 0; x < F; x++)
+            {
+                int i = y * F + x;
+                H[i] += amp[i] * 2f * (rough(x / (float)F, y / (float)F) - 0.5f);
+                Bed[i] = g.Bed[Math.Min(G - 1, y / f) * G + Math.Min(G - 1, x / f)];
+                Sed[i] = MathF.Max(0f, Sed[i]); Lime[i] = MathF.Max(0f, Lime[i]); Ice[i] = MathF.Max(0f, Ice[i]);
+            }
+        g.SetArrays(H, Sed, Lime, Ice, Bed);
+    }
+
     /// <summary>The critical hillslope gradient GEO_SC as elevation (0..1) per field cell, at the game's vertical scale
     /// (H_RELIEF above the lakes) and the land surface's horizontal one (GEO_CELL_M): for Hydrology.Erode's failure.</summary>
-    public static float CriticalDrop(World w) => K.GEO_SC * K.GEO_CELL_M * (1f - w.SeaLevel) / K.H_RELIEF;
+    public static float CriticalDrop(World w) => K.GEO_SC * K.GEO_CELL_M * (1f - w.SeaLevel) / Map.ReliefM;
 
     /// <summary>Each field cell's critical slope as elevation (0..1) per field cell (2026-11-01): of the rock beneath its
     /// loose cover (c.FineBed, Rock.Sc); the cover itself (Cover) fails at CriticalDrop.</summary>
@@ -776,7 +851,7 @@ public static class Geology
     {
         int n = Map.FW * Map.FW;
         var d = new float[n];
-        float k = K.GEO_CELL_M * (1f - w.SeaLevel) / K.H_RELIEF;
+        float k = K.GEO_CELL_M * (1f - w.SeaLevel) / Map.ReliefM;
         for (int i = 0; i < n; i++) d[i] = Rock.Sc[c.FineBed[i]] * k;
         return d;
     }
@@ -786,7 +861,7 @@ public static class Geology
     {
         int n = Map.FW * Map.FW;
         var d = new float[n];
-        float k = 1000f * (1f - w.SeaLevel) / K.H_RELIEF;
+        float k = 1000f * (1f - w.SeaLevel) / Map.ReliefM;
         for (int i = 0; i < n; i++) d[i] = c.FineSed[i] * k;
         return d;
     }
@@ -795,7 +870,7 @@ public static class Geology
     /// the rock beneath is its surface.</summary>
     public static void Expose(World w, Crust c, float[] cover)
     {
-        float min = K.GEO_SED_MIN * 1000f * (1f - w.SeaLevel) / K.H_RELIEF;
+        float min = c.SedMin * 1000f * (1f - w.SeaLevel) / Map.ReliefM;
         for (int i = 0; i < cover.Length; i++)
             if (w.Rock[i] == Rock.Sedimentary && cover[i] <= min) w.Rock[i] = c.FineBed[i];
     }

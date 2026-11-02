@@ -13,7 +13,11 @@ public class WetlandTests
     static float Profile(float xM) => xM <= MathF.Pow(K.SHORE_HC / K.SHORE_A, 1.5f) ? K.SHORE_A * MathF.Pow(xM, 2f / 3f)
         : K.SHORE_HC + K.SHORE_S * (xM - MathF.Pow(K.SHORE_HC / K.SHORE_A, 1.5f));
 
-    [Fact] // the sea and the lakes: a shore cell (one beside land or a river) is in the shallow realm, no cell is deeper than
+    // (2026-11-02, the 1 km world) on the 1024 map: the shoreface reaches its closure depth SHORE_HC (4 m) at
+    // (SHORE_HC / SHORE_A)^1.5 = 354 m, 22 cells of 16 m, out from the shore. The 256 test map (1 km) holds only a sea of
+    // ~400 cells, at most 10 cells (150 m) from its shore and so at most 2.3 m deep, as the profile has it; the 1024 map's
+    // waters reach ~29 cells out (~7 m). At 218 m a cell the third ring was already past the closure depth
+    [Fact, BigWorld] // the sea and the lakes: a shore cell (one beside land or a river) is in the shallow realm, no cell is deeper than
            // the shoreface profile at its distance from the shore, each body's surface is flat, and the sea goes deeper offshore
     public void StandingWaterDeepensFromTheShore()
     {
@@ -89,7 +93,14 @@ public class WetlandTests
             }
             Assert.True(wet > 0.002 * (wet + dry), $"{wet} wetland cells of {wet + dry}");
             Assert.True(hW / wet < 0.2 * hD / dry, $"height above drainage: wetlands {hW / wet:F1} m, dry land {hD / dry:F1} m");
-            Assert.True(tW / wet > tD / dry + 1, $"wetness index: wetlands {tW / wet:F2}, dry land {tD / dry:F2}");
+            // the wetness index ranks wetlands wetter than dry land. 2026-11-02 (the 1 km world): it was by more than 1, on
+            // 218 m cells, where a wetland cell was a valley floor draining the valley. On 16 m cells nearly all wetlands are
+            // riparian, held up by the stream beside them (HAND under 0.5 m for ~90% of them, asserted above): flatter than
+            // dry land (ln(1/tan b) ~0.7 higher) but draining only the strip of hillside above them straight into the
+            // channel (D8 area no larger than dry land's), so their index is ~0.4 higher. On fine DEMs the depth to the
+            // nearest water separates wet soils far better than the TWI does, whose skill falls with the cell size (Agren et
+            // al. 2014, HESS: on 2-24 m DEMs)
+            Assert.True(tW / wet > tD / dry, $"wetness index: wetlands {tW / wet:F2}, dry land {tD / dry:F2}");
             Assert.True(mW / wet > 0.85, $"wetland soil moisture {mW / wet:F2}");
             Assert.True(pW / wet > 10 * pD / dry && pW / wet > 0.3, $"peat: wetlands {pW / wet:F2} m, dry land {pD / dry:F3} m");
             Assert.True(fW / cW > fD / cD + 0.2, $"flood tolerance: wetlands {fW / cW:F2}, dry land {fD / cD:F2}");

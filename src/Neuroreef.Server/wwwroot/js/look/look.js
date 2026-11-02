@@ -71,7 +71,7 @@ export class Look {
     this.frameMs += (dt - this.frameMs) * 0.05;
     this._adapt(dt);
     const cam = v.camera, fog = v.scene.fog;
-    this.light.update(cam, v.controls.target, v.mode, dt);
+    this.light.update(cam, v.controls.target, v.mode, dt, (v.explore && v.explore.ps) || 1);   // (the person's size, explore.js)
     // fog: the sky's horizon in the direction the camera looks; haze length from the view (looking down from high up
     // one looks through less air than along the ground)
     cam.getWorldDirection(this._fwd);

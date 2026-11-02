@@ -41,7 +41,7 @@
     world that grows from it. Choose the land, how harsh nature is, and how life starts. Nothing is created until you press
     Start. 1× on a nature setting is the documented law; the rest is your choice.</p>
   <div class="presets"><span class="k" style="color:var(--dim)">Presets:</span>
-    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (laptop)">Light (laptop)</a><a data-p="normal" data-name="Normal valley (default)">Normal valley (default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a></div>
+    <a data-p="pet" data-name="Pet valley">Pet valley</a><a data-p="light" data-name="Light (4 km)">Light (4 km)</a><a data-p="normal" data-name="Normal (8 km, default)">Normal (8 km, default)</a><a data-p="region" data-name="Region">Region</a><a data-p="big" data-name="Continent">Continent</a><a data-p="huge" data-name="Supercontinent">Supercontinent</a></div>
   <div id="groups"></div>
 </main>
 <div class="est"><div class="in">
@@ -57,25 +57,29 @@ const gb = (b) => (b / 1e9).toFixed(1) + ' GB';
 const x = (v) => '×' + (+v).toFixed(2).replace(/0$/, '').replace(/\.0$/, '');
 let info, rows = [];
 const MAPS = [256, 512, 1024, 2048], MAPN = { 256: 'Valley', 512: 'Region', 1024: 'Continent', 2048: 'Supercontinent' };
-const mapFmt = (v) => `${MAPN[v]} (${Math.round(v * M_PER_UNIT / 1000)} km across)`;
+const mapFmt = (v) => { const km = v * M_PER_UNIT / 1000; return `${MAPN[v]} (${km < 10 ? km.toFixed(1) : Math.round(km)} km across)`; };
 const STEPS = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 0];
+const DEF_MIN = 8766 / 3000 * 60, STEP_LIST = [1, 10, 60, DEF_MIN];
+const stepFmt = (v) => v < 59 ? `${Math.round(v)} min` : v < 61 ? '1 hour' : `${(v / 60).toFixed(2)} hours (default)`;
 const SLOTS = () => [2048, 4096, 8192, 12288, 16384, 20480, 24576, 32768].filter((v) => v <= (info.maxSlots || 1e9));
 const WSLOTS = () => [1024, 2048, 4096, 8192, 12288, 16384, 24576, 32768].filter((v) => v <= (info.maxSlots || 1e9));
 const RATES = [1, 3, 10, 30, 0];
-// real units (ICD §2.1): a world unit is 54.5 m (a field cell of 4 units is 218 m), a step 2.92 h (3,000 steps a year)
-const M_PER_UNIT = 218 / 4, STEP_H = 8766 / 3000;
+// real units (ICD §2.1): a world unit is 4 m (a field cell of 4 units is 16 m; 2026-11-01, the 1 km world: the server's
+// setup-info metresPerUnit overrides it), a step 2.92 h (3,000 steps a year)
+let M_PER_UNIT = 16 / 4; const STEP_H = 8766 / 3000;
 const years = (steps) => { const y = steps * STEP_H / 8766; return y >= 1.5 ? `${y.toFixed(1).replace(/\.0$/, '')} years` : y >= 0.95 ? '1 year' : `${Math.round(y * 12)} months`; };
 
 function nearestIndex(list, v) { let b = 0; for (let i = 0; i < list.length; i++) if (Math.abs(list[i] - v) < Math.abs(list[b] - v)) b = i; return b; }
 
 function defs() {
   const V = info.v, ev = info.evolve;
+  if (+info.metresPerUnit > 0) M_PER_UNIT = +info.metresPerUnit;
   return [
     { g: 'Land', note: 'the prehistory evolves on a bigger map; the world you watch can be smaller', rows: [
       { key: 'preMap', label: 'Map of the prehistory', list: MAPS, val: V.preMap, fmt: mapFmt,
-        help: 'Where life evolves. A valley (the default, 14 km) is seen whole on one screen; a region is four times it and a continent sixteen times: more animals and lineages, at that much more memory and CPU.' },
+        help: 'Where life evolves. The default is 8 km (Supercontinent): the smallest map that keeps many lineages at real animal densities. A valley is 1 km, a region 2 km, a continent 4 km: smaller is lighter but holds fewer lineages.' },
       ...(ev ? [] : [{ key: 'worldMap', label: 'Map of your world', list: MAPS, val: V.worldMap, fmt: mapFmt,
-        help: 'Where you watch. A valley (the default, 14 km) fits on one screen with mountains, rivers, lakes and caves; a region is four times it, a continent sixteen times (much more to scroll over).' }]),
+        help: 'Where you watch. The default is 8 km, as big as the prehistory; a valley (1 km) fits on one screen, a region is 2 km, a continent 4 km.' }]),
       { key: 'water', label: 'Water', min: 0.03, max: 0.4, step: 0.01, val: V.water, fmt: (v) => Math.round(v * 100) + '% of the land',
         help: 'How much of the map is lakes and sea.' },
       { key: 'ponds', label: 'Ponds', min: 0, max: 1, step: 0.05, val: V.ponds, fmt: (v) => Math.round(v * 100) + '% of basins',
@@ -86,6 +90,10 @@ function defs() {
       { key: 'seasons', label: 'Seasons', min: 0, max: 2, step: 0.05, val: V.seasons, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How much wetter the wet season and drier the dry season are.' },
       { key: 'seasonLength', label: 'Length of the seasons\' year', min: 1000, max: 20000, step: 500, val: V.seasonLength, fmt: (v) => v.toLocaleString() + ' steps · ' + years(v),
         help: 'One wet and one dry season. A step is 2.92 hours, so 3,000 steps (the default) are a calendar year; about one lifespan, which lets breeding seasons and migration evolve. Much longer and seasons feel like climate eras.' },
+      { key: 'preStepMinutes', label: 'Time in a step: prehistory', list: STEP_LIST, val: V.preStepMinutes || DEF_MIN, fmt: stepFmt,
+        help: 'How much time passes in one step of the prehistory. 2.92 hours (the default) evolves fast; an animal can cover hundreds of metres in a step. Keep it coarse: a finer step costs many times more per simulated year.' },
+      { key: 'worldStepMinutes', label: 'Time in a step: your world', list: STEP_LIST, val: V.worldStepMinutes || DEF_MIN, fmt: stepFmt,
+        help: 'How much time passes in one step of the world you watch. 1–10 minutes lets animals move at their real speeds (use the Real time speed button), at many times the cost per simulated day; the animals\' acts (strikes, matings, calls) happen at the same rate per hour at any step. Plants and water still change every 2.92 hours. Experimental below the default.' },
       { key: 'drought', label: 'Droughts and wet years', min: 0, max: 3, step: 0.05, val: V.drought, fmt: (v) => v == 0 ? 'every year the same' : x(v),
         help: 'How far a year\'s rain can swing. The biggest lever on how much nature matters.' },
       { key: 'fire', label: 'Wildfire', min: 0, max: 5, step: 0.1, val: V.fire, fmt: (v) => v == 0 ? 'none' : x(v), help: 'How often fires start in dry vegetation.' },
@@ -116,7 +124,8 @@ function defs() {
       { key: 'branchSlots', label: 'Animal slots per branch, to start', list: SLOTS(), val: V.branchSlots, fmt: (v) => v.toLocaleString(),
         help: 'Room for organisms (eggs included) a branch starts with. It grows as births need more, as long as memory allows (an eighth of it is kept free); only if it cannot grow do the slots, not nature, choose who is born, and the run is marked invalid.' },
       { key: 'steps', label: 'Length of the prehistory', list: STEPS, val: V.steps,
-        fmt: (v) => v === 0 ? (ev ? 'until you stop it' : 'until you begin the world') : v.toLocaleString() + ' steps', help: '' },
+        fmt: (v) => v === 0 ? (ev ? 'until you stop it' : 'until you begin the world') : `${years(v)} of world time (${v.toLocaleString()} steps of 2.92 h)`,
+        help: 'A time: at a finer prehistory step it is the same years in more steps.' },
     ] },
     ...(ev ? [] : [{ g: 'Your world', note: '', rows: [
       { key: 'worldSlots', label: 'Animal slots in the world, to start', list: WSLOTS(), val: V.worldSlots, fmt: (v) => v.toLocaleString(),
@@ -195,7 +204,7 @@ function estimate() {
 function labelPresets() {
   for (const a of document.querySelectorAll('[data-p]')) {
     const p = PRESETS[a.dataset.p], e = calc((k) => p[k] !== undefined ? p[k] : has(k) ? val(k) : undefined);
-    const map = p.worldMap && !info.evolve ? p.worldMap : p.preMap, km = Math.round(map * M_PER_UNIT / 1000);
+    const map = p.worldMap && !info.evolve ? p.worldMap : p.preMap, km = +(map * M_PER_UNIT / 1000).toFixed(1);
     const mem = gb(e.start) + (e.most > e.start * 1.05 ? '–' + gb(e.most) : '');
     a.innerHTML = `${a.dataset.name}<small>${km} km · ${mem}</small>`;
     a.title = `${a.dataset.name}: a ${MAPN[map].toLowerCase()} ${km} km across, about ${e.lo.toLocaleString()}–${e.hi.toLocaleString()} animals, ${gb(e.start)} of memory to start` +
@@ -260,10 +269,12 @@ function bodyEstimate() {
 
 const PRESETS = {
   pet: { preMap: 256, worldMap: 256, branches: 2, branchSlots: 8192, founders: 400, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, plants: 0.6, seasons: 1.6, drought: 2, seasonLength: 3000, worldMut: 3, climate: 0.3 },
-  light: { preMap: 256, worldMap: 256, branches: 1, branchSlots: 8192, founders: 300, bigBrains: 1, bigBrainUnits: 128, worldSlots: 4096, rate: 3, climate: 0.3 },
-  // the default (2026-11-01): a valley (14 km, seen whole on one screen), a few thousand animals
-  normal: { preMap: 256, worldMap: 256, branches: 3, branchSlots: 8192, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
-  // a region (28 km): four times the land, about 5,000-30,000 animals
+  // lighter: a continent (4 km), 7-12 lineages in the size sweep at ~3-3.6 GB, but 2-11x the real density
+  light: { preMap: 1024, worldMap: 1024, branches: 1, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 128, worldSlots: 16384, rate: 3, climate: 0.3 },
+  // the default (2026-11-01, the owner chose it after the size sweep): 8 km, the smallest map that kept 7-13 lineages near
+  // the real (Damuth) density, ~4 GB with one branch
+  normal: { preMap: 2048, worldMap: 2048, branches: 1, branchSlots: 16384, founders: 600, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 3, climate: 0.3 },
+  // a region (2 km): four times the land
   region: { preMap: 512, worldMap: 512, branches: 2, branchSlots: 12288, founders: 500, bigBrains: 1, bigBrainUnits: 256, worldSlots: 8192, rate: 3, climate: 0.3 },
   big: { preMap: 1024, worldMap: 1024, branches: 3, branchSlots: 24576, founders: 900, bigBrains: 1, bigBrainUnits: 256, worldSlots: 16384, rate: 10, climate: 0.5 },
   // one supercontinent (2048 x 2048, 4 continents of land): one branch, so its slots fit in ~7 GB

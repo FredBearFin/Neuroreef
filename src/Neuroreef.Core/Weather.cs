@@ -11,7 +11,7 @@ public static class Weather
 {
     public static void Update(World w)
     {
-        long year = (long)(w.Step / (ulong)Nature.SeasonLength);
+        long year = w.Year;
         while (w.RainYear < year)
         {
             w.RainYear++;

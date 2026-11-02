@@ -35,6 +35,8 @@ public static class Host
         Console.WriteLine("NEUROREEF 2");
         Console.WriteLine("The world is births and deaths only: no animal is ever spawned.");
         using var host = new SimHost(o, bank);
+        Console.WriteLine(host.Pre != null ? Options.MemoryLine(host.Pre.B.Length == 1 ? "the prehistory branch" : "the prehistory branches", host.Pre.B[0].W.Cap, o.MaxCapacity, host.Pre.B.Length)
+            : Options.MemoryLine("the world", host.W.Cap, o.MaxCapacity));
         if (host.Pre != null)
             Console.WriteLine($"No evolved brains yet, so the PREHISTORY runs first: {host.Pre.B.Length} branches evolve at full speed " +
                 (host.Pre.Pending.TotalSteps == int.MaxValue ? "(until you begin the world). "
@@ -119,9 +121,16 @@ public static class Host
 
     static void StatusLoop(SimHost h, ManualResetEventSlim done)
     {
+        // the rate is the steps made since the last line over its time: a paused or stalled run reads 0, not the last rate it had
+        ulong lastStep = 0; bool lastPre = false; var clock = Stopwatch.StartNew(); double lastT = 0; bool first = true;
         while (!done.Wait(10000))
         {
             var pre = h.Pre;
+            ulong step = pre != null ? pre.Step : h.W.Step;
+            double t = clock.Elapsed.TotalSeconds;
+            double rate = StatusRate(first || lastPre != (pre != null), h.Paused, step, lastStep, t - lastT, pre != null ? pre.Rate : h.MeasuredRate);
+            first = false; lastPre = pre != null; lastStep = step; lastT = t;
+            string paused = h.Paused ? "  PAUSED" : "";
             if (pre != null)
             {
                 var parts = new List<string>();
@@ -131,12 +140,21 @@ public static class Host
                     for (int sp = 0; sp < K.CLADES; sp++) if (Prehistory.StandingOf(pre.B[b], sp, out _, out _) == Prehistory.Standing.SelfSustaining) self++;
                     parts.Add($"branch {b}: {pre.B[b].W.AliveCount:N0} alive, {self} self-sustaining");
                 }
-                Console.WriteLine($"prehistory {pre.Step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {pre.Step:N0})  {pre.Rate,4:F0} steps/s  " + string.Join("  |  ", parts));
+                Console.WriteLine($"prehistory {step * (ulong)K.YEARS_PER_STEP / 1_000_000,4:N0} Myr (step {step:N0})  {rate,4:F0} steps/s{paused}  " + string.Join("  |  ", parts));
                 continue;
             }
             var w = h.W;
-            Console.WriteLine($"step {w.Step,9:N0}  {h.MeasuredRate,5:F0} steps/s  alive {w.AliveCount,6:N0}  slots {w.Cap,7:N0}{(w.FullNow ? $"  WORLD FULL: births refused at {w.GrowLimit}" : "")}");
+            Console.WriteLine($"step {step,9:N0}  {rate,5:F0} steps/s{paused}  alive {w.AliveCount,6:N0}  slots {w.Cap,7:N0}{(w.FullNow ? $"  WORLD FULL: births refused at {w.GrowLimit}" : "")}");
         }
+    }
+
+    /// <summary>The status line's steps per second: the steps since the last line over the seconds between them (0 if the
+    /// step has not moved, or paused), or the sim's own measure on the first line of a phase, when there is no last line to compare.</summary>
+    public static double StatusRate(bool fresh, bool paused, ulong step, ulong lastStep, double seconds, double measured)
+    {
+        if (fresh) return paused ? 0 : measured;
+        if (step <= lastStep || seconds <= 0) return 0;
+        return (step - lastStep) / seconds;
     }
 
     internal static IEnumerable<string> LanAddresses()
@@ -421,7 +439,7 @@ public static class Host
                         season = w.SeasonAt(Map.W * 0.5f), mapSide = Map.W, rain = w.RainAnom, phase = h.Phase, phaseVersion = h.PhaseVersion, view = h.ViewBranch,
                         branches = h.Pre?.B.Length ?? 0, bankPath = h.BankPath,
                         player = PlayerState(h),
-                        units = Wire.Units(), bodyLenM = Wire.BodyLengths(w),   // 2026-11-01: metres per unit, step length; each organism's body length (m)
+                        units = Wire.Units(w), bodyLenM = Wire.BodyLengths(w),   // 2026-11-01: metres per unit, step length; each organism's body length (m)
                         bodyLook = (statusN++ & 3) == 0 ? Wire.BodyLooks(w) : null,   // 2026-11-01: endothermy and fibrous diet for drawing (every 2 s)
                     }), ct);
                 }
@@ -441,7 +459,8 @@ public static class Host
             var p = h.W.Player;   // the live world's, or the watched branch's
             if (p == null) return null;
             return new { present = p.Present, hp = MathF.Round(p.Hp, 1), maxHp = Player.MAX_HP, deaths = p.Deaths, kills = p.Kills, hits = p.Hits, x = p.X, y = p.Y,
-                vehicle = p.Vehicle, alt = MathF.Round(p.AltM), blasts = p.Blasts, blastKills = p.BlastKills, fires = p.FiresStarted };
+                vehicle = p.Vehicle, alt = MathF.Round(p.AltM), blasts = p.Blasts, blastKills = p.BlastKills, fires = p.FiresStarted,
+                scale = MathF.Round(p.Scale, 4), mass = MathF.Round(p.Mass, 3) };
         }
 
         async Task Receive(CancellationToken ct)
@@ -530,10 +549,13 @@ public static class Host
                             // VEHICLES: the vehicle it is in (a spawned kind, or none) and its height above the ground (m)
                             string? veh = e.TryGetProperty("veh", out var pv) && pv.ValueKind == JsonValueKind.String ? pv.GetString() : null;
                             float alt = e.TryGetProperty("alt", out var pa) && pa.ValueKind == JsonValueKind.Number ? (float)pa.GetDouble() : 0f;
+                            // the person's size (the console's player size; ICD §3): height factor and mass; absent, unchanged
+                            float psc = e.TryGetProperty("scale", out var ps) && ps.ValueKind == JsonValueKind.Number ? (float)ps.GetDouble() : float.NaN;
+                            float pms = e.TryGetProperty("mass", out var pmv) && pmv.ValueKind == JsonValueKind.Number ? (float)pmv.GetDouble() : float.NaN;
                             if (!float.IsFinite(px) || !float.IsFinite(py) || !float.IsFinite(ph)) break;
                             h.PlayerSeen = DateTime.UtcNow; _exploring = true;
                             double now = Wall.Elapsed.TotalSeconds;
-                            h.PostView(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Board(veh, alt); p.Place(px, py, ph, run); });
+                            h.PostView(s => { var p = s.W.Player ??= new Player(); p.Clock = now; p.Resize(psc, pms); p.Board(veh, alt); p.Place(px, py, ph, run); });
                             break;
                         }
                         case "vehicle":

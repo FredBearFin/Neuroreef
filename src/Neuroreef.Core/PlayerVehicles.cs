@@ -36,7 +36,8 @@ public static class Vehicles
     /// <summary>Why a vehicle cannot be placed at (x, y) (world units), or null when it can: a jeep on land, a boat on water
     /// at least its depth deep, a plane on land flat enough to take off from (the field cell and its neighbours within
     /// the plane's slope; the console checks its runway on the drawn ground).</summary>
-    public static string? SpawnCheck(World w, string kind, float x, float y)
+    /// <param name="scale">the person's size (Player.Scale): its vehicles are built to it, so a boat needs that much less depth</param>
+    public static string? SpawnCheck(World w, string kind, float x, float y, float scale = 1f)
     {
         var v = Spec(kind);
         if (v == null) return "unknown vehicle";
@@ -45,7 +46,7 @@ public static class Vehicles
         if (v.Realm == "water")
         {
             if (land) return "not on water";
-            if (Player.WaterDepthM(w, c) < v.MinDepthM) return "too shallow";
+            if (Player.WaterDepthM(w, c) < v.MinDepthM * scale) return "too shallow";
             return null;
         }
         if (!land) return "not on land";
@@ -57,7 +58,7 @@ public static class Vehicles
             {
                 int nx = World.WrapI(cx + (k == 0 ? 1 : k == 1 ? -1 : 0), FW), ny = World.WrapI(cy + (k == 2 ? 1 : k == 3 ? -1 : 0), FW);
                 int n = ny * FW + nx;
-                float gn = (MathF.Max(w.Elev[n], w.SeaLevel) - w.SeaLevel) / MathF.Max(1e-3f, 1f - w.SeaLevel) * K.H_RELIEF;
+                float gn = (MathF.Max(w.Elev[n], w.SeaLevel) - w.SeaLevel) / MathF.Max(1e-3f, 1f - w.SeaLevel) * Map.ReliefM;
                 if (MathF.Abs(gn - g) > tan * K.GEO_CELL_M) return "not flat enough to take off";
             }
         }
@@ -118,7 +119,7 @@ public sealed partial class Player
     /// <summary>A vehicle of this kind is placed in the world: its weapon is loaded. Returns why not, or null.</summary>
     public string? Spawn(World w, string kind, float x, float y)
     {
-        var why = Vehicles.SpawnCheck(w, kind, x, y);
+        var why = Vehicles.SpawnCheck(w, kind, x, y, Scale);
         if (why != null) return why;
         var v = Vehicles.Spec(kind)!;
         _spawned.Add(kind);
@@ -140,7 +141,7 @@ public sealed partial class Player
 
     /// <summary>Depth of water over cell c (m); 0 on land.</summary>
     public static float WaterDepthM(World w, int c)
-        => w.Cell[c] == (byte)Neuroreef.Realm.Land ? 0f : MathF.Max(0f, w.Depth[c]) / MathF.Max(1e-3f, 1f - w.SeaLevel) * K.H_RELIEF;
+        => w.Cell[c] == (byte)Neuroreef.Realm.Land ? 0f : MathF.Max(0f, w.Depth[c]) / MathF.Max(1e-3f, 1f - w.SeaLevel) * Map.ReliefM;
 
     public enum BlastResult { Exploded, NotPresent, UnknownWeapon, WrongVehicle, NoAmmo, BadTime, LaunchFar, OutOfRange, TooFast, NotInWater, BadDepth }
 
@@ -208,7 +209,7 @@ public sealed partial class Player
         Rounds[m.Id] = rep.RoundsLeft = left - 1;
         Blasts++;
 
-        float R = m.RadiusM, Ru = R / M_PER_UNIT;
+        float R = m.RadiusM * Scale, Ru = R / M_PER_UNIT;   // a smaller person's bombs are as much smaller (Resize)
         for (int i = 0; i < w.SlotsUsed; i++)
         {
             byte st = w.StageOf[i];

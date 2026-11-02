@@ -83,6 +83,14 @@ public sealed class Simulation : IDisposable
     /// </summary>
     public void BuildLand(Land? from = null)
     {
+        // the land is made on the reference clock, whatever the world's step (LandTicks)
+        float h = W.StepH;
+        W.SetStepH(K.STEP_H);
+        try { BuildLandRef(from); } finally { W.SetStepH(h); }
+    }
+
+    void BuildLandRef(Land? from)
+    {
         if (from != null && from.Is == Land.Stage.Grown) { from.Into(W); return; }
         var rain = from?.Into(W);
         if (rain != null) Terrain.Finish(W, rain); else Terrain.Build(W);
@@ -135,48 +143,99 @@ public sealed class Simulation : IDisposable
         int nBig = w.Evo.BigBrains, bigLand = (nBig + 1) / 2, bigWater = nBig / 2;
         int nLand = w.Evo.AncestorsLand, nAll = nLand + w.Evo.AncestorsWater;
         var homes = new System.Collections.Generic.List<(float, float)>();
+        // ancestors whose test waits until the others are founded (2026-11-01, below): ancestor, clade, home
+        var later = new System.Collections.Generic.List<(int a, int clade, float hx, float hy, uint probe)>();
         for (int a = 0; a < nAll; a++)
         {
             bool land = a < nLand;
-            bool big = land ? a < bigLand : a - nLand < bigWater;
             int clade = Clades.NewClade(w, -1, a);
             var realm = land ? Realm.Land : Realm.Water;
-            float gx = 0, gy = 0;
             // each ancestor has its own home range, as far as possible from the others: species meet at the edges of
             // their ranges as they spread, not everywhere at once (Revision N)
             if (!Life.PickHome(w, realm, 0x60000u + (uint)a * 977u, homes, out float hx, out float hy)) continue;
-            // the ancestor's one brain and body (Revision H: unrelated random brains per founder made crossover
-            // scramble networks, a hidden cost only sex paid); each founder varies around it
-            // An ancestor is a lineage that can live where it lives: of up to ANCESTOR_TRIES random bodies, the first
-            // whose home range can feed a founding group (FOUND_MIN) at its size, brain and diet, else the best fed.
-            // Nothing says which diet or size: a water animal that eats grass, or a meat-eater with nothing to eat,
-            // is simply not among the ancestors (2026-10-30: such ancestors starved in the first few hundred steps)
-            var anc = new sbyte[G.LEN];
-            int bestT = -1; float bestCap = 0f;
-            for (int t = 0; t < K.ANCESTOR_TRIES; t++)
-            {
-                Ancestor(anc, seed, a, t, land, big);
-                float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, key + 0x70000u + (uint)t, out _);
-                if (cap > bestCap) { bestCap = cap; bestT = t; }
-                if (cap >= K.FOUND_MIN) break;
-            }
-            if (bestT < 0) continue;   // no viable draw: never fall back to an incompatible or unfed body
-            Ancestor(anc, seed, a, bestT, land, big);
-            int units = Body.Units(anc[G.B_BRAIN]);
-            // founders: FOUND_FILL of what its home range (widened for a big body, Life.RangeFor) can feed at this
-            // body's size, brain and diet, at least one group and at most Founders, spread over that range
-            float cap0 = ProbeCapacity(w, clade, anc, realm, hx, hy, key + 0x70000u + (uint)bestT, out float range);
-            int founders = Math.Min(w.Evo.Founders, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap0)));
-            w.Sp[clade].HomeX = hx; w.Sp[clade].HomeY = hy; w.Sp[clade].HomeR = range;
-            for (int k = 0; k < founders; k++, key++)
-            {
-                if (k % K.GROUP_SIZE == 0 && !Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
-                anc.CopyTo(tmpl, 0);
-                Brain.VaryBrain(tmpl, seed, key, units);
-                Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
-                Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy, realm);
-            }
+            if (!FoundAncestor(seed, a, clade, hx, hy, nLand, bigLand, bigWater, tmpl, key, ref key, mayWait: true)) later.Add((a, clade, hx, hy, key));
         }
+        // the ancestors that eat mostly what animals make are tested now, on the animals living in their ranges, in the
+        // order they were drawn (2026-11-01): prey before predators, as food webs are built from the bottom (Life.AnimalFood)
+        foreach (var (a, clade, hx, hy, probe) in later) { WaitedClades.Add(clade); FoundAncestor(seed, a, clade, hx, hy, nLand, bigLand, bigWater, tmpl, probe, ref key, mayWait: false); }
+    }
+
+    /// <summary>The genome of each clade's founded ancestor, the body the founding judged viable (null if the clade was not
+    /// founded); its founders vary around it (Clades.VaryBody, Brain.VaryBrain). Kept for this run only, not saved.</summary>
+    public readonly sbyte[]?[] FoundedAncestors = new sbyte[]?[K.CLADES];
+
+    /// <summary>The clades whose ancestors were tested after the others, on the animals living in their ranges (reporting).</summary>
+    public readonly System.Collections.Generic.List<int> WaitedClades = new();
+
+    /// <summary>
+    /// Draw ancestor a's body and found its lineage around (hx, hy). An ancestor is a lineage that can live where it
+    /// lives: of up to ANCESTOR_TRIES random bodies, the first whose home range can feed, at FOUND_FILL, the smallest group
+    /// that can breed (Life.BreedingGroup) at its size, brain and diet, on the food that is there when it is tested
+    /// (Life.RangeCapacity); none if no draw can. It starts with as many founders as that food feeds, up to Founders:
+    /// a small group may die out by chance, as small founding populations do.
+    /// Nothing says which diet or size: a water animal that eats grass, or a meat-eater with nothing to eat, is simply not
+    /// among the ancestors (2026-10-30: such ancestors starved in the first few hundred steps). With mayWait, a body that
+    /// gets most from what animals make (meat, blood, carrion, dung) and cannot yet be fed stops the draws and returns
+    /// false: the ancestor is tested again once every other ancestor is founded, as its food is made by them
+    /// (2026-11-01: before, only growing plant food counted, so meat-eaters were never founded). The draws and the test
+    /// are the same either way (the probes are keyed by probeKey, the same both times); only when it is tested changes.
+    /// </summary>
+    bool FoundAncestor(uint seed, int a, int clade, float hx, float hy, int nLand, int bigLand, int bigWater, sbyte[] tmpl, uint probeKey, ref uint key, bool mayWait)
+    {
+        var w = W;
+        bool land = a < nLand;
+        bool big = land ? a < bigLand : a - nLand < bigWater;
+        var realm = land ? Realm.Land : Realm.Water;
+        float gx = 0, gy = 0;
+        // the ancestor's one brain and body (Revision H: unrelated random brains per founder made crossover
+        // scramble networks, a hidden cost only sex paid); each founder varies around it
+        var anc = new sbyte[G.LEN];
+        int bestT = -1;
+        for (int t = 0; t < K.ANCESTOR_TRIES; t++)
+        {
+            Ancestor(anc, seed, a, t, land, big);
+            float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)t, out _, out bool animalFood, out int group);
+            // (2026-11-01) viable when its range feeds the smallest group that can breed (Life.BreedingGroup: a pair, or
+            // one if it breeds alone), not a fixed FOUND_MIN = 50; the first viable draw is the ancestor
+            bool viable = FoundersFed(cap / K.FOUND_FILL, group, w.Evo.Founders) > 0;
+            if (mayWait && animalFood && !viable) return false;
+            if (viable) { bestT = t; break; }
+        }
+        // no draw its range can feed a breeding group of: no lineage (before 2026-11-01 the best fed was founded with at
+        // least GROUP_SIZE founders, however little fed them)
+        if (bestT < 0) return true;
+        Ancestor(anc, seed, a, bestT, land, big);
+        FoundedAncestors[clade] = (sbyte[])anc.Clone();
+        int units = Body.Units(anc[G.B_BRAIN]);
+        // founders: FOUND_FILL of what its home range (widened until it feeds Founders, Life.RangeFor) can feed at this
+        // body's size, brain and diet, at most Founders, spread over that range in groups of up to GROUP_SIZE
+        float cap0 = ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)bestT, out float range, out _, out int group0);
+        int founders = FoundersFed(cap0, group0, w.Evo.Founders);
+        w.Sp[clade].HomeX = hx; w.Sp[clade].HomeY = hy; w.Sp[clade].HomeR = range;
+        for (int k = 0; k < founders; k++, key++)
+        {
+            if (k % K.GROUP_SIZE == 0 && !Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
+            anc.CopyTo(tmpl, 0);
+            Brain.VaryBrain(tmpl, seed, key, units);
+            Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
+            Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy, realm);
+        }
+        return true;
+    }
+
+    /// <summary>Does the diet of organism c get the most energy per kilogram from food that animals make (meat, blood,
+    /// carrion, dung), rather than from plants and what falls from them?</summary>
+    public static bool EatsAnimalFood(World w, int c)
+    {
+        var d = w.DietOf(c);
+        float plant = 0f, animal = 0f;
+        for (int p = 0; p < Pools.N; p++)
+        {
+            float e = d[p] * Pools.Rho[p];
+            if (p == (int)Pool.Meat || p == (int)Pool.Blood || p == (int)Pool.Carrion || p == (int)Pool.Dung) animal = MathF.Max(animal, e);
+            else plant = MathF.Max(plant, e);
+        }
+        return animal > plant;
     }
 
     /// <summary>Random ancestor genome number t of ancestor a (t = 0 is the first draw, as before 2026-10-30).</summary>
@@ -189,30 +248,44 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>What a home range can feed of animals with this genome, and the range's radius: one is made, measured and removed again.</summary>
-    static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range)
+    static float ProbeCapacity(World w, int clade, sbyte[] genome, Realm realm, float hx, float hy, uint key, out float range, out bool animalFood, out int group)
     {
-        range = K.HOME_R * Map.W;
+        range = K.HOME_R * Map.W; animalFood = false; group = 2;
         if (!Life.HomeSite(w, realm, hx, hy, key, out float gx, out float gy)) return 0f;
-        int c = Life.Found(w, clade, genome, true, key, gx, gy, realm);
+        // the ancestor's own body, unmutated (2026-11-02: Found mutated it by the probe's key, so the founding judged a
+        // mutant nobody was given, and FoundedAncestors held a body whose range fed up to ~2% fewer than were founded)
+        int c = Life.Found(w, clade, genome, true, key, gx, gy, realm, mutate: false);
         if (c < 0) return 0f;
+        animalFood = EatsAnimalFood(w, c); group = Life.BreedingGroup(w, c);
         // it must breathe where its founders are put, in the realm it is founded in (2026-11-01: a gill-breather founded
         // on land, or an air-breather that cannot keep its head up in the water it is founded in, would not live a step)
-        if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.FreeSlot(w, c); w.T.Created[clade]--; return 0f; }
-        range = Life.RangeFor(w, c, hx, hy, out float cap);
-        Life.FreeSlot(w, c);
+        if (!Respiration.Breathable(w, c, World.FIdx(w.X[c], w.Y[c]))) { Life.FreeFounder(w, c); w.T.Created[clade]--; return 0f; }
+        // what it can live on in the realm it is founded in (2026-11-01): a water lineage on water foods, where it can breathe
+        // in water at the depth it holds, its organs' upkeep and running costs paid (before, a wading ancestor put in
+        // water was fed by the land around it, and water lineages lived ashore on grass and roots, with lungs)
+        range = Life.RangeFor(w, c, hx, hy, out float cap, habitat: realm);
+        Life.FreeFounder(w, c);
         w.T.Created[clade]--;
         return cap;
     }
 
     /// <summary>
-    /// How many founders a lineage starts with: FOUND_FILL of what its home range can feed (Life.RangeCapacity), at
-    /// least one group and at most the given limit. A large body or a costly brain starts with fewer, a small one with
+    /// How many founders a lineage starts with: FOUND_FILL of what its home range can feed (Life.RangeCapacity), at most
+    /// the given limit; none if that is fewer than a breeding group (Life.BreedingGroup, 2026-11-01). A large body or a costly brain starts with fewer, a small one with
     /// more, as populations are set by food (Damuth 1981: density falls as M^-3/4).
     /// </summary>
-    static int FedFounders(World w, int c, float hx, float hy, int limit, out float range)
+    public static int FedFounders(World w, int c, float hx, float hy, int limit, out float range)
     {
-        range = Life.RangeFor(w, c, hx, hy, out float cap);
-        return Math.Min(limit, Math.Max(K.GROUP_SIZE, (int)MathF.Round(K.FOUND_FILL * cap)));   // a clade with fewer than a group keeps them all
+        range = Life.RangeFor(w, c, hx, hy, out float cap, limit);
+        return FoundersFed(cap, Life.BreedingGroup(w, c), limit);
+    }
+
+    /// <summary>Founders for a home range that can feed cap animals: FOUND_FILL of them, at most limit, and none if that
+    /// is fewer than a breeding group (2026-11-01; replaces the fixed FOUND_MIN = 50 and the GROUP_SIZE floor).</summary>
+    public static int FoundersFed(float cap, int group, int limit)
+    {
+        int n = Math.Min(limit, (int)MathF.Round(K.FOUND_FILL * cap));
+        return n >= group ? n : 0;
     }
 
     /// <summary>The clades of a gene bank, each founded with as many organisms as it had (up to ANCESTOR_COUNT x 2), in groups.</summary>
@@ -247,7 +320,11 @@ public sealed class Simulation : IDisposable
                     if (!Life.HomeSite(w, realm, hx, hy, key + 0x50000u, out gx, out gy, range)) break;
                 }
                 int f = Life.Found(w, c.Slot, g, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy);
-                if (k == 0 && f >= 0) { n = FedFounders(w, f, hx, hy, n, out range); s.HomeX = hx; s.HomeY = hy; s.HomeR = range; }   // no more than its home range can feed
+                if (k == 0 && f >= 0)
+                {
+                    n = FedFounders(w, f, hx, hy, n, out range); s.HomeX = hx; s.HomeY = hy; s.HomeR = range;   // no more than its home range can feed
+                    if (n == 0) { Life.FreeFounder(w, f); w.T.Created[c.Slot]--; }   // not even a breeding group (2026-11-01)
+                }
             }
         }
         w.CladeScratch.Version++;
@@ -292,19 +369,41 @@ public sealed class Simulation : IDisposable
         Life.Run(w, _active);
         Clades.Update(w);
         Lap(3);
-        Weather.Update(w);
-        PlantsStep();
-        Lap(4);
-        Fields.Fire(w);
-        // the water cycle (rows in parallel, then the routing, drinkable water and lakes in order)
-        if (w.Step % K.WC_EVERY == 0 && w.WaterOn) { _pool.Run(_waterJob, Map.FW); WaterCycle.Finish(w); }
+        if (w.Dt == 1f) { Weather.Update(w); PlantsStep(); Lap(4); FireAndWater(); }
+        else { LandTicks(); Lap(4); }
         Lap(5);
         w.Step++;
-        if (w.Step % K.SAMPLE_EVERY == 0) w.T.Take();
+        if (w.Every(K.SAMPLE_EVERY)) w.T.Take();
         Snap.AfterStep();
         w.Reserve();   // grow between steps if the next one could run short of slots (World.Reserve)
         Seen();
         Lap(6);
+    }
+
+    /// <summary>Fire, then the water cycle (rows in parallel, then the routing, drinkable water and lakes in order).</summary>
+    void FireAndWater()
+    {
+        var w = W;
+        Fields.Fire(w);
+        if (w.Step % K.WC_EVERY == 0 && w.WaterOn) { _pool.Run(_waterJob, Map.FW); WaterCycle.Finish(w); }
+    }
+
+    /// <summary>
+    /// The land (weather, fields, plants, fire, the water cycle) of a world whose step is not the reference step
+    /// (2026-11-02): it runs on the reference clock, one tick for each reference step (K.STEP_H) this step ends, as the
+    /// reference world's land runs: a fine step (minutes) runs it once in ~2.92 h of steps, a coarse one more than once a
+    /// step. Each tick sees the reference step number (World.RefStep) and Dt = 1, so the land's rates, stripes and
+    /// seeds are the reference world's whatever the step; the animals see a land that changes in ticks of K.STEP_H.
+    /// </summary>
+    void LandTicks()
+    {
+        var w = W;
+        ulong s = w.Step, l0 = w.RefStep(s), l1 = w.RefStep(s + 1);
+        if (l0 == l1) return;
+        float h = w.StepH;
+        w.SetStepH(K.STEP_H);
+        try { for (ulong l = l0; l < l1; l++) { w.Step = l; Weather.Update(w); PlantsStep(); FireAndWater(); } }
+        finally { w.Step = s; w.SetStepH(h); }
     }
 
     /// <summary>BUILD: counting sort of every visible agent (not embryos) into the HCELL-unit hash grid.</summary>

@@ -19,6 +19,7 @@ public sealed class World
     [PerSlot] public float[] X, Y, Heading, Speed;
     // ---- agents: physiology
     [PerSlot] public float[] Energy, Gut, GutEnergy, GutWaste, GutSeedy, Thirst, Fatigue, Age, Pain, Cooldown, Timer;
+    [PerSlot] public float[] GutN;          // nutrient in the gut's undigested share, left in the dung (2026-11-02, Nutrients.cs)
     [PerSlot] public float[] Grown;         // share of its growable tissue a juvenile has built (0 at birth, 1 = adult size; DESIGN §9.1)
     [PerSlot] public float[] Reward, RewardMean, PendingR, LastFear;
     // ---- agents: path integration (Revision P), written by RESOLVE (own slot): the remembered vector (world units) from the
@@ -136,6 +137,48 @@ public sealed class World
     [NonSerialized] public int Grows;
     [NonSerialized] public string? GrowLimit;
 
+    // ---- the length of a step (2026-11-02): a world setting (Nature.StepH when the world is built, saved in a checkpoint's
+    // header), K.STEP_H = 2.92 h by default. Dt is a step in reference steps (StepH / K.STEP_H): a rate per reference step
+    // is x Dt a step, a probability p per reference step is 1 - (1 - p)^Dt (PStep), a decay factor f is f^Dt (Keep), a
+    // duration of n reference steps is n / Dt steps (Steps). At the default Dt is exactly 1 and every one of these returns
+    // its argument bit for bit, so the default world is the same run as before. The land (weather, fields, plants, fire,
+    // the water cycle) runs on the reference clock, once per reference step (Simulation.LandTicks, LandStep). Not state
+    // of its own: set from the checkpoint header (Checkpoint.ReadStepH) or Nature.StepH (SetStepH)
+    [NonSerialized] public float StepH = K.STEP_H, StepS = K.STEP_S, StepsPerDay = K.STEPS_PER_DAY, Dt = 1f;
+
+    /// <summary>Set the length of a step in hours (K.STEP_H: the reference step, Dt = 1 exactly).</summary>
+    public void SetStepH(float h)
+    {
+        if (h == K.STEP_H || !(h > 0f)) { StepH = K.STEP_H; StepS = K.STEP_S; StepsPerDay = K.STEPS_PER_DAY; Dt = 1f; return; }
+        StepH = h; StepS = h * 3600f; StepsPerDay = 24f / h; Dt = h / K.STEP_H;
+    }
+
+    /// <summary>A probability p per reference step, for one step of this world: 1 - (1 - p)^Dt (p itself at Dt = 1).</summary>
+    public float PStep(float p)
+    {
+        if (Dt == 1f || p <= 0f) return p;
+        if (p >= 1f) return 1f;
+        return 1f - MathK.Exp(Dt * MathK.Log(1f - p));
+    }
+
+    /// <summary>A share f kept per reference step (1 - a decay rate), for one step: f^Dt (f itself at Dt = 1).</summary>
+    public float Keep(float f) => Dt == 1f ? f : f <= 0f ? 0f : MathK.Exp(Dt * MathK.Log(f));
+
+    /// <summary>A duration or interval of n reference steps in this world's steps (at least 1): n at Dt = 1.</summary>
+    public int Steps(int n) => Dt == 1f ? n : Math.Max(1, (int)Math.Round(n / (double)Dt));
+
+    /// <summary>Is this a step on which something done every n reference steps falls (Step % Steps(n) == 0)?</summary>
+    public bool Every(int n) => Step % (ulong)Steps(n) == 0;
+
+    /// <summary>Reference steps (of K.STEP_H) elapsed before step s: s at Dt = 1.</summary>
+    public ulong RefStep(ulong s) => Dt == 1f ? s : (ulong)Math.Floor(s * (double)Dt);
+
+    /// <summary>Reference steps into the year now (the seasons' clock): Step mod SeasonLength at Dt = 1.</summary>
+    public float YearStep => Dt == 1f ? (float)(Step % (ulong)Nature.SeasonLength) : (float)(Step * (double)Dt % Nature.SeasonLength);
+
+    /// <summary>Whole years elapsed (the weather's year).</summary>
+    public long Year => Dt == 1f ? (long)(Step / (ulong)Nature.SeasonLength) : (long)(Step * (double)Dt / Nature.SeasonLength);
+
     // ---- spatial hash (counting sort)
     public readonly int[] CellStart, CellCount;
     [PerSlot] public int[] Sorted, CellOf;
@@ -143,6 +186,11 @@ public sealed class World
     // ---- fields (DESIGN §10): food pools 0..12, then structure layers
     public readonly float[][] Pool;        // [Pools.NFIELD][FW*FW]
     public readonly float[] Shrub, Tree, Sapling;   // cover of the shrub, tree and sapling slots (grass = the herb slot, Pool.Grass), updated in place by Plants
+    public readonly float[] LiveWood;               // live wood of the woody slots (2026-11-01; cover units, PLANT_KG_M2 per m2): fed by the canopy's production beyond its crown growth, dies with the stems into Pool.Wood
+    // nutrient held in the dead pools whose content per unit varies with what fell into them (2026-11-02, Nutrients.cs):
+    // dead wood (stems at leafy content, live wood at WOOD_N), detritus, carrion, dung and peat
+    public readonly float[] WoodN, DetN, CarN, DungN, PeatN;
+    [NonSerialized] public readonly Nutrients.Book NutBook;   // nutrient inputs and outputs (run counters, not saved)
     public float[] Nutrient, Scent;
     public float[] NutrientN, ScentN;   // double buffers
     // ---- plants (Revision S, Plants.cs): per land cell the genotype of each slot (herb, shrub, tree, sapling; 0 = empty),
@@ -186,11 +234,29 @@ public sealed class World
     public float SeaLevel;
     /// <summary>Elevation (0..1) per metre at the game's vertical scale: 1 - SeaLevel above the lakes is H_RELIEF m. A height
     /// or depth constant given in metres is m x ElevPerM in elevation (2026-11-01: so it keeps its meaning when H_RELIEF changes).</summary>
-    public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / K.H_RELIEF;
+    public float ElevPerM => MathF.Max(1e-6f, 1f - SeaLevel) / Map.ReliefM;
 
     /// <summary>The shallow realm's depth (SHALLOW m) in elevation, as Depth is: water at most this deep is Realm.Shallow
     /// (wadeable; algae grow), deeper is Realm.Deep (2026-11-01: SHALLOW is in metres).</summary>
     public float ShallowE => K.SHALLOW * ElevPerM;
+
+    /// <summary>The latitude this world sits at (degrees, &lt; 0 south; 2026-11-01, the 1 km world): Nature.Latitude if
+    /// set, else drawn from the terrain seed between LAT_LO and LAT_HI in either hemisphere, so a seed makes one land and
+    /// one climate. The map spans Map.LatSpanDeg about it (Climate.SinLat).</summary>
+    public float LatDeg
+    {
+        get
+        {
+            if (!float.IsNaN(Nature.Latitude)) return Nature.Latitude;
+            if (!_latSeeded)
+            {
+                _lat = (Rng.U(TerrainSeed, 0, 0, Rs.Latitude) < 0.5f ? -1f : 1f) * (K.LAT_LO + (K.LAT_HI - K.LAT_LO) * Rng.U(TerrainSeed, 0, 1, Rs.Latitude));
+                _latSeeded = true;
+            }
+            return _lat;
+        }
+    }
+    float _lat; bool _latSeeded;
     // ---- water cycle (WaterCycle.cs): stores in mm of water over a cell, fluxes in mm x cells per update (WC_EVERY steps).
     // Fixed at WaterCycle.Init: the rain pattern (relative to the land mean; a lake cell holds its row's land mean), soil
     // capacity, the drainage receivers and their topological order (outlets first), the lake each cell drains to
@@ -271,10 +337,12 @@ public sealed class World
     {
         if (capacity < 1 || capacity > MaxSlots) throw new ArgumentOutOfRangeException(nameof(capacity), $"1 to {MaxSlots:N0} slots per world");
         Cap = capacity; Seed = seed; TerrainSeed = terrainSeed == 0 ? seed : terrainSeed;
+        SetStepH(Nature.StepH);   // the length of a step this world runs at (2026-11-02)
         int c = capacity;
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];
         Energy = new float[c]; Gut = new float[c]; GutEnergy = new float[c]; GutWaste = new float[c]; GutSeedy = new float[c];
         Grown = new float[c];
+        GutN = new float[c];
         Thirst = new float[c]; Fatigue = new float[c]; Age = new float[c]; Pain = new float[c]; Cooldown = new float[c]; Timer = new float[c];
         Reward = new float[c]; RewardMean = new float[c]; PendingR = new float[c]; LastFear = new float[c];
         MemDrinkX = new float[c]; MemDrinkY = new float[c]; MemFedX = new float[c]; MemFedY = new float[c]; MemHas = new byte[c];
@@ -315,8 +383,9 @@ public sealed class World
         int n = Map.FW * Map.FW;
         Pool = new float[Pools.NFIELD][];
         for (int p = 0; p < Pools.NFIELD; p++) Pool[p] = new float[n];
-        Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; Nutrient = new float[n]; Scent = new float[n];
+        Shrub = new float[n]; Tree = new float[n]; Sapling = new float[n]; LiveWood = new float[n]; Nutrient = new float[n]; Scent = new float[n];
         NutrientN = new float[n]; ScentN = new float[n];
+        WoodN = new float[n]; DetN = new float[n]; CarN = new float[n]; DungN = new float[n]; PeatN = new float[n]; NutBook = new Nutrients.Book(Map.FW);
         POcc = new ushort[4 * n]; BankMom = new ushort[3 * n]; BankDad = new ushort[3 * n]; SeedMom = new ushort[3 * n]; SeedDad = new ushort[3 * n];
         FruitG = new ushort[n]; PollenDad = new ushort[n]; BankM = new float[3 * n]; SeedOut = new float[3 * n]; PFlags = new byte[n];
         int nb = 3 * Plants.Blocks, nr = 3 * Map.FW * ((Map.FW + K.WIND_BLOCK - 1) / K.WIND_BLOCK);
@@ -365,6 +434,20 @@ public sealed class World
     public const int GROW_BLOCK = 1024;
     /// <summary>Memory kept free of slots: an eighth of what the machine (or container) gives the process, at least 1 GB.</summary>
     public static long MemoryReserve(long available) => Math.Max(available / 8, 1L << 30);
+
+    /// <summary>
+    /// The slots a world (or each of share prehistory branches) starts with by default: a quarter of the memory the machine
+    /// (or container) gives the process, over BytesPerSlot, in whole GROW_BLOCKs, clamped to DEFAULT_SLOTS_LO..HI. 2026-11-01:
+    /// a fixed 16,384 (3.4 GB) was most of an 8 GB PC before the 8 km land; a quarter of 16 GB is about 19,000 slots, 4 GB.
+    /// Only where a run starts: a world grows as births need (Grow), and a seed gives the same run from any start size.
+    /// </summary>
+    public static int DefaultSlots(int share = 1) => DefaultSlots(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes, share);
+    public static int DefaultSlots(long available, int share)
+    {
+        long slots = available / 4 / Math.Max(1, share) / BytesPerSlot / GROW_BLOCK * GROW_BLOCK;
+        return (int)Math.Clamp(slots, DEFAULT_SLOTS_LO, DEFAULT_SLOTS_HI);
+    }
+    public const int DEFAULT_SLOTS_LO = 4096, DEFAULT_SLOTS_HI = 32768;
 
     static long _slotBytes;
     /// <summary>Memory one slot takes: every per-slot array of the world and of its derived cache (bytes).</summary>
@@ -511,7 +594,22 @@ public sealed class World
             }
             return v;
         }
-        return PVLand[i] * Footing(i, cell);
+        float vl = PVLand[i] * Footing(i, cell);
+        // flapping helps on a slope (wing-assisted incline running, Body.WingInclineGain, 2026-11-01); nothing on the flat
+        return PWings[i] > 0f ? vl * Body.WingInclineGain(PWings[i], SlopeSin(cell)) : vl;
+    }
+
+    /// <summary>Sine of the steepest slope from this cell to a neighbour (2026-11-01): the largest rise in metres
+    /// (elevation above the lakes over 1 - SeaLevel is ReliefM, as Climate.Build reads it) over a cell's side, GEO_CELL_M.</summary>
+    public float SlopeSin(int cell)
+    {
+        int fw = Map.FW, cx = cell % fw, cy = cell / fw;
+        float e = Elev[cell];
+        float d = MathF.Max(MathF.Max(MathF.Abs(Elev[cy * fw + (cx + 1) % fw] - e), MathF.Abs(Elev[cy * fw + (cx + fw - 1) % fw] - e)),
+                            MathF.Max(MathF.Abs(Elev[(cy + 1) % fw * fw + cx] - e), MathF.Abs(Elev[(cy + fw - 1) % fw * fw + cx] - e)));
+        if (d <= 0f) return 0f;
+        float s = d / MathF.Max(1f - SeaLevel, 1e-3f) * Map.ReliefM / K.GEO_CELL_M;   // rise over run
+        return s / MathF.Sqrt(1f + s * s);
     }
 
     /// <summary>
@@ -551,14 +649,16 @@ public sealed class World
         return (kind & (byte)Body.GroundRealm(PLegs[i], PFins[i])) != 0 && Depth[cell] <= MaxWaterDepth(i);
     }
 
-    /// <summary>Is flier i in the air (2026-10-31)? A flier lands whenever it can and is going no faster than it can walk
-    /// (Resolve: resting, eating and drinking land it), so one in the air is over ground it cannot stand on or moved
-    /// faster than its legs carry it.</summary>
+    /// <summary>Is flier i in the air? Since 2026-11-01 its last step says (Flag.Aloft, Flag.Landed: Resolve decides, and a
+    /// flier that cannot fly over water it cannot stand in is in the water). Before its first step it is in the air if it
+    /// goes faster than it walks.</summary>
     public bool Airborne(int i)
     {
         if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return false;
-        int cell = FIdx(X[i], Y[i]);
-        return !GroundAllows(i, cell) || Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;
+        if ((Flags[i] & Flag.Aloft) != 0) return true;     // what its last step was (Resolve, 2026-11-01)
+        if ((Flags[i] & Flag.Landed) != 0) return false;
+        int cell = FIdx(X[i], Y[i]);   // before its first step: in the air if it goes faster than it walks (being over water
+        return Speed[i] > GroundVmax(i, cell) * 1.0001f + 1e-6f;   // it cannot stand in is not flying: a newborn there is in it)
     }
 
     public bool CellAllows(int i, int cell, Realm realm)
@@ -569,7 +669,7 @@ public sealed class World
         return PLoco[i] == (byte)Loco.Fly || Depth[cell] <= MaxWaterDepth(i);
     }
 
-    public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * (float)(Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / Map.W);
+    public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * YearStep / Nature.SeasonLength - Climate.Phase(this, y / K.FCELL));
 
     /// <summary>Is the mother of i still the same living animal? Returns her slot or -1.</summary>
     public int MotherOf(int i)

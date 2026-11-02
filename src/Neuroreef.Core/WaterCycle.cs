@@ -44,7 +44,7 @@ public static class WaterCycle
     public static float YearFrac => (float)K.WC_EVERY / Nature.SeasonLength;
 
     static float Season(World w, int y) =>
-        MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - 2f * MathF.PI * y / Map.FW);
+        MathK.Sin(2f * MathF.PI * w.YearStep / Nature.SeasonLength - Climate.Phase(w, y));
 
     /// <summary>Rain per update (mm) on a cell of pattern 1 in row y now: the mean, x the season by latitude (as the
     /// moisture season always ran), x this year's anomaly.</summary>
@@ -217,7 +217,7 @@ public static class WaterCycle
                 w.PondWater[i] = pw;
             }
             w.SoilWater[i] = s; w.Runoff[i] = ro;
-            w.Moisture[i] = s / cap;
+            w.Moisture[i] = MathF.Min(1f, s / cap);   // (2026-11-02: float rounding in s += min(x, cap - s) can leave s an ulp over cap)
         }
         int o = y * NSUM;
         w.WcRow[o] = sR; w.WcRow[o + 1] = sE; w.WcRow[o + 2] = sP;
@@ -327,7 +327,7 @@ public static class WaterCycle
             float give = MathF.Min(w.SoilCap[i] - w.SoilWater[i], w.Discharge[d]);
             if (give <= 0f) continue;
             w.SoilWater[i] += give; w.Discharge[d] -= give;
-            w.Moisture[i] = w.SoilWater[i] / w.SoilCap[i];
+            w.Moisture[i] = MathF.Min(1f, w.SoilWater[i] / w.SoilCap[i]);
             // the water would have reached the lake this river runs to (the lakes are already balanced this update)
             int l = w.Outlet[d];
             if (l >= 0) w.LakeLevel[l] -= give / w.LakeArea[l];

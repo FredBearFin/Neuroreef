@@ -152,7 +152,7 @@ public static class Brain
         float r = w.Reward[i];
         float adv = r - w.RewardMean[i];
         // a young animal's baseline is the plain mean of what it has felt so far, not a slow drift up from 0
-        w.RewardMean[i] += MathF.Max(K.RBAR_RATE, 1f / (1f + w.Age[i])) * (r - w.RewardMean[i]);
+        w.RewardMean[i] += MathF.Max(w.PStep(K.RBAR_RATE), 1f / (1f + w.Age[i])) * (r - w.RewardMean[i]);   // RBAR_RATE per reference step (World.PStep)
         int t = (int)(w.Step & 0x3FFFFFFF);
         w.HistA[i * BLOCK + ((t - 1 + i) & (BLOCK - 1))] = adv;
         if (((t + i) & (BLOCK - 1)) == 0) ApplyBlock(w, i);
@@ -169,7 +169,7 @@ public static class Brain
     static unsafe void ApplyBlock(World w, int i)
     {
         float eta = G.Gene(w.Genome.At(i, G.ETA), K.ETA_LO, K.ETA_HI);
-        float lam = G.Gene(w.Genome.At(i, G.LAMBDA), K.LAMBDA_LO, K.LAMBDA_HI);
+        float lam = w.Keep(G.Gene(w.Genome.At(i, G.LAMBDA), K.LAMBDA_LO, K.LAMBDA_HI));   // the trace decays per reference step (World.Keep)
         // normalised learning (Revision P): a step changes an output by eta x advantage x |input|^2, and a big brain's input
         // is larger (|input|^2 ~117 at 256 units against ~25 at 24), so its steps were ~5x too big and it learned a delayed
         // cue worse than a small brain. Above NLMS_REF the step is scaled by NLMS_REF / |input|^2 (normalised LMS)
@@ -307,9 +307,14 @@ public static class Brain
             // sense input is sqrt(BRAIN_START / units) of its genome's, so a big brain's units hold different past moments
             // instead of echoing the same input (256 units recalled 16 steps at full input, 31 at a quarter)
             float ins = MathF.Sqrt(K.BRAIN_START / (float)Math.Max(K.BRAIN_START, units));
+            // memory in real time (2026-11-02): a unit moves toward its new value at Dt of the way a step (a leaky integrator
+            // with a time constant of one reference step, K.STEP_H), so what a brain holds fades over the same hours at any
+            // step; at the reference step it takes the new value outright, as before
+            float dt = w.Dt;
             for (int h = 0; h < units; h++)
             {
                 float v = MathK.Tanh((ins * DotS8(gen + h * G.NIN, u, F.N) + wire * DotS8(gen + h * G.NIN + F.N, u + F.N, units)) * K.WSCALE);
+                if (dt != 1f) v = u[F.N + h] + dt * (v - u[F.N + h]);
                 hid[h] = v; yp[h] = v;
             }
             for (int k = 0; k < F.N; k++) yp[G.NH + k] = f[k];

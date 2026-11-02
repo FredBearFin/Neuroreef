@@ -119,8 +119,12 @@ public class EngineeringTests
         // founding limit, so the default 600 per ancestor founded ~9,600 animals in each world and the pair reached the
         // test machine's memory limit (18,432 slots, 8.7 GB) before step 400. With 60 the small world still starts under
         // its 1,024 slots and must grow by births.
+        // 2026-11-01 (plants round 3): with the plants' canopy production bound, live wood and stem life, the same seed
+        // peaked at 840 animals, under 1,024: the small world now starts at START slots, so it still has to grow past
+        // its start and the test asserts what it did
+        const int START = 512;
         var evo = new EvoSettings { Founders = 60 };
-        using var small = new Simulation(1024, 11, 2, evo: evo);
+        using var small = new Simulation(START, 11, 2, evo: evo);
         using var big = new Simulation(4096, 11, 1, evo: evo);   // and on another number of threads (NR-105)
         Assert.Equal(RunHash(big.W), RunHash(small.W));
         int peak = 0;
@@ -130,8 +134,8 @@ public class EngineeringTests
             peak = Math.Max(peak, small.W.AliveCount);
             if (k % 50 == 49) Assert.Equal(RunHash(big.W), RunHash(small.W));
         }
-        Assert.True(small.W.Cap > 1024 && small.W.Grows > 0, $"the small world never grew ({small.W.Cap} slots, peak {peak} animals)");
-        Assert.True(peak > 1024, $"the run never needed more than its 1,024 starting slots (peak {peak}): the test proves nothing");
+        Assert.True(small.W.Cap > START && small.W.Grows > 0, $"the small world never grew ({small.W.Cap} slots, peak {peak} animals)");
+        Assert.True(peak > START, $"the run never needed more than its {START} starting slots (peak {peak}): the test proves nothing");
         Assert.Equal(0, small.W.T.SlotShortage);   // never full: it grew instead
         Assert.Equal(RunHash(big.W), RunHash(small.W));
         Assert.Equal(small.W.Cap - small.W.AliveCount, small.W.FreeTop);

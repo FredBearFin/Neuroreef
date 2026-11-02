@@ -1,7 +1,7 @@
 // Console entry point: connects to the simulation, builds the 3D view and the panels, wires controls.
 
 import { Link, setMassRange } from './net.js';
-import { World3D } from './world3d.js';
+import { World3D, setRelief } from './world3d.js';
 import { Panels, bar, setUnits, when, span } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
 import { Explore } from './explore/explore.js';   // EXPLORE: walk and hunt (js/explore/)
@@ -43,12 +43,13 @@ try { if (localStorage.getItem('nr-panel') === '0') setPanel(false); } catch { /
 
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
-let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9;
+let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9, lastUnits = null;
 let clades = [], pendingClades = null;   // the live clade table (32 slots; unused ones have used = false)
 let explore = null;                      // EXPLORE: the person on foot (js/explore/explore.js)
 
 link.listen('meta', (m) => {
   meta = m;
+  setRelief(m);   // the relief's true scale follows the map on view (2026-11-01: a prehistory and its world may differ)
   setUnits(m.units);   // real units for every panel (ICD §2.1)
   setMassRange(m.units);   // the world's body sizes: record byte 12 is on its scale
   $('s-seed').textContent = m.seed;
@@ -205,24 +206,35 @@ function setCam(m) {
 
 // ------------------------------------------------------------------ how big things are drawn, and the whole world
 
-/** The creature size control: the magnification (overview and the animal cameras), or true size in Explore. */
+/** The creature size control: the display multiplier of the overview and the animal cameras, or Explore's own (it and
+ *  the vehicles: js/scale.js). Display only: the simulation never sees it. */
 function showMag() {
   if (!world) return;
-  const ex = world.mode === 'explore', m = world.scale.creatureMag;
+  const ex = world.mode === 'explore', m = world.scale.creatureMag, pm = world.scale.plantMag;
   $('scalebox').classList.toggle('explore', ex);
-  $('mag').value = MAGS.indexOf(world.scale.mag);
-  $('mag-v').textContent = ex ? '×1' : '×' + m;
-  $('mag-k').textContent = ex ? 'true size' : m === 1 ? 'true size' : `magnified · plants ×${world.scale.plantMag.toFixed(1).replace(/\.0$/, '')}`;
+  $('mag').max = MAGS.length - 1;
+  $('mag').value = MAGS.indexOf(m);
+  $('mag-v').textContent = m === 1 ? 'true' : '×' + m;
+  // (a multiplier is 'at least this visible': small bodies are drawn up to x m, big ones barely, js/scale.js)
+  $('mag-k').textContent = m === 1 ? 'true size' : ex || pm === 1 ? 'small ones magnified' : `small ones magnified · plants ×${pm.toFixed(1).replace(/\.0$/, '')}`;
+  if (explore) { $('psize').value = explore.sizeMode; $('psize-k').textContent = ex ? explore.sizeText().replace(/^[a-z-]+ · /, '') : ''; }
+  for (const b of document.querySelectorAll('#magpre button')) b.classList.toggle('on', +b.dataset.mag === m);
 }
 
 function wireScale() {
   world.onScale = showMag;
+  world.onNote = (h) => toast(h, 3500);   // the overview's N / Tab: which group or clade it flew to
+  explore.onSize = showMag;
+  $('psize').onchange = (e) => { explore.setSize(e.target.value); e.target.blur(); showMag(); };
   $('mag').oninput = () => world.setMagnification(MAGS[+$('mag').value]);
+  for (const b of document.querySelectorAll('#magpre button')) b.onclick = (e) => { e.stopPropagation(); world.setMagnification(+b.dataset.mag); };
   $('fitworld').onclick = () => { if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); };
   addEventListener('keydown', (e) => {
-    if (!world || world.mode === 'explore' || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!world || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    // [ and ]: the creature size, in Explore too (its own setting); the other keys are the overview's
+    if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.creatureMag); return; }
+    if (world.mode === 'explore') return;
     if (e.key === 'Home') { e.preventDefault(); if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); }
-    else if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.mag); }
     else if (e.key === 'p' || e.key === 'P') setPanel(document.body.classList.contains('nopanel'));
   });
   showMag();
@@ -240,14 +252,20 @@ function buildControls() {
     if (world.mode === 'overview') { world.setMode('follow'); for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === 'follow'); }
   };
   // the speed buttons show the speed that is set (the server's), so the right one is lit in the prehistory too
-  window.showRate = (r) => { for (const o of document.querySelectorAll('#speed button[data-rate]')) o.classList.toggle('on', +o.dataset.rate === Math.round(r)); };
+  // "real" (2026-11-02): one second of world time a second, at the world's own step (units.realTimeRate, ICD §2.1)
+  const rtRate = () => (lastUnits && lastUnits.realTimeRate > 0 ? lastUnits.realTimeRate : 1 / (8766 / 3000 * 3600));
+  const rateOf = (b) => b.dataset.rate === 'rt' ? rtRate() : +b.dataset.rate;
+  window.showRate = (r) => {
+    const rt = Math.abs(r - rtRate()) < 1e-6 * Math.max(1, r);
+    for (const o of document.querySelectorAll('#speed button[data-rate]')) o.classList.toggle('on', o.dataset.rate === 'rt' ? rt : !rt && +o.dataset.rate === Math.round(r));
+  };
   for (const b of document.querySelectorAll('#speed button')) {
     b.onclick = () => {
       if (b.dataset.cmd === 'pause') { const p = b.classList.toggle('on'); link.send({ cmd: p ? 'pause' : 'resume' }); return; }
       if (b.dataset.cmd === 'step') { link.send({ cmd: 'step' }); return; }
-      link.send({ cmd: 'rate', value: +b.dataset.rate });
+      link.send({ cmd: 'rate', value: rateOf(b) });
       rateClicked = performance.now();
-      showRate(+b.dataset.rate);
+      showRate(rateOf(b));
     };
   }
   // tap to select (ignore drags)
@@ -316,18 +334,20 @@ function status(s) {
     const tot = lastPre.settings.totalSteps, my = Math.round(lastPre.step * lastPre.yearsPerStep / 1e6);
     $('s-pre').textContent = tot >= 2147483647 ? `PREHISTORY · ${my} Myr · branch ${s.view}` : `PREHISTORY · ${my} of ${Math.round(tot * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
   }
-  setUnits(s.units); setMassRange(s.units);
+  setUnits(s.units); setMassRange(s.units); if (s.units) lastUnits = s.units;
+  // how long a step lasts on screen, so positions glide over the whole of a slow step (world3d.setAgents)
+  if (world) world.stepMs = s.paused || !(s.rate > 0) ? 0 : 1000 / s.rate;
   $('s-step').textContent = s.step.toLocaleString();
   // the world's own clock (a step is 2.92 h); the prehistory's steps are symbolic years (its badge shows them)
   $('s-time-box').classList.toggle('hidden', s.phase === 'prehistory');
   $('s-time').textContent = when(s.step);
-  $('s-time-box').title = `${span(s.step)} since the world began. A step is ${(s.units ? s.units.stepHours : 2.922).toFixed(2)} hours; ${(s.units ? s.units.stepsPerYear : 3000).toLocaleString()} steps are a year.`;
+  $('s-time-box').title = `${span(s.step)} since the world began. A step is ${s.units && s.units.stepHours < 1 ? (s.units.stepHours * 60).toFixed(1) + ' minutes' : (s.units ? s.units.stepHours : 2.922).toFixed(2) + ' hours'}; ${(s.units ? s.units.stepsPerYear : 3000).toLocaleString()} steps are a year.`;
   if (panels) panels.setStep(s.step);
   $('s-alive').textContent = s.alive.toLocaleString();
-  $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
+  $('s-rate').textContent = s.paused ? 'paused' : s.measured < 1 && s.measured > 0 ? s.measured.toFixed(3) : Math.round(s.measured).toString();
   if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
-  if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.mag);   // the sim's own metres (ICD §2.1)
+  if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.creatureMag);   // the sim's own metres (ICD §2.1)
   if (world && s.bodyLenM) world.setBodyLengths(s.bodyLenM);   // each animal's true length (a juvenile's grows)
   if (world && s.bodyLook) world.setBodyLooks(s.bodyLook);     // endothermy and diet, for how each body is drawn
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +

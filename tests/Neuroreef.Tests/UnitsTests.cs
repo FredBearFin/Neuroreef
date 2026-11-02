@@ -16,13 +16,40 @@ public class UnitsTests
     {
         Assert.Equal(365.25f * 24f, K.STEP_H * K.T_SEASON, 2);
         Assert.InRange(K.STEP_H, 2.9f, 2.95f);
-        Assert.Equal(54.5f, K.M_PER_UNIT, 3);
+        Assert.Equal(4f, K.M_PER_UNIT, 3);   // 2026-11-01, the 1 km world (54.5 m before; 13.75 m for a day)
         Assert.Equal(2.0913f, MathK.Pow(K.MASS_HI, K.EXP_SIGHT), 3);   // MAX_SIGHT's literal
         Assert.Equal(3.41995f, MathK.Cbrt(K.MASS_HI), 4);              // MAX_HEAR's literal
         // the cost of moving a metre is Taylor et al.'s on Kleiber's energy scale
         Assert.Equal(K.COT_J, K.C_MOVE / K.M_PER_UNIT / K.C_BASAL * K.BMR_W * K.STEP_S, 3);
         // a step's top travel is the day range over the share of top speed the world's animals use
         Assert.Equal(K.DMD_M / K.STEPS_PER_DAY / K.TRAVEL_SHARE, K.C_SPEED * K.M_PER_UNIT, 1);
+    }
+
+    [Fact] // the 1 km world (2026-11-01): one length scale, GEO_CELL_M; every metres-per-unit and metres-per-cell
+           // quantity follows from it, the default map is ~1 km across and its relief a valley and its hills
+    public void EveryLengthFollowsFromTheFieldCell()
+    {
+        Assert.Equal(K.GEO_CELL_M / K.FCELL, K.M_PER_UNIT, 5);
+        Assert.Equal(K.GEO_CELL_M, K.CELL_M, 5);                                 // plants disperse over the same cell
+        Assert.Equal(K.GEO_CELL_M * K.GEO_CELL_M * 1e-6f, Map.CellKm2, 7);        // the hydrology's km2
+        Assert.Equal(K.SENSE_WATER_M, K.SENSE_WATER * K.GEO_CELL_M, 2);
+        Assert.Equal(K.SENSE_WATER_M, K.MEM_NEAR * K.M_PER_UNIT, 2);
+        Assert.Equal(K.PI_DIFF_M, K.PI_DIFF * K.M_PER_UNIT, 3);
+        Assert.Equal(K.L_MAR_M, K.L_MAR * K.GEO_CELL_M, 2);
+        Assert.Equal(K.HEAR_R_M, K.HEAR_R * K.M_PER_UNIT, 2);
+        Assert.Equal(K.C_SIGHT_M, K.C_SIGHT * K.M_PER_UNIT, 3);
+        Assert.Equal(K.FLY_V_CAP_M, K.FLY_V_CAP * K.M_PER_UNIT, 1);
+        Assert.InRange(256 * K.M_PER_UNIT, 900f, 1100f);                         // the default map, ~1 km
+        // the default map (2026-11-01, the owner after the size sweep): 2048, 8.2 km at 16 m a cell
+        Assert.Equal(2048, new Server.Options().WorldMap);
+        Assert.Equal(2048, new Server.Options().PreMap);
+        Assert.InRange(2048 * K.M_PER_UNIT, 8000f, 8500f);
+        // the vertical scale grows with the map as width^RELIEF_HURST: a valley's hills, ~150 m, on the default map
+        Assert.InRange(Map.Relief(256), 100f, 200f);
+        Assert.True(Map.Relief(512) > Map.Relief(256) && Map.Relief(1024) > Map.Relief(512) && Map.Relief(2048) > Map.Relief(1024));
+        Assert.True(Map.Relief(2048) < K.H_RELIEF);
+        // a map sits at one latitude: its true span is a fraction of a degree
+        Assert.InRange(Map.LatSpanDeg, 0f, 0.5f);
     }
 
     [Fact] // the hashes hold everything an animal can perceive or hear: the neighbour search must not miss any
@@ -33,9 +60,10 @@ public class UnitsTests
         Assert.True(K.MAX_HEAR <= 2 * K.HCELL_CALL);
         Assert.Equal(49, Decide.Offsets(K.MAX_PERCEIVE));
         Assert.Equal(9, Decide.Offsets(K.HCELL));
-        foreach (int side in Map.Sizes) { Assert.Equal(0, side % K.HCELL); Assert.Equal(0, side % K.HCELL_CALL); }
+        // a map side is a multiple of each hash cell, or a hash cell is the whole map (2026-11-01, the 1 km world)
+        foreach (int side in Map.Sizes) foreach (int cell in new[] { K.HCELL, K.HCELL_CALL }) Assert.True(side % cell == 0 || cell % side == 0, $"side {side}, cell {cell}");
         // the fastest walker (the largest, fastest-legged body) perceiving along its way stays inside the neighbourhood
-        float vMax = K.C_SPEED * MathK.Pow(K.MASS_HI, K.EXP_SPEED) * K.BODY_RANGE_TRAIT * 1.3f * (1f + K.GLIDE);
+        float vMax = K.C_SPEED * MathK.Pow(K.MASS_HI, K.EXP_SPEED) * K.BODY_RANGE_TRAIT * 1.3f * Body.WingGroundGainMax;
         Assert.True(MathF.Sqrt(K.MAX_SIGHT * K.MAX_SIGHT + 2f * K.MAX_SIGHT * vMax / MathF.PI) < K.MAX_PERCEIVE, $"walker {vMax:F1} units a step");
         // perception grows with the way travelled as the band an eye sweeps: area pi R^2 + 2 R d
         float r = 1.2f, d = 10f, p = Decide.Perceive(r, false, d);
@@ -83,6 +111,11 @@ public class UnitsTests
         using var doc = JsonDocument.Parse(json);
         Assert.Equal(K.M_PER_UNIT, doc.RootElement.GetProperty("metresPerUnit").GetSingle(), 3);
         Assert.Equal(K.STEP_H, doc.RootElement.GetProperty("stepHours").GetSingle(), 3);
+        // 2026-11-01: the map's width and vertical scale, for the console's true-scale relief (RELIEF = reliefM x fcell / fieldCellM)
+        Assert.Equal(Map.WidthM, doc.RootElement.GetProperty("mapWidthM").GetSingle(), 1);
+        Assert.Equal(K.GEO_CELL_M, doc.RootElement.GetProperty("fieldCellM").GetSingle(), 3);
+        Assert.Equal(Map.ReliefM, doc.RootElement.GetProperty("reliefM").GetSingle(), 1);
+        Assert.Equal(K.FCELL, doc.RootElement.GetProperty("fcell").GetInt32());
         var b = Wire.BodyLengths(w);
         Assert.Equal(0, b.Length % 2);
         int alive = 0; for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && w.StageOf[i] != St.Embryo) alive++;

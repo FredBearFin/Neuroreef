@@ -3,7 +3,7 @@
 // threshold that decides what a body "is". Each trait has a physical cost, so evolution trades them off:
 //   mass       everything scales by allometry (Kleiber): a bigger body costs more and matures later
 //   legs, fins, wings  locomotion organs: speed on land, in water and in the air follows smoothly from their
-//              sizes; a body flies when its flight muscles' power (~wings x M^0.7) reaches the least power flight
+//              sizes; a body flies when its flight muscles' power (~wings x M^(2/3)) reaches the least power flight
 //              requires (~M^(7/6)), and stays in deep water when it swims well enough; fins and wings cost upkeep,
 //              legs cost their swing while walking and flight its power while airborne (Resolve)
 //   leg pairs, fin pairs, eye pairs   how many: more legs share the body's weight, steady a small body on rough
@@ -57,6 +57,37 @@ public static class Body
     /// <summary>The brain-size gene for a number of memory units (inverse of Units).</summary>
     public static sbyte UnitsGene(float units) => (sbyte)Math.Clamp((int)MathF.Round(MathK.Log(Math.Max(units, K.BRAIN_MIN) / K.BRAIN_MIN) / MathK.Log((float)G.NH / K.BRAIN_MIN) * 254f - 127f), -127, 127);
 
+    /// <summary>
+    /// The most memory units a body of m kg can surely pay for: its brain at most BRAIN_SHARE_MAX of its basal cost (the
+    /// founding test, Life.RangeCapacity), with the cheapest body of that mass (basal factor 0.5, Express). A unit costs the
+    /// same whatever the body (energy per neuron is about constant, Herculano-Houzel 2011), so it falls as M^0.75: ~140 units
+    /// at 0.1 kg, ~770 at 1 kg (capped at G.NH by Units), ~24 at 10 g, 4 at 1 g (BRAIN_SHARE_MAX 0.6 since 2026-11-01; 0.25 before). Clades.AncestorBody draws a random ancestor's brain within it.
+    /// </summary>
+    public static float UnitsAffordable(float m) =>
+        K.BRAIN_SHARE_MAX / (1f - K.BRAIN_SHARE_MAX) * 0.5f * MathK.Pow(m, K.EXP_BASAL) * K.BRAIN_REF / K.COST_BRAIN;
+
+    /// <summary>
+    /// The size of a body's gut against the reference gut of its mass (2026-11-02), and its whole basal cost with that
+    /// gut's upkeep. Guts are built to the energy they must pass: their mass and absorptive capacity grow with demand
+    /// (lactation, cold, migratory fattening; Hammond &amp; Diamond 1997; McWilliams &amp; Karasov 2001), so an animal's
+    /// sustained intake is a fixed multiple of its own basal metabolism (the sustained metabolic scope, ~4-7x), not of
+    /// its mass alone. Gut tissue is costly (GUT_SHARE of a Kleiber body's basal cost for the reference gut), so a gut
+    /// of g references costs g x GUT_SHARE x Kleiber, and is built so its absorption, C_ABSORB x M^0.75 x g, is
+    /// C_ABSORB / C_BASAL times the whole basal cost, its own upkeep included: g = rest / ((1 - GUT_SHARE) Kleiber),
+    /// at most GUT_FLEX_MAX. A Kleiber body keeps the reference gut (g = 1) and its cost; every other cost is raised by
+    /// 1 / (1 - GUT_SHARE), the gut that feeds it. No energy is made: the gut only passes food that is eaten, and pays for itself.
+    /// </summary>
+    /// <param name="basalRef">the basal cost with the reference gut (the gut's GUT_SHARE x Kleiber included), E/step</param>
+    /// <param name="kleiber">Kleiber's basal cost for its mass, C_BASAL x M^0.75</param>
+    /// <param name="basal">its whole basal cost with the gut it builds</param>
+    public static float GutScale(float basalRef, float kleiber, out float basal)
+    {
+        float rest = basalRef - K.GUT_SHARE * kleiber;   // everything but the gut
+        float g = MathF.Min(K.GUT_FLEX_MAX, rest / ((1f - K.GUT_SHARE) * kleiber));
+        basal = rest + K.GUT_SHARE * g * kleiber;
+        return g;
+    }
+
     public static void Express(World w, int i)
     {
         var gn = w.Genome.Slot(i);
@@ -104,17 +135,25 @@ public static class Body
                      + K.COST_LIMB * fins * finPairs * 0.5f + K.COST_WING * wings   // legs pay while they walk (LEG_SWING), flight while airborne
                      + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
                      + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice
-                     + K.COST_INS * ins + K.COST_APP * app;
+                     + K.COST_INS * ins + K.COST_APP * app
+                     + Respiration.OrganUpkeep(w.PLungs[i]);   // lungs and gills, with their fixed overheads (2026-11-01)
         // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
-        w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;
+        // (2026-11-02) its gut is built to its own basal cost (GutScale): absorption and digestion grow with it, and so does
+        // the gut's upkeep, part of that cost
+        float kleiber = K.C_BASAL * mPow;
+        float gut = GutScale(kleiber * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF, kleiber, out float basal);
+        // rates are per step (x World.Dt: the constants are per reference step of K.STEP_H) and durations in steps (/ Dt):
+        // at the default step Dt is 1 and these are the constants' values bit for bit (2026-11-02)
+        float dt = w.Dt;
+        w.PBasal[i] = basal * dt;
         w.PGut[i] = K.C_GUT * m;
-        w.PDig[i] = K.C_DIGEST * mPow;
-        w.PAbsorb[i] = K.C_ABSORB * mPow;   // energy the gut can take up a step (2026-11-01)
-        w.PBite[i] = K.C_BITE * mPow;
+        w.PDig[i] = K.C_DIGEST * mPow * gut * dt;
+        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * dt;   // energy the gut can take up a step (2026-11-01)
+        w.PBite[i] = K.C_BITE * mPow * dt;
         float t = MathK.Pow(m, K.EXP_LIFE);
-        w.PMature[i] = K.C_MATURE * t * devel;
-        w.PLife[i] = K.C_LIFE * t * life * MathK.Pow(devel, K.DEVEL_AGING);
+        w.PMature[i] = K.C_MATURE * t * devel / dt;
+        w.PLife[i] = K.C_LIFE * t * life * MathK.Pow(devel, K.DEVEL_AGING) / dt;
         // a narrow field of view sees further (forward eyes), a wide one sees around but less far. In metres (2026-11-01):
         // C_SIGHT_M = 60 m at 1 kg, eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008)
         w.PSight[i] = MathF.Min(BodySize.MaxSight, K.C_SIGHT * MathK.Pow(m, K.EXP_SIGHT) * fsi * (1.6f - fov / 360f));
@@ -122,16 +161,11 @@ public static class Body
         w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * (1f + K.FIN_TURN * (finPairs - 1) * fins);
 
         // locomotion: smooth speeds in each medium from the organ sizes. On land the legs carry the body's weight and its
-        // armour: bone stress grows as M^(1/3), and more legs share it (LOAD_DRAG; an unarmoured two-pair body is the
-        // allometry's own reference). In water and air armour only adds drag
-        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED);   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
+        // armour, and the bones' safety factor limits how fast it can go (BoneLoad). In water and air armour only adds drag
+        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * dt;   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
         float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
-        float loadDrag = K.LOAD_DRAG * MathK.Cbrt(m) * ((1f + armour) / MathF.Sqrt(legs >= K.LIMB_MIN ? legPairs : 1) - 0.70710678f);
-        // legs that share the weight better than the reference make the drag negative; the gain is at most twice the plain
-        // body's speed, as a speed ratio is elsewhere (ReachM). Up to 40 kg it never binds (-0.14 at most); without it a body
-        // of three or four leg pairs above ~14 t had a negative or infinite speed (2026-11-01, giants)
-        float vLand = v0 / MathF.Max(0.5f, 1f + loadDrag) * (K.CRAWL + (1f - K.CRAWL) * legs);
+        float vLand = v0 * LandLoadFactor(m, armour, legs >= K.LIMB_MIN ? legPairs : 1) * (K.CRAWL + (1f - K.CRAWL) * legs);
         float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         float lengthShare = length;   // of the cube of its volume (LengthM)
@@ -144,13 +178,13 @@ public static class Body
         vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
         vWater *= streamlining * (1f - 0.2f * limbShape * legs);
         w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
-        // flight (2026-10-31): a body flies when the power its flight muscles deliver (~ wings x M^0.7) reaches the least
+        // flight (2026-10-31): a body flies when the power its flight muscles deliver (~ wings x M^(2/3)) reaches the least
         // power flight requires (~M^(7/6)) and its flight muscle can lift its weight at all (FLY_WING_MIN); the margin
         // sets how far above the speed of least power it can fly
         float margin = FlightMargin(wings, m);
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
-        if (!flies) vLand *= 1f + K.GLIDE * wings;   // wings that cannot lift still help (wing-assisted running), from the first increment
-        float vAir = flies ? MathF.Min(K.FLY_V_CAP, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
+        vLand *= WingGroundFactor(wings);   // the flight muscle's dead load on the flat; flapping helps on slopes (World.GroundSpeed, WingInclineGain)
+        float vAir = flies ? MathF.Min(K.FLY_V_CAP * dt, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
         bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
         bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
@@ -175,8 +209,8 @@ public static class Body
         w.PSexual[i] = (byte)(gn[G.B_SEX] >= 0 ? 1 : 0);
         w.PLive[i] = (byte)(gn[G.B_LIVE] >= 0 ? 1 : 0);
         // gestation (or incubation) grows with body size and with how big the young are at birth
-        w.PGest[i] = K.C_GEST * t * MathF.Sqrt(birth / 0.1f);
-        w.PCool[i] = K.C_COOL * t;
+        w.PGest[i] = K.C_GEST * t * MathF.Sqrt(birth / 0.1f) / dt;
+        w.PCool[i] = K.C_COOL * t / dt;
         w.PCare[i] = Organ(gn[G.B_CARE]);
         ExpressDiet(w, i, reach, new Span<float>(w.PDiet, i * Pools.N, Pools.N));
         // a meat-eater can feed on a carcass, its own kill's included (Revision L, ecology review: wolves
@@ -271,6 +305,116 @@ public static class Body
     /// <summary>The least power of flight at mass m (2026-10-31): FLIGHT_MULT x basal at FLY_M_REF, rising as M^(7/6).</summary>
     public static float FlightPowerMin(float m)
         => K.FLIGHT_MULT * K.C_BASAL * MathK.Pow(K.FLY_M_REF, K.EXP_BASAL) * MathK.Pow(m / K.FLY_M_REF, K.EXP_FLY_REQ);
+
+    /// <summary>
+    /// Speed kept on land under the load its bones carry (2026-11-01, replaces LOAD_DRAG and its 0.5 floor), against an
+    /// unarmoured two-pair body of 1 kg. Peak bone stress is weight over bone section over the limb's effective mechanical
+    /// advantage (EMA): weight ~M and section ~M^(2/3) give M^(1/3) at a fixed posture, but bigger mammals stand straighter,
+    /// EMA ~M^0.26, which holds peak stress nearly constant up to ~300 kg (Biewener 1989, 1990); a straight leg cannot
+    /// straighten further, so above that stress rises as M^(1/3) and giants move carefully (elephants do not gallop:
+    /// Hutchinson et al. 2003). The weight is shared by the legs, each with its own bone, so stress ~ (1 + armour) x
+    /// weight / (leg pairs x section). Speed is then limited twice over: by the muscles (the allometry, v0) and by the
+    /// bones, whose peak force rises with speed while the safety factor is kept at ~2-4 (Alexander 1977; Biewener 1990),
+    /// so the bone-limited speed is ~ allowed stress / static stress. Two limits on one speed add as 1/v = 1/v0 + 1/v_bone:
+    /// v = v0 (1 + B) / (1 + B s), with s the stress against the reference and B = BONE_LOAD the reference's v0 / v_bone.
+    /// Positive and finite for any mass, armour and leg count; a body with stress far above the limit walks at
+    /// ~ v0 (1 + B) / (B s): it is held to a slow walk, never to zero.
+    /// </summary>
+    public static float LandLoadFactor(float m, float armour, int legPairs)
+    {
+        float s = BoneStress(m) / BoneStress(1f) * (1f + armour) * K.LEG_PAIRS_REF / legPairs;
+        return (1f + K.BONE_LOAD) / (1f + K.BONE_LOAD * s);
+    }
+
+    /// <summary>Peak bone stress of an unarmoured body of mass m on its legs, in arbitrary units: M^(1/3) / EMA(M), the
+    /// posture (EMA) straightening as M^EXP_EMA up to POSTURE_M and fully straight above it, joined smoothly
+    /// (EMA = (1 + (POSTURE_M / M)^(EXP_EMA k))^(-1/k), k = POSTURE_K) (Biewener 1989, 1990).</summary>
+    public static float BoneStress(float m)
+    {
+        float k = K.POSTURE_K;
+        return MathK.Cbrt(m) * MathK.Pow(1f + MathK.Pow(K.POSTURE_M / m, K.EXP_EMA * k), 1f / k);
+    }
+
+    /// <summary>
+    /// Land speed kept on flat ground by a body with wing gene w, flier or not (2026-11-01): its flight muscle is
+    /// FLY_MUSCLE_MAX x w of its mass, tissue that is not leg, so leg power per unit weight, and the speed, fall by that
+    /// share (flight and leg muscle trade off in the avian body plan, Heers &amp; Dial 2015; strong fliers walk badly:
+    /// swifts, bats). Flapping does not help on the flat; on a slope it does (WingInclineGain).
+    /// </summary>
+    public static float WingGroundFactor(float wings) => 1f - K.FLY_MUSCLE_MAX * wings;
+
+    /// <summary>
+    /// Speed gained on a slope by flapping while running, with wing gene w on ground whose steepest slope has sine
+    /// sinSlope (2026-11-01): 1 + WAIR_GAIN x w x sin(slope). The wings' aerodynamic force presses the feet onto the
+    /// incline and adds to the legs' push against the slope's share of gravity, so partly feathered young birds run up
+    /// slopes they could not climb on their legs alone, and the gain grows with the slope (wing-assisted incline running,
+    /// Dial 2003; Tobalske &amp; Dial 2007); going down, flapping controls the descent (Dial, Jackson &amp; Segre 2008). On
+    /// flat ground it is 1. This, not flat-ground running, is the physical way up to flight.
+    /// </summary>
+    public static float WingInclineGain(float wings, float sinSlope) => 1f + K.WAIR_GAIN * wings * sinSlope;
+
+    /// <summary>The most any wing gene multiplies a land speed by, on the steepest ground (sine 1): the largest of
+    /// WingGroundFactor x WingInclineGain over w in 0..1 (for bounds on travel, BodySize.WalkerPerceive).</summary>
+    public static float WingGroundGainMax
+    {
+        get
+        {
+            float wStar = Math.Clamp((K.WAIR_GAIN - K.FLY_MUSCLE_MAX) / (2f * K.WAIR_GAIN * K.FLY_MUSCLE_MAX), 0f, 1f);
+            return WingGroundFactor(wStar) * WingInclineGain(wStar, 1f);
+        }
+    }
+
+    /// <summary>
+    /// A juvenile's flight muscle as a share of its body, against an adult's of the same wing gene (2026-11-01): flight
+    /// muscle grows with positive allometry and matures last, so young birds fledge only near adult size (Ricklefs 1979;
+    /// Choi, Ricklefs &amp; Shea 1993): share ~ (mass / adult mass)^FLY_MUSCLE_ALLO. An adult's is 1.
+    /// </summary>
+    public static float FlightMuscleGrown(float mass, float pm) => MathK.Pow(MathF.Min(1f, mass / pm), K.FLY_MUSCLE_ALLO);
+
+    /// <summary>
+    /// Mass a flier must lift besides its body (2026-11-01): the food in its gut and the young it carries inside it (a
+    /// live-bearer's litter, at half its birth mass on average over the gestation). Wing loading rises with it
+    /// (Pennycuick 2008; Marden 1987); birds lay eggs rather than carry their young, bats carry a single pup.
+    /// </summary>
+    public static float FlightLoad(World w, int i)
+    {
+        float load = MathF.Max(0f, w.Gut[i]);
+        if ((w.Flags[i] & Flag.Carrying) != 0) load += 0.5f * w.PLitter[i] * w.PBirth[i] * w.PM[i];
+        return load;
+    }
+
+    /// <summary>
+    /// Can flier i take off now (2026-11-01)? Flight muscle at a core temperature below T_BODY delivers less power: maximal
+    /// muscle power has a Q10 of ~2-3 (Bennett 1984, 1985; Josephson 1981), as the body's chemistry here (Heat.Rate, Q10
+    /// ~2.3 at E_ACT): insects and birds warm their flight muscle before they take off, and a cold ectotherm cannot fly
+    /// until it is warm (Heinrich 1974, 1993). A load lowers the share of its mass that is flight muscle, which must be
+    /// FLY_WING_MIN of the body's (Marden 1987: lift per unit flight muscle is nearly constant), and raises the least power
+    /// of level flight as (total / body)^(3/2) at fixed wings (induced power ~W^2 / V, V_mp ~W^(1/2); Pennycuick 1975, 2008).
+    /// Once in the air its own muscle's heat keeps it warm (Heinrich 1993), so the test is for taking off. A juvenile's
+    /// flight muscle is a smaller share of its body (FlightMuscleGrown): it fledges when its own margin is met. A margin of
+    /// at least 1 at the speed of least power is a positive rate of climb, (P_available - P_min) / (m g) (Pennycuick 2008).
+    /// </summary>
+    public static bool CanTakeOff(float wings, float pm, float mass, float load, float rateT)
+    {
+        float body = mass / (mass + load);
+        return wings * FlightMuscleGrown(mass, pm) * rateT * body >= K.FLY_WING_MIN && LoadedMargin(wings, pm, mass, load, rateT) >= 1f;
+    }
+
+    /// <summary>Power margin of flight now (2026-11-01): its grown flight muscle's power at its muscle temperature over the
+    /// least power of level flight with its load, FlightMargin(wings x grown, M) x rate x (body / (body + load))^(3/2)
+    /// (Pennycuick 1975, 2008). For an adult with an empty gut and a warm core it is FlightMargin(wings, M).</summary>
+    public static float LoadedMargin(float wings, float pm, float mass, float load, float rateT)
+        => FlightMargin(wings * FlightMuscleGrown(mass, pm), mass) * rateT * MathK.Pow(mass / (mass + load), 1.5f);
+
+    /// <summary>
+    /// Top air speed with a load (2026-11-01): the speed of least power rises as the square root of the weight (vmp, the
+    /// unloaded body's, given), and the fastest level flight is where the power curve meets the loaded margin
+    /// (TopFlightSpeed): a load lowers the top speed wherever power, not FLY_X_MAX, binds, and a margin at or below 1
+    /// leaves it only the speed of least power, sinking (Pennycuick 1975, 2008). The maximum-range speed, 3^(1/4) = 1.32 x
+    /// vmp for this power curve (minimum of power / speed), needs a loaded margin of 1.14. At most FLY_V_CAP.
+    /// </summary>
+    public static float LoadedTopAirSpeed(float vmp, float mass, float load, float loadedMargin, float dt = 1f)
+        => MathF.Min(K.FLY_V_CAP * dt, vmp * MathK.Pow((mass + load) / mass, 0.5f) * TopFlightSpeed(loadedMargin));
 
     static void ExpressDiet(World w, int i, Realm realm, Span<float> dst)
     {

@@ -30,7 +30,7 @@ export class Vehicles {
     const m = ex.meta.explore || {};
     this.specs = {};
     for (const v of m.vehicles || []) this.specs[v.id] = v;
-    this.mpu = m.metresPerUnit || 54.5;
+    this.mpu = m.metresPerUnit || 4;
     this.list = {};            // kind -> vehicle (one of each)
     this.wrecks = [];
     this.cur = null;           // the vehicle the person is in
@@ -52,13 +52,15 @@ export class Vehicles {
     if (this.T) return true;
     const w = this.world;
     if (!w.world) return false;
-    const W = w.W, uv = this.ex.upm, uh = 1 / this.mpu, wrap = (v) => ((v % W) + W) % W;
+    // (uv, uh: view units per metre of the person's own size, explore.js upm: the vehicles are built to the person, so
+    // an animal-sized person drives a jeep a few tens of cm long; rescale() follows a change of size)
+    const W = w.W, uv = this.ex.upm, uh = this.ex.ps / this.mpu, wrap = (v) => ((v % W) + W) % W;
     const iMoist = (w.meta.fieldLayers || []).indexOf('moisture');
     this.T = {
       W, uh, uv, wrap,
       at: (x, z) => {
         const r = w.groundWater(wrap(x), wrap(z)), g = r[0], s = r[1], water = s === s;
-        return { g, s, water, depthM: water ? Math.max(0, s - g) / uv : 0 };
+        return { g, s, water, depthM: water ? Math.max(0, s - g) / this.T.uv : 0 };
       },
       moist: (x, z) => {
         const f = w.fields; if (!f || iMoist < 0) return 0.3;
@@ -74,6 +76,14 @@ export class Vehicles {
     this.sightRing.visible = false; this.sightRing.renderOrder = 8; this.sightRing.frustumCulled = false;
     w.scene.add(this.sightRing);
     return true;
+  }
+
+  /** The person's size changed (explore.js setSize): the vehicles, their effects and every distance follow it. */
+  rescale() {
+    if (!this.T) return;
+    this.T.uv = this.u = this.ex.upm; this.T.uh = this.ex.ps / this.mpu;
+    if (this.fx) this.fx.u = this.u;
+    for (const v of Object.values(this.list)) if (v.mesh) v.mesh.scale.setScalar(this.u);
   }
 
   /** The server's cell under a place: the realm bits (1 land, 2 shallow, 4 deep) of the WORLD frame. */
@@ -487,7 +497,7 @@ export class Vehicles {
     const now = performance.now();
     if (!force && now - this.lastSend < SEND_MS) return;
     this.lastSend = now; this.ex.lastSend = now;
-    this.link.send({ cmd: 'player', on: true, x: this.T.wrap(v.x), y: this.T.wrap(v.z), h: v.yaw, run: Math.abs(v.v) > 3, veh: v.kind, alt: v.agl });
+    this.link.send({ cmd: 'player', on: true, x: this.T.wrap(v.x), y: this.T.wrap(v.z), h: v.yaw, run: Math.abs(v.v) > 3, veh: v.kind, alt: v.agl, scale: this.ex.ps, mass: this.ex.pmass });
   }
 
   // ------------------------------------------------------------------------------------------------ weapons

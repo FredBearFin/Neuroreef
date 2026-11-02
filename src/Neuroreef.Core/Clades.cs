@@ -35,7 +35,7 @@ public static class Clades
         for (int k = 0; k < K.CLADES && slot < 0; k++)
         {
             var c = w.Sp[k];
-            if (!c.Alive && c.Extinct >= 0 && (long)w.Step - c.Extinct >= K.CLADE_RECYCLE) slot = k;
+            if (!c.Alive && c.Extinct >= 0 && (long)w.Step - c.Extinct >= w.Steps(K.CLADE_RECYCLE)) slot = k;
         }
         if (slot < 0) return -1;
         var s = w.Sp[slot];
@@ -128,8 +128,14 @@ public static class Clades
         body[G.B_EYEN - B] = (sbyte)((U(16) * 2f - 1f) * 127f);   // eye pairs
         body[G.B_LIFE - B] = (sbyte)((U(17) - 0.5f) * 120f);      // lifespan, development and brain size: anywhere mid-range
         body[G.B_DEVEL - B] = (sbyte)((U(18) - 0.5f) * 120f);
-        // brain: a random size up to BRAIN_START units, or exactly brainUnits for a big-brained ancestor
-        float units = brainUnits > 0 ? brainUnits : K.BRAIN_MIN + U(19) * (K.BRAIN_START - K.BRAIN_MIN);
+        // brain: a random size up to BRAIN_START units, or exactly brainUnits for a big-brained ancestor. (2026-11-01) A random
+        // ancestor's brain is drawn no larger than its body can pay for (Body.UnitsAffordable), as small animals have small
+        // brains: in a 1 g - 1 kg world, 2-24 units drawn whatever the body made most bodies under ~10 g fail the founding
+        // test's brain share (BRAIN_SHARE_MAX), and a failed draw redraws the mass too, so the founders were thinned of small
+        // bodies (20 seeds: 5 of 109 draws under 10 g viable). Above ~0.07 kg it never binds: the default range is unchanged
+        float m = MathF.Max(fl, G.GeneLog(body[G.B_MASS - B], BodySize.Min, BodySize.Max));
+        float top = MathF.Max(K.BRAIN_MIN, MathF.Min(K.BRAIN_START, Body.UnitsAffordable(m)));
+        float units = brainUnits > 0 ? brainUnits : K.BRAIN_MIN + U(19) * (top - K.BRAIN_MIN);
         body[G.B_BRAIN - B] = Body.UnitsGene(units);
         body[G.B_HERM - B] = (sbyte)(U(35) < 0.5f ? -40 : 40);     // separate sexes or hermaphrodite
         body[G.B_SEXRATIO - B] = (sbyte)((U(36) - 0.5f) * 40f);    // about even sex ratio
@@ -191,7 +197,7 @@ public static class Clades
             bool alive = x.Count[s] > 0;
             if (c.Alive && !alive) { c.Alive = false; c.Extinct = (long)w.Step; x.Version++; }
         }
-        if (w.Step > 0 && w.Step % K.SPEC_EVERY == 0)
+        if (w.Step > 0 && w.Every(K.SPEC_EVERY))
             for (int s = 0; s < K.CLADES; s++)
                 if (w.Sp[s].Alive && x.Count[s] >= 2 * K.MIN_SPLIT) TrySplit(w, s, x);
     }
