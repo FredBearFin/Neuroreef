@@ -106,7 +106,7 @@ public static class Wetlands
         if (room <= 0f) return g;
         float a = MathF.Min(g, room), b = MathF.Min(MathF.Max(0f, qc), room - a);
         g -= a; qc -= b;
-        w.SoilWater[c] += a + b; w.Moisture[c] = w.SoilWater[c] / w.SoilCap[c];
+        w.SoilWater[c] += a + b; w.Moisture[c] = MathF.Min(1f, w.SoilWater[c] / w.SoilCap[c]);
         return g;
     }
 

@@ -217,7 +217,7 @@ public static class WaterCycle
                 w.PondWater[i] = pw;
             }
             w.SoilWater[i] = s; w.Runoff[i] = ro;
-            w.Moisture[i] = s / cap;
+            w.Moisture[i] = MathF.Min(1f, s / cap);   // (2026-11-02: float rounding in s += min(x, cap - s) can leave s an ulp over cap)
         }
         int o = y * NSUM;
         w.WcRow[o] = sR; w.WcRow[o + 1] = sE; w.WcRow[o + 2] = sP;
@@ -327,7 +327,7 @@ public static class WaterCycle
             float give = MathF.Min(w.SoilCap[i] - w.SoilWater[i], w.Discharge[d]);
             if (give <= 0f) continue;
             w.SoilWater[i] += give; w.Discharge[d] -= give;
-            w.Moisture[i] = w.SoilWater[i] / w.SoilCap[i];
+            w.Moisture[i] = MathF.Min(1f, w.SoilWater[i] / w.SoilCap[i]);
             // the water would have reached the lake this river runs to (the lakes are already balanced this update)
             int l = w.Outlet[d];
             if (l >= 0) w.LakeLevel[l] -= give / w.LakeArea[l];
