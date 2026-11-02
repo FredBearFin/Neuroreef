@@ -44,7 +44,8 @@ world ~1 km across, one valley with a stream, hills and a pond, several hundred 
   The RIVERS lines carry that width in field cells (under 1); World.RivW is the cells it covers (1 for any stream
   narrower than a cell).
 - *Console.* RELIEF = reliefM x fcell / fieldCellM from meta (world3d.js setRelief, on every meta; 38 units on 256);
-  creature size defaults to x1 (true size; the control stays); metres per unit from the server everywhere.
+  creature size defaulted to x1 (true size; the control stays; x100 since 2026-11-02, below); metres per unit from the
+  server everywhere.
 Measured (256 map, seeds 3 / 5 / 7; tools/ScaleProbe):
 - width 1.02 km; top 153 / 153 / 97 m above the lakes, land p50 42 / 41 / 31 m; slopes p50 14 / 12 / 9°, p90 23 / 21 / 16°,
   p99 30 / 28 / 23°; land rock crystalline 25-32%, sedimentary 66-71% (regolith and colluvium mantle the hills), volcanic
@@ -315,6 +316,25 @@ should be easy to see the whole thing", "we don't need worlds that reach 60k pop
 - Swimmers are drawn under the water's surface at their depth (AGENTS format 7: depth in m, at true scale), fading
   into the water's colour with depth and its murk (algae, plankton); an air-breather that spends only part of each step
   at depth dives for that share of an 8 s cycle and is at the surface for the rest. Never below the bed.
+
+**Creature display size, and the animals that vanished in Explore** (2026-11-02; js/scale.js, js/world3d.js,
+js/main.js, js/explore/explore.js, index.html, style.css; images docs/art/scale3/). The owner: "the realistic sizes,
+you just cannot see them at all. You basically need to have it in 100x size", and "in the vehicle mode or in the
+explore mode, all the animals just disappear". Display only; the simulation is untouched.
+- Cause of the second: Explore (and the vehicles, which run inside it) forced the creature size to x1 (scale.trueSize),
+  and the smallest-on-screen rule applied only to the overview. At true size a 0.1-40 kg animal is 5-34 cm long: the
+  person, dropped 8 m from one, saw a body of ~10 px in the grass, and every animal farther off was under a pixel. The
+  server sends every animal (no area of interest), the frustum test uses the drawn size, the clip planes are fine
+  (near 0.004, far 1,200 units), so the animals were drawn, only too small to see.
+- Two remembered settings (localStorage, new keys, so the old x1 default is not kept): the overview and animal cameras
+  (default x100: a 1 kg animal drawn 10 m long, 40 kg 34 m), and Explore with the vehicles (default x10: a 1 kg animal
+  as big as a dog beside the 1.7 m person; x100 there would put the person inside it). Steps true, x3, x10, x30, x100,
+  x300 on the slider, presets true / x10 / x30 / x100 / x300 beside it, keys [ and ] (in Explore too).
+- No body is drawn shorter than DOT_PX = 3 px in any view, so on an 8 km map or from a plane the animals stay specks.
+- Hit areas follow the drawn size (pick reach, Explore's aim ray, the selection ring, fight marks, call rings, eggs).
+  The person is placed beside an animal at its drawn size's distance plus 8-45 m. A far body drawn longer than ~1 m
+  is sheared to the slope like a near one, so a magnified animal stands on a hillside rather than half in it. Plants
+  in Explore stay true size. The server still checks weapon range from the true centre.
 
 **High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
 Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and

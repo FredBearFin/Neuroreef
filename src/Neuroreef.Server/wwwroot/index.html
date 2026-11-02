@@ -51,8 +51,9 @@
     </div>
     <div id="scalebox" class="floating">
       <button id="fitworld" title="See the whole world at once (Home key)">Whole world</button>
-      <label id="magbox" title="Animals are drawn bigger than they are so you can see them from the overview: a 1 kg animal is 10 cm long, and the sim's animals live hundreds of metres apart. Plants are magnified by the square root of it. Explore always shows true size. Keys: [ and ].">
-        <span>creature size</span> <b id="mag-v">×20</b><input id="mag" type="range" min="0" max="6" step="1"><span id="mag-k" class="k">magnified</span></label>
+      <label id="magbox" title="How big the animals are drawn (display only: the simulation never sees it). At true size a 1 kg animal is 10 cm long and the animals live tens to hundreds of metres apart, so they are magnified: x100 by default in the overview and the animal cameras, x10 in Explore and the vehicles (each remembered). Far animals are never drawn smaller than a few pixels. Plants follow the overview's at the fourth root. Keys: [ and ].">
+        <span>creature size</span> <b id="mag-v">×100</b><input id="mag" type="range" min="0" max="5" step="1"><span id="mag-k" class="k">magnified</span></label>
+      <span id="magpre" title="Creature size presets"><button data-mag="1">true</button><button data-mag="10">×10</button><button data-mag="30">×30</button><button data-mag="100">×100</button><button data-mag="300">×300</button></span>
     </div>
     <div id="experience" class="floating">
       <select id="exp-species" title="Experience a clade: pick a random living member and follow it"></select>

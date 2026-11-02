@@ -206,24 +206,30 @@ function setCam(m) {
 
 // ------------------------------------------------------------------ how big things are drawn, and the whole world
 
-/** The creature size control: the magnification (overview and the animal cameras), or true size in Explore. */
+/** The creature size control: the display multiplier of the overview and the animal cameras, or Explore's own (it and
+ *  the vehicles: js/scale.js). Display only: the simulation never sees it. */
 function showMag() {
   if (!world) return;
-  const ex = world.mode === 'explore', m = world.scale.creatureMag;
+  const ex = world.mode === 'explore', m = world.scale.creatureMag, pm = world.scale.plantMag;
   $('scalebox').classList.toggle('explore', ex);
-  $('mag').value = MAGS.indexOf(world.scale.mag);
-  $('mag-v').textContent = ex ? '×1' : '×' + m;
-  $('mag-k').textContent = ex ? 'true size' : m === 1 ? 'true size' : `magnified · plants ×${world.scale.plantMag.toFixed(1).replace(/\.0$/, '')}`;
+  $('mag').max = MAGS.length - 1;
+  $('mag').value = MAGS.indexOf(m);
+  $('mag-v').textContent = m === 1 ? 'true' : '×' + m;
+  $('mag-k').textContent = m === 1 ? 'true size' : ex || pm === 1 ? 'magnified' : `magnified · plants ×${pm.toFixed(1).replace(/\.0$/, '')}`;
+  for (const b of document.querySelectorAll('#magpre button')) b.classList.toggle('on', +b.dataset.mag === m);
 }
 
 function wireScale() {
   world.onScale = showMag;
   $('mag').oninput = () => world.setMagnification(MAGS[+$('mag').value]);
+  for (const b of document.querySelectorAll('#magpre button')) b.onclick = (e) => { e.stopPropagation(); world.setMagnification(+b.dataset.mag); };
   $('fitworld').onclick = () => { if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); };
   addEventListener('keydown', (e) => {
-    if (!world || world.mode === 'explore' || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!world || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    // [ and ]: the creature size, in Explore too (its own setting); the other keys are the overview's
+    if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.creatureMag); return; }
+    if (world.mode === 'explore') return;
     if (e.key === 'Home') { e.preventDefault(); if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); }
-    else if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.mag); }
     else if (e.key === 'p' || e.key === 'P') setPanel(document.body.classList.contains('nopanel'));
   });
   showMag();
@@ -328,7 +334,7 @@ function status(s) {
   $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
   if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
-  if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.mag);   // the sim's own metres (ICD §2.1)
+  if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.creatureMag);   // the sim's own metres (ICD §2.1)
   if (world && s.bodyLenM) world.setBodyLengths(s.bodyLenM);   // each animal's true length (a juvenile's grows)
   if (world && s.bodyLook) world.setBodyLooks(s.bodyLook);     // endothermy and diet, for how each body is drawn
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +

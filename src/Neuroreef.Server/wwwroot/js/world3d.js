@@ -46,7 +46,9 @@ const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sin
 const NEAR_PX = 22;          // organisms drawn longer than this on screen (pixels) get the detailed body
 const SWIM_FINS = (0.3 - 0.1) / 0.9;   // fins at which a body swims in deep water (Body.GroundRealm: 0.1 + 0.9 fins >= DEEP_SWIM 0.3)
 const FLY_VM = 90;           // metres per step x M^0.17 above which a flier is taken to be in the air (a landed one walks: _air)
-const DOT_PX = 1.8;          // in the overview no organism is drawn shorter than this (a dot where it is, never a carpet)
+const DOT_PX = 3;            // no organism is drawn shorter than this on screen (a speck where it is, never a carpet; 2026-11-02:
+                             // in every view, not only the overview, so a far animal never vanishes in Explore or a vehicle)
+const SLOPE_SC = 0.25;       // a far body drawn longer than this (world units, ~1 m) is sheared to the slope too
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
@@ -790,7 +792,7 @@ export class World3D {
     this.mode = m;
     this.controls.enabled = m === 'overview';
     this._fly = null; this._camT = 0;
-    this.scale.trueSize = m === 'explore';   // Explore: everything at true size (x1)
+    this.scale.explore = m === 'explore';    // Explore and the vehicles: their own creature size (js/scale.js)
     if (m === 'explore') { this.explore?.setView(); this._plants(true); return; }   // EXPLORE hook: js/explore/ sets the lens and fog
     this.camera.fov = m === 'ride' ? 78 : 55; if (m !== 'overview') this.camera.near = 0.005; this.camera.updateProjectionMatrix();
     this.scene.fog.near = m === 'ride' ? 60 : 250; this.scene.fog.far = m === 'ride' ? 380 : 900;
@@ -1003,7 +1005,7 @@ export class World3D {
     // sizes: true size x the magnification (bk: world units per view-size unit); on screen, pixels per unit at distance 1
     const bk = this.scale.bodyK, ppu = this.canvas.clientHeight / (2 * Math.tan(this.camera.fov * Math.PI / 360));
     const lenPx = MODEL_LEN * ppu, nearK = lenPx / NEAR_PX;   // a body of drawn size sc is detailed within nearK x sc
-    const dots = this.mode === 'overview' ? DOT_PX / lenPx : 0;   // the overview's smallest drawn size per unit of distance
+    const dots = DOT_PX / lenPx;   // the smallest drawn size per unit of distance (every view)
     const U = this.bodyMat.userData.uniforms;
     U.uTime.value = now / 1000; U.uBodyK.value = bk;
     U.uSpeciesOverlay.value = this.speciesOverlay ? 1 : 0;
@@ -1061,7 +1063,7 @@ export class World3D {
       const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * sc + 0.05 * bk));
       e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
       const ddx = x - camX, ddy = gy - camY, ddz = y - camZ, dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-      if (dots && sc < dots * dist) { sc = dots * dist; if (air > 0.01) gy = Math.max(gy, this.heightAt(x, y) + sc * air); }   // never smaller than a dot
+      if (sc < dots * dist) { sc = dots * dist; if (air > 0.01) gy = Math.max(gy, this.heightAt(x, y) + sc * air); }   // never smaller than a speck
       if (!inView(x, gy, y, 3 * sc + 0.02)) continue;   // a body (wings and tail spread) lies well within 3 x its size
       const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997;
       // out of breath (oxygen debt, 0..15) and calling ride above the action byte (anim.js)
@@ -1070,7 +1072,9 @@ export class World3D {
       // are sent each frame. A near one goes to the far mesh when the near one is full; a near one standing on the
       // ground is sheared to its slope (feet on the slope, not in it or above it)
       const isNear = dist < nearK * sc;
-      if (isNear && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
+      // sheared to the slope when near, or when drawn long enough (magnified) that a slope under it shows: its feet on
+      // the ground, not buried at one end and floating at the other
+      if ((isNear || sc > SLOPE_SC) && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
       if (isNear && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nn++;
       else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nf++;
     }
