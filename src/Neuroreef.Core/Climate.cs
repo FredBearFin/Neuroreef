@@ -101,7 +101,7 @@ public static class Climate
     public static void RowParams(World w, int y, out float a, out float b)
     {
         float s = SinLat(w, y), c = Nature.Climate;
-        float year = MathK.Sin(2f * MathF.PI * (float)(w.Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength);
+        float year = MathK.Sin(2f * MathF.PI * w.YearStep / Nature.SeasonLength);
         a = K.T_REF + c * (SeaLevelMean(s) - K.T_REF);
         b = c * K.A_SEAS * s * year;
     }
@@ -308,15 +308,16 @@ public static class Heat
         return t + Nature.Climate * K.SOLAR * open / (1f + 0.5f * K.R_INS * ins);
     }
 
-    /// <summary>Dry conductance of a body (energy per step per K): least (cold, vasoconstricted) and most (warm, vasodilated).</summary>
-    public static void Conductance(float mass, float ins, float app, bool immersed, out float cmin, out float cmax)
+    /// <summary>Dry conductance of a body (energy per step per K): least (cold, vasoconstricted) and most (warm, vasodilated).
+    /// dt: the step in reference steps (World.Dt; heat lost a step is x dt).</summary>
+    public static void Conductance(float mass, float ins, float app, bool immersed, out float cmin, out float cmax, float dt = 1f)
     {
         float c = MathK.Cbrt(mass), ac = c * c;
         float ie = ins * MathF.Min(1f, c);                 // a small body cannot carry a thick coat
         float kw = 1f;
         if (immersed) { ie *= K.FUR_WET; kw = K.K_WATER; }
         float core = ac / (1f + K.R_INS * ie);
-        float g = kw * K.K_COND * K.C_BASAL;
+        float g = kw * K.K_COND * K.C_BASAL * dt;
         cmin = g * (core + K.APP_LEAK * app * ac);
         cmax = g * (K.VASO * core + app * ac);
     }
@@ -327,9 +328,9 @@ public static class Heat
     /// (none under water), and the shortfalls beyond the caps (cold, hot).
     /// </summary>
     public static void Balance(float mass, float ins, float app, float top, bool immersed, float h, float basal,
-        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY)
+        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY, float dt = 1f)
     {
-        Conductance(mass, ins, app, immersed, out float cmin, out float cmax);
+        Conductance(mass, ins, app, immersed, out float cmin, out float cmax, dt);
         float dT = core - top;
         thermo = 0; evap = 0; cold = 0; hot = 0;
         float lossMin = cmin * dT;
@@ -374,10 +375,10 @@ public static class Heat
     /// core is below T_FREEZE. A cold-blooded body cannot make it, so it is all shortfall (strain, death by cold): on land
     /// in a frost an ectotherm freezes, in water (never below T_WATER_MIN) it does not.
     /// </summary>
-    public static float Freeze(float mass, float ins, float app, bool immersed, float core)
+    public static float Freeze(float mass, float ins, float app, bool immersed, float core, float dt = 1f)
     {
         if (core >= K.T_FREEZE) return 0f;
-        Conductance(mass, ins, app, immersed, out float cmin, out _);
+        Conductance(mass, ins, app, immersed, out float cmin, out _, dt);
         return cmin * (K.T_FREEZE - core);
     }
 

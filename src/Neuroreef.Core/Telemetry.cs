@@ -279,8 +279,8 @@ public sealed class Telemetry
             a[o + S_TRAITS + T_SEXUAL] += w.PSexual[i];
             a[o + S_TRAITS + T_LIVE] += w.PLive[i];
             a[o + S_TRAITS + T_LEGN] += w.PLegs[i] >= K.LIMB_MIN ? 2 * w.PLegPairs[i] : 0;
-            a[o + S_TRAITS + T_LIFE] += w.PLife[i];
-            a[o + S_TRAITS + T_MATURE] += w.PMature[i];
+            a[o + S_TRAITS + T_LIFE] += w.PLife[i] * w.Dt;     // in reference steps, whatever the world's step (World.Dt)
+            a[o + S_TRAITS + T_MATURE] += w.PMature[i] * w.Dt;
             a[o + S_TRAITS + T_BRAIN] += w.PBrain[i];
             a[o + S_TRAITS + T_HERM] += w.PHerm[i];
             a[o + S_TRAITS + T_FEMALE] += w.PSexRatio[i];

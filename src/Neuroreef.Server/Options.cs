@@ -35,6 +35,15 @@ public sealed class Options
     // nature (Nature.cs): multipliers on the laws, 1 = as documented
     public float Plants = 1f, Seasons = 1f, Drought = 1f, Fire = 1f, Disease = 1f, Thirst = 1f, Water = K.LAKE_SHARE, Ponds = 1f, Climate = K.CLIMATE;
     public int SeasonLength = K.T_SEASON;
+    public float StepH = K.STEP_H;   // the length of a step in hours (--step-minutes, 2026-11-02; Nature.StepH)
+
+    /// <summary>A step of mn minutes in hours, clamped to Nature's range; the default (175.3 min, within a hundredth of a
+    /// minute) is K.STEP_H exactly, so the default world is the reference run bit for bit.</summary>
+    public static float StepHFromMinutes(float mn)
+    {
+        if (!(mn > 0f) || MathF.Abs(mn - K.STEP_H * 60f) < 0.01f) return K.STEP_H;
+        return Math.Clamp(mn / 60f, Nature.STEP_H_MIN, Nature.STEP_H_MAX);
+    }
     // the bodies (BodySize, 2026-11-01): the mass gene's range in kg and the size classes' floors (null: in the default's
     // proportions of the range). The default is 0.1-40 kg with floors 0.1, 1, 3 and 10 kg
     public float MassMin = K.MASS_LO, MassMax = K.MASS_HI;
@@ -47,7 +56,7 @@ public sealed class Options
     public void ApplyNature(bool prehistory)
     {
         Nature.Plants = Plants; Nature.Seasons = Seasons; Nature.SeasonLength = SeasonLength; Nature.Drought = Drought;
-        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap;
+        Nature.Fire = Fire; Nature.Disease = Disease; Nature.Thirst = Thirst; Nature.Water = Water; Nature.Ponds = Ponds; Nature.Climate = Climate; Nature.WorldMap = WorldMap; Nature.StepH = StepH;
         Nature.Clamp();
         BodySize.Set(MassMin, MassMax, Floors);   // before the map: its hash cells follow the largest body
         Map.Set(prehistory ? PreMap : WorldMap);
@@ -132,7 +141,9 @@ public sealed class Options
   --ancestors-land N, --ancestors-water N   random ancestors (default 6 and 4; at most 16 in all)
   --mating-drive X      strength of the breeding instinct (default 1)
   Nature (multipliers, 1 = as documented): --plants X  --seasons X  --drought X  --fire X  --disease X  --thirst X
-  --season-length N     steps per year (default 3000)   --water X   share of the map under water (default 0.10)
+  --season-length N     reference steps per year (default 3000)   --water X   share of the map under water (default 0.10)
+  --step-minutes X      the length of a step in minutes, 1..720 (default 175.3 = 2.92 h: 3000 steps a year). Fine steps
+                        (1-10 min) let animals move at watchable real speeds; the default and coarser run evolution fast
   --ponds X             share of land basins with seasonal ponds (default 1; 0 = water only in lakes and rivers)
   --climate X           climate strength 0..2: how strongly sun, height and seasons change temperature
                         (default 0.6; 0 = everywhere 20 °C and no body-heat budget)
@@ -213,6 +224,7 @@ public sealed class Options
                 case "--plants": o.Plants = F(Next()); break;
                 case "--seasons": o.Seasons = F(Next()); break;
                 case "--season-length": o.SeasonLength = int.Parse(Next()); break;
+                case "--step-minutes": o.StepH = StepHFromMinutes(float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture)); break;
                 case "--drought": o.Drought = F(Next()); break;
                 case "--fire": o.Fire = F(Next()); break;
                 case "--disease": o.Disease = F(Next()); break;

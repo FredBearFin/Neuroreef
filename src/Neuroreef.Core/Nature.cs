@@ -8,7 +8,12 @@ public static class Nature
 {
     public static float Plants = 1f;          // x every plant and algae growth rate (lush > 1, harsh < 1)
     public static float Seasons = 1f;         // x A_SEASON: how much wetter the wet season and drier the dry one
-    public static int SeasonLength = K.T_SEASON;   // steps per year
+    public static int SeasonLength = K.T_SEASON;   // reference steps (K.STEP_H) per year
+    // the length of a step, in hours (2026-11-02): K.STEP_H (2.92 h) by default; 1/60 (a minute) to watch animals move at
+    // their real speeds, hours for fast evolution. Worlds take it when they are built (World.SetStepH); a checkpoint keeps
+    // its world's in its header (Checkpoint.ReadStepH), so it is not in Write/Read
+    public static float StepH = K.STEP_H;
+    public const float STEP_H_MIN = 1f / 60f, STEP_H_MAX = 12f;
     public static float Drought = 1f;         // x RAIN_SD: how far a year's rainfall can swing (droughts and wet years)
     public static float Fire = 1f;            // x LAMBDA_FIRE: how often fires start
     public static float Disease = 1f;         // x PG_INF: how easily pathogens infect (0 = no disease)
@@ -31,6 +36,7 @@ public static class Nature
         Fire = System.Math.Clamp(Fire, 0f, 10f); Disease = System.Math.Clamp(Disease, 0f, 5f);
         Thirst = System.Math.Clamp(Thirst, 0.1f, 4f); Water = System.Math.Clamp(Water, 0.02f, 0.6f);
         Ponds = System.Math.Clamp(Ponds, 0f, 1f); Climate = System.Math.Clamp(Climate, 0f, 2f);
+        if (!(StepH > 0f)) StepH = K.STEP_H; else if (StepH != K.STEP_H) StepH = System.Math.Clamp(StepH, STEP_H_MIN, STEP_H_MAX);
     }
 
     // for checkpoints and saved worlds: the map side and every setting, in a fixed order
@@ -49,5 +55,6 @@ public static class Nature
 
     public static string Describe() =>
         $"{Map.Name} map ({Map.W} units), plants x{Plants:0.##}, seasons x{Seasons:0.##} over {SeasonLength:N0} steps, " +
-        $"droughts x{Drought:0.##}, fire x{Fire:0.##}, disease x{Disease:0.##}, thirst x{Thirst:0.##}, water {Water:P0}, ponds {Ponds:P0}, climate x{Climate:0.##}";
+        $"droughts x{Drought:0.##}, fire x{Fire:0.##}, disease x{Disease:0.##}, thirst x{Thirst:0.##}, water {Water:P0}, ponds {Ponds:P0}, climate x{Climate:0.##}" +
+        (StepH == K.STEP_H ? "" : $", a step {StepH * 60f:0.##} min");
 }

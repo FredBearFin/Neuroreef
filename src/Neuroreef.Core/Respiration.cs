@@ -58,7 +58,7 @@ public static class Respiration
 
     static readonly float DoRef = DissolvedO2(K.T_REF);
 
-    /// <summary>Seconds in a step: a year is Nature.SeasonLength steps.</summary>
+    /// <summary>Seconds in a reference step: a year is Nature.SeasonLength reference steps (x World.Dt for a world's step).</summary>
     public static float StepSeconds => 365.25f * 86400f / Nature.SeasonLength;
 
     /// <summary>Height of the surface (the water's where there is water, else the ground's) above the sea, m.</summary>
@@ -105,7 +105,7 @@ public static class Respiration
     /// </summary>
     public static float OrganBase(World w, int i)
     {
-        float brain = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF;
+        float brain = K.COST_BRAIN * K.C_BASAL * w.PBrain[i] / K.BRAIN_REF * w.Dt;   // per step, as PBasal (World.Dt)
         return MathF.Max(1e-9f, (w.PBasal[i] - brain) * MathK.Pow(MathF.Max(w.MassOf(i), 1e-4f) / w.PM[i], K.EXP_BASAL) + brain);
     }
 
@@ -202,7 +202,7 @@ public static class Respiration
         float m = MathF.Max(w.MassOf(i), 1e-4f), basal = OrganBase(w, i) * Aerobic(w, i, cell, airborne);
         float L = w.PLungs[i], Gi = 1f - L;
         // the skin is passive diffusion: it does not grow with what the body's tissues cost, only with its surface
-        float skin = K.SKIN * K.C_BASAL * MathK.Pow(m, K.EXP_BASAL) / basal / MathK.Cbrt(m) * (1f - w.PInsul[i]);
+        float skin = K.SKIN * K.C_BASAL * MathK.Pow(m, K.EXP_BASAL) * w.Dt / basal / MathK.Cbrt(m) * (1f - w.PInsul[i]);
         float aAir = AirO2(SurfaceM(w, cell), AirT(w, cell));
         var b = new Breath { AAir = aAir, AWater = 1f };
         z = 0f; share = 0f;
@@ -229,7 +229,7 @@ public static class Respiration
                 // a breath-hold dive: no deeper than its store lasts the round trip at DIVE_V, and at depth only for the
                 // share of the step that keeps its oxygen balanced; the rest at the surface
                 float store = K.O2_STORE * K.C_BASAL * m;
-                float zlim = K.DIVE_V * store / MathF.Max(need - uz, 1e-9f) * StepSeconds * 0.5f;
+                float zlim = K.DIVE_V * store / MathF.Max(need - uz, 1e-9f) * StepSeconds * w.Dt * 0.5f;
                 // at most half its store spent travelling: a dive to the limit would leave no time down there
                 if (zt > 0.5f * zlim) { zt = 0.5f * zlim; aZ = WaterO2(w, cell, zt); uz = basal * aZ * (K.GILL_SCOPE * Gi + skin); }
                 f = us > uz ? Math.Clamp((us - need) / (us - uz), 0f, 1f) : 0f;

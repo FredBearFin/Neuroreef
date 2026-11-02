@@ -137,6 +137,48 @@ public sealed class World
     [NonSerialized] public int Grows;
     [NonSerialized] public string? GrowLimit;
 
+    // ---- the length of a step (2026-11-02): a world setting (Nature.StepH when the world is built, saved in a checkpoint's
+    // header), K.STEP_H = 2.92 h by default. Dt is a step in reference steps (StepH / K.STEP_H): a rate per reference step
+    // is x Dt a step, a probability p per reference step is 1 - (1 - p)^Dt (PStep), a decay factor f is f^Dt (Keep), a
+    // duration of n reference steps is n / Dt steps (Steps). At the default Dt is exactly 1 and every one of these returns
+    // its argument bit for bit, so the default world is the same run as before. The land (weather, fields, plants, fire,
+    // the water cycle) runs on the reference clock, once per reference step (Simulation.LandTicks, LandStep). Not state
+    // of its own: set from the checkpoint header (Checkpoint.ReadStepH) or Nature.StepH (SetStepH)
+    [NonSerialized] public float StepH = K.STEP_H, StepS = K.STEP_S, StepsPerDay = K.STEPS_PER_DAY, Dt = 1f;
+
+    /// <summary>Set the length of a step in hours (K.STEP_H: the reference step, Dt = 1 exactly).</summary>
+    public void SetStepH(float h)
+    {
+        if (h == K.STEP_H || !(h > 0f)) { StepH = K.STEP_H; StepS = K.STEP_S; StepsPerDay = K.STEPS_PER_DAY; Dt = 1f; return; }
+        StepH = h; StepS = h * 3600f; StepsPerDay = 24f / h; Dt = h / K.STEP_H;
+    }
+
+    /// <summary>A probability p per reference step, for one step of this world: 1 - (1 - p)^Dt (p itself at Dt = 1).</summary>
+    public float PStep(float p)
+    {
+        if (Dt == 1f || p <= 0f) return p;
+        if (p >= 1f) return 1f;
+        return 1f - MathK.Exp(Dt * MathK.Log(1f - p));
+    }
+
+    /// <summary>A share f kept per reference step (1 - a decay rate), for one step: f^Dt (f itself at Dt = 1).</summary>
+    public float Keep(float f) => Dt == 1f ? f : f <= 0f ? 0f : MathK.Exp(Dt * MathK.Log(f));
+
+    /// <summary>A duration or interval of n reference steps in this world's steps (at least 1): n at Dt = 1.</summary>
+    public int Steps(int n) => Dt == 1f ? n : Math.Max(1, (int)Math.Round(n / (double)Dt));
+
+    /// <summary>Is this a step on which something done every n reference steps falls (Step % Steps(n) == 0)?</summary>
+    public bool Every(int n) => Step % (ulong)Steps(n) == 0;
+
+    /// <summary>Reference steps (of K.STEP_H) elapsed before step s: s at Dt = 1.</summary>
+    public ulong RefStep(ulong s) => Dt == 1f ? s : (ulong)Math.Floor(s * (double)Dt);
+
+    /// <summary>Reference steps into the year now (the seasons' clock): Step mod SeasonLength at Dt = 1.</summary>
+    public float YearStep => Dt == 1f ? (float)(Step % (ulong)Nature.SeasonLength) : (float)(Step * (double)Dt % Nature.SeasonLength);
+
+    /// <summary>Whole years elapsed (the weather's year).</summary>
+    public long Year => Dt == 1f ? (long)(Step / (ulong)Nature.SeasonLength) : (long)(Step * (double)Dt / Nature.SeasonLength);
+
     // ---- spatial hash (counting sort)
     public readonly int[] CellStart, CellCount;
     [PerSlot] public int[] Sorted, CellOf;
@@ -295,6 +337,7 @@ public sealed class World
     {
         if (capacity < 1 || capacity > MaxSlots) throw new ArgumentOutOfRangeException(nameof(capacity), $"1 to {MaxSlots:N0} slots per world");
         Cap = capacity; Seed = seed; TerrainSeed = terrainSeed == 0 ? seed : terrainSeed;
+        SetStepH(Nature.StepH);   // the length of a step this world runs at (2026-11-02)
         int c = capacity;
         X = new float[c]; Y = new float[c]; Heading = new float[c]; Speed = new float[c];
         Energy = new float[c]; Gut = new float[c]; GutEnergy = new float[c]; GutWaste = new float[c]; GutSeedy = new float[c];
@@ -626,7 +669,7 @@ public sealed class World
         return PLoco[i] == (byte)Loco.Fly || Depth[cell] <= MaxWaterDepth(i);
     }
 
-    public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * (float)(Step % (ulong)Nature.SeasonLength) / Nature.SeasonLength - Climate.Phase(this, y / K.FCELL));
+    public float SeasonAt(float y) => MathK.Sin(2f * MathF.PI * YearStep / Nature.SeasonLength - Climate.Phase(this, y / K.FCELL));
 
     /// <summary>Is the mother of i still the same living animal? Returns her slot or -1.</summary>
     public int MotherOf(int i)
