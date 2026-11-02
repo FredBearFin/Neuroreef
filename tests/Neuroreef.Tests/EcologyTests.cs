@@ -63,8 +63,10 @@ public class EcologyTests
             }
             // the ancestor's own body, made where its first founder stands, breathes there, and its home range feeds at
             // FOUND_FILL at least its breeding group and at least as many as were founded (the ranges were measured on the
-            // animals then living; the clades founded since only add prey, carrion and dung)
-            int a = Life.Found(w, s, anc, true, 0xA0000u + (uint)s, w.X[first[s]], w.Y[first[s]], realm);
+            // animals then living; the clades founded since only add prey, carrion and dung). It is the ancestor's own body,
+            // unmutated, as the founding judged it (2026-11-02: both were mutants drawn by their keys, and on seed 7 a flier
+            // founded with 600 re-measured at 593.7, its mutant 2% heavier)
+            int a = Life.Found(w, s, anc, true, 0xA0000u + (uint)s, w.X[first[s]], w.Y[first[s]], realm, mutate: false);
             Assert.True(a >= 0);
             Assert.True(Respiration.Breathable(w, a, World.FIdx(w.X[a], w.Y[a])), $"ancestor {s} cannot breathe where its founders stand");
             var c = w.Sp[s];
@@ -782,8 +784,9 @@ public class EcologyTests
         Assert.True(w.PDiet[(int)Pool.Grass] > grass0);
         Assert.True(w.PDiet[(int)Pool.Seed] < seed0);
         Assert.True(w.PVmax[i] > v0 * 1.4f);
-        // the speed gene adds exactly its own cost to the basal rate (other costs unchanged)
-        float extra = K.COST_SPEED * (Body.Factor(127, K.BODY_RANGE_TRAIT) - 1f) * K.C_BASAL * MathK.Pow(w.PM[i], K.EXP_BASAL);
+        // the speed gene adds exactly its own cost to the basal rate (other costs unchanged), and the upkeep of the bigger
+        // gut that feeds it (Body.GutScale, 2026-11-02): 1 / (1 - GUT_SHARE) of it
+        float extra = K.COST_SPEED * (Body.Factor(127, K.BODY_RANGE_TRAIT) - 1f) * K.C_BASAL * MathK.Pow(w.PM[i], K.EXP_BASAL) / (1f - K.GUT_SHARE);
         Assert.Equal(basal0 + extra, w.PBasal[i], 4);
     }
 
@@ -827,12 +830,15 @@ public class EcologyTests
         Assert.True(costAdult < costJuv);
     }
 
-    [Fact] // 2026-11-01: the gut absorbs at most C_ABSORB x M^0.75 a step: a gut full of seeds yields no more than that, one of grass its bulk rate
+    [Fact] // 2026-11-01: the gut absorbs at most C_ABSORB x M^0.75 a step (x its gut's size, 2026-11-02): a gut full of seeds yields no more than that, one of grass its bulk rate
     public void AbsorptionBoundsRichFood()
     {
         var w = new World(256, 15); Terrain.Build(w);
         int a = Make(w, 0, 0);
-        float m = w.PM[a], absorb = K.C_ABSORB * MathK.Pow(m, K.EXP_BASAL);
+        float m = w.PM[a], kleiber = K.C_BASAL * MathK.Pow(m, K.EXP_BASAL);
+        float gut = w.PBasal[a] / kleiber;   // its gut is built to its basal cost (below GUT_FLEX_MAX here)
+        Assert.InRange(gut, 0.3f, K.GUT_FLEX_MAX);
+        float absorb = K.C_ABSORB * MathK.Pow(m, K.EXP_BASAL) * gut;
         Assert.Equal(absorb, w.PAbsorb[a], 6);
         // seeds: 7 E/M at 0.75, so the bulk rate alone would pass C_DIGEST x 5.25 a step, 19x basal
         Assert.True(K.C_DIGEST * K.RHO_SEED * 0.75f > 2f * K.C_ABSORB);

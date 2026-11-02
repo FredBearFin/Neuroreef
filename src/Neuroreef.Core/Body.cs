@@ -66,6 +66,28 @@ public static class Body
     public static float UnitsAffordable(float m) =>
         K.BRAIN_SHARE_MAX / (1f - K.BRAIN_SHARE_MAX) * 0.5f * MathK.Pow(m, K.EXP_BASAL) * K.BRAIN_REF / K.COST_BRAIN;
 
+    /// <summary>
+    /// The size of a body's gut against the reference gut of its mass (2026-11-02), and its whole basal cost with that
+    /// gut's upkeep. Guts are built to the energy they must pass: their mass and absorptive capacity grow with demand
+    /// (lactation, cold, migratory fattening; Hammond &amp; Diamond 1997; McWilliams &amp; Karasov 2001), so an animal's
+    /// sustained intake is a fixed multiple of its own basal metabolism (the sustained metabolic scope, ~4-7x), not of
+    /// its mass alone. Gut tissue is costly (GUT_SHARE of a Kleiber body's basal cost for the reference gut), so a gut
+    /// of g references costs g x GUT_SHARE x Kleiber, and is built so its absorption, C_ABSORB x M^0.75 x g, is
+    /// C_ABSORB / C_BASAL times the whole basal cost, its own upkeep included: g = rest / ((1 - GUT_SHARE) Kleiber),
+    /// at most GUT_FLEX_MAX. A Kleiber body keeps the reference gut (g = 1) and its cost; every other cost is raised by
+    /// 1 / (1 - GUT_SHARE), the gut that feeds it. No energy is made: the gut only passes food that is eaten, and pays for itself.
+    /// </summary>
+    /// <param name="basalRef">the basal cost with the reference gut (the gut's GUT_SHARE x Kleiber included), E/step</param>
+    /// <param name="kleiber">Kleiber's basal cost for its mass, C_BASAL x M^0.75</param>
+    /// <param name="basal">its whole basal cost with the gut it builds</param>
+    public static float GutScale(float basalRef, float kleiber, out float basal)
+    {
+        float rest = basalRef - K.GUT_SHARE * kleiber;   // everything but the gut
+        float g = MathF.Min(K.GUT_FLEX_MAX, rest / ((1f - K.GUT_SHARE) * kleiber));
+        basal = rest + K.GUT_SHARE * g * kleiber;
+        return g;
+    }
+
     public static void Express(World w, int i)
     {
         var gn = w.Genome.Slot(i);
@@ -117,10 +139,14 @@ public static class Body
                      + Respiration.OrganUpkeep(w.PLungs[i]);   // lungs and gills, with their fixed overheads (2026-11-01)
         // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
-        w.PBasal[i] = K.C_BASAL * mPow * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF;
+        // (2026-11-02) its gut is built to its own basal cost (GutScale): absorption and digestion grow with it, and so does
+        // the gut's upkeep, part of that cost
+        float kleiber = K.C_BASAL * mPow;
+        float gut = GutScale(kleiber * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF, kleiber, out float basal);
+        w.PBasal[i] = basal;
         w.PGut[i] = K.C_GUT * m;
-        w.PDig[i] = K.C_DIGEST * mPow;
-        w.PAbsorb[i] = K.C_ABSORB * mPow;   // energy the gut can take up a step (2026-11-01)
+        w.PDig[i] = K.C_DIGEST * mPow * gut;
+        w.PAbsorb[i] = K.C_ABSORB * mPow * gut;   // energy the gut can take up a step (2026-11-01)
         w.PBite[i] = K.C_BITE * mPow;
         float t = MathK.Pow(m, K.EXP_LIFE);
         w.PMature[i] = K.C_MATURE * t * devel;

@@ -166,7 +166,8 @@ public class RespirationTests
         Assert.InRange(L, 0.19f, 0.21f);
         // its basal cost carries the organs' upkeep: COST_LUNG L^ORGAN_EXP + COST_GILL (1-L)^ORGAN_EXP of C_BASAL M^EXP_BASAL
         float mPow = MathK.Pow(w.PM[i], K.EXP_BASAL);
-        float extra = K.C_BASAL * mPow * (Respiration.OrganUpkeep(L) - Respiration.OrganUpkeep(0f));
+        // and the upkeep of the bigger gut that feeds them (Body.GutScale, 2026-11-02): 1 / (1 - GUT_SHARE) of it
+        float extra = K.C_BASAL * mPow * (Respiration.OrganUpkeep(L) - Respiration.OrganUpkeep(0f)) / (1f - K.GUT_SHARE);
         Assert.True(extra > 0f, "a lung added to gills costs nothing extra");
         Assert.Equal(pure + extra, w.PBasal[i], 4);
         // with an organ's fixed overhead (ORGAN_EXP < 1) the small lung costs more than the gill tissue it replaced saves
