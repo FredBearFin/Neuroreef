@@ -14,6 +14,12 @@
 //   delete appendage       loss of an appendage gene
 //   insert appendage       a new, tiny bud with random parameters (de novo outgrowth)
 //   repeat count           a segment gene's serial repeat (metamerism) is one of its parameters
+//   mass                   one genome-level gene sets the adult body mass (log 1 g .. 10 kg); development scales the
+//                          whole body to it, and the physics' allometry (Kleiber, gut throughput, Reynolds number,
+//                          predators in a size spectrum) decides what size pays
+// Every module carries an INNOVATION NUMBER (NEAT; Stanley & Miikkulainen 2002), given when the module first appears
+// (insertion, duplication) and copied with it, so crossover can line up homologous modules and the distance between
+// genomes can count the unmatched ones (speciation, Evolver.cs).
 // All randomness through Rng.Seq; all maths through MathK (NR-104).
 
 using System;
@@ -40,37 +46,53 @@ public static class AP
 public sealed class AppGene
 {
     public readonly float[] P = new float[AP.N];
-    public AppGene Clone() { var a = new AppGene(); Array.Copy(P, a.P, AP.N); return a; }
+    public uint Innov;
+    public AppGene Clone() { var a = new AppGene { Innov = Innov }; Array.Copy(P, a.P, AP.N); return a; }
 }
 
 public sealed class SegGene
 {
     public readonly float[] P = new float[SP.N];
     public readonly List<AppGene> Apps = new();
+    public uint Innov;
     public SegGene Clone()
     {
-        var s = new SegGene(); Array.Copy(P, s.P, SP.N);
+        var s = new SegGene { Innov = Innov }; Array.Copy(P, s.P, SP.N);
         foreach (var a in Apps) s.Apps.Add(a.Clone());
         return s;
     }
+}
+
+/// <summary>Hands out innovation numbers: one counter per evolutionary run, so runs stay deterministic.</summary>
+public sealed class Innovations
+{
+    uint _next;
+    public Innovations(uint start = 100) { _next = start; }
+    public uint Next() => _next++;
+    /// <summary>For mutations made outside a run (tests, probes).</summary>
+    public static readonly Innovations Shared = new(1_000_000);
 }
 
 public sealed class MorphGenome
 {
     public const int MAX_SEG_GENES = 8, MAX_APP_GENES = 4;
     public readonly List<SegGene> Segs = new();
+    /// <summary>The mass gene in [0,1]: adult body mass, log-mapped from 1 g to 10 kg (Development.MassOf).</summary>
+    public float MassG = BLOB_MASS_G;
+    /// <summary>The gene value of 0.25 kg, the mass every body had before the mass gene.</summary>
+    public static readonly float BLOB_MASS_G = MathK.Log(0.25f / Development.MASS_LO) / MathK.Log(Development.MASS_HI / Development.MASS_LO);
 
-    public MorphGenome Clone() { var g = new MorphGenome(); foreach (var s in Segs) g.Segs.Add(s.Clone()); return g; }
+    public MorphGenome Clone() { var g = new MorphGenome { MassG = MassG }; foreach (var s in Segs) g.Segs.Add(s.Clone()); return g; }
 
-    public int ParamCount { get { int n = 0; foreach (var s in Segs) n += SP.N + s.Apps.Count * AP.N; return n; } }
+    public int ParamCount { get { int n = 1; foreach (var s in Segs) n += SP.N + s.Apps.Count * AP.N; return n; } }
     public int AppGeneCount { get { int n = 0; foreach (var s in Segs) n += s.Apps.Count; return n; } }
 
     /// <summary>The generic starting body: one segment, about as long as wide as high, soft thin skin, no appendages,
-    /// no exchange surface (it breathes through its skin), a little axial muscle.</summary>
+    /// no exchange surface (it breathes through its skin), a little axial muscle, 0.25 kg.</summary>
     public static MorphGenome Blob()
     {
         var g = new MorphGenome();
-        var s = new SegGene();
+        var s = new SegGene { Innov = 1 };   // every founder's trunk is homologous
         s.P[SP.LEN] = 0.75f; s.P[SP.WID] = 0.75f; s.P[SP.HEI] = 0.75f;   // ~6 cm each way
         s.P[SP.TAPER] = 0.5f; s.P[SP.REPEAT] = 0f;
         s.P[SP.INT_T] = 0.1f; s.P[SP.INT_MIN] = 0f; s.P[SP.PORE] = 0f; s.P[SP.INVAG] = 0.5f; s.P[SP.AXMUS] = 0.2f;
@@ -87,6 +109,7 @@ public sealed class MutationRates
     public float Diverge = 0.05f, DivergeSigma = 0.04f;
     public float DupSeg = 0.03f, DelSeg = 0.03f;
     public float DupApp = 0.04f, DelApp = 0.04f, InsApp = 0.04f;
+    public float MassRate = 0.2f, MassSigma = 0.04f;   // the mass gene: 0.04 in gene space is x1.45 in mass
 }
 
 public static class Mutate
@@ -119,14 +142,19 @@ public static class Mutate
     public static float HalfStep(float lo, float hi) => MathK.Log(2f) / MathK.Log(hi / lo);
 
     /// <summary>Tandem duplication of a segment gene: the copy is inserted next to it and each copy is half as long, so
-    /// the body is nearly unchanged until the copies diverge.</summary>
-    public static bool DuplicateSegment(MorphGenome g, int i)
+    /// the body is nearly unchanged until the copies diverge. The copy is a new gene (a paralogue): it and its
+    /// appendage genes get new innovation numbers.</summary>
+    public static bool DuplicateSegment(MorphGenome g, int i, Innovations? inn = null)
     {
         if (g.Segs.Count >= MorphGenome.MAX_SEG_GENES) return false;
+        inn ??= Innovations.Shared;
         var s = g.Segs[i];
         float h = HalfStep(Development.SEG_L_LO, Development.SEG_L_HI);
         s.P[SP.LEN] = Clamp01(s.P[SP.LEN] - h);
-        g.Segs.Insert(i + 1, s.Clone());
+        var c = s.Clone();
+        c.Innov = inn.Next();
+        foreach (var a in c.Apps) a.Innov = inn.Next();
+        g.Segs.Insert(i + 1, c);
         return true;
     }
 
@@ -139,7 +167,7 @@ public static class Mutate
 
     /// <summary>Duplicates appendage gene j of segment i, onto the same segment or (when it is full, or by chance) a
     /// neighbour. The two copies share the original's muscle.</summary>
-    public static bool DuplicateAppendage(MorphGenome g, int i, int j, int target)
+    public static bool DuplicateAppendage(MorphGenome g, int i, int j, int target, Innovations? inn = null)
     {
         var s = g.Segs[i];
         if (j < 0 || j >= s.Apps.Count) return false;
@@ -147,7 +175,9 @@ public static class Mutate
         if (t.Apps.Count >= MorphGenome.MAX_APP_GENES) return false;
         var a = s.Apps[j];
         a.P[AP.MUSCLE] *= 0.5f;
-        t.Apps.Add(a.Clone());
+        var c = a.Clone();
+        c.Innov = (inn ?? Innovations.Shared).Next();
+        t.Apps.Add(c);
         return true;
     }
 
@@ -160,11 +190,11 @@ public static class Mutate
     }
 
     /// <summary>A new appendage bud: tiny, every other parameter random.</summary>
-    public static bool InsertAppendage(MorphGenome g, int i, ref Rng.Seq r)
+    public static bool InsertAppendage(MorphGenome g, int i, ref Rng.Seq r, Innovations? inn = null)
     {
         var s = g.Segs[i];
         if (s.Apps.Count >= MorphGenome.MAX_APP_GENES) return false;
-        var a = new AppGene();
+        var a = new AppGene { Innov = (inn ?? Innovations.Shared).Next() };
         for (int k = 0; k < AP.N; k++) a.P[k] = r.Next();
         a.P[AP.LEN] = 0.05f * r.Next(); a.P[AP.CHORD] = 0.1f * r.Next(); a.P[AP.MUSCLE] = 0.1f * r.Next();
         s.Apps.Add(a);
@@ -172,13 +202,14 @@ public static class Mutate
     }
 
     /// <summary>One offspring's mutations: point and divergence always possible, then each structural operator with its rate.</summary>
-    public static void Apply(MorphGenome g, ref Rng.Seq r, MutationRates m)
+    public static void Apply(MorphGenome g, ref Rng.Seq r, MutationRates m, Innovations? inn = null)
     {
         Point(g, ref r, m.PointRate, m.PointSigma);
+        if (r.Next() < m.MassRate) g.MassG = Clamp01(g.MassG + m.MassSigma * Gauss(ref r));
         if (r.Next() < m.Diverge) Diverge(g, ref r, m.DivergeSigma);
-        if (r.Next() < m.DupSeg) DuplicateSegment(g, Pick(ref r, g.Segs.Count));
+        if (r.Next() < m.DupSeg) DuplicateSegment(g, Pick(ref r, g.Segs.Count), inn);
         if (r.Next() < m.DelSeg) DeleteSegment(g, Pick(ref r, g.Segs.Count));
-        if (r.Next() < m.InsApp) InsertAppendage(g, Pick(ref r, g.Segs.Count), ref r);
+        if (r.Next() < m.InsApp) InsertAppendage(g, Pick(ref r, g.Segs.Count), ref r, inn);
         if (r.Next() < m.DupApp)
         {
             int i = Pick(ref r, g.Segs.Count);
@@ -187,7 +218,7 @@ public static class Mutate
             {
                 int target = r.Next() < 0.3f ? i + (r.Next() < 0.5f ? -1 : 1) : i;
                 if (target < 0 || target >= g.Segs.Count || g.Segs[target].Apps.Count >= MorphGenome.MAX_APP_GENES) target = i;
-                DuplicateAppendage(g, i, Pick(ref r, s.Apps.Count), target);
+                DuplicateAppendage(g, i, Pick(ref r, s.Apps.Count), target, inn);
             }
         }
         if (r.Next() < m.DelApp)
@@ -195,5 +226,69 @@ public static class Mutate
             int i = Pick(ref r, g.Segs.Count);
             if (g.Segs[i].Apps.Count > 0) DeleteAppendage(g, i, Pick(ref r, g.Segs[i].Apps.Count));
         }
+    }
+}
+
+/// <summary>NEAT-style recombination and compatibility on innovation numbers (Stanley &amp; Miikkulainen 2002).</summary>
+public static class Homology
+{
+    /// <summary>Crossover: the child keeps the fitter parent's module structure and order. Each module the other parent
+    /// also has (the same innovation number) is inherited whole from either parent at random, and its appendage genes
+    /// are aligned the same way. Modules only the less fit parent has are not inherited (NEAT's disjoint and excess
+    /// genes). The mass gene comes from either parent.</summary>
+    public static MorphGenome Cross(MorphGenome fitter, MorphGenome other, ref Rng.Seq r)
+    {
+        var c = new MorphGenome { MassG = r.Next() < 0.5f ? fitter.MassG : other.MassG };
+        foreach (var s in fitter.Segs)
+        {
+            SegGene? o = null;
+            foreach (var t in other.Segs) if (t.Innov == s.Innov) { o = t; break; }
+            if (o == null) { c.Segs.Add(s.Clone()); continue; }
+            var ns = new SegGene { Innov = s.Innov };
+            Array.Copy(r.Next() < 0.5f ? s.P : o.P, ns.P, SP.N);
+            foreach (var a in s.Apps)
+            {
+                AppGene? b = null;
+                foreach (var t in o.Apps) if (t.Innov == a.Innov) { b = t; break; }
+                ns.Apps.Add(b != null && r.Next() < 0.5f ? b.Clone() : a.Clone());
+            }
+            c.Segs.Add(ns);
+        }
+        return c;
+    }
+
+    public const float C_UNMATCHED = 1f, C_PARAM = 3f, C_MASS = 2f;
+
+    /// <summary>Compatibility distance: C_UNMATCHED x (modules with no homologue in the other genome) / (modules in the
+    /// larger genome), plus C_PARAM x the mean absolute parameter difference of matched modules, plus C_MASS x the
+    /// difference of the mass genes.</summary>
+    public static float Distance(MorphGenome a, MorphGenome b)
+    {
+        int na = 0, nb = 0, matched = 0, matchedParams = 0;
+        float diff = 0f;
+        foreach (var s in a.Segs) na += 1 + s.Apps.Count;
+        foreach (var s in b.Segs) nb += 1 + s.Apps.Count;
+        foreach (var s in a.Segs)
+        {
+            SegGene? o = null;
+            foreach (var t in b.Segs) if (t.Innov == s.Innov) { o = t; break; }
+            if (o == null) continue;
+            matched++;
+            for (int k = 0; k < SP.N; k++) diff += MathF.Abs(s.P[k] - o.P[k]);
+            matchedParams += SP.N;
+            foreach (var x in s.Apps)
+                foreach (var y in o.Apps)
+                    if (x.Innov == y.Innov)
+                    {
+                        matched++;
+                        for (int k = 0; k < AP.N; k++) diff += MathF.Abs(x.P[k] - y.P[k]);
+                        matchedParams += AP.N;
+                        break;
+                    }
+        }
+        int unmatched = na + nb - 2 * matched;
+        return C_UNMATCHED * unmatched / Math.Max(1, Math.Max(na, nb))
+             + C_PARAM * (matchedParams > 0 ? diff / matchedParams : 0f)
+             + C_MASS * MathF.Abs(a.MassG - b.MassG);
     }
 }
