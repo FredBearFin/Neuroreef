@@ -14,7 +14,9 @@ public sealed class EcoWatch
 {
     public const int EVERY = 300;
     // the step after which flows are pooled: the first year by default (the founders' transient), NR_ECO_FROM for short runs
-    static readonly ulong From = ulong.TryParse(Environment.GetEnvironmentVariable("NR_ECO_FROM"), out var f) ? f : (ulong)K.T_SEASON;
+    static readonly ulong FromEnv = ulong.TryParse(Environment.GetEnvironmentVariable("NR_ECO_FROM"), out var f) ? f : 0;
+    // step-aware (2026-11-02): a year is Nature.SeasonLength reference steps, SeasonLength / Dt of this world's steps
+    double _yr = K.T_SEASON, _perDay = K.STEPS_PER_DAY; ulong From = FromEnv > 0 ? FromEnv : (ulong)K.T_SEASON;
     readonly double _landKm2;
     readonly int _land;
     double[] _prod = new double[5], _eaten = new double[Pools.N], _intake = Array.Empty<double>(), _grow = Array.Empty<double>(), _repro = Array.Empty<double>();
@@ -95,8 +97,9 @@ public sealed class EcoWatch
     public void Sample(Simulation sim)
     {
         var w = sim.W; var T = w.T; var t = w.Flora;
+        _yr = Nature.SeasonLength / (double)w.Dt; _perDay = w.StepsPerDay; if (FromEnv == 0) From = (ulong)_yr;
         if (w.Step % EVERY != 0 || w.Step == _lastStep) return;
-        double years = (w.Step - _lastStep) / (double)K.T_SEASON;
+        double years = (w.Step - _lastStep) / _yr;
         var grp = new int[w.NS];
         for (int s = 0; s < w.NS; s++) grp[s] = Group(T.Intake, _intake, s);
         var n = new int[4]; var bio = new double[4]; int infected = 0, alive = 0;
@@ -180,7 +183,7 @@ public sealed class EcoWatch
         if (_cellProd0 == null || _nS == 0) return "";
         string[] name = { "polar/tundra", "boreal forest", "temperate forest", "warm forest", "desert/dry scrub", "temperate grass/shrub", "savanna/warm grass" };
         int nb = name.Length; var cnt = new int[nb]; var npp = new double[nb]; var tt = new double[nb]; var mm = new double[nb]; var tc = new double[nb]; var wd = new double[nb];
-        double years = _sSteps / K.T_SEASON;
+        double years = _sSteps / _yr;
         for (int i = 0; i < Map.FW * Map.FW; i++)
         {
             if ((w.Cell[i] & (byte)Realm.Land) == 0) continue;
@@ -201,14 +204,14 @@ public sealed class EcoWatch
         var w = sim.W; var T = w.T; var o = new StringBuilder();
         o.Append(Series);
         o.AppendLine();
-        o.AppendLine($"ECO POOLED after step {From} ({_nS:F0} samples): NPP {_sN1 / Math.Max(1, _sSteps) * K.T_SEASON / _land * K.PLANT_KG_M2:F3} kg dry/m2/yr " +
-            $"= {_sNpp / Math.Max(1, _sSteps) * K.T_SEASON * Pools.EnergyJ / 1e6 / (_landKm2 * 1e6) * 1000:F0} kJ/m2/yr; herbivore offtake {(_sN1 > 0 ? 100 * _sOff / _sN1 : 0):F2}% of NPP (mass); " +
+        o.AppendLine($"ECO POOLED after step {From} ({_nS:F0} samples): NPP {_sN1 / Math.Max(1, _sSteps) * _yr / _land * K.PLANT_KG_M2:F3} kg dry/m2/yr " +
+            $"= {_sNpp / Math.Max(1, _sSteps) * _yr * Pools.EnergyJ / 1e6 / (_landKm2 * 1e6) * 1000:F0} kJ/m2/yr; herbivore offtake {(_sN1 > 0 ? 100 * _sOff / _sN1 : 0):F2}% of NPP (mass); " +
             $"assimilated by herbivores {(_sNpp > 0 ? 100 * _sIn0 / _sNpp : 0):F2}% of NPP energy, by carnivores {(_sIn0 > 0 ? 100 * _sIn2 / _sIn0 : 0):F2}% of the herbivores' intake ({(_sP1 > 0 ? 100 * _sIn2 / _sP1 : 0):F1}% of their production); " +
             $"production P2/NPP {(_sNpp > 0 ? 100 * _sP1 / _sNpp : 0):F2}%, P3/P2 {(_sP1 > 0 ? 100 * _sP2 / _sP1 : 0):F2}%; mean biomass herbivores {_sBio1 / Math.Max(1, _nS) / _landKm2:F1} kg/km2, carnivores {_sBio2 / Math.Max(1, _nS) / _landKm2:F2} kg/km2 (1 : {(_sBio2 > 0 ? _sBio1 / _sBio2 : 0):F0})");
         o.AppendLine($"ECO ANIMAL FOOD (pooled, any clade whatever its group): meat and blood assimilated {(_sP1 > 0 ? 100 * _sMeat / _sP1 : 0):F2}% of herbivore production ({(_sIn0 > 0 ? 100 * _sMeat / _sIn0 : 0):F3}% of herbivore intake), carrion {(_sP1 > 0 ? 100 * _sCarrion / _sP1 : 0):F2}% of herbivore production");
-        o.AppendLine("ECO PRODUCTION (pooled, kg dry/m2 of land/yr): " + string.Join("  ", new[] { "herb", "shrub", "tree", "sapling", "repro" }.Select((n, k) => $"{n} {_sProd[k] / Math.Max(1, _sSteps) * K.T_SEASON / _land * K.PLANT_KG_M2:F3}")));
+        o.AppendLine("ECO PRODUCTION (pooled, kg dry/m2 of land/yr): " + string.Join("  ", new[] { "herb", "shrub", "tree", "sapling", "repro" }.Select((n, k) => $"{n} {_sProd[k] / Math.Max(1, _sSteps) * _yr / _land * K.PLANT_KG_M2:F3}")));
         o.Append(Biomes(w));
-        o.AppendLine("ECO EATEN (pooled, M/km2/yr; energy E/km2/yr at the pool's density): " + string.Join("  ", Enumerable.Range(0, Pools.N).Where(p => _sEat[p] > 0).Select(p => $"{(Pool)p} {_sEat[p] / Math.Max(1, _sSteps) * K.T_SEASON / _landKm2:F1} ({_sEat[p] * Pools.Rho[p] / Math.Max(1, _sSteps) * K.T_SEASON / _landKm2:F0})")));
+        o.AppendLine("ECO EATEN (pooled, M/km2/yr; energy E/km2/yr at the pool's density): " + string.Join("  ", Enumerable.Range(0, Pools.N).Where(p => _sEat[p] > 0).Select(p => $"{(Pool)p} {_sEat[p] / Math.Max(1, _sSteps) * _yr / _landKm2:F1} ({_sEat[p] * Pools.Rho[p] / Math.Max(1, _sSteps) * _yr / _landKm2:F0})")));
         o.AppendLine("ECO CLADES (living): name, group (whole run), alive, adults, juveniles%, mean adult mass kg, density /km2 land, Damuth 4e4 M(g)^-0.75 /km2, ratio, infected%, mean age at death / expected lifespan, deaths: starve thirst killed disease old other");
         for (int s = 0; s < w.NS; s++)
         {
@@ -230,7 +233,7 @@ public sealed class EcoWatch
             long st = T.Deaths[s * Cause.N + Cause.Starve], th = T.Deaths[s * Cause.N + Cause.Thirst], ki = T.Deaths[s * Cause.N + Cause.Killed],
                  di = T.Deaths[s * Cause.N + Cause.Disease], ol = T.Deaths[s * Cause.N + Cause.Old];
             long all = 0; for (int c = 0; c < Cause.N; c++) all += T.Deaths[s * Cause.N + c];
-            o.AppendLine($"  {w.Sp[s].Name,-12} {gn} {alive,6} {adults,6} {100.0 * (alive - adults) / alive,5:F0}% {mm,7:F2} {dens,8:F2} {damuth,8:F0} {(damuth > 0 ? dens / damuth : 0),7:F3} {100.0 * inf / alive,5:F0}% {ageD / K.STEPS_PER_DAY,6:F0} d / {life / alive / K.STEPS_PER_DAY,5:F0} d   {st,6} {th,6} {ki,6} {di,6} {ol,6} {all - st - th - ki - di - ol,6}");
+            o.AppendLine($"  {w.Sp[s].Name,-12} {gn} {alive,6} {adults,6} {100.0 * (alive - adults) / alive,5:F0}% {mm,7:F2} {dens,8:F2} {damuth,8:F0} {(damuth > 0 ? dens / damuth : 0),7:F3} {100.0 * inf / alive,5:F0}% {ageD / _perDay,6:F0} d / {life / alive / K.STEPS_PER_DAY,5:F0} d   {st,6} {th,6} {ki,6} {di,6} {ol,6} {all - st - th - ki - di - ol,6}");
         }
         return o.ToString();
     }

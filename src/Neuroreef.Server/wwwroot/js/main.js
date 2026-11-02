@@ -43,7 +43,7 @@ try { if (localStorage.getItem('nr-panel') === '0') setPanel(false); } catch { /
 
 const link = new Link();
 let meta = null, world = null, panels = null, probe = null, lastProbeT = 0, extinct = [];
-let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9;
+let pre = null, phase = null, phaseVersion = -1, lastPre = null, rateClicked = -1e9, lastUnits = null;
 let clades = [], pendingClades = null;   // the live clade table (32 slots; unused ones have used = false)
 let explore = null;                      // EXPLORE: the person on foot (js/explore/explore.js)
 
@@ -252,14 +252,20 @@ function buildControls() {
     if (world.mode === 'overview') { world.setMode('follow'); for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === 'follow'); }
   };
   // the speed buttons show the speed that is set (the server's), so the right one is lit in the prehistory too
-  window.showRate = (r) => { for (const o of document.querySelectorAll('#speed button[data-rate]')) o.classList.toggle('on', +o.dataset.rate === Math.round(r)); };
+  // "real" (2026-11-02): one second of world time a second, at the world's own step (units.realTimeRate, ICD §2.1)
+  const rtRate = () => (lastUnits && lastUnits.realTimeRate > 0 ? lastUnits.realTimeRate : 1 / (8766 / 3000 * 3600));
+  const rateOf = (b) => b.dataset.rate === 'rt' ? rtRate() : +b.dataset.rate;
+  window.showRate = (r) => {
+    const rt = Math.abs(r - rtRate()) < 1e-6 * Math.max(1, r);
+    for (const o of document.querySelectorAll('#speed button[data-rate]')) o.classList.toggle('on', o.dataset.rate === 'rt' ? rt : !rt && +o.dataset.rate === Math.round(r));
+  };
   for (const b of document.querySelectorAll('#speed button')) {
     b.onclick = () => {
       if (b.dataset.cmd === 'pause') { const p = b.classList.toggle('on'); link.send({ cmd: p ? 'pause' : 'resume' }); return; }
       if (b.dataset.cmd === 'step') { link.send({ cmd: 'step' }); return; }
-      link.send({ cmd: 'rate', value: +b.dataset.rate });
+      link.send({ cmd: 'rate', value: rateOf(b) });
       rateClicked = performance.now();
-      showRate(+b.dataset.rate);
+      showRate(rateOf(b));
     };
   }
   // tap to select (ignore drags)
@@ -328,15 +334,17 @@ function status(s) {
     const tot = lastPre.settings.totalSteps, my = Math.round(lastPre.step * lastPre.yearsPerStep / 1e6);
     $('s-pre').textContent = tot >= 2147483647 ? `PREHISTORY · ${my} Myr · branch ${s.view}` : `PREHISTORY · ${my} of ${Math.round(tot * lastPre.yearsPerStep / 1e6)} Myr · branch ${s.view}`;
   }
-  setUnits(s.units); setMassRange(s.units);
+  setUnits(s.units); setMassRange(s.units); if (s.units) lastUnits = s.units;
+  // how long a step lasts on screen, so positions glide over the whole of a slow step (world3d.setAgents)
+  if (world) world.stepMs = s.paused || !(s.rate > 0) ? 0 : 1000 / s.rate;
   $('s-step').textContent = s.step.toLocaleString();
   // the world's own clock (a step is 2.92 h); the prehistory's steps are symbolic years (its badge shows them)
   $('s-time-box').classList.toggle('hidden', s.phase === 'prehistory');
   $('s-time').textContent = when(s.step);
-  $('s-time-box').title = `${span(s.step)} since the world began. A step is ${(s.units ? s.units.stepHours : 2.922).toFixed(2)} hours; ${(s.units ? s.units.stepsPerYear : 3000).toLocaleString()} steps are a year.`;
+  $('s-time-box').title = `${span(s.step)} since the world began. A step is ${s.units && s.units.stepHours < 1 ? (s.units.stepHours * 60).toFixed(1) + ' minutes' : (s.units ? s.units.stepHours : 2.922).toFixed(2) + ' hours'}; ${(s.units ? s.units.stepsPerYear : 3000).toLocaleString()} steps are a year.`;
   if (panels) panels.setStep(s.step);
   $('s-alive').textContent = s.alive.toLocaleString();
-  $('s-rate').textContent = s.paused ? 'paused' : Math.round(s.measured).toString();
+  $('s-rate').textContent = s.paused ? 'paused' : s.measured < 1 && s.measured > 0 ? s.measured.toFixed(3) : Math.round(s.measured).toString();
   if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
   if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.creatureMag);   // the sim's own metres (ICD §2.1)

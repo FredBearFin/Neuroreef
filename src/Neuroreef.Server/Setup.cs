@@ -39,7 +39,7 @@ public static class Setup
             v = new
             {
                 preMap = o.PreMap, worldMap = o.WorldMap, water = o.Water, ponds = o.Ponds, climate = o.Climate,
-                plants = o.Plants, seasons = o.Seasons, seasonLength = o.SeasonLength, stepMinutes = o.StepH * 60f, drought = o.Drought, fire = o.Fire, disease = o.Disease, thirst = o.Thirst,
+                plants = o.Plants, seasons = o.Seasons, seasonLength = o.SeasonLength, preStepMinutes = o.PreStepH * 60f, worldStepMinutes = o.WorldStepH * 60f, drought = o.Drought, fire = o.Fire, disease = o.Disease, thirst = o.Thirst,
                 ancestorsLand = o.AncestorsLand, ancestorsWater = o.AncestorsWater, founders = o.Founders > 0 ? o.Founders : K.ANCESTOR_COUNT,
                 bigBrains = o.BigBrains >= 0 ? o.BigBrains : K.BIG_BRAINS, bigBrainUnits = o.BigBrainUnits > 0 ? o.BigBrainUnits : K.BIG_BRAIN_UNITS,
                 matingDrive = o.MatingDrive, mutBrain = 1f, mutBody = 1f, worldMut = o.WorldMut,
@@ -58,7 +58,8 @@ public static class Setup
             float F(string k, float lo, float hi, float dflt) => e.TryGetProperty(k, out var v) && v.TryGetDouble(out double x) ? (float)Math.Clamp(x, lo, hi) : dflt;
             o.PreMap = I("preMap", 256, 2048, o.PreMap); o.WorldMap = I("worldMap", 256, 2048, o.WorldMap); o.Water = F("water", 0.02f, 0.6f, o.Water); o.Ponds = F("ponds", 0f, 1f, o.Ponds); o.Climate = F("climate", 0f, 2f, o.Climate);
             o.Plants = F("plants", 0.1f, 4f, o.Plants); o.Seasons = F("seasons", 0f, 2.2f, o.Seasons); o.SeasonLength = I("seasonLength", 1000, 100000, o.SeasonLength);
-            o.StepH = Options.StepHFromMinutes(F("stepMinutes", 1f, 720f, o.StepH * 60f));
+            o.PreStepH = Options.StepHFromMinutes(F("preStepMinutes", 1f, 720f, o.PreStepH * 60f));
+            o.WorldStepH = Options.StepHFromMinutes(F("worldStepMinutes", 1f, 720f, o.WorldStepH * 60f));
             o.Drought = F("drought", 0f, 4f, o.Drought); o.Fire = F("fire", 0f, 10f, o.Fire); o.Disease = F("disease", 0f, 5f, o.Disease); o.Thirst = F("thirst", 0.1f, 4f, o.Thirst);
             o.AncestorsLand = I("ancestorsLand", 0, 16, o.AncestorsLand); o.AncestorsWater = I("ancestorsWater", 0, 16, o.AncestorsWater);
             o.Founders = I("founders", 20, 5000, K.ANCESTOR_COUNT);

@@ -579,7 +579,9 @@ export class World3D {
     const now = performance.now();
     // (up to 0.7 s: at a few steps a second the frames are that far apart, and the animals glide between them
     // instead of moving for a quarter second and standing still for the rest)
-    this.frameDt = Math.min(700, Math.max(16, now - this.frameT)); this.frameT = now;
+    // (2026-11-02) and over a whole slow step: at real time with a fine world step a step lasts a minute or more on screen,
+    // so the glide may last as long as a step does (stepMs, from the speed set; never past 10 minutes)
+    this.frameDt = Math.min(Math.max(700, Math.min(600000, 1.25 * (this.stepMs || 0))), Math.max(16, now - this.frameT)); this.frameT = now;
     const gen = (this._gen = (this._gen || 0) + 1), W = this.W, o = this.tmp;
     // the world's mass range changed (a world of giants after the prehistory, ICD §2.1): every body is decoded again
     const mv = massRangeVersion(), fresh = mv !== this._massVer; this._massVer = mv;

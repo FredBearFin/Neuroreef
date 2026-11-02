@@ -257,21 +257,69 @@ public class StepLengthTests
         finally { Nature.StepH = h0; if (System.IO.File.Exists(path)) System.IO.File.Delete(path); }
     }
 
-    [Fact] // a world of animals at a 10-minute step runs a simulated day: no NaN, animals alive, the land on its clock
-    public void AFineStepWorldRunsADay()
+    /// <summary>What a world of animals did over a day: acts per animal-hour (events) or the share of animal-steps (states),
+    /// and how far its brains' weights moved from their genomes an hour of life.</summary>
+    sealed record DayActs(double Strike, double Mate, double Lay, double Call, double EatShare, double RestShare, double LearnPerHour, int Alive0, int Alive);
+
+    static DayActs RunADay(float stepH, float hours = 24f) => At(stepH, () =>
     {
-        At(Fine, () =>
+        var m = new Decide.DecisionMetrics();
+        Decide.Metrics = m;
+        try
         {
             using var sim = new Simulation(4096, 7, 2);
             var w = sim.W;
-            Assert.InRange(w.Dt, 0.057f, 0.0571f);
-            int alive0 = w.AliveCount, n = StepsIn(w, 24f);
+            int alive0 = w.AliveCount, n = StepsIn(w, hours);
             for (int k = 0; k < n; k++) sim.Step();
-            Assert.True(w.AliveCount > alive0 / 2, $"{w.AliveCount} of {alive0} alive after a day");
             for (int i = 0; i < w.Cap; i++)
                 if (w.StageOf[i] != St.Dead) Assert.True(float.IsFinite(w.Energy[i]) && float.IsFinite(w.X[i]), $"slot {i}");
-            Assert.InRange(w.RefStep(w.Step), 8UL, 9UL);   // ~8.2 reference steps in a day
-            return 0;
-        }, noClimate: false);
+            double animalH = m.Decisions * (double)w.StepH, steps = Math.Max(1, m.Decisions);
+            long calls = 0; for (int p = P.CALL_0; p < P.N; p++) calls += m.Attempts[p];
+            // learning: the mean |learned - genome| of the output weights in use, of the founders still alive, an hour
+            double learned = 0; int nl = 0;
+            for (int i = 0; i < w.Cap; i++)
+            {
+                if (w.StageOf[i] < St.Juvenile || w.Age[i] * w.Dt < 1f) continue;
+                for (int p = 0; p < P.N; p++)
+                    for (int k = G.NH; k < G.NIN; k++)
+                        learned += MathF.Abs(w.W2f[(long)i * G.W2N + p * G.NIN + k] - w.Genome.At(i, G.W2 + p * G.NIN + k) * K.WSCALE);
+                nl++;
+            }
+            return new DayActs(m.Attempts[P.STRIKE] / animalH, m.Attempts[P.MATE] / animalH, m.Attempts[P.LAY] / animalH, calls / animalH,
+                m.Attempts[P.EAT] / steps, m.Attempts[P.REST] / steps, learned / Math.Max(1, nl) / (n * w.StepH), alive0, w.AliveCount);
+        }
+        finally { Decide.Metrics = null; }
+    }, noClimate: false);
+
+    [Fact] // decisions in real time: a world of animals does the same strikes, matings, lays and calls an hour, spends the
+           // same share of its time eating and resting, and its brains learn as much an hour, at a 10-minute step as at
+           // 2.92 h (the same seed and founders; the runs differ in detail, so within ~25%)
+    public void ActsAndLearningAnHourAreTheSameAtAFineStep()
+    {
+        var c = RunADay(K.STEP_H); var f = RunADay(Fine);
+        string Say(DayActs a) => $"strike {a.Strike:F4}/h mate {a.Mate:F4}/h lay {a.Lay:F4}/h calls {a.Call:F4}/h eat {a.EatShare:P1} rest {a.RestShare:P1} learned {a.LearnPerHour:E3}/h alive {a.Alive0}->{a.Alive}";
+        Console.WriteLine("STEP 2.92 h: " + Say(c));
+        Console.WriteLine("STEP 10 min: " + Say(f));
+        Assert.Equal(c.Alive0, f.Alive0);   // the same founders (Life.Found counts per reference step)
+        Assert.True(f.Alive > c.Alive0 / 2, $"{f.Alive} of {f.Alive0} alive after a day at 10 minutes");
+        void Near(double a, double b, double tol, string what) => Assert.True(b > 0 ? Math.Abs(a / b - 1) <= tol : a < 1e-3, $"{what}: 10 min {a:G4} against 2.92 h {b:G4}\n{Say(f)}\n{Say(c)}");
+        Near(f.Strike, c.Strike, 0.25, "strikes an hour");
+        Near(f.Call, c.Call, 0.25, "calls an hour");
+        Near(f.Mate, c.Mate, 0.5, "matings an hour");   // fewer: a chance in a few hundred an hour
+        Near(f.Lay, c.Lay, 0.25, "lays an hour");
+        Near(f.EatShare, c.EatShare, 0.25, "share of time eating");
+        Near(f.RestShare, c.RestShare, 0.25, "share of time resting");
+        Near(f.LearnPerHour, c.LearnPerHour, 0.5, "learning an hour");
+    }
+
+    [Fact] // a 1-minute world: half a day (720 steps) runs, and its acts an hour are those of the 2.92-hour world's day
+    public void AOneMinuteWorldActsAsTheReferenceWorld()
+    {
+        var c = RunADay(K.STEP_H); var f = RunADay(1f / 60f, 12f);
+        Console.WriteLine($"STEP 1 min, 12 h: strike {f.Strike:F4}/h mate {f.Mate:F4}/h lay {f.Lay:F4}/h calls {f.Call:F4}/h eat {f.EatShare:P1} rest {f.RestShare:P1} learned {f.LearnPerHour:E3}/h alive {f.Alive0}->{f.Alive}");
+        Assert.True(f.Alive > f.Alive0 / 2);
+        Assert.InRange(f.Strike / c.Strike, 0.6, 1.4);
+        Assert.InRange(f.Call / c.Call, 0.6, 1.4);
+        Assert.InRange(f.EatShare / c.EatShare, 0.75, 1.25);
     }
 }

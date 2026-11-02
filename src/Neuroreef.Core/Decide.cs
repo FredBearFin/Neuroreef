@@ -433,7 +433,7 @@ public static class Decide
         w.Reward[i] -= K.R_FEAR * MathF.Max(0f, f[F.FEAR] - w.LastFear[i]);
         w.LastFear[i] = f[F.FEAR];
         Brain.Learn(w, i);
-        if (((int)w.Step + i) % 32 == 1) Brain.Relax(w, i);
+        { int rx = w.Steps(32); if (((int)w.Step + i) % rx == 1 % rx) Brain.Relax(w, i); }   // every 32 reference steps of time (kappa per reference step)
 
         // ---- brain
         Span<float> yv = stackalloc float[G.NIN];
@@ -449,10 +449,36 @@ public static class Decide
         // exploration: perturb continuous gains, sample discrete actions (DESIGN §7.2)
         float sigma = Brain.Sigma(w, i);
         uint acts = 0;
+        // decisions in real time (2026-11-02, DESIGN 0c): a brain's output for an act is its chance in a reference step
+        // (K.STEP_H). States (eating, drinking, resting, marking: their effects are per unit time, x Dt) are held for the
+        // share of the time the gain says; events (strike, mate, lay, cache, each call) fire with chance g x Dt a step, so
+        // they happen g times a reference step on average at any finer step (a count, not the chance of at least one: a
+        // hazard of -ln(1 - g) would fire an urge near 1 many times), and a fine step does not multiply strikes, matings
+        // and calls a day; a coarser step fires once at most, with the chance of one in its Dt reference steps. The continuous gains' exploration noise is held for a reference step, and learning sees it x Dt a step, so
+        // a reference step's trace holds one perturbation, as at the reference step. At Dt = 1 this is the old loop
+        float dt = w.Dt;
+        var rsHeld = dt == 1f ? rs : new Rng.Seq(Rng.Hash(seed, (uint)w.RefStep(w.Step), (uint)i, Rs.ExploreHeld));
         for (int p = 0; p < P.N; p++)
         {
             float ge;
-            if (p < P.FIRST_ACTION)
+            if (dt != 1f)
+            {
+                if (p < P.FIRST_ACTION)
+                {
+                    float n = (rsHeld.Next() + rsHeld.Next() + rsHeld.Next() - 1.5f) * 2f;
+                    ge = Math.Clamp(g[p] + sigma * n, 0f, 1f);
+                    delta[p] = sigma * n * dt;
+                }
+                else
+                {
+                    float q = !Event(p) ? g[p] : dt < 1f ? g[p] * dt : w.PStep(g[p]);   // an event: g expected a reference step
+                    bool fire = rs.Next() < q;
+                    ge = fire ? 1f : 0f;
+                    if (fire) { acts |= 1u << (p - P.FIRST_ACTION); metrics?.Attempt(p); }
+                    delta[p] = ge - q;
+                }
+            }
+            else if (p < P.FIRST_ACTION)
             {
                 // learning sees the noise drawn, not the clamped change: near 0 the clamp cuts the downward half, and its
                 // mean would credit a gain with rewards it did not cause (audit 2026-10-30: +0.06 at sigma 0.16, g 0.02)
@@ -537,6 +563,11 @@ public static class Decide
         // a correlated random walk: a compass direction drawn every 16 steps, blended into the next. (It was an offset to
         // the current heading held for 16 steps, so the animal turned the same way each step and walked in circles.)
         uint wb = (step + (uint)i) / 16u; float wt = ((step + (uint)i) & 15u) / 16f;
+        if (w.Dt != 1f)   // every 16 reference steps of time (2026-11-02)
+        {
+            double tw = w.Step * (double)w.Dt + i;
+            wb = (uint)(long)(tw / 16.0); wt = (float)(tw / 16.0 - Math.Floor(tw / 16.0));
+        }
         float wa0 = Rng.U(seed, wb, (uint)i, Rs.Wander) * 2f * MathF.PI, wa1 = Rng.U(seed, wb + 1u, (uint)i, Rs.Wander) * 2f * MathF.PI;
         Add(g[P.WANDER], (1f - wt) * MathK.Cos(wa0) + wt * MathK.Cos(wa1), (1f - wt) * MathK.Sin(wa0) + wt * MathK.Sin(wa1));
         if (loud > 0) { Add(g[P.TOWARD_CALL], callDx, callDy); Add(g[P.AWAY_CALL], -callDx, -callDy); }
@@ -742,6 +773,10 @@ public static class Decide
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static void Bump(byte[] t, int k) { if (t[k] < 255) t[k]++; }
+
+    /// <summary>Is primitive p an event (an act that happens at an instant: strike, mate, lay, cache, a call), not a state
+    /// held over time (eat, drink, rest, mark)? Events fire at a hazard per unit time (Run, 2026-11-02).</summary>
+    public static bool Event(int p) => p == P.STRIKE || p == P.MATE || p == P.LAY || p == P.CACHE || p >= P.CALL_0;
 
     public static bool Ready(World w, int i)
     {
