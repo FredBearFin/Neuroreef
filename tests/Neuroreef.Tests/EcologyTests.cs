@@ -823,8 +823,9 @@ public class EcologyTests
         Assert.True(w.PDiet[(int)Pool.Seed] < seed0);
         Assert.True(w.PVmax[i] > v0 * 1.4f);
         // the speed gene adds exactly its own cost to the basal rate (other costs unchanged), and the upkeep of the bigger
-        // gut that feeds it (Body.GutScale, 2026-11-02): 1 / (1 - GUT_SHARE) of it
-        float extra = K.COST_SPEED * (Body.Factor(127, K.BODY_RANGE_TRAIT) - 1f) * K.C_BASAL * MathK.Pow(w.PM[i], K.EXP_BASAL) / (1f - K.GUT_SHARE);
+        // gut that feeds it (Body.GutScale, 2026-11-02): 1 / (1 - GUT_SHARE) of it, at its tissues' metabolic level
+        // (Heat.Level; 2026-11-02, fourth round: a trait's upkeep is a share of a basal cost that follows endothermy)
+        float extra = K.COST_SPEED * (Body.Factor(127, K.BODY_RANGE_TRAIT) - 1f) * K.C_BASAL * MathK.Pow(w.PM[i], K.EXP_BASAL) * Heat.Level(w.PEndo[i]) / (1f - K.GUT_SHARE);
         Assert.Equal(basal0 + extra, w.PBasal[i], 4);
     }
 

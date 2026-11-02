@@ -174,7 +174,7 @@ public static class Decide
              mate = new() { D = 1e9f, J = -1 }, strike = new() { D = 1e9f, J = -1 }, strikeBig = new() { D = 1e9f, J = -1 },
              strikeKin = new() { D = 1e9f, J = -1 };
         float o2Mass = -1f, strikeBigMass = -1f;
-        float reach = w.PReach[i];
+        float reach = w.ReachOf(i);
         int hcx = (int)(x / Map.HCell), hcy = (int)(y / Map.HCell);
         int nOff = Offsets(R);
         Span<int> neighbours = stackalloc int[K.MAX_NEIGH];
@@ -202,7 +202,7 @@ public static class Decide
                 bool alike = Body.LooksAlike(myLook, nb->Look);
                 // contact route (Revision R): any animal in reach that sheds, of any kind; whether its strain can grow here is the strain's host range
                 float shedJ = nb->Shed;
-                if (active && shedJ > 0f && d <= reach + w.PReach[j]) { infNear++; dose += shedJ; if (shedJ > srcShed) { srcShed = shedJ; strainSrc = j; } }
+                if (active && shedJ > 0f && d <= reach + w.ReachOf(j)) { infNear++; dose += shedJ; if (shedJ > srcShed) { srcShed = shedJ; strainSrc = j; } }
                 if (ready && active && d < mate.D && ValidPartner(w, i, j)) mate = new Near { D = d, Dx = ddx, Dy = ddy, J = j };
                 if (alike)
                 {
@@ -614,7 +614,7 @@ public static class Decide
         w.ITarget[i] = tgt.J;
         if (metrics != null && tgt.J >= 0) metrics.Add(ref metrics.InReach);
         // a partner within reach of the way it goes, both closing in (Resolve.Mate)
-        w.IMate[i] = (mate.J >= 0 && PathDist2(px, py, mate.Dx, mate.Dy) <= Sq(reach + w.PReach[mate.J])) ? mate.J : -1;
+        w.IMate[i] = (mate.J >= 0 && PathDist2(px, py, mate.Dx, mate.Dy) <= Sq(reach + w.ReachOf(mate.J))) ? mate.J : -1;
         w.IFoodHere[i] = fh;
         w.IKinDensity[i] = f[F.KIN_DENSITY];
         w.IInfNear[i] = (byte)Math.Min(255, infNear);
@@ -764,8 +764,8 @@ public static class Decide
         metrics.Add(ref metrics.CapHits);
         if (o1.J != allO1.J) metrics.Add(ref metrics.O1Changed);
         if (o2.J != allO2.J) metrics.Add(ref metrics.O2Changed);
-        int chosenMate = mate.J >= 0 && mate.D <= reach + vmax + w.PReach[mate.J] ? mate.J : -1;
-        int fullMate = allMate.J >= 0 && allMate.D <= reach + vmax + w.PReach[allMate.J] ? allMate.J : -1;
+        int chosenMate = mate.J >= 0 && mate.D <= reach + vmax + w.ReachOf(mate.J) ? mate.J : -1;
+        int fullMate = allMate.J >= 0 && allMate.D <= reach + vmax + w.ReachOf(allMate.J) ? allMate.J : -1;
         if (chosenMate != fullMate) metrics.Add(ref metrics.MateChanged);
         int chosenStrike = w.PParasite[i] != 0 ? strikeBig.J : strike.J >= 0 ? strike.J : strikeKin.J;
         int fullStrike = w.PParasite[i] != 0 ? allStrikeBig.J : allStrike.J >= 0 ? allStrike.J : allStrikeKin.J;

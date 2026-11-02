@@ -223,6 +223,7 @@ public class OceanTests
     {
         string? all = Environment.GetEnvironmentVariable("OCEAN_PROBE");
         uint[] seeds = all == "1" ? new uint[] { 1, 2, 3, 4, 5 } : new uint[] { 1 };
+        var counts = new System.Collections.Generic.List<int>();
         foreach (uint seed in seeds)
         {
             int lineages = Sea(() =>
@@ -249,8 +250,56 @@ public class OceanTests
                 _out.WriteLine($"seed {seed}: {k} lineages of {w.Evo.AncestorsWater} water ancestors, {w.AliveCount} animals");
                 return k;
             });
-            Assert.True(lineages >= 3, $"seed {seed}: {lineages} lineages");
+            counts.Add(lineages);
         }
+        // every seed is founded before any is judged, so a probe reports them all (2026-11-02)
+        for (int k = 0; k < seeds.Length; k++) Assert.True(counts[k] >= 3, $"seed {seeds[k]}: {counts[k]} lineages (all: {string.Join(", ", counts)})");
+    }
+
+    [Fact] // the ocean audit (2026-11-02): the first 20 draws of one ocean ancestor on seed 3, each with the founding test that decided it
+    public void WhyDrawsPassOrFailFoundingAtSea()
+    {
+        var lines = new System.Collections.Generic.List<string>();
+        int finned = 0, finnedOk = 0; bool fishOk = false;
+        Sea(() =>
+        {
+            using var sim = new Simulation(64, 3, 2);
+            var w = sim.W;
+            int a = 1;   // the first ancestor that is not big-brained (BigBrains 2: one water ancestor of each world is)
+            int clade = -1; for (int c = 0; c < K.CLADES; c++) if (w.Sp[c].Used && w.Sp[c].Ancestor == a && w.Sp[c].Parent < 0) { clade = c; break; }
+            float hx, hy;
+            if (clade >= 0 && w.Sp[clade].HomeR > 0f) { hx = w.Sp[clade].HomeX; hy = w.Sp[clade].HomeY; }
+            else { clade = K.CLADES - 1; Life.PickHome(w, Realm.Water, 0x60000u + (uint)a * 977u, new(), out hx, out hy); }
+            bool big = a < w.Evo.BigBrains / 2;
+            var anc = new sbyte[G.LEN];
+            string cur = "", body = "";
+            // the body, then the last range it was judged on (RangeFor widens the range while it feeds too few)
+            Life.Trace = s => { if (s.StartsWith("#body")) cur = body = s[6..]; else cur = body + " | " + s; };
+            try
+            {
+                for (int t = 0; t < 20; t++)
+                {
+                    cur = "";
+                    sim.Ancestor(anc, 3, a, t, false, big);
+                    float cap = Simulation.ProbeCapacity(w, clade, anc, Realm.Water, hx, hy, 0x70000u + (uint)t, out float range, out _, out int group);
+                    bool ok = Simulation.FoundersFed(cap, group, w.Evo.Founders) > 0;
+                    if (!cur.Contains("Fly")) { finned++; if (ok) finnedOk++; }
+                    lines.Add($"draw {t,2}: {(ok ? "FOUNDED" : "failed ")} cap {cap:F1} (range {range * K.M_PER_UNIT:F0} m): {cur}");
+                }
+                // the plankton fish of FeedingBudgetTests on draw 0's brain: is a real fish founded here?
+                cur = "";
+                sim.Ancestor(anc, 3, a, 0, false, big);
+                FeedingBudgetTests.MakeFish(new Span<sbyte>(anc), -127, 127);
+                float fc = Simulation.ProbeCapacity(w, clade, anc, Realm.Water, hx, hy, 0x70000u, out float fr, out _, out int fg);
+                fishOk = Simulation.FoundersFed(fc, fg, w.Evo.Founders) > 0;
+                lines.Add($"the plankton fish: {(fishOk ? "FOUNDED" : "failed ")} cap {fc:F1} (range {fr * K.M_PER_UNIT:F0} m): {cur}");
+            }
+            finally { Life.Trace = null; }
+            return 0;
+        });
+        foreach (var l in lines) _out.WriteLine(l);
+        _out.WriteLine($"not winged: {finned} of 20 draws, {finnedOk} founded");
+        Assert.True(fishOk, "a 1 kg plankton-eating fish is founded in the open sea");
     }
 
     [Fact] // --ocean-shallow: a reef-flat world is still a setting (2026-11-02): its share of the floor on banks 1-30 m deep

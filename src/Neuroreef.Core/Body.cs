@@ -40,10 +40,12 @@ public static class Body
     /// <summary>Relative body axes, sharing the renderer's exponential scale and unit-volume normalization.</summary>
     public static void Dimensions(sbyte lengthGene, sbyte widthGene, sbyte heightGene, out float length, out float width, out float height)
     {
-        float logTwo = MathK.Log(2f);
-        length = MathK.Exp(logTwo * (2f * Organ(lengthGene) - 1f));
-        width = MathK.Exp(logTwo * (2f * Organ(widthGene) - 1f));
-        height = MathK.Exp(logTwo * (2f * Organ(heightGene) - 1f));
+        // each axis from 1 / SHAPE_RANGE to SHAPE_RANGE of the cube's before the volume is restored (2026-11-02: was 1/2 to 2,
+        // so the longest body was 2.5 cube sides, fineness 4; now 4.3, fineness up to 9, an eel's)
+        float logR = MathK.Log(K.SHAPE_RANGE);
+        length = MathK.Exp(logR * (2f * Organ(lengthGene) - 1f));
+        width = MathK.Exp(logR * (2f * Organ(widthGene) - 1f));
+        height = MathK.Exp(logR * (2f * Organ(heightGene) - 1f));
         float volumeScale = MathK.Cbrt(length * width * height);
         length /= volumeScale; width /= volumeScale; height /= volumeScale;
     }
@@ -141,15 +143,21 @@ public static class Body
         // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
         // (2026-11-02) its gut is built to its own basal cost (GutScale): absorption and digestion grow with it, and so does
         // the gut's upkeep, part of that cost
-        float kleiber = K.C_BASAL * mPow;
+        // (2026-11-02) its tissues' metabolic level (Heat.Level: a cold-blooded body's standard metabolism is ~1/5 of a
+        // warm-blooded one's of its mass at the same body temperature) sets its body's resting cost, its gut (built to that
+        // cost) and its organs' capacity (Respiration.OrganBase), in every world; the brain costs per unit whatever the body
+        float level = Heat.Level(w.PEndo[i]);
+        float kleiber = K.C_BASAL * mPow * level;
         float gut = GutScale(kleiber * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF, kleiber, out float basal);
         // rates are per step (x World.Dt: the constants are per reference step of K.STEP_H) and durations in steps (/ Dt):
         // at the default step Dt is 1 and these are the constants' values bit for bit (2026-11-02)
         float dt = w.Dt;
         w.PBasal[i] = basal * dt;
         w.PGut[i] = K.C_GUT * m;
-        w.PDig[i] = K.C_DIGEST * mPow * gut * dt;
-        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * dt;   // energy the gut can take up a step (2026-11-01)
+        // a gut processes and absorbs at the pace of the tissues that build and run it (level): a reptile's food intake and
+        // digestive throughput are a fraction of a mammal's of its size (Karasov & Diamond 1985; Nagy 2005)
+        w.PDig[i] = K.C_DIGEST * mPow * gut * level * dt;
+        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * level * dt;   // energy the gut can take up a step (2026-11-01)
         w.PBite[i] = K.C_BITE * mPow * dt;
         float t = MathK.Pow(m, K.EXP_LIFE);
         w.PMature[i] = K.C_MATURE * t * devel / dt;
@@ -166,15 +174,21 @@ public static class Body
         float v0 = v0Ref * fs;
         float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
         float vLand = v0 * LandLoadFactor(m, armour, legs >= K.LIMB_MIN ? legPairs : 1) * (K.CRAWL + (1f - K.CRAWL) * legs);
-        float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * fins);
+        float prop = Propulsor(fins, wings);   // fins, and wings stroked under water (2026-11-02)
+        float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * prop);
         Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
         float lengthShare = length;   // of the cube of its volume (LengthM)
+        float whShare = width * height;   // its cross-section, of the cube's face
         const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
         length = MathK.Log(length) * invLn2 * 0.5f; width = MathK.Log(width) * invLn2 * 0.5f; height = MathK.Log(height) * invLn2 * 0.5f;
         float limbShape = Organ(gn[G.B_LIMB_SHAPE]) - 0.5f;
         // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
         // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
-        float streamlining = Math.Clamp(1f + 0.2f * length - 0.15f * width - 0.15f * height, 0.75f, 1.25f);
+        // (2026-11-02) drag of a body of revolution at a given volume against its fineness ratio f = length / sqrt(width x
+        // height): C_DV ~ 4 f^(1/3) + 6 f^(-7/6) + 24 f^(-8/3) (Hoerner 1965), least near f = 4.5, as fishes' and
+        // cetaceans' bodies are (Webb 1975; Fish 1993); at a given power, speed goes as drag^(-1/3), against a cube's
+        // (f = 1). Was a bounded linear guess (0.75-1.25)
+        float streamlining = Streamlining(lengthShare, whShare);
         vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
         vWater *= streamlining * (1f - 0.2f * limbShape * legs);
         w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
@@ -185,20 +199,25 @@ public static class Body
         bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
         vLand *= WingGroundFactor(wings);   // the flight muscle's dead load on the flat; flapping helps on slopes (World.GroundSpeed, WingInclineGain)
         float vAir = flies ? MathF.Min(K.FLY_V_CAP * dt, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
-        bool deep = 0.1f + 0.9f * fins >= K.DEEP_SWIM;   // swims well enough to stay up in open water
-        bool settled = legs < K.LIMB_MIN * 0.2f && fins < K.LIMB_MIN * 0.2f && !flies;
+        bool deep = 0.1f + 0.9f * prop >= K.DEEP_SWIM;   // swims well enough to stay up in open water
+        bool settled = legs < K.LIMB_MIN * 0.2f && prop < K.LIMB_MIN * 0.2f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
         w.PVLand[i] = vLand; w.PVWater[i] = vWater; w.PVAir[i] = vAir;
         Realm realm = flies ? Realm.Any : Realm.Land | Realm.Shallow | (deep ? Realm.Deep : 0);
-        Loco loco = settled ? Loco.Sessile : flies ? Loco.Fly : vWater > vLand ? (legs >= K.LIMB_MIN ? Loco.Wade : Loco.Swim) : (fins >= K.LIMB_MIN ? Loco.Wade : Loco.Walk);
-        if (settled) realm = fins > legs ? Realm.Water : Realm.Land;
+        Loco loco = settled ? Loco.Sessile : flies ? Loco.Fly : vWater > vLand ? (legs >= K.LIMB_MIN ? Loco.Wade : Loco.Swim) : (prop >= K.LIMB_MIN ? Loco.Wade : Loco.Walk);
+        if (settled) realm = prop > legs ? Realm.Water : Realm.Land;
         // a flier eats where it can land: water-column food only if it also wades or swims (2026-10-31)
-        Realm reach = flies ? GroundRealm(legs, fins) : realm;
+        Realm reach = flies ? GroundRealm(legs, prop) : realm;
         w.PLoco[i] = (byte)loco; w.PRealm[i] = (byte)realm;
         w.PVmax[i] = MathF.Max(vAir, MathF.Max(vLand, vWater));
         // reach in a step (2026-11-01): its body and the distance it sprints in a chase (ReachM)
         w.PLen[i] = LengthM(m, lengthShare);
         w.PReach[i] = ReachM(m, w.PVmax[i] / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
+        // (2026-11-02) a chase runs at the speed of the medium it is in: its swimming speed in water, its running speed on
+        // land, its flight speed only in the air (World.ReachOf). Before, every body chased at its fastest speed anywhere,
+        // so a flier that never flew struck under water as far as it could fly
+        w.PReachLand[i] = ReachM(m, vLand / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
+        w.PReachSwim[i] = ReachM(m, vWater / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
 
         w.PArmour[i] = armour;
         w.PStrike[i] = strike;
@@ -249,8 +268,32 @@ public static class Body
     public static float ReachM(float m, float speedRatio, float lengthM)
         => lengthM + SprintMps(m) * K.T_CHASE * Math.Clamp(speedRatio, 0f, 2f);
 
+    /// <summary>Hoerner's (1965) volume drag of a streamlined body of fineness ratio f: 4 f^(1/3) + 6 f^(-7/6) + 24 f^(-8/3).</summary>
+    public static float VolumeDrag(float f)
+    {
+        f = MathF.Max(f, 0.05f);
+        return 4f * MathK.Cbrt(f) + 6f * MathK.Pow(f, -7f / 6f) + 24f * MathK.Pow(f, -8f / 3f);
+    }
+
+    /// <summary>Speed at a given power against a cube's (drag^(-1/3)), for a body of length share lengthShare and width x
+    /// height share wh (Dimensions: length x width x height = 1, so wh = 1 / lengthShare when the volume holds).</summary>
+    public static float Streamlining(float lengthShare, float wh)
+        => MathK.Cbrt(VolumeDrag(1f) / VolumeDrag(lengthShare / MathF.Sqrt(MathF.Max(wh, 1e-4f))));
+
+    /// <summary>
+    /// What propels a body under water, in fins' worth (2026-11-02): its fins, and its wings stroked as flippers, as auks,
+    /// diving petrels and penguins swim (Johansson &amp; Aldrin 2002; Watanuki et al. 2006). Water is ~800x denser than air,
+    /// so the wing area that best drives a body through it is far smaller than the area that carries it in the air: a
+    /// wing works as a flipper best at half the wing gene (a penguin's flipper; flightless at most masses, FlightMargin)
+    /// and worse as it grows toward a flier's, which a diver must half fold (murres and diving petrels; the flight-versus-
+    /// dive trade-off, Thaxter et al. 2010; Elliott et al. 2013): WING_SWIM x 4 w (1 - w). At most 1.
+    /// </summary>
+    public static float Propulsor(float fins, float wings)
+        => MathF.Min(1f, fins + K.WING_SWIM * 4f * wings * (1f - wings));
+
     /// <summary>Where a flier can stand, perch, feed or rest once landed: land; shallow water if it wades on legs or
     /// swims; open water if it swims well enough to stay up (DEEP_SWIM).</summary>
+    /// <param name="fins">its propulsor under water, fins and wings (Propulsor)</param>
     public static Realm GroundRealm(float legs, float fins)
     {
         bool swims = 0.1f + 0.9f * fins >= K.DEEP_SWIM;

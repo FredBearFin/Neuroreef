@@ -79,7 +79,8 @@ public class WadingTests
         Assert.True(stand < 0.5f);
         Assert.False(w.StandsIn(0, water));
         Assert.True(w.GroundVmax(0, water) <= w.PVWater[0] * 1.0001f, "it swims: no wading speed");
-        float swim = K.C_MOVE * MathK.Pow(m, K.EXP_MOVE) * spd;
+        float swim = Respiration.SwimCost(w, 0, m) * spd * (1f + K.INS_MOVE * w.PInsul[0]);   // swimming's cost of transport (2026-11-02, the ocean audit)
+        Assert.True(swim < K.C_MOVE * MathK.Pow(m, K.EXP_MOVE) * spd, "swimming costs less a metre than running");
         Assert.Equal(swim, Resolve.MoveCost(w, 0, m, 1f, spd, water, false), 5);
         // the bottom's food: not from the surface where the water is deeper than it stands; within reach where it is not
         int alg = (int)Pool.Algae;
@@ -99,7 +100,8 @@ public class WadingTests
         var wing = Body0(mass: -40, wings: 127);
         Assert.Equal(Loco.Fly, wing.w.LocoOf(0));
         float wo = wing.w.PWings[0];
-        float kleiber = K.C_BASAL * MathK.Pow(wing.w.PM[0], K.EXP_BASAL) * wing.w.Dt;
+        // its tissues' metabolic level (Heat.Level, 2026-11-02) scales the wings' upkeep with the rest of its basal cost
+        float kleiber = K.C_BASAL * MathK.Pow(wing.w.PM[0], K.EXP_BASAL) * wing.w.Dt * Heat.Level(wing.w.PEndo[0]);
         float extra = wing.w.PBasal[0] - bare.w.PBasal[0];
         _out.WriteLine($"{wing.w.PM[0]:F2} kg, wings {wo:F2}: basal {bare.w.PBasal[0]:E3} -> {wing.w.PBasal[0]:E3} (+{100 * extra / bare.w.PBasal[0]:F0}%; COST_WING x wings alone {100 * K.COST_WING * wo:F0}% of Kleiber's)");
         Assert.True(extra >= K.COST_WING * wo * kleiber * 0.999f, "the wings' upkeep at least");

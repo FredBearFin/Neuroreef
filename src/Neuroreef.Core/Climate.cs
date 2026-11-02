@@ -364,11 +364,13 @@ public static class Heat
     /// capacity and endurance. Resting cost and the respiratory organs' capacity scale with Rate(core) x Level(e)
     /// (Activity); digestion (gut enzymes) and muscle power for a burst follow the core's temperature alone.
     /// </summary>
-    public static float Level(float e) => K.ECTO_LEVEL + (1f - K.ECTO_LEVEL) * e;
+    /// (2026-11-02) ECTO_LEVEL^(1 - e), on a log scale between the two, and in every world: it is in the body's basal cost
+    /// itself (Body.Express: PBasal, the gut, the organs' capacity), so Activity does not apply it again.
+    public static float Level(float e) => MathK.Exp((1f - Math.Clamp(e, 0f, 1f)) * MathK.Log(K.ECTO_LEVEL));
 
-    /// <summary>The pace of a body's chemistry at core temperature t and endothermy e against a warm-blooded body at
-    /// T_BODY: Rate(t) x Level(e). 1 with no climate (no heat budget).</summary>
-    public static float Activity(float t, float e) => Climate.On ? Rate(t) * Level(e) : 1f;
+    /// <summary>The pace of a body's chemistry at core temperature t against the same body at T_BODY: Rate(t) (its
+    /// metabolic level is in its basal cost, Level). 1 with no climate (no heat budget).</summary>
+    public static float Activity(float t, float e) => Climate.On ? Rate(t) : 1f;
 
     /// <summary>
     /// Heat a body would have to make to keep its core from freezing (2026-11-01): its least dry conductance x how far its

@@ -29,6 +29,12 @@ public class FoundingTests
         w.Genome[g + G.B_HERM] = (sbyte)(food == Pool.Grass ? 40 : -40);                              // every grazer bears young
         w.Genome[g + G.B_SPEED] = 0; w.Genome[g + G.B_SIGHT] = 0; w.Genome[g + G.B_EYEN] = -127; w.Genome[g + G.B_LIFE] = 0;
         w.Genome[g + G.B_IMMUNE] = -127; w.Genome[g + G.B_WATER] = -127; w.Genome[g + G.B_VOICE] = -127; w.Genome[g + G.B_INSUL] = -127; w.Genome[g + G.B_APPEND] = -127;
+        // warm-blooded (2026-11-02, the ocean audit): since the metabolic level (Heat.Level, ECTO_LEVEL 0.2^(1 - endothermy),
+        // fourth round, de1e378) a body's basal cost, and so its day's need, follows its endothermy, which these bodies took
+        // at random from Life.Found's draw: the meat-eater drawn there was part cold-blooded and burned less than a mammal
+        // of its mass, so the same 600 prey fed 24 of it (the test asks 6-15; it passed before de1e378). The counts below were derived for a mammal's basal cost (Kleiber),
+        // so the bodies are mammals' now: the expectation is unchanged, its body is stated
+        w.Genome[g + G.B_ENDO] = 127;
         Body.Express(w, c);
         w.Flags[c] = 0; w.StageOf[c] = adult ? St.Adult : St.Juvenile; w.Grown[c] = adult ? 1f : 0.5f;
         w.Age[c] = adult ? w.PMature[c] * 2 : w.PMature[c] * 0.5f;

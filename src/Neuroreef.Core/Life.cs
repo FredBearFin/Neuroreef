@@ -158,6 +158,9 @@ public static class Life
     /// </summary>
     /// <param name="habitat">the realm the lineage is founded in (2026-11-01): a lineage founded in water must feed and
     /// breathe in water, so only those of its cells count (Realm.Any: every cell its locomotion allows)</param>
+    /// <summary>Reporting only (2026-11-02, the ocean audit): when set, RangeCapacity reports which test decided what it fed.</summary>
+    public static Action<string>? Trace;
+
     public static float RangeCapacity(World w, int c, float hx, float hy, float r, Realm habitat = Realm.Any)
     {
         // where it can forage is where it moves well: a swimmer in water, a walker on land, a wader on both and in
@@ -169,15 +172,20 @@ public static class Life
             Loco.Wade => Realm.Land | Realm.Shallow,
             _ => w.RealmOf(c),
         } & habitat;
-        if (realm == 0) return 0f;
+        if (realm == 0) { Trace?.Invoke("no realm"); return 0f; }
         var diet = w.DietOf(c);
         float need = K.FIELD_METAB * MathF.Max(w.PBasal[c], 1e-6f);
         // a brain the body cannot pay for: more than BRAIN_SHARE_MAX of its basal cost
         float brainCost = K.COST_BRAIN * K.C_BASAL * w.PBrain[c] / K.BRAIN_REF * w.Dt;   // per step, as PBasal
-        if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) return 0f;
+        if (brainCost > K.BRAIN_SHARE_MAX * w.PBasal[c]) { Trace?.Invoke($"brain {brainCost / w.PBasal[c]:P0} of basal"); return 0f; }
         float cs = Map.W / (float)Map.FW;
         int rc = (int)MathF.Ceiling(r / cs), cx = (int)(hx / cs), cy = (int)(hy / cs);
-        double y = 0, heatNeed = 0, breathCost = 0, actSum = 0; int n = 0;
+        double y = 0, heatNeed = 0, breathCost = 0, actSum = 0, plank = 0; int n = 0;
+        // the water a plankton-eater sweeps and the bottom a grazer crops in an eating step, as RESOLVE: its travel at
+        // TRAVEL_SHARE of its top swimming speed and its feeding bout's cruise, paid (Respiration.FeedCruiseM; 2026-11-02)
+        float travelF = w.PVWater[c] * K.TRAVEL_SHARE * K.M_PER_UNIT, cruiseF = Respiration.FeedCruiseM(w, c, travelF);
+        float sweep = travelF + cruiseF;
+        double bottom = 0, waterCells = 0;
         Span<double> stock = stackalloc double[Pools.NFIELD];
         Span<float> reached = stackalloc float[Pools.N];
         for (int dy = -rc; dy <= rc; dy++)
@@ -194,7 +202,13 @@ public static class Life
                 // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
                 if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
                 breathCost += bc;
-                float standM = Respiration.StandM(w, c);   // ventilation, osmoregulation and buoyancy there (2026-11-01)
+                float standM = Respiration.StandM(w, c);
+                plank += Respiration.PlanktonKg(w, c, cell, sweep, z, share);
+                if ((w.Cell[cell] & (byte)Realm.Water) != 0)
+                {
+                    waterCells++;
+                    bottom += Respiration.BottomKg(w, c, cell, (int)Pool.Algae, sweep, z, share);
+                }   // ventilation, osmoregulation and buoyancy there (2026-11-01)
                 for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share, standM);
                 y += Fields.Yield(w, cell, reached); n++;
                 for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share, standM);   // kg
@@ -205,11 +219,14 @@ public static class Life
                     actSum += Heat.Rate(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]));   // the gut's pace: the core's temperature
                 }
             }
-        if (n == 0) return 0f;
+        if (n == 0) { Trace?.Invoke("no cell it may use and breathe in"); return 0f; }
+        float need0 = need;
         // with a climate, a day here costs what this body pays at the temperature around it (Revision P): its basal
         // cost at its core temperature, and the heat it must make to keep its core where its endothermy holds it
         if (Climate.On) need = MathF.Max(1e-6f, (float)(heatNeed / n));
         need += (float)(breathCost / n);   // what breathing there costs (Respiration.Cost): gills in water, lungs at depth
+        // a water forager's feeding cruise, for the share of its range that is water (2026-11-02)
+        if (waterCells > 0) need += Respiration.CruiseCost(w, c, cruiseF) * (float)(waterCells / n);
         // the food the animals already living in the range make (2026-11-01): their production as prey, their bodies
         // as carrion and their dung (AnimalFood). Before, only growing plant food counted, so an ancestor that eats
         // mostly meat, carrion or dung was never founded: no prey existed when it was tested
@@ -236,9 +253,29 @@ public static class Life
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
             float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+            if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));   // what it can clear (Respiration.PlanktonKg)
+            if (p == (int)Pool.Algae && waterCells > 0) pass = MathF.Min(pass, (float)(bottom / n));   // what it can crop (BottomKg)
             rate = MathF.Max(rate, MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
         }
         double fed = rate >= margin ? y + an.Detritus : 0;
+        if (Trace != null)
+        {
+            float bestPass = 0f; int bp = -1;
+            for (int p = 0; p < Pools.NFIELD; p++)
+            {
+                if (diet[p] <= 0 || !Fields.Grows(p)) continue;
+                float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+                if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));
+                if (p == (int)Pool.Algae && waterCells > 0) pass = MathF.Min(pass, (float)(bottom / n));
+                float v = MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass);
+                if (v > bestPass) { bestPass = v; bp = p; }
+            }
+            float dayB = Climate.On ? (float)(heatNeed / n) : need0;
+            float cruiseB = waterCells > 0 ? Respiration.CruiseCost(w, c, cruiseF) * (float)(waterCells / n) : 0f;
+            Trace($"cells {n} water {waterCells / n:P0}: need/step {need:E2} = day {dayB:E2} + breath {breathCost / n:E2} + cruise {cruiseB:E2} (basal {w.PBasal[c]:E2}); " +
+                  $"best food {(bp >= 0 ? Pools.Names[bp] : "-")} {bestPass:E2}/step = x{rate / MathF.Max(need, 1e-12f):F2} need, margin x{K.FORAGE_MARGIN:F0} (absorb cap x{absorb / MathF.Max(need, 1e-12f):F2} need; plankton {plank / n * 1000:F2} g, bottom {bottom / Math.Max(1, waterCells) * 1000:F2} g a step) " +
+                  (rate >= margin ? $"FOOD OK, feeds {(y + an.Detritus) / (need / w.Dt):F1}" : "FAILS FOOD TEST"));
+        }
         // a kill goes into the gut whole, as much of it as fits (Resolve.Strike), and passes as fast as the gut digests
         if (an.MeatKg > 0f && MathF.Min(absorb, diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(dig, w.PGut[c]), an.MeatKg)) >= margin)
             fed += an.Meat;
@@ -404,10 +441,16 @@ public static class Life
         {
             x = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 100u + (uint)t * 2) * Map.W;
             y = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 101u + (uint)t * 2) * Map.W;
-            if (w.CellAllows(i, World.FIdx(x, y), realm)) return true;
+            if (FounderAllows(w, i, World.FIdx(x, y), realm)) return true;
         }
         x = y = 0; return false;
     }
+
+    /// <summary>Can founder i be placed in this cell? Where its realm allows; at sea a flier only where it can land (World.
+    /// GroundAllows: it eats and rests landed), as RangeCapacity counts its range (2026-11-02: a 13 kg flier was founded
+    /// over open water it could neither swim in nor stand in).</summary>
+    static bool FounderAllows(World w, int i, int cell, Realm realm)
+        => w.CellAllows(i, cell, realm) && (!w.Ocean || w.PLoco[i] != (byte)Loco.Fly || w.GroundAllows(i, cell));
 
     /// <summary>
     /// Create one founder organism of a clade at step 0 (or from a gene bank). With an empty genome, a random brain
@@ -439,7 +482,7 @@ public static class Life
                 float a = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 200u + (uint)t * 2) * 2f * MathF.PI;
                 float d = Rng.U(w.Seed, (uint)w.Step, key, Rs.Place + 201u + (uint)t * 2) * spread;
                 x = World.Wrap(gx + MathK.Cos(a) * d); y = World.Wrap(gy + MathK.Sin(a) * d);
-                ok = w.CellAllows(c, World.FIdx(x, y), realm);
+                ok = FounderAllows(w, c, World.FIdx(x, y), realm);
             }
         if (!ok && !RandomSite(w, c, realm, key, out x, out y)) { FreeSlot(w, c); return -1; }
         Place(w, c, clade, adult ? St.Adult : St.Juvenile, x, y, 0f, -1);
@@ -521,7 +564,7 @@ public static class Life
     {
         int m = w.MotherOf(i);
         if (m < 0 || w.PCare[m] <= 0 || w.Grown[i] >= K.WEAN) return;
-        float dx = World.Delta1(w.X[m] - w.X[i]), dy = World.Delta1(w.Y[m] - w.Y[i]), reach = w.PReach[m] + w.PReach[i];
+        float dx = World.Delta1(w.X[m] - w.X[i]), dy = World.Delta1(w.Y[m] - w.Y[i]), reach = w.ReachOf(m) + w.ReachOf(i);
         if (dx * dx + dy * dy > reach * reach) return;
         uint mark = (uint)w.Step + 1u;           // 0 = never refreshed
         if (w.CareStep[m] != mark) { w.CareStep[m] = mark; w.CareLeft[m] = K.CARE_RATE * w.PCare[m] * w.PBasal[m]; }

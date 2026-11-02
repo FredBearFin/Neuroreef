@@ -2453,7 +2453,79 @@ wading (2026-11-02), which is physics of every world's water and re-pinned StepL
   any body), the "waders" being legged bodies that swim faster than they walk. The fliers are one lineage of 0.12 kg
   winged plankton-eaters that dive to ~55 m and never fly (a diving petrel's niche), paying their wings' upkeep;
   grazing rose to 67-78% of the water's NPP (microzooplankton graze ~60-70% of marine production: Calbet & Landry
-  2004). Not fixed: a flier's chase reach (Body.ReachM, from its top flight speed) is kept while it swims.
+  2004). Not fixed then: a flier's chase reach (Body.ReachM, from its top flight speed) is kept while it swims.
+- **The water column, second round** (2026-11-02, every world; DivingTests). Plankton is taken from the water a body
+  sweeps (Respiration.PlanktonKg): the mixed layer's concentration (stock over the cell's area and the mixed depth, less
+  below it by the light, for the share of the step it is there) x GAPE (0.5) of its frontal area x the metres it swims,
+  its travel and its dives (Jorgensen 1966; Hansen, Bjornsen & Hansen 1997; Sanderson & Wassersug 1993); before, a
+  body anywhere in the water took the whole column's plankton at a bite. Dives are swum down and up (Breath.DiveM:
+  2z a dive, as many breath-hold dives as fill its share of the step at depth) at swimming's cost of transport. A chase
+  reaches at the medium's speed (World.ReachOf: PReachSwim, PReachLand, PReach in the air). Wings stroke under water
+  as flippers (Body.Propulsor = fins + WING_SWIM 4 w (1 - w)): best at half the wing gene, which flies only light bodies,
+  so a heavy diver trades flight against swimming (Thaxter et al. 2010; Elliott et al. 2013). Measured: the valley run
+  (seed 3, 2,000 steps) founded 7 lineages (16 before) and collapsed to one, a 0.27 kg legged algae and detritus eater
+  (124 "waders", 0 swimmers, 0 fliers at step 2,000; 332 / 124 / 2,735 before); founding on the 256 map gave 9, 16, 7,
+  12 and 10 lineages on seeds 1-5. Plankton-eaters starve: a step's travel is the model's net displacement (DMD_M), a
+  few hundred metres in hours, where a real filter feeder cruises at about a body length a second all the while it
+  feeds, so the water swept (and paid for) is one to two orders of magnitude below a real one's. That is the open
+  question, not the clearance physics.
+- **The feeding bout** (2026-11-02, third round; DivingTests). An eating step in water has a bout of FEED_DAY (0.4) of
+  the step's time less its travel time, cruised back and forth within the patch at CRUISE_BL (1) body lengths a second
+  x its propulsion (Videler 1993; Sato et al. 2007), not moving the animal and paid at swimming's cost of transport
+  (Respiration.FeedCruiseM, CruiseCost). It sweeps plankton (PlanktonKg) and crops the bottom's algae and detritus
+  along its path at its mouth's width (BottomKg; Spalinger & Hobbs 1992), where the bottom was bitten without limit.
+  Founding uses the same model (algae; detritus is not yet capped there). Measured: a 2 kg finned body (cube-shaped,
+  0.126 m) cruises 0.13 m/s, ~530 m an eating step, and takes ~1.2 g of plankton a step at 0.3 of a unit: a day of eating
+  gives 0.05 x its basal cost on that test genome's diet (0.19; ~0.2 x at a specialist's 0.7). The valley run (seed 3)
+  founded 6 lineages and fell to 16 animals of one by step 2,000 (0 swimmers, 16 waders, 0 fliers); founding on the
+  256 map gave 0, 13, 6, 9 and 0 lineages on seeds 1-5 (FoundingAtSeaGivesSeveralWaterLineages fails on seeds 1 and 5).
+  What holds intake down, in the model's own terms: bodies are cubes (BODY_L_M x M^(1/3) unless the length gene
+  stretches them, so a 2 kg body is 0.13 m long where a 2 kg fish is ~0.5 m and cruises four times as fast), and the
+  basal cost is a mammal's (C_BASAL, Kleiber) at full warmth without a climate, where fishes run at ~1/10 of it.
+- **Metabolic level and body shape** (2026-11-02, fourth round, every world, approved by the owner; MetabolismTests).
+  A body's tissues run at Heat.Level = ECTO_LEVEL (0.2)^(1 - endothermy) of a warm-blooded body's of its mass at the
+  same core temperature (Bennett & Ruben 1979; White, Phillips & Seymour 2006): its basal cost (PBasal, brain apart:
+  a neuron costs the same), its gut and digestion, and through OrganBase its organs' aerobic capacity, climate on or off.
+  The core's temperature paces it on top (Heat.Activity is Rate alone now, so the level is not applied twice): a
+  cold-blooded body at 20 °C burns 1/22 of a mammal at 38 °C. The shape genes reach 1/3-3 of the cube on each axis
+  (SHAPE_RANGE): a 2 kg body can be 0.47 m long; speed in water and air goes as Hoerner's (1965) volume drag of its
+  fineness ratio, least near 4.5 (a 2 kg long body swims 1.6x a cube). At sea a flier is founded only where it can land.
+  Measured, valley ocean (seed 3, 2,000 steps): 5 lineages founded, extinct by step 1,200 (deaths: starvation 702,
+  lost young 922, parasites 440, killed 213); founding on the 256 map 5, 11, 5, 7, 6 lineages on seeds 1-5 (nearly all
+  winged: Loco.Fly). Valley land (seed 3, 1,500 steps, random brains): 16 lineages founded, 15 alive; warm-blooded
+  (endothermy > 0.5) 45-52% of animals and 9 of 15 lineages mostly warm; deaths 12,478: killed 60%, lost young 32%,
+  parasites 6%, starved 17, suffocated 104, cold 24.
+- **The ocean audit** (2026-11-02, fifth round, every world; FeedingBudgetTests, OceanTests.WhyDrawsPassOrFailFoundingAtSea).
+  A 1 kg cold-blooded, gilled, finned, streamlined plankton specialist eating every step in RESOLVE at 15 °C and 169 mg
+  C/m3 (0.3 of a unit over the 40 m mixed layer): basal 11.1 kJ/day (body 6.8, gut 2.8, fins 0.6, gills 0.5, eyes 0.3,
+  brain 0.1) plus breathing 1.3, against Clarke & Johnston's (1999) 20.5 kJ/day for a 1 kg teleost at 15 °C (0.6x);
+  clearance 30 L/min (menhaden of ~0.3 kg 5.8-24.8 L/min: Durbin & Durbin 1975); assimilation 0.7; absorbed 78 kJ/day,
+  the gut's ceiling (7x basal). The term off by the most was the feeding cruise: 91 kJ/day, 8x its standard metabolism,
+  because every body swam at running's cost of transport (Taylor et al. 1982, 10.7 J/(kg m) at 1 kg), where a fish
+  swims at ~1 (Schmidt-Nielsen 1972; Videler & Nolet 1990), so the fish lost 30 kJ a day eating without pause and failed
+  the founding test (its gut's ceiling 1.3x its need, FORAGE_MARGIN asks 3x). Swimming now costs COT_SWIM_J (1 J/m at
+  1 kg, x M^EXP_MOVE) x ETA_LIFT over its propulsive efficiency (paddling 0.33 to fins and flippers 0.8: Fish 1996;
+  Respiration.SwimCost), in its travel, dives and feeding cruise: the fish nets +57 kJ/day and is founded (x3.5 its need).
+  The founding of random ancestors at sea is still mostly winged (seed 3, ancestor 1: none of 15 finned or legged draws
+  of the first 20 passed): what fails them is the food test, their diets spending most of the digestive budget on land
+  foods the sea does not have (browse, fruit, seed, root at 0.4-0.6, plankton 0.1-0.4), and short bodies that cruise
+  slowly; the winged draws that pass are judged only on the banks where they can land and stand, whose bottom they crop.
+  Measured: founding (256 map) 14, 16, 14, 15, 16 lineages on seeds 1-5 (was 5, 11, 5, 7, 6); the valley run (seed 3,
+  2,000 steps, random brains) kept one lineage, 0 swimmers / 72 waders / 329 fliers at step 500, 0 / 13 / 107 at 2,000
+  (1,223 founded; deaths 1,154: killed 1,046, starved 36), where before all were extinct by step 1,200, mostly starved.
+  Then (the same day) **sea diets**: in a world that is all sea (no islands) a random ancestor's diet genes are drawn over
+  the sea's foods only, plankton, algae, detritus, prey and blood (Clades.AncestorBody, SeaFoods; carcasses and dung
+  fall into the water as detritus, so carrion and dung are not among them), the rest at their least: an initial
+  condition, as the water realm is, since marine faunas descend from marine ancestors; evolution may change the diet
+  after. Land worlds and island worlds draw as before. Founding (256 map) gave 16, 16, 16, 16, 15 lineages on seeds 1-5:
+  fliers 9, 11, 7, 8, 5; legged swimmers ("waders") 6, 3, 7, 5, 8; finned swimmers 0, 2, 2, 3, 2 (one walker on seed 1).
+  Most non-winged lineages are meat-eaters founded on 1-6 animals; the big non-winged ones (seed 2:
+  600 + 600 waders, a 600 blood-drinking swimmer; seed 3: a 292 plankton wader; seed 4: 600 + 600 + 600 + 176 waders,
+  600 + 33 swimmers; seed 5: 421 + 392 algae waders, a 600 plankton swimmer). The valley run (seed 3, 2,000 steps,
+  random brains): 1,136 founded in 16 lineages; alive 2,620 / 3,487 / 3,633 / 4,804 at steps 500-2,000 in 11 / 10 / 7 /
+  6 lineages (the loco census of grown animals: swimmers 5 / 3 / 2 / 1, waders 261 / 254 / 367 / 779, fliers 555 / 470
+  / 902 / 1,143). The world now grows: its two big lineages are a 0.23 kg winged detritus eater that dives to ~16 m and
+  a 20 kg legged (flightless) plankton eater, 1,123 and 776 at step 2,000; deaths 2,043 (killed 1,284, parasites 456, lost young 156, starved 117).
 - **Measured on the reef-flat floor** (phase 2, OceanTests, the 256 map, seed 3, no animals): open water ~115 gC/m2/yr (Field et al. 1998: 50-150),
   slopes ~220, banks ~400-440 (coastal and shelf seas 200-500), reef flats ~105 (phase 1: 74, 120, 170, 65). The reef
   flats are still far below the 1,000-2,000 of kelp and reef flats (Mann 1973; Hatcher 1988): their algae hold ~0.12

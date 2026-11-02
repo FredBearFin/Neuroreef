@@ -44,7 +44,24 @@ public class StepLengthTests
         // algae and detritus only where the water is no deeper than it stands (was: land's cost and >= 0.6 x land speed
         // anywhere under SHALLOW, 2 m, and the bottom within BOTTOM_BAND, 2 m, from the surface). This world's lakes and
         // rivers have animals in them, so their speeds, costs and food moved. It was 14491964511445264084 before.
-        Assert.Equal(9027147687691935544UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-02 (second round, DivingTests): a chase reaches at the speed of the medium a body is in
+        // (World.ReachOf: swimming in water, running on land, flying only in the air; was its fastest speed anywhere),
+        // plankton is taken from the water a body sweeps (Respiration.PlanktonKg; was the whole column's at a bite), dives
+        // are paid, and wings stroke under water (Body.Propulsor). Every world's lakes and every chase moved. It was
+        // 9027147687691935544 before.
+        // Re-pinned 2026-11-02 (third round): a feeding bout in water cruises within its patch (Respiration.FeedCruiseM:
+        // CRUISE_BL lengths a second for FEED_DAY of the step), sweeping plankton and cropping the bottom's algae and
+        // detritus by its gape (BottomKg; the bottom was bitten without an area limit), and pays swimming's cost for it;
+        // this world's lake and river feeders moved. It was 2011528924806897781 before.
+        // Re-pinned 2026-11-02 (fourth round, MetabolismTests; approved by the owner for all worlds): a body's basal cost,
+        // gut and organ capacity follow its metabolic level, ECTO_LEVEL (0.2)^(1 - endothermy), climate on or off (was 1
+        // for every body), with the core's temperature pace on top and not twice; and the shape genes reach 1/3-3 of the
+        // cube on each axis with Hoerner's volume drag for swimming and flight (were 1/2-2 and a bounded linear factor).
+        // Every body in this world changed. It was 3283118220941252680 before.
+        // Re-pinned 2026-11-02 (the ocean audit, FeedingBudgetTests): swimming is paid at swimming's cost of transport
+        // (COT_SWIM_J, 1 J/m at 1 kg, over its propulsive efficiency: Respiration.SwimCost), not running's 10.7 J/m; this
+        // world's swimmers and feeding cruises in its lake and river pay less. It was 14911671059831046093 before.
+        Assert.Equal(11681709169049197875UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time
