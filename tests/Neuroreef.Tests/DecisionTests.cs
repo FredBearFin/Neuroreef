@@ -194,7 +194,11 @@ public class DecisionTests
         return w.IHeading[i] - MathF.PI / 2f;   // > 0: turned toward -x, where the water is
     }
 
-    [Fact] // far from water an animal cannot steer toward it unless it remembers where it drank
+    // (2026-11-02, the 1 km world) on the 1024 map: SENSE_WATER is 109 cells (1.74 km of 16 m cells), and the 256 test map
+    // is 64 cells (1 km) round, so no cell of it is farther than 32 cells from the water column. The 1024 map is 256
+    // cells round: column 128 is 128 cells (2.05 km) from it, beyond SENSE_WATER (before the rescale: column 100 of 64
+    // cells of 218 m wrapped to 28 cells, then beyond 8)
+    [Fact, BigWorld] // far from water an animal cannot steer toward it unless it remembers where it drank
     public void FarWaterIsFoundFromMemoryOrTheGroundUnderfoot()
     {
         // near water (3 cells): the local sense shows the way
@@ -203,9 +207,9 @@ public class DecisionTests
         Assert.True(nvx < 0f && MathF.Abs(nvy) < 1e-6f, $"near water: way ({nvx}, {nvy})");
         Assert.True(TurnAfterDecide(wn, n) > 0.9f * wn.PTurn[n], "near water it does not turn toward it");
 
-        // far from water (100 cells, beyond SENSE_WATER) with no memory, on ground alike all round (as damp, flat): no way
+        // far from water (128 cells, beyond SENSE_WATER's 109) with no memory, on ground alike all round (as damp, flat): no way
         // is known, and it hardly turns
-        var (w, i) = ThirstyWalker(100);
+        var (w, i) = ThirstyWalker(128);
         int cell = World.FIdx(w.X[i], w.Y[i]);
         Assert.True(w.DistDrink[cell] > K.SENSE_WATER);
         void Ground(World g, int c, float dmx, float dmy, float dex, float dey)
@@ -233,8 +237,8 @@ public class DecisionTests
         PathMemory.WaterWay(w, i, cell, out vx, out vy);
         Assert.True(vy > 0f && MathF.Abs(vx) < 1e-6f, $"downhill to +y: way ({vx}, {vy})");
 
-        // the same animal remembering that it drank 400 units to the -x side: it heads there
-        var (wm, m) = ThirstyWalker(100);
+        // the same animal remembering that it drank 400 units (1.6 km) to the -x side: it heads there
+        var (wm, m) = ThirstyWalker(128);
         PathMemory.Drank(wm, m); wm.MemDrinkX[m] = -400f; wm.MemDrinkY[m] = 0f;
         float remembered = TurnAfterDecide(wm, m);
         Assert.True(remembered > 0.9f * wm.PTurn[m], $"with memory it turned {remembered}");
