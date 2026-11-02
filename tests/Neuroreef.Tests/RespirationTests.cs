@@ -237,7 +237,8 @@ public class RespirationTests
         int c = World.FIdx(u.X[k], u.Y[k]);
         var b = Respiration.Uptake(u, k, c, false, 0f, out float z, out float share);
         Assert.True(z > 0f && share > 0f);
-        Assert.Equal(K.BUOY_COST * Respiration.OrganBase(u, k) * share / (1f + z / 10f), b.Extra, 4);
+        // and its dives, swum at swimming's cost of transport (Breath.DiveM, 2026-11-02)
+        Assert.Equal(K.BUOY_COST * Respiration.OrganBase(u, k) * share / (1f + z / 10f) + Respiration.CruiseCost(u, k, b.DiveM), b.Extra, 4);
     }
 
     [Fact]
@@ -290,22 +291,24 @@ public class RespirationTests
     public void ColdBloodedTissueRunsAtItsLevelAndCoreTemperature()
     {
         // at the same core temperature a cold-blooded body burns and can breathe ECTO_LEVEL of a warm-blooded one's
-        // (ECTO_LEVEL is 1, not active, since 2026-11-01: see its entry); in the cold its core, and so its pace, falls
+        // (2026-11-02: active, 0.2, in its basal cost itself, Body.Express; Activity is the core's pace alone, so the level
+        // is not applied twice); in the cold its core, and so its pace, falls
         Assert.Equal(1f, Heat.Level(1f), 5);
         Assert.Equal(K.ECTO_LEVEL, Heat.Level(0f), 5);
-        Assert.Equal(K.ECTO_LEVEL, Heat.Activity(K.T_BODY, 0f), 5);
+        Assert.Equal(1f, Heat.Activity(K.T_BODY, 0f), 5);
         // in the cold its pace falls (its core follows the air, a warm one's does not); its lungs' capacity follows that
         // pace as Activity^AEROBIC_T (AEROBIC_T 0, not active, since 2026-11-01: see its entry)
         Assert.True(Heat.Activity(5f, 0f) < 0.1f * Heat.Activity(K.T_BODY, 1f));
         var (w, i) = One(false, 0f, 127, -127, 127);
         Array.Fill(w.Temp, 5f);
         int cell = World.FIdx(w.X[i], w.Y[i]);
-        float warm = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Air;
+        float warm = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Air, obWarm = Respiration.OrganBase(w, i);
         SetEndo(w, i, -127);
         float cold = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Air;
         float expect = MathK.Pow(Respiration.Aerobic(w, i, cell, false), 1f);   // its capacity against a warm body's at T_BODY
-        Assert.Equal(warm * expect, cold, 4);
-        if (K.AEROBIC_T <= 0f) Assert.Equal(warm, cold, 4);
+        // its organs are built to its own basal cost (OrganBase), its level x a warm body's, paced as Aerobic says
+        Assert.Equal(warm * Respiration.OrganBase(w, i) / obWarm * expect, cold, 4);
+        Assert.True(Respiration.OrganBase(w, i) < 0.5f * obWarm, "a cold-blooded body's organs are built to its lower cost");
     }
 
     [Fact]
