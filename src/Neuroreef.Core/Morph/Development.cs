@@ -234,6 +234,11 @@ public static class Development
         p.Artic = Articulation(p.Joints, p.Mineral);
     }
 
+    /// <summary>Exchange area lining a m³ of gas space wholly made of respiratory parenchyma, at body mass M (kg): SV_GAS at
+    /// 1 kg, finer in smaller bodies as M^-0.11 (alveolar surface ~M^0.95, Gehr et al. 1981, against lung volume ~M^1.06,
+    /// Stahl 1967: smaller alveoli in smaller mammals).</summary>
+    public static float GasLining(float mass) => Mat.SV_GAS * MathK.Pow(MathF.Max(mass, 1e-6f), -0.11f);
+
     static void Finish(Morphology m)
     {
         float aPrev = 0f, skinT = 0f;
@@ -264,7 +269,7 @@ public static class Development
             aPrev = a;
             float ex = s.Pore * s.Area * Mat.FOLD;
             m.ExchExt += ex * (1f - s.Invag); m.ExchInt += ex * s.Invag;
-            m.GasV += s.GasV; m.ExchGas += s.Invag * s.GasV * Mat.SV_GAS;
+            m.GasV += s.GasV; m.ExchGas += s.Invag * s.GasV;   // x the lining per m³ below
             float skin = (1f - s.Pore) * s.Area;
             m.SkinArea += skin; skinT += skin * s.IntT;
             m.IntMass += s.IntMass;
@@ -274,6 +279,7 @@ public static class Development
             m.MuscleMass += s.AxMuscle + s.AppMuscle;
             m.TotalArea += s.Area;
         }
+        m.ExchGas *= GasLining(m.Mass);
         m.TailH = m.Segs.Count > 0 ? m.Segs[^1].H : 0f;
         foreach (var p in m.Pairs)
         {

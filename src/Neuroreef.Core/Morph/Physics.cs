@@ -169,6 +169,10 @@ public static class Phys
     public const float PRED_R = 0.3f;         // m: turning radius of the predator of a reference-mass prey (~0.5 of a 0.6 m fish)
     public const float R_MAX = 100f;
     public const float R_MIN_L = 0.1f;        // least turning radius as a share of body length (Domenici & Blake 1997)
+    // the oscillatory boundary layer of surge over a rough floor (phase 2b, RollHold): delta ~ 0.072 A (A / k)^-0.25
+    // (Jonsson & Carlsen 1976; Fredsøe & Deigaard 1992) for an orbital amplitude A = U T / (2 pi) ~ 0.38 m (U 0.3 m/s,
+    // an 8 s swell) over roughness k ~ the 3 cm obstacles: ~1.5 cm
+    public const float DELTA_SURGE = 0.015f;
 }
 
 public struct MorphEval
@@ -382,23 +386,25 @@ public static class Physics
     }
 
     /// <summary>Roll stability near the floor in surge (0..1, 1 = it holds upright). A body that forages on the floor
-    /// lives in the surge's boundary layer, which over rough ground is centimetres thick, as thick as the body is tall
-    /// (turbulent wave boundary layers, Jonsson 1966; Denny 1988). In a linear profile u = U z / H the drag per unit
-    /// height grows as z², so the side force is q S / 3 at 3H/4 from the floor, a rolling moment q S H / 12 about the
-    /// body's mid-height (S its side area, at the 0.8 side coefficient the slide test uses). It is righted by:
+    /// lives in the surge's boundary layer, u(z) = U min(1, z / delta), delta = DELTA_SURGE. The drag per unit height
+    /// grows as u², so about the body's mid-height H/2 it rolls the body with q S H³ / (12 delta²) when it lies within
+    /// the layer (H &lt;= delta) and q S (delta / 3 - delta² / (4H)) when it stands out of it (both q S H / 12 at
+    /// H = delta; S its side area, at the 0.8 side coefficient the slide test uses). A small body hides in the slow
+    /// flow; a tall one is pushed over by the shear at its foot. It is righted by:
     ///   its weight in water on its belly's half-width (when it is denser than water and rests on the floor);
     ///   its metacentric height: a submerged body has no waterplane, so its hydrostatic stability is the height of its
     ///   centre of buoyancy over its centre of mass (Webb 2002), which a gas space raises by holding the lightest volume
     ///   dorsally (fish swim bladders and lungs lie dorsal; Alexander 1966). A gas volume V_g in the dorsal half, its
     ///   centroid ~H/4 over the axis, gives a righting moment rho g V_g H/4 at a 90° heel;
     ///   its mobile pairs' lift on their half-span (Webb 2002; Weihs 2002; Fish 2002).
-    /// The moment grows as H², the righting by weight as W: a tall, thin, gasless body without fins rolls over.</summary>
+    /// Righting by weight grows as W² H, the moment out of the layer only as H: a tall, thin, gasless body without fins
+    /// rolls over; a round one of the same mass does not.</summary>
     public static float RollHold(Morphology m, float rho, float surge, float wEff)
     {
         if (Ablate.Plate || surge <= 0f) return 1f;
         float q = 0.5f * rho * surge * surge;
-        float side = 0.8f * m.Length * m.MaxH;
-        float roll = q * side * m.MaxH / 12f;
+        float side = 0.8f * m.Length * m.MaxH, h = MathF.Max(m.MaxH, 1e-6f), d = Phys.DELTA_SURGE;
+        float roll = h <= d ? q * side * h * h * h / (12f * d * d) : q * side * (d / 3f - d * d / (4f * h));
         float right = MathF.Max(0f, wEff) * 0.5f * m.MaxW + rho * Phys.G * m.GasV * 0.25f * m.MaxH;
         var c = ControlAreas(m, rho, surge);
         for (int i = 0; i < m.Pairs.Count; i++) { var a = m.Pairs[i]; right += q * Phys.CL_MAX * c[i] * (0.5f * m.Segs[a.Seg].W + 0.5f * a.Len); }

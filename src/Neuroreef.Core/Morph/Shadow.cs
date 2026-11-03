@@ -294,9 +294,10 @@ public static class ShadowDiag
         "flight margin", "flies", "standing height", "O2 supply in air", "O2 supply in water", "protection gain",
         "basal cost", "drag shape", "turning (rel.)", "land speed (rel.)", "water speed (rel.)",
         "land cost/m, legs>=0.7", "water cost/m, fins>=0.7", "water cruise, fins>=0.7", "water cost/m, fins>=0.7, fish shape",
+        "O2 scope in air", "O2 scope in water",
     };
     /// <summary>Which live values are physically grounded (docs/BODYPLAN.md §10.2).</summary>
-    static readonly bool[] Grounded = { true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true };
+    static readonly bool[] Grounded = { true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, true, true };
 
     public static Row[] NewRows()
     {
@@ -349,6 +350,11 @@ public static class ShadowDiag
                 var fish = lg; fish.LengthShare = 2.5f; fish.WidthShare = fish.HeightShare = MathK.Sqrt(1f / 2.5f);
                 Add(rows[21], Shadow.Of(fish, Shadow.GeneBasalFactor(gn), Shadow.BrainW(gn)).CotWater, l.CotWater);
             }
+            // aerobic scope: each expression builds its organs to its own basal (symmorphosis; Respiration.OrganBase), and
+            // the shadow's basal is ~0.75 of the live one (the live organ-upkeep terms, docs/BODYPLAN.md §10.4), so the
+            // absolute supply inherits that gap. The grounded quantity is the scope: ~10 in air for full lungs (Weibel &
+            // Hoppeler 2005), 2-5 in water for gills (Killen et al. 2016)
+            if (s.Basal > 0f && l.Basal > 0f) { Add(rows[22], s.O2Air / s.Basal, l.O2Air / l.Basal); Add(rows[23], s.O2Water / s.Basal, l.O2Water / l.Basal); }
         }
     }
 

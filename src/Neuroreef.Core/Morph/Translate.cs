@@ -113,15 +113,15 @@ public static class Translate
         {
             var m1 = Development.Grow(Build(l, 0f, 0f, gasG), l.Mass);
             // the exchange surfaces, sized as the live organs are (their scopes over the organ base): the lungs are the
-            // lining of the gas space (the invagination share of it: Mat.SV_GAS per m³), the gills everted
+            // lining of the gas space (the invagination share of it: Development.GasLining per m³), the gills everted
             // surface (FOLD x pore share of the skin, at most 0.5 of it)
             float aLung = K.LUNG_SCOPE * l.Lungs * organBaseW / Phys.S_AIR_INT;
             float aGill = K.GILL_SCOPE * (1f - l.Lungs) * organBaseW / Phys.S_WATER_EXT;
-            // One invagination share i serves both: the gas space's lining is respiratory over i of it (G = GasV x SV_GAS
+            // One invagination share i serves both: the gas space's lining is respiratory over i of it (G = GasV x GasLining
             // when wholly so), and of the surface's exchange epithelium P, i is folded in and 1 - i everted. So
             // P (1 - i) = aGill and i (P + G) = aLung, i.e. G i² - (aGill + G + aLung) i + aLung = 0, whose root in
             // [0, 1] is exact. A lung larger than its gas space can line (i = 1) puts the rest in surface pockets.
-            float G = m1.GasV * Mat.SV_GAS, need = aLung + aGill, invag = 0f, P = 0f;
+            float G = m1.GasV * Development.GasLining(m1.Mass), need = aLung + aGill, invag = 0f, P = 0f;
             if (need > 0f)
             {
                 if (G <= 0f) { invag = aLung / need; P = need; }

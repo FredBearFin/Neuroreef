@@ -101,6 +101,10 @@ public class ShadowTests
         Assert.InRange(Med("air cost/m"), 0.7f, 1.3f);              // flight's cost a metre at the speed of least power
         Assert.InRange(Med("water cruise, fins>=0.7"), 0.7f, 1.4f); // Videler's ~1 length a second
         Assert.InRange(Med("basal cost"), 0.7f, 1.05f);             // Kleiber at the metabolic level, less the labelled organs' upkeep
+        // phase 2b (docs/BODYPLAN.md §11): the lung is the lining of a gas space bounded by volume, so the aerobic scope
+        // each expression builds (Weibel & Hoppeler's ~10 in air, fishes' 2-5 in water) agrees
+        Assert.InRange(Med("O2 scope in air"), 0.8f, 1.2f);
+        Assert.InRange(Med("O2 scope in water"), 0.75f, 1.25f);
     }
 
     // ---------- the translator carries the live genes' key capabilities over
