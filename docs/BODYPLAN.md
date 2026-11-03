@@ -1231,6 +1231,29 @@ clearance at 101 L/min, against the 6–83 L/min the menhaden data allow (Durbin
    `COST_APP` in the next re-pin.
 10. **Heat in water.** A body's appendage surface now sets its heat loss (Allen's rule), so a warm-blooded body with big
     limbs dies of cold in water. This is physical, and it moved `RespirationTests`' gill-breather to a cold-blooded body.
+### 13.10 Test status at the end of this session (2026-11-03)
+
+Each class was run on its own (one test process at a time, with a timeout per class).
+
+- **Green:** MorphLiveTests, MorphTests, FeedingTests, WadingTests (1 retired), AppearanceTests (6 retired),
+  BrainTests, ExploreTests, MetabolismTests, UnitsTests, BodySizeTests, ShadowTests (1 retired), OptionsTests,
+  MemoryResetTests, VehicleTests, PathogenTests, CavesTests, GeologyTests, HydrologyTests, WetlandTests, PlantTests,
+  PlantProductionTests.
+- **Green after re-derivation in a later build** (each verified by itself): LocomotionTests, DivingTests,
+  RespirationTests, WireTests (AgentsFrameRoundTrips).
+- **Not green:**
+  - `FeedingBudgetTests.APlanktonEatingFishsBudget`: clearance 101 L/min against at most 83 (§13.8);
+  - `DecisionTests.WaterDepthControlsAccessAndSwimmingSpeedContinuously`: not yet analysed;
+  - `ClimateTests.EvaporationCostsWaterWhateverTheKidneys`: water loss 0.00532 against 0.00563. Evaporation is now the
+    grown body's (PEvapK); not yet re-derived;
+  - `CheckpointTests.Format17SaveContinuesExactly`: the disk filled during the test (~0.5 GB save); not a code
+    failure, but not re-run;
+  - StepLengthTests: one test failed (a count of 6,357 against 6,353), and the class did not finish in 7 minutes. The
+    re-pinned hash was measured with a test run of its own.
+- **Not finished in time** (the run was stopped): VoiceTests and WaterCycleTests (timed out).
+- **Not run:** FoundingTests, OceanTests (WhyDrawsPassOrFailFoundingAtSea fails; §13.8), EcologyTests,
+  EcosystemTests, NutrientBalanceTests, EngineeringTests, BodyLabTests, PrehistoryTests.
+
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
