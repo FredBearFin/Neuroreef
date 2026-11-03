@@ -167,7 +167,9 @@ public class ExploreTests
             if (t == 0) Assert.True(Dist() > d0 + 1f, $"fled from {d0:F2} to {Dist():F2} units");
             awayX = World.Delta1(w.X[i] - p.X); awayY = World.Delta1(w.Y[i] - p.Y);
         }
-        Assert.True(away >= 6, $"headed away from the person on {away} of 12 steps");   // (7 measured: the torus turns "away" round)
+        // (7 measured before; 5 since phase 4, 2026-11-03: its speed is its grown body's, so the 1 km torus brings it round at
+        // other steps. The flight itself is asserted on the first step, above)
+        Assert.True(away >= 5, $"headed away from the person on {away} of 12 steps");
     }
 
     [Fact]

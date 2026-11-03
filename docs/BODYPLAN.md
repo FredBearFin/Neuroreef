@@ -1036,6 +1036,93 @@ porous (gill) surface is confined to its first segment: a head with gill opening
 Fitness is ~1% below the barrels' (2.87-2.98 against 2.97-2.98), so the barrel had been exploiting the loophole by
 only a little, but it set every run's body plan.
 
+### 13.2 Phase 3: storage
+
+- **The block.** Every live genome ends in a module block of `G.MORPHN` = 681 bytes at `G.MORPH`, after the brain,
+  body and reflex genes (`Morph/Codec.cs`): a segment-gene count, then 8 segment slots of 85 bytes (a 4-byte NEAT
+  innovation number, the 12 segment parameters, an appendage count, and 4 appendage slots of a 4-byte innovation
+  number and 13 parameters). A parameter is one byte, `(b + 127) / 254`. Genes beyond the count are ignored, and
+  duplication and deletion shift entries within the block. `G.LEN` grows by 681 bytes (from ~98 KB).
+- **The cap is the developmental limit of the prototype** and is stated: at most 8 segment genes (`MAX_SEG_GENES`),
+  each grown as up to 4 serial copies (`Development.MAX_REPEAT`), so at most 32 segments, and 4 appendage genes per
+  segment gene, so at most 128 pairs. It limits how many distinct segment identities (Hox-like genes) a body carries,
+  not its size, since the mass gene scales any body (bilaterians carry ~4–14 Hox paralogue groups; Carroll, Grenier &
+  Weatherbee 2005). An operator that would exceed it does nothing.
+- **Mutation** (`Brain.Mutate` → `Codec.MutateBlock`): every Morph operator at the prototype's per-offspring rates
+  (point 0.02 per parameter × N(0, 0.08), diverge 5%, duplicate and delete a segment 3% each, duplicate, delete and
+  insert an appendage 4% each, the repeat count as a parameter). The byte-level rate `MUT_RATE` is now `1 / G.MORPH`,
+  the length of every gene but the block, so it is what `1 / G.LEN` was.
+- **Innovation numbers** for new modules come from a run of numbers that starts at a hash of (seed, step, slot), at
+  2^16 or above (clear of the translator's fixed role numbers). No shared counter is needed, so births on any thread
+  stay deterministic. Two lineages share a number only by a 32-bit hash collision.
+- **Crossover** (`Brain.Crossover` → `Codec.CrossBlock`) is `Homology.Cross`: the child takes one parent's module order
+  and structure, at random (the live sim has no fitness at mating; NEAT keeps the fitter parent's disjoint genes), and
+  each module both parents carry from either.
+- **Distance.** `Body.Distance` (mating compatibility) is √(½ d_body² + ½ d_morph²), where d_morph
+  (`Codec.Distance`, read from the bytes without allocating) is an RMS per gene on the body genes' scale: matched
+  modules by their parameter differences, every parameter of an unmatched module at √(2/3), the RMS difference of two
+  independent uniform genes. Genomes without a block compare by body genes alone. Clade splitting (`Clades.Vis`) and
+  the look signature (`Body.Signature`, `LooksAlike`) use the grown body's visible traits (§13.5).
+- **Formats.** Checkpoint version 28 → 29, gene bank 13 → 14. Older genomes are read at their old length
+  (`G.MORPH`), and `Codec.TranslateInto` writes each one's block from its labelled body genes (Morph.Translate, its
+  exchange surfaces sized to its own basal as the shadow sized them). Every living genome and every archive entry is
+  translated, and every animal is expressed again. A genome with no block (a hand-made test genome) is translated each
+  time it is expressed, so a test can still describe "a 1 kg legged walker" by its labelled genes.
+
+### 13.3 Phase 4: the switch
+
+`Body.Express` decodes the block, grows it at the live mass (`Development.Grow(g, mass)`), and takes every body
+capability from the physics of that morphology (`Morph/Live.cs`):
+
+| live value | from the morphology | conversion |
+|---|---|---|
+| PVLand, PVWater, PVAir | top speed on flat ground (`Shadow.LandMech` at burst power 250 W/kg), burst in water (within Wardle's twitch limit), level flight (v_mp × `TopFlightSpeed(margin)`) | a step's travel = v / Garland's sprint × the plain body's travel (the live reading of speed, `Body.ReachM`) |
+| PLoco, PRealm | flies if margin ≥ 1 and flight muscle ≥ FLY_WING_MIN × FLY_MUSCLE_MAX of the mass (Marden 1987); deep water if it sustains DEEP_SWIM × CRUISE_BL lengths a second; sessile if it cannot move | as before on these |
+| PMargin; PWings | `Physics.FlightMargin` (wingbeat-frequency-limited muscle work against the least power of level flight); flight muscle of lifting pairs / (FLY_MUSCLE_MAX M) | take-off and loaded margin (`Body.CanTakeOffOf`, `LoadedMarginOf`): a juvenile's grown muscle share and (pm/m)^(1/3) |
+| PCotLand, PCotLandTop, PCotWater | least net cost a metre walking or crawling (`WalkMetabolic`), at the top speed; at the cruise of least gross cost a metre in water (a body that cannot sustain any swimming pays burst power anaerobically, ×3) | J/m → energy units a world unit (M_PER_UNIT / J_PER_E), × (mass/adult)^0.7. MoveCost runs from the least to the top cost with speed |
+| PCruise | the swimming speed of least gross cost a metre (Videler 1993) | × (mass/adult)^(1/3) |
+| PStand | limb clearance + trunk height | × (mass/adult)^(1/3) (Respiration.StandM) |
+| PScopeAir, PScopeLung, PScopeWater | `Physics.O2Supply` in air and in water (everted and folded-in surfaces, the gas space's lining, the skin through its integument), and its air-breathing surfaces alone | over its basal: Respiration's uptake = basal × the medium's oxygen (altitude's partial pressure, dissolved O2) × scope; a swimmer's head at the surface breathes the lung scope |
+| PArmour | crushing odds against a bite scaled to its size (`Physics.PKill`) over the plain body's | DEF_BASE × (gain − 1), so defence = mass × DEF_BASE × gain: the live strike's power / (power + defence) is the physics' bite / (bite + crush) |
+| moulting | a rigid outer skeleton is soft for MOULT_SOFT_GROW (0.15) × rigidity of the time it grows, every MOULT_DAYS (20 d) (Drach 1939; Hartnoll 1982), and sheds its cuticle (MOULT_COST × rigidity × exoskeleton mass) while it grows | `World.Moulting`: armour 0 and speed × (1 − rigidity) when soft; the cost charged to its reserve while growing |
+| PTurn | least turning radius in water at 1 m/s (`Physics.TurnRadius`) | C_TURN M^EXP_TURN × the plain body's radius (× M^(1/3)) / its own |
+| PBasal, gut | Kleiber on the active (non-mineral, lean) mass × level × the factor of the genes that stay genes, integument turnover, exchange epithelium upkeep, brain; the gut built to it (`Body.GutScale`) | W → energy units. The organ upkeep terms (COST_LIMB, COST_WING, COST_ARMOUR_ABS, OrganUpkeep) and B_SPEED's cost are gone |
+| drag shape, buoyancy | in the swimming budget: wetted-area drag by fineness and Reynolds number, holding depth against \|M − ρV\| g with the gas space and fat | — |
+| heat (Heat.Conductance) | PSurfK: its segments' surface, each through its integument (1 / (1 + t / 4 cm): tissue ~0.4 W/(m K) against a boundary layer of ~10 W/(m² K)); PAppSurf: its pairs' surface on the same scale (Allen's rule) | over the plain body's trunk surface × M^(2/3); fur (B_INSUL, kept) covers it as before |
+| water (thirst) | PEvapK: evaporation of everted wet surface, of its lungs at basal, and of its skin through its integument (Physics' EVAP terms) | over the plain body's; replaces Respiration.Drying's GILL_EVAP |
+| PLen | the grown body's length | — |
+| PCrush | the strongest crushing force at the mouth (`Physics.Handle`) | reported only (§13.9) |
+
+The labelled body genes `B_LEGS`, `B_FINS`, `B_WINGS`, `B_LEGN`, `B_FINN`, `B_ARMOUR`, `B_LUNGS`, `B_SPEED`, `B_APPEND`
+and the shape genes are retired: they stay in the layout and are read only to translate a genome that has no block.
+`PLegs`, `PFins`, `PWings`, `PLungs`, `PLegPairs` and `PFinPairs` now hold the physics' equivalents of those genes,
+each derived from a physical quantity (the table in `Body.Express`), for the renderer, telemetry and the few gates
+that read them (wading, paddling, the footing's stability, depth range). The shadow comparison is retired with the
+switch (`Shadow.Express` is no longer called).
+
+### 13.4 Founding
+
+`Clades.AncestorMorph` grows each random ancestor from the generic seed (`MorphGenome.Blob`, one segment) with its
+parameters drawn anywhere in their ranges, then up to 10 random rounds of the module operators: a tandem duplication
+of a segment gene (then diverged by N(0, 0.15)), a de novo appendage with every parameter random, a duplicated
+appendage (diverged), or a deleted one. Nothing says leg, fin or wing. Whether it can live where it starts is the
+founding's test (breathing, moving and being fed in its home range), up to ANCESTOR_TRIES = 256 draws, as for every
+other ancestor gene. In a sea world the draw is the same and the sea is the founding's realm. Founders vary around
+their ancestor by FOUNDER_BODY_SD on every module parameter (`Clades.VaryMorph`).
+
+### 13.5 Visible traits
+
+Clade splitting uses the grown body's traits (`Body.MorphVisible`): segments, pairs, fineness, depth, longest limb,
+limb angle, limb flatness, armour (rigidity), exchange surface and joints, with size, eyes, weapons and eye pairs. The
+look signature carries the physics' organ equivalents and the morphology in place of the shape genes.
+
+### 13.6 Console
+
+The clade table (`clades` and `meta.species`, docs/ICD.md) carries each clade's `morph`: mean segment and pair counts,
+and its representative member's grown body, every segment (L, W, H, rigidity, porosity, gas) and every pair (length,
+flatness, joints, rigidity, porosity, droop, sagittal, and its physics role). The AGENTS record keeps its layout; its
+legs, fins, wings, armour and shape bytes are the morphology's legacy display values, so the existing renderer keeps
+working until it draws the module body.
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.

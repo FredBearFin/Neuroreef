@@ -75,7 +75,8 @@ public sealed class World
     [PerSlot] public float[] PCrush, PDensity; // crushing force at the mouth (N); body density (kg/m³)
     [PerSlot] public byte[] PSegN, PPairN;     // segments and appendage pairs grown
     [PerSlot] public float[] PSurfK, PAppSurf, PEvapK;   // heat-losing trunk surface and appendage surface over the plain body's (x M^(2/3)); evaporation over the plain body's (Morph.Live)
-    [PerSlot] public float[] PMorphVis;        // Cap * Body.NMVIS: the developed body's visible traits (Body.MorphVisible), for clades
+    [PerSlot] public float[] PMorphVis;
+    [PerSlot] public sbyte[] PShapeG;          // Cap * 3: its grown body's length, width and height as the retired shape genes' bytes (B_LENGTH..B_HEIGHT; Body.Dimensions), for the renderer        // Cap * Body.NMVIS: the developed body's visible traits (Body.MorphVisible), for clades
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
     [PerSlot] public float[] CareLeft;         // care a mother can still give this step
     [PerSlot] public uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
@@ -385,7 +386,7 @@ public sealed class World
         PLungs = new float[c]; PDive = new float[c]; Z = new float[c]; ZShare = new float[c]; O2Debt = new float[c];
         PProp = new float[c]; PMargin = new float[c]; PStand = new float[c]; PCruise = new float[c]; PCotLand = new float[c]; PCotLandTop = new float[c]; PCotWater = new float[c];
         PScopeAir = new float[c]; PScopeLung = new float[c]; PScopeWater = new float[c]; PMoultW = new float[c]; PMoultSoft = new float[c]; PCrush = new float[c]; PDensity = new float[c];
-        PSegN = new byte[c]; PPairN = new byte[c]; PSurfK = new float[c]; PAppSurf = new float[c]; PEvapK = new float[c]; PMorphVis = new float[c * Body.NMVIS];
+        PSegN = new byte[c]; PPairN = new byte[c]; PSurfK = new float[c]; PAppSurf = new float[c]; PEvapK = new float[c]; PMorphVis = new float[c * Body.NMVIS]; PShapeG = new sbyte[c * 3];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c];
         PgLoad = new float[c]; PgGene = new byte[c * PG.N]; Strain = new sbyte[c * G.NMHC]; PgFit = new float[c]; ImmEff = new float[c]; ImmMem = new float[c];

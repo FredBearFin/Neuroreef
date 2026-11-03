@@ -192,7 +192,10 @@ public class BrainTests
         // the same brain on a smaller body takes a larger share, as M^-0.75 for the body's own part
         float s1 = Share(1f, K.BIG_BRAIN_UNITS), m1 = w.PM[0], s8 = Share(8f, K.BIG_BRAIN_UNITS), m8 = w.PM[0];
         Assert.True(s1 > s8);
-        Assert.Equal(MathK.Pow(m8 / m1, K.EXP_BASAL), (1f / s8 - 1f) / (1f / s1 - 1f), 3);   // body over brain, as M^0.75
+        // body over brain, as M^0.75. Re-derived 2026-11-03 (phase 4, docs/BODYPLAN.md §13.7): the body's part is Kleiber on its
+        // grown body's ACTIVE mass (less its inert mineral, whose share grows with size: skeleton ~M^1.09, Prange et al. 1979)
+        // plus its integument's turnover, so it rises a little slower than M^0.75 (measured 0.93 of it from 1 to 8 kg)
+        Assert.InRange((1f / s8 - 1f) / (1f / s1 - 1f) / MathK.Pow(m8 / m1, K.EXP_BASAL), 0.88f, 1.0f);
         // the most units a body surely pays for (cheapest basal factor 0.5) take exactly the ceiling, and the ceiling is the
         // measured vertebrate maximum: a 0.5 kg body may carry the 256-unit brain (~46% with the cheapest body; it was
         // rejected at 25%), a 0.1 kg one may not (~79%)

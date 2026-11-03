@@ -457,10 +457,13 @@ public static class Wire
         int ns = K.CLADES;
         var n = new int[ns]; var mass = new double[ns]; var sight = new double[ns]; var fov = new double[ns]; var birth = new double[ns];
         var sexual = new double[ns]; var live = new double[ns]; var diet = new double[ns * Pools.N]; var loco = new int[ns * 5];
+        var segN = new double[ns]; var pairN = new double[ns]; var rep = new int[ns]; Array.Fill(rep, -1);
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] < St.Juvenile) continue;
             int s = w.Spc[i]; n[s]++;
+            segN[s] += w.PSegN[i]; pairN[s] += w.PPairN[i];
+            if (rep[s] < 0 || w.StageOf[i] == St.Adult && w.StageOf[rep[s]] != St.Adult) rep[s] = i;   // its first adult (else juvenile) by slot: the clade's representative genotype
             mass[s] += w.PM[i]; sight[s] += w.PSight[i]; fov[s] += 2 * MathF.Acos(Math.Clamp(w.PFovCos[i], -1f, 1f)) * 180 / MathF.PI;
             birth[s] += w.PBirth[i]; sexual[s] += w.PSexual[i]; live[s] += w.PLive[i]; loco[s * 5 + w.PLoco[i]]++;
             for (int p = 0; p < Pools.N; p++) diet[s * Pools.N + p] += w.PDiet[i * Pools.N + p];
@@ -483,9 +486,36 @@ public static class Wire
                 niche, trophic = tro, mass = m, unitMass = m, swarm = false, parasite = false, loco = lc, juvLoco = lc, twoStage = false,
                 sight = (float)(sight[s] / k), fov = (float)(fov[s] / k), birth = (float)(birth[s] / k), sexual = (float)(sexual[s] / k), live = (float)(live[s] / k),
                 diet = d, juvDiet = d, shape = 0,
+                morph = n[s] == 0 ? null : Morph(w, rep[s], segN[s] / k, pairN[s] / k),
             };
         }
         return list;
+    }
+
+    /// <summary>
+    /// A clade's body plan for the console (docs/BODYPLAN.md §13.6, docs/ICD.md "clades"): the clade's mean segment and pair
+    /// counts, and its representative member's grown body (Morph.Development.Grow of its module genome at its adult mass):
+    /// every segment (length, width, height in mm, integument rigidity and porosity), every appendage pair (its segment,
+    /// length mm, flatness = chord / thickness, joints, rigidity = mineral share, porosity = exchange share of its surface,
+    /// droop in degrees, sagittal or lateral, and its physics role: fly, support, swim, handle, steer or passive,
+    /// Morph.Live.Roles), and its legacy display values (legs, fins, wings, armour, leg and fin pairs: the physics'
+    /// equivalents of the retired genes, which the current renderer draws from). Display only.
+    /// </summary>
+    static object Morph(World w, int i, double meanSegs, double meanPairs)
+    {
+        var gn = w.Genome.Slot(i);
+        var mg = Neuroreef.Morph.Codec.Decode(Neuroreef.Morph.Codec.Block((ReadOnlySpan<sbyte>)gn)) ?? Neuroreef.Morph.Codec.FromLabelled(gn);
+        var m = Neuroreef.Morph.Development.Grow(mg, w.PM[i]);
+        var roles = Neuroreef.Morph.Live.Roles(m);
+        static float R(float v, int d) => MathF.Round(v, d);
+        return new
+        {
+            meanSegments = R((float)meanSegs, 1), meanPairs = R((float)meanPairs, 1), segments = m.SegmentCount, pairs = m.PairCount,
+            massKg = R(w.PM[i], 3), lengthM = R(m.Length, 3), fineness = R(m.Fineness, 2), density = R(m.Mass / MathF.Max(m.Volume, 1e-12f), 0), rigidity = R(m.Rigidity, 2),
+            modules = m.Segs.Select(x => new { l = R(1000f * x.L, 1), w = R(1000f * x.W, 1), h = R(1000f * x.H, 1), rigid = R(x.IntMin, 2), pore = R(x.Pore, 3), gas = R(x.Gas, 3) }).ToArray(),
+            appendages = m.Pairs.Select((a, k) => new { seg = a.Seg, len = R(1000f * a.Len, 1), flat = R(a.Chord / MathF.Max(a.Thick, 1e-9f), 1), joints = a.Joints, rigid = R(a.Mineral, 2), pore = R(a.Pore, 3), droop = R(a.Theta * 180f / MathF.PI, 0), sagittal = a.Sagittal, role = roles[k] }).ToArray(),
+            legacy = new { legs = R(w.PLegs[i], 2), fins = R(w.PFins[i], 2), wings = R(w.PWings[i], 2), armour = R(w.PArmour[i], 2), legPairs = (int)w.PLegPairs[i], finPairs = (int)w.PFinPairs[i] },
+        };
     }
 
     static string LocoWord(Loco l) => l switch { Loco.Walk => "walking", Loco.Wade => "wading", Loco.Swim => "swimming", Loco.Fly => "flying", _ => "settled" };

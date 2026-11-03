@@ -99,23 +99,27 @@ Each record:
 | 7 | u8 | actions fired this step: bit 0 EAT, 1 STRIKE, 2 DRINK, 3 MATE, 4 REST, 5 MARK, 6 LAY, 7 CACHE |
 | 8 | u32 | serial (unique for the run) |
 | 12 | i8 | the body's actual mass on the mass gene's scale: kg = lo·(hi/lo)^((g+128)/255), lo and hi the world's body sizes (units `massMinKg`, `massMaxKg`; 0.1 and 40 by default) |
-| 13 | i8 | body gene: legs (organ size (g+127)/254) |
-| 14 | i8 | body gene: fins |
-| 15 | i8 | body gene: wings |
+| 13 | i8 | legs, (g+127)/254. Since 2026-11-03 (phase 4, docs/BODYPLAN.md §13) the grown body's physics equivalent of the retired leg gene: the share of its weight its limbs bear on land × how far they raise it, on the live 0..1 scale (World.PLegs) |
+| 14 | i8 | fins: since phase 4 its swimming ability, (sustained speed / (CRUISE_BL × length) − 0.1) / 0.9 (World.PProp) |
+| 15 | i8 | wings: since phase 4 its flight muscle over a full-winged body's (FLY_MUSCLE_MAX of its mass; World.PWings) |
 | 16 | i8 | body gene: sight |
-| 17 | i8 | body gene: armour |
+| 17 | i8 | armour: since phase 4 its integument's crushing protection, World.PArmour / ARMOUR_MAX clamped to 1 |
 | 18 | i8 | body gene: strike |
 | 19 | i8 | meat-eating efficiency × 254 − 127 |
-| 20 | u8 | leg pairs (1..4) |
+| 20 | u8 | leg pairs (1..4; since phase 4 the grown body's limbs on the ground / 2) |
 | 21 | u8 | bits 0–3 locomotion label (Loco: walk, wade, swim, fly, settled), for drawing only; bits 4–7 the first sound of its utterance this step (0 none, 1..8) |
-| 22 | u8 | fin pairs (1..4) |
+| 22 | u8 | fin pairs (1..4; since phase 4 its flat, near-horizontal pairs) |
 | 23 | u8 | eye pairs (1..4) |
 | 24 | u8 | bits 0–3 the second sound of its utterance, bits 4–7 the third (0 none; Revision N) |
-| 25 | u8 | bits 4–7 fur (insulation gene × 15), bits 0–3 appendages (× 15) (Revision O; reserved 0 before) |
+| 25 | u8 | bits 4–7 fur (insulation gene × 15), bits 0–3 appendages (× 15) (Revision O; reserved 0 before; since phase 4 its appendages' heat-losing surface over the plain body's, Morph.Live.AppSurf, clamped to 1) |
 | 26–41 | i8[16] | inherited appearance genes, in the order below; each maps to 0..1 as (g+127)/254 |
 | 42 | u16 | depth below the water's surface, decimetres (metres × 10; 0 at the surface or out of water) |
 | 44 | u8 | share of the step spent at that depth × 255 (the rest at the surface: an air-breather's dives; 255 for a fish or a bottom-walker) |
 | 45 | u8 | bits 0–3 lungs × 15 (0 gills only, 15 lungs only); bits 4–7 oxygen debt × 15 (0 breathing freely, 15 about to suffocate or drown) |
+
+Since phase 4 bytes 26–28 (length, width, height) are the grown body's own proportions, on those genes' scale (World.PShapeG);
+the rest are genes. The record layout and format number are unchanged: these are the legacy display values the current
+renderer draws from, derived from the morphology until the renderer draws the module body (the clade table's `morph`).
 
 Appearance genes: length, width, height, head size, neck length, tail length, limb placement,
 limb shape, fin shape, wing shape, hue, saturation, lightness, markings, marking scale,
@@ -209,7 +213,7 @@ Every text frame has a `type`:
 | `status` | every 0.5 s | step, rate, measured rate, paused, alive, free slots, capacity (the slots the world has grown to), bank source (evolved / shipped / file / random), extinction step per species (−1 = alive), slot shortages, `full` (the last step refused a birth: the world is at its memory limit or --max-capacity), `growLimit` (that limit, in words, or null), probe serial, follow flag, alive count per species, season, `rain` (this year's rainfall anomaly), `phase` (`prehistory` / `live`), `phaseVersion` (changes when the simulation on view changes: another branch, or the world after the prehistory; the client then drops its history and the server resends HISTORY), `view` (branch on view), `branches`, `bankPath`, `player` (Explore mode, the live world's or the watched branch's: `present`, `hp`, `maxHp`, `deaths`, `kills`, `hits`, `x`, `y`, and for vehicles `vehicle` (or null), `alt`, `blasts`, `blastKills`, `fires`; null when no one has explored) |
 | `vehicle` | answer to `vehicle` | `kind`, `ok`, `why` (null, or why it cannot be placed: not on land, not on water, too shallow, not flat enough to take off), `x`, `y`, `weapon`, `rounds` |
 | `blast` | answer to `blast` | `id`, `weapon`, `ok`, `result` (Exploded, NotPresent, UnknownWeapon, WrongVehicle, NoAmmo, BadTime, LaunchFar, OutOfRange, TooFast, NotInWater, BadDepth), `hurt`, `killed`, `fires`, `rounds` (left), `kills`, `blastKills`, `victims` (`serial`, `clade`, `loss`, `killed`), `launchErrM`, `launchLimitM`, `flightM`, `x`, `y` |
-| `clades` | when the clade table changes, and every 5 s | `step`, `splits`, `list`: the clade table of the simulation on view (as in `meta.species`) |
+| `clades` | when the clade table changes, and every 5 s | `step`, `splits`, `list`: the clade table of the simulation on view (as in `meta.species`). Since 2026-11-03 (phase 4, docs/BODYPLAN.md §13.6) each living clade also has `morph`: `meanSegments`, `meanPairs` (over its living members), and its representative member's grown body (its first adult by slot): `segments`, `pairs`, `massKg`, `lengthM`, `fineness`, `density` (kg/m³), `rigidity` (mass-weighted mineral of its outer skeleton), `modules` (per segment: `l`, `w`, `h` in mm, `rigid` its integument's mineral share, `pore` its exchange share, `gas` its gas share), `appendages` (per pair: `seg`, `len` mm, `flat` chord/thickness, `joints`, `rigid` mineral share, `pore`, `droop` degrees, `sagittal`, `role`: fly, support, swim, handle, steer or passive, from the physics, Morph.Live.Roles), `legacy` (`legs`, `fins`, `wings`, `armour`, `legPairs`, `finPairs`: the values the AGENTS record carries); null for an extinct clade |
 | `prehistory` | every 1 s, during the prehistory | `step`, `rate` (steps/s per branch), `paused`, `finished`, `yearsPerStep`, `view`, `settings` (the EvoSettings fields), `branches`: per branch `clades` (that branch's clade table), `splits`, `step`, `alive`, `full`, and per species `standing` (0 gone, 1 dying, 2 breeding, 3 self-sustaining), `count`, `births` (last ~1,000 steps), `generation` |
 | `lexicon` | every 1.5 s | the translator (display only; Revision M, N): `step`, `minUtt`, `newSteps`, `clades`: per living clade `id`, `calls`, `utts`, `types`, `tracked`, `mute`, `bases`, `sounds` (per sound: `n`, `ctx`, `resp`, `heard`, `z` (standardised difference of every sense), `when`, `then`), `words` (the most made utterance types and every new one: `t`, `syl` (sounds 1..8 in order), `rank`, `n`, `heard`, `resp`, `first`, `last`, `born` (step it reached `minUtt`), `isNew`, `z`, `when`, `then`), `zipf` (counts of its utterance types, most made first), `dialect` (`west`, `east`, `jsd`, `chance`, or null); `user`: `id`, `sounds`, `resp` (how listeners answered the person's latest call) |
 | `explain` | every 3 s | `items`: sentences generated from the telemetry (§12.4 of DESIGN), each with `text`, `species` (−1 = none) and `kind` |

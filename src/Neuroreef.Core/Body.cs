@@ -232,6 +232,15 @@ public static class Body
         foreach (var a in mo.Pairs) if (a.Chord >= 3f * a.Thick && a.Theta < MathF.PI / 4f) finPairs++;
         w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)Math.Clamp(finPairs, 1, 4);
         MorphVisible(mo, new Span<float>(w.PMorphVis, i * NMVIS, NMVIS));
+        {
+            // its proportions as the retired shape genes' bytes (Dimensions inverted: each axis exp(ln SHAPE_RANGE (2 g - 1)) of
+            // the cube of its volume), so the renderer draws the grown body's length, width and height
+            float side = MathK.Cbrt(MathF.Max(mo.Volume, 1e-12f)), lr = MathK.Log(K.SHAPE_RANGE);
+            float wMean = 0f, hMean = 0f; foreach (var sg in mo.Segs) { wMean += sg.W * sg.L; hMean += sg.H * sg.L; }
+            wMean /= MathF.Max(mo.Length, 1e-9f); hMean /= MathF.Max(mo.Length, 1e-9f);
+            static sbyte Shape(float share, float lr) => (sbyte)Math.Clamp((int)MathF.Round(((MathK.Log(MathF.Max(share, 1e-6f)) / lr + 1f) * 0.5f) * 254f - 127f), -127, 127);
+            w.PShapeG[i * 3] = Shape(mo.Length / side, lr); w.PShapeG[i * 3 + 1] = Shape(wMean / side, lr); w.PShapeG[i * 3 + 2] = Shape(hMean / side, lr);
+        }
         Signature(w, i);   // its look and MHC diversity, cached for DECIDE and LIFECYCLE (see Signature), from the body above
 
         w.PStrike[i] = strike;

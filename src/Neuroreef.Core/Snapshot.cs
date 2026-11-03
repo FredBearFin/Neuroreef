@@ -83,11 +83,14 @@ public sealed class Snapshot
             // the organism's own body genes, from which the console draws its body (ICD: record bytes 12-19)
             var gn = w.Genome.Slot(i);
             span[12] = (byte)G.ToGeneLog(w.PM[i], BodySize.Min, BodySize.Max);   // the body's actual size (its class floor included), on the world's mass-gene scale (status units: massMinKg..massMaxKg)
-            span[13] = (byte)gn[G.B_LEGS];
-            span[14] = (byte)gn[G.B_FINS];
-            span[15] = (byte)gn[G.B_WINGS];
+            // phase 4 (docs/BODYPLAN.md §13.6): legs, fins, wings and armour are the grown body's physics equivalents of the
+            // retired genes (Body.Express), on those genes' byte scale, until the renderer draws the module body itself
+            static byte Org(float v) => (byte)(sbyte)Math.Clamp((int)MathF.Round(v * 254f - 127f), -127, 127);
+            span[13] = Org(w.PLegs[i]);
+            span[14] = Org(w.PFins[i]);
+            span[15] = Org(w.PWings[i]);
             span[16] = (byte)gn[G.B_SIGHT];
-            span[17] = (byte)gn[G.B_ARMOUR];
+            span[17] = Org(MathF.Min(1f, w.PArmour[i] / K.ARMOUR_MAX));
             span[18] = (byte)gn[G.B_STRIKE];
             span[19] = (byte)(sbyte)Math.Clamp((int)MathF.Round(w.PDiet[i * Pools.N + (int)Pool.Meat] * 254f - 127f), -127, 127);   // meat-eating
             span[20] = w.PLegPairs[i];                                   // number of leg pairs (1..4)
@@ -95,8 +98,9 @@ public sealed class Snapshot
             span[21] = (byte)(w.PLoco[i] | (w.Call[cb] << 4));         // locomotion (low 4 bits: 0 walk .. 4 settled); the first sound of its utterance (high 4 bits, 0 none)
             span[22] = w.PFinPairs[i]; span[23] = w.PEyePairs[i];        // fin pairs, eye pairs (1..4)
             span[24] = (byte)(w.Call[cb + 1] | (w.Call[cb + 2] << 4));  // its second and third sounds (Revision N)
-            span[25] = (byte)(((int)(w.PInsul[i] * 15f + 0.5f) << 4) | (int)(w.PAppend[i] * 15f + 0.5f));   // fur (high 4 bits) and appendages (low), 0..15 (Revision O)
+            span[25] = (byte)(((int)(w.PInsul[i] * 15f + 0.5f) << 4) | (int)(MathF.Min(1f, w.PAppend[i]) * 15f + 0.5f));   // fur (high 4 bits) and appendages (low), 0..15 (Revision O)
             for (int k = 0; k < G.NAPPEARANCE; k++) span[26 + k] = (byte)gn[G.APPEARANCE + k];
+            for (int k = 0; k < 3; k++) span[26 + k] = (byte)w.PShapeG[i * 3 + k];   // the grown body's length, width, height (phase 4)
             // the water column (format 7, Respiration.cs): its depth below the water's surface in decimetres (0 at the surface
             // or out of water), the share of the step it spends there (the rest at the surface: a diver's breathing), its
             // lungs (0 gills .. 15 lungs) and its oxygen debt (0 .. 15 = about to suffocate or drown)
