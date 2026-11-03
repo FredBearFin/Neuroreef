@@ -247,9 +247,13 @@ public static class Respiration
                 f *= zlim > 0f ? MathF.Max(0f, 1f - zt / zlim) : 0f;
             }
             z = f > 0f ? zt : 0f; share = f > 0f ? f : 0f;
-            // down and up: once a step if it can stay down (it breathes there), else as many breath-hold dives as fill its
-            // share of the step at depth, each lasting what its store lasts
-            if (z > 0f) b.DiveM = 2f * z * (tDive > 0f ? MathF.Max(1f, share * StepSeconds * w.Dt / tDive) : 1f);
+            // down and up, as metres an hour whatever the step's length (2026-11-03, phase 5: they were "once a step" and "at
+            // least one dive a step", so a 10-minute world paid ~17x the vertical travel of a 2.92-hour one, and founded a
+            // different number of animals): one that can stay down (it breathes there) moves between the surface and its
+            // depth once a day, as diel vertical migrants do (Lampert 1989); a breath-holder makes as many dives as fill its
+            // share of the time at depth, each lasting what its store lasts (an expected number, fractional in a short step)
+            float stepS = StepSeconds * w.Dt;
+            if (z > 0f) b.DiveM = 2f * z * (tDive > 0f ? share * stepS / tDive : stepS / 86400f);
             b.Air = (1f - share) * basal * aAir * sLung;
             b.Water = basal * sW * ((1f - share) * aW0 + share * aZ);
             b.AWater = (1f - share) * aW0 + share * aZ;

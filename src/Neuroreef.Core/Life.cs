@@ -252,7 +252,10 @@ public static class Life
         for (int p = 0; p < Pools.NFIELD; p++)
         {
             if (diet[p] <= 0 || !Fields.Grows(p)) continue;
-            float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+            // (2026-11-03) the half-grazed stock a bite takes from is what one reference step of eating can take, x World.Dt a
+            // step, as the bite and gut rates beside it are: a stock taken whole every step made a 10-minute world's foragers
+            // eat ~17x faster an hour from it, and found more of them. Unchanged at the default step (Dt 1)
+            float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n) * w.Dt);
             if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));   // what it can clear (Respiration.PlanktonKg)
             if (p == (int)Pool.Algae && waterCells > 0) pass = MathF.Min(pass, (float)(bottom / n));   // what it can crop (BottomKg)
             rate = MathF.Max(rate, MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass));   // no more than its gut absorbs (C_ABSORB)
@@ -264,7 +267,7 @@ public static class Life
             for (int p = 0; p < Pools.NFIELD; p++)
             {
                 if (diet[p] <= 0 || !Fields.Grows(p)) continue;
-                float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n));
+                float pass = MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(stock[p] / n) * w.Dt);
                 if (p == (int)Pool.Phyto) pass = MathF.Min(pass, (float)(plank / n));
                 if (p == (int)Pool.Algae && waterCells > 0) pass = MathF.Min(pass, (float)(bottom / n));
                 float v = MathF.Min(absorb, diet[p] * Pools.Rho[p] * pass);
@@ -274,16 +277,19 @@ public static class Life
             float cruiseB = waterCells > 0 ? Respiration.CruiseCost(w, c, cruiseF) * (float)(waterCells / n) : 0f;
             Trace($"cells {n} water {waterCells / n:P0}: need/step {need:E2} = day {dayB:E2} + breath {breathCost / n:E2} + cruise {cruiseB:E2} (basal {w.PBasal[c]:E2}); " +
                   $"best food {(bp >= 0 ? Pools.Names[bp] : "-")} {bestPass:E2}/step = x{rate / MathF.Max(need, 1e-12f):F2} need, margin x{K.FORAGE_MARGIN:F0} (absorb cap x{absorb / MathF.Max(need, 1e-12f):F2} need; plankton {plank / n * 1000:F2} g, bottom {bottom / Math.Max(1, waterCells) * 1000:F2} g a step) " +
-                  (rate >= margin ? $"FOOD OK, feeds {(y + an.Detritus) / (need / w.Dt):F1}" : "FAILS FOOD TEST"));
+                  (rate >= margin ? $"FOOD OK, feeds {(y + an.Detritus) / (need / w.Dt):F1} (yield {y:E3}, animal food {an.Meat:E2} meat {an.Carrion:E2} carrion {an.Dung:E2} dung {an.Detritus:E2} detritus a reference step)" : "FAILS FOOD TEST"));
         }
         // a kill goes into the gut whole, as much of it as fits (Resolve.Strike), and passes as fast as the gut digests
-        if (an.MeatKg > 0f && MathF.Min(absorb, diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(dig, w.PGut[c]), an.MeatKg)) >= margin)
+        // (2026-11-03: the gut-full and the carcass are a meal per reference step of eating, x World.Dt per step, as the rates
+        // beside them are; they were per step whatever its length, so a 10-minute world founded more meat-eaters than a
+        // 2.92-hour one. At the default step, Dt 1, it is unchanged)
+        if (an.MeatKg > 0f && MathF.Min(absorb, diet[(int)Pool.Meat] * K.RHO_MEAT * MathF.Min(MathF.Min(dig, w.PGut[c] * w.Dt), an.MeatKg * w.Dt)) >= margin)
             fed += an.Meat;
         // carrion and dung are bitten from what lies about: their stock where nothing eats them is inflow over rot
         // (per cell of the range), and a forager finds it half eaten, as plants are
-        if (an.CarrionKg > 0 && MathF.Min(absorb, diet[(int)Pool.Carrion] * K.RHO_CARRION * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.CarrionKg / K.ROT_CARRION / n))) >= margin)
+        if (an.CarrionKg > 0 && MathF.Min(absorb, diet[(int)Pool.Carrion] * K.RHO_CARRION * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.CarrionKg / K.ROT_CARRION / n) * w.Dt)) >= margin)
             fed += an.Carrion;
-        if (an.DungKg > 0 && MathF.Min(absorb, diet[(int)Pool.Dung] * K.RHO_DUNG * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.DungKg / K.ROT_DUNG / n))) >= margin)
+        if (an.DungKg > 0 && MathF.Min(absorb, diet[(int)Pool.Dung] * K.RHO_DUNG * MathF.Min(MathF.Min(w.PBite[c], dig), 0.5f * (float)(an.DungKg / K.ROT_DUNG / n) * w.Dt)) >= margin)
             fed += an.Dung;
         return (float)(fed / (need / w.Dt));
     }
