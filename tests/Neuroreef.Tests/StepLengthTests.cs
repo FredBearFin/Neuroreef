@@ -75,7 +75,9 @@ public class StepLengthTests
         // the appendage heat surface anchored on the plain body. Was 15361944388290876228.
         // Re-pinned 2026-11-03 (third round, docs/BODYPLAN.md §13.15): the vertical travel of dives is metres an hour, not
         // once a step (a swimmer that stays down moves between the surface and its depth once a day). Was 10104198921116109538.
-        Assert.Equal(5632958963462331332UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03: a crawling wave runs over the length the body's mass is spread over, not nose to tail (a
+        // weightless thread made a head on a 10 cm tail the cheapest crawler). Was 5632958963462331332.
+        Assert.Equal(11947864240597378162UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time
