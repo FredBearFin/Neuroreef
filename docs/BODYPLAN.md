@@ -1154,6 +1154,19 @@ and its representative member's grown body, every segment (L, W, H, rigidity, po
 flatness, joints, rigidity, porosity, droop, sagittal, and its physics role). The AGENTS record keeps its layout; its
 legs, fins, wings, armour and shape bytes are the morphology's legacy display values, so the existing renderer keeps
 working until it draws the module body.
+
+Since 2026-11-03 the console draws it (js/creatures/modular.js). Each living clade's body is built once by the Body
+Lab's own builder (js/bodylab/build.js `buildBody`, at a coarse `near` or `far` detail with a triangle budget for its
+limbs and gill fringes), merged into one geometry and drawn as one InstancedMesh per clade and detail. An animal is
+drawn at its own true length (status `bodyLenM`) over the representative's, times the view's creature-size factor.
+Animals a few pixels long are drawn as the old template's specks, and so is any clade with no `morph` (an older
+server or save). A body that would topple (`morph.topple`, Server/BodyPose.cs: the chance `Live.StandPosture` weights
+by `Physics.Topple`) lies on its right side whenever it stands on the ground, in the console and in the Body Lab. A
+swimmer in open water and a flier stay upright. The vertex shader animates the body by each pair's physics role:
+support limbs swing in alternation, swimming and flying pairs beat, steering pairs trim, and the trunk of a swimmer or
+limbless crawler bends in a wave. The clade table added `topple`, `intT`, `invag`, `chord`, `thick` and `exo` for
+this. A clade is drawn from its representative's body, so members whose genomes differ visibly within a clade are not
+told apart beyond their size and pigment.
 ### 13.7 Phase 5: tests (2026-11-03)
 
 Tests that describe a body by its labelled genes still do so. A genome with no module block is translated each time it

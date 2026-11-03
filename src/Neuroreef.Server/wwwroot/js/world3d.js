@@ -11,6 +11,7 @@ import { agentState, agentGenes, REC, massRangeVersion } from './net.js';
 import { Scale, MODEL_LEN } from './scale.js';
 import { Look } from './look/look.js';
 import { bodyGeometry, bodyMaterial, bodyMesh, beginBodies, placeBody, finishBodies, bodySize, appearanceColor } from './creatures/body.js';
+import { ModularBodies } from './creatures/modular.js';
 import { Ground, CARVE_NONE } from './terrain/ground.js';
 import { fromWire, fromCells, stampRivers, ribbonGeometry, patchRiverMaterial, riverWidth, preparePath } from './terrain/rivers.js';
 import { decodeFeatures, stampFeatures, featureMeshes } from './terrain/caves.js';
@@ -56,6 +57,10 @@ const VIEW_M_MIN = 30, VIEW_M_MAX = 80;   // ... framed in a view this many metr
 const MIN_DIST_M = 1;        // the overview zooms in to this distance (m): a 10 cm animal about a sixth of the view
 const PAN_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ', 'KeyE', 'Minus', 'Equal'];
 const SLOPE_SC = 0.25;       // a far body drawn longer than this (world units, ~1 m) is sheared to the slope too
+// module bodies (2026-11-03, js/creatures/modular.js): an animal drawn at least MOD_PX long on screen is drawn from its
+// clade's grown body (near detail from NEAR_PX, within MOD_NEAR_CAP of them), a smaller one as the template's speck; at
+// most MOD_CAP module bodies a frame (the rest as the template). ?modular=0 draws the template everywhere
+const MOD_PX = 5, MOD_NEAR_CAP = 384, MOD_CAP = 12000;
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
 const FAR_BUDGET = 16000;    // at most about this many low-detail bodies per frame (a sample of the far ones when there are more)
@@ -573,6 +578,8 @@ export class World3D {
     this.near = this._allocBodies(null, this.nearGeo, NEAR_CAP);
     this.far = this._allocBodies(null, this.farGeo, 4096);
     this.cladeRGB = new Float32Array(NCLADES * 3).fill(0.5);
+    this.modular = /[?&]modular=0\b/.test(location.search) ? null
+      : new ModularBodies(this.scene, { shared: this.bodyMat.userData.uniforms, shadows: !!this.look.quality.shadows });
     this.setClades(this.meta.species || []);
     this.eggs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 6, 4), new THREE.MeshLambertMaterial({ color: 0xffffff }), 4096);
     this.eggs.count = 0; this.eggs.frustumCulled = false;
@@ -593,6 +600,7 @@ export class World3D {
   setClades(list) {
     if (!Array.isArray(list)) return;
     this.clades = list;
+    if (this.modular) this.modular.setClades(list);   // each living clade's grown body (clades.morph), built when first drawn
     const n = Math.max(NCLADES, list.length);
     if (this.cladeRGB.length < n * 3) this.cladeRGB = new Float32Array(n * 3).fill(0.5);
     const c = new THREE.Color();
@@ -1217,7 +1225,26 @@ export class World3D {
     U.uTime.value = now / 1000; U.uBodyK.value = bk;
     U.uSpeciesOverlay.value = this.speciesOverlay ? 1 : 0;
     U.uRimSea.value = this._camUnder ? 1 : 0;   // under the sea: a bright rim, so a body reads against the blue (2026-11-02)
-    let nn = 0, nf = 0, ne = 0;
+    let nn = 0, nf = 0, ne = 0, nm = 0, nmn = 0;
+    const MB = this.modular, upm = this.scale.upm, tint = this._tint ||= new THREE.Color();
+    if (MB) MB.begin(this.speciesOverlay);
+    // an animal drawn from its clade's grown body (js/creatures/modular.js): at its own true length over the clade
+    // representative's, times its display factor (sc / tsc); lying on its side on the ground when it would topple
+    const modular = (serial, e, x, gy, y, h, sc, tsc, dist, isNear, gait, ph, rs, cr, cg, cb, sf, ss, dead) => {
+      const mb = MB && MB.get(e.sp);
+      if (!mb || nm >= MOD_CAP || sc * lenPx < MOD_PX * dist) return false;
+      const near = isNear && nmn < MOD_NEAR_CAP;
+      const lie = dead || (mb.topple > 0.5 && e.grounded);   // (a corpse lies on its side)
+      const L = this.lenM.get(serial) ?? mb.lengthM * Math.cbrt((e.mass || mb.massKg) / mb.massKg) * (e.stage === 1 ? 0.55 : 1);
+      const k = (L / mb.lengthM) * upm * (sc / tsc);
+      if (this.speciesOverlay || dead) tint.setRGB(cr, cg, cb); else appearanceColor(e, tint);
+      // the body wave: a swimmer in open water always, a limbless crawler as it moves, a legged walker barely
+      const swimming = !e.grounded && e.pose !== 'Fly' && !(e.fly && (e.air || 0) > 0.01);
+      const wave = dead ? 0 : swimming ? 0.6 + 0.4 * gait : (mb.crawler ? gait : 0.15 * gait);
+      if (!MB.place(e.sp, near, lie, x, gy, y, h, k, k * (dead ? 0.6 : 1), sf, ss, rs ? 0 : gait, ph, wave, (e.under || 0) / 15, tint.r, tint.g, tint.b)) return false;
+      nm++; if (near) nmn++;
+      return true;
+    };
     // with tens of thousands of organisms, draw every near one and a sample of the far ones (by serial, so the
     // same ones stay drawn from frame to frame): far bodies are a few pixels, and the frame time stays bounded
     const farStride = Math.max(1, Math.ceil(total / FAR_BUDGET));
@@ -1285,6 +1312,7 @@ export class World3D {
       // sheared to the slope when near, or when drawn long enough (magnified) that a slope under it shows: its feet on
       // the ground, not buried at one end and floating at the other
       if ((isNear || sc > SLOPE_SC) && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
+      if (modular(serial, e, x, gy, y, h, sc, tsc, dist, isNear, e.gait, ph, rs, cr, cg, cb, SL[0], SL[1], false)) continue;
       if (isNear && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nn++;
       else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nf++;
     }
@@ -1301,10 +1329,13 @@ export class World3D {
       e.pose = null;           // it lies as its body is built, not as it last moved (a flier shot down lies with wings folded)
       const isNear = ddx * ddx + ddz * ddz < nr * nr;
       if (isNear && e.grounded) this._slope(x, y, d.h, sc, SL); else SL[0] = SL[1] = 0;
+      if (modular(d.serial, e, x, gy + sc * 0.15, y, d.h, sc, this._trueSize(e), Math.hypot(x - camX, gy - camY, y - camZ), isNear, 0, 0, 1, r, g, b, SL[0], SL[1], true)) continue;
       if (isNear && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, pk, 1, r, g, b, SL[0], SL[1])) nn++;
       else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, pk, 1, r, g, b, SL[0], SL[1])) nf++;
     }
     finishBodies(near); finishBodies(far);
+    if (MB) MB.finish();
+    this.drawn = { near: nn, far: nf, modular: nm, modularNear: nmn, modTris: MB ? MB.stats.tris : 0, modMeshes: MB ? MB.stats.meshes : 0 };
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
 
     // selection marker, field of view and perceived animals

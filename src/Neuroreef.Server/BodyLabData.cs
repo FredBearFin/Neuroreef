@@ -163,6 +163,9 @@ public sealed class LabBody
     public float O2Supply { get; set; }
     public float O2Demand { get; set; }
     public float SkinO2 { get; set; }      // share of its oxygen through plain skin
+    /// <summary>The chance it tips over on rough ground (BodyPose.Topple, as Morph.Live.StandPosture weights it): above
+    /// 0.5 a body on the ground is drawn lying on its side (2026-11-03).</summary>
+    public float Topple { get; set; }
     public string Summary { get; set; } = "";
     public List<LabSeg> Segs { get; set; } = new();
     public List<LabPair> Pairs { get; set; } = new();
@@ -212,6 +215,7 @@ public static class LabReport
             Mode = Evolver.Mode(e), Speed = R(e.Speed), Rigidity = R(m.Rigidity), IntShare = R(m.IntMass / m.Mass), Moult = R(e.MoultShare),
             ExchExt = R(m.ExchExt), ExchInt = R(m.ExchInt), Crush = R(e.CrushForce), ItemShare = R(e.ItemShare), PKill = R(e.PKill),
             Escape = R(e.Escape), Mortality = R(e.Mortality), TurnR = R(MathF.Min(e.TurnR, 99f)), O2Supply = R(e.O2Supply), O2Demand = R(e.O2Demand),
+            Topple = R(BodyPose.Topple(m)),
         };
 
         bool water = env.Medium == Medium.Water;

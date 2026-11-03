@@ -17,6 +17,27 @@ export const ROLE_NAMES = {
 
 const SPHERE = new THREE.SphereGeometry(1, 40, 28);
 const SPHERE_LO = new THREE.SphereGeometry(1, 16, 12);
+// the detail levels (opts.detail): the lab's own, and the console's near and far module bodies (js/creatures/modular.js
+// merges a body into one geometry per clade and draws thousands of it, so its spheres and lofts are coarse)
+// (near and far: each limb link's sphere as fine as a budget of limb triangles over its links allows, and at most
+// `fringes` gill filaments in all)
+const DETAIL = {
+  lab: { sphere: SPHERE, small: SPHERE_LO, nx: 64, na: 40, extras: true },
+  near: { limbTris: 9000, small: new THREE.SphereGeometry(1, 6, 4), nx: 28, na: 16, extras: true, fringes: 240 },
+  far: { limbTris: 1000, small: null, nx: 10, na: 8, extras: false },
+};
+const LINK_SPHERES = [[12, 8], [8, 6], [6, 4], [4, 3]].map(([w, h]) => { const g = new THREE.SphereGeometry(1, w, h); return [g, g.index.count / 3]; });
+/** The detail for this body: the sphere for its limb links within the budget, and the share of its fringes drawn. */
+function detailFor(b, D) {
+  if (!D.limbTris) return { ...D, fringeK: 1 };
+  const pairs = b.pairs || [], segs = b.segs || [];
+  let links = 0, fr = 0;
+  for (const p of pairs) { const n = 2 * ((p.joints || 0) + 1), ev = (p.pore || 0) * (1 - (p.invag || 0)); links += n; if (ev > 0.005) fr += n * (3 + 14 * ev); }
+  for (const s of segs) { const ev = (s.pore || 0) * (1 - (s.invag || 0)); if (ev > 0.005) fr += 8 + 90 * Math.sqrt(ev); }
+  const per = D.limbTris / Math.max(1, links);
+  const sphere = (LINK_SPHERES.find(([, t]) => t <= per) || LINK_SPHERES[LINK_SPHERES.length - 1])[0];
+  return { ...D, sphere, fringeK: D.fringes ? Math.min(1, D.fringes / Math.max(1, fr)) : 1 };
+}
 const FRINGE = (() => { const g = new THREE.CylinderGeometry(0.12, 0.5, 1, 5, 1); g.translate(0, 0.5, 0); return g; })();   // a filament from its base
 
 const SOFT = new THREE.Color(0xe3a596), CHITIN = new THREE.Color(0xb7853f), CALC = new THREE.Color(0xefe2c4);
@@ -58,10 +79,20 @@ function material(color, mineral, shine, role, opts, plain) {
   return m;
 }
 
+/** Whether a body is drawn lying on its side: one that would topple on rough ground (b.topple, the chance it tips,
+ *  BodyPose.Topple on the server, as the live sim's Live.StandPosture weights it) and is not swimming. */
+export function liesDown(b, swimming = b.mode === 'swims') { return !swimming && (b.topple || 0) > 0.5; }
+
 /** The body as a group, centred, with its longest extent `size` scene units. Each pickable mesh carries
- *  userData.part = { kind: 'seg'|'pair', index }. Returns { group, extent (m), scale, bottom (scene y) }. */
+ *  userData.part = { kind: 'seg'|'pair', index }, and userData.rig = { kind: 'trunk'|'limb'|'gill'|'dark', pair, side,
+ *  link, base (the limb's root, body frame), role } for the console's animation (js/creatures/modular.js).
+ *  opts.detail: 'lab' (default), 'near' or 'far'; opts.fit = false leaves it in metres, uncentred (head at +x, back at
+ *  +y, left at +z); opts.lie (default liesDown(b)) lays it on its right side (rotated about its long axis: its width
+ *  becomes its height), as the sim has a body that would topple lie. Returns { group, extent (m), scale, bottom (scene
+ *  y), lying }. */
 export function buildBody(b, opts = {}) {
-  const size = opts.size ?? 2.4;
+  const size = opts.size ?? 2.4, D = detailFor(b, DETAIL[opts.detail] || DETAIL.lab);
+  const lie = opts.lie ?? liesDown(b);
   const g = new THREE.Group();
   const segs = b.segs || [], pairs = b.pairs || [];
   const L = segs.reduce((s, x) => s + (x.l || 0), 0) || 0.01;
@@ -78,30 +109,31 @@ export function buildBody(b, opts = {}) {
     const part = { kind: 'seg', index: i };
     const xHi = L / 2 - (s.x0 || 0), xLo = xHi - l;
     const soft = rig > 0.35 ? 0.05 : rig;
-    const body = new THREE.Mesh(loft(prof, xLo, xHi, 1, 0, Math.PI * 2, L), mk(tissueColor(soft), soft, rig > 0.35 ? 0.1 : rig * 0.6, s.primary, opts));
-    body.userData.part = part; g.add(body);
+    const body = new THREE.Mesh(loft(prof, xLo, xHi, 1, 0, Math.PI * 2, L, false, D), mk(tissueColor(soft), soft, rig > 0.35 ? 0.1 : rig * 0.6, s.primary, opts));
+    body.userData.part = part; body.userData.rig = { kind: 'trunk' }; g.add(body);
     // a mineralised integument: a plated shell over the back and flanks (a gap at each joint between plates), its
     // thickness exaggerated just enough to see
     if (rig > 0.35) {
       const t = Math.min(0.14, Math.max(0.035, 2 * (s.intT || 0) / h));
       const inset = Math.min(l * 0.08, 0.04 * L / segs.length);
-      const shell = new THREE.Mesh(loft(prof, xLo + inset, xHi - inset, 1 + t, -0.15 * Math.PI, 1.3 * Math.PI, L, true),
+      const shell = new THREE.Mesh(loft(prof, xLo + inset, xHi - inset, 1 + t, -0.15 * Math.PI, 1.3 * Math.PI, L, true, D),
         mk(tissueColor(rig), rig, Math.min(1, 0.4 + rig), s.primary, opts));
       shell.material.side = THREE.DoubleSide;   // an open shell: its underside shows at the flanks
-      shell.userData.part = part; g.add(shell);
+      shell.userData.part = part; shell.userData.rig = { kind: 'trunk', twoSided: true }; g.add(shell);
     }
     // everted exchange surface: gill-like fringes along both flanks, as many and as long as the porous share
     const ev = (s.pore || 0) * (1 - (s.invag || 0));
     // (by the square root: a 3% porous share, folded tenfold, is already a third more surface)
-    if (ev > 0.005) fringes(g, mk(GILL, 0, 0.3, 'gas', true), part, Math.round(8 + 90 * Math.sqrt(ev)), cx, l, w, h, 0.35 + 2.2 * Math.sqrt(ev), prof);
+    if (D.extras && ev > 0.005) fringes(g, mk(GILL, 0, 0.3, 'gas', true), part, Math.round((8 + 90 * Math.sqrt(ev)) * D.fringeK), cx, l, w, h, 0.35 + 2.2 * Math.sqrt(ev), prof);
     // folded-in exchange: dark openings (spiracles, a lung's pore) on the flanks
     const inn = (s.pore || 0) * (s.invag || 0);
-    if (inn > 0.005) openings(g, mk(PORE, 0, 0.2, 'gas', true), part, Math.min(6, Math.round(1 + 20 * inn)), cx, l, w, h, prof);
+    if (D.extras && inn > 0.005) openings(g, mk(PORE, 0, 0.2, 'gas', true), part, Math.min(6, Math.round(1 + 20 * inn)), cx, l, w, h, prof, D.small);
     // the mouth at the front of the first segment
-    if (i === 0) {
-      const mouth = new THREE.Mesh(SPHERE_LO, new THREE.MeshStandardMaterial({ color: 0x2a0b10, roughness: 0.6 }));
+    if (i === 0 && D.small) {
+      const mouth = new THREE.Mesh(D.small, new THREE.MeshStandardMaterial({ color: 0x2a0b10, roughness: 0.6 }));
       mats.push(mouth.material);
-      mouth.scale.set(l * 0.05 + 1e-5, h * 0.12, w * 0.16); mouth.position.set(L / 2 - Math.min(l * 0.12, h * 0.05), -h * 0.08, 0); g.add(mouth);
+      mouth.scale.set(l * 0.05 + 1e-5, h * 0.12, w * 0.16); mouth.position.set(L / 2 - Math.min(l * 0.12, h * 0.05), -h * 0.08, 0);
+      mouth.userData.rig = { kind: 'dark' }; g.add(mouth);
     }
   });
 
@@ -120,7 +152,7 @@ export function buildBody(b, opts = {}) {
     const mineral = p.mineral || 0, shine = Math.min(1, mineral * (0.3 + 0.7 * (p.exo || 0)));
     const mat = mk(tissueColor(mineral), mineral, shine, p.primary, opts);
     const knuckle = mk(tissueColor(mineral).multiplyScalar(0.7), mineral, shine, p.primary, opts);
-    const fr = (p.pore || 0) * (1 - (p.invag || 0)) > 0.005 ? mk(GILL, 0, 0.3, 'gas', true) : null;
+    const fr = D.extras && (p.pore || 0) * (1 - (p.invag || 0)) > 0.005 ? mk(GILL, 0, 0.3, 'gas', true) : null;
     for (const side of [1, -1]) {
       let base, dirAt;
       const th = p.theta || 0, links = (p.joints || 0) + 1, len = p.len || 1e-4;
@@ -138,17 +170,18 @@ export function buildBody(b, opts = {}) {
       for (let j = 0; j < links; j++) {
         const d = dirAt(j).normalize(), ll = len / links;
         const taper = 1 - 0.35 * (j / Math.max(1, links));
-        const m = new THREE.Mesh(SPHERE, mat);
+        const m = new THREE.Mesh(D.sphere, mat);
         orient(m, d);
         m.scale.set((p.chord || 1e-4) / 2 * taper, ll / 2 * 1.08, (p.thick || 1e-4) / 2 * taper);
         m.position.copy(at).addScaledVector(d, ll / 2);
-        m.userData.part = part; g.add(m);
-        if (fr) fringeAlong(g, fr, part, m, d, ll, (p.chord || 1e-4) * taper, (p.pore || 0) * (1 - (p.invag || 0)));
+        const rig = { kind: 'limb', pair: i, side, link: j, base: base.clone(), role: p.role || p.primary || 'passive', sagittal: !!p.sagittal };
+        m.userData.part = part; m.userData.rig = rig; g.add(m);
+        if (fr) fringeAlong(g, fr, part, m, d, ll, (p.chord || 1e-4) * taper, (p.pore || 0) * (1 - (p.invag || 0)), { ...rig, kind: 'gill' }, D.fringeK);
         at.addScaledVector(d, ll);
-        if (j < links - 1) {   // a joint: a knuckle between two rigid links
+        if (j < links - 1 && D.small) {   // a joint: a knuckle between two rigid links
           const r = Math.min(p.chord || 1e-4, p.thick || 1e-4) * 0.36 * taper;
-          const kn = new THREE.Mesh(SPHERE_LO, knuckle);
-          kn.scale.setScalar(r); kn.position.copy(at); kn.userData.part = part; g.add(kn);
+          const kn = new THREE.Mesh(D.small, knuckle);
+          kn.scale.setScalar(r); kn.position.copy(at); kn.userData.part = part; kn.userData.rig = rig; g.add(kn);
         }
       }
       span = Math.max(span, Math.abs(at.z) * 2, Math.abs(at.x - cx) + L / 2);
@@ -156,6 +189,13 @@ export function buildBody(b, opts = {}) {
     }
   });
 
+  // lying on its side: turned about its long axis, its back to +z (the left) and its right flank down
+  if (lie) g.rotation.x = Math.PI / 2;
+  g.userData.lying = lie;
+  if (opts.fit === false) {
+    g.userData.dispose = () => { mats.forEach(m => m.dispose()); g.traverse(o => { if (o.geometry?.userData.own) o.geometry.dispose(); }); };
+    return { group: g, extent: L, length: L, scale: 1, bottom: 0, lying: lie };
+  }
   // fit it to the view
   const box = new THREE.Box3().setFromObject(g);
   const ext = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z, 1e-6);
@@ -169,7 +209,7 @@ export function buildBody(b, opts = {}) {
     mats.forEach(m => m.dispose());
     g.traverse(o => { if (o.geometry?.userData.own) o.geometry.dispose(); });   // the lofted trunk (the rest is shared)
   };
-  return { group: outer, extent: ext, length: L, scale: k, bottom: (box.min.y - ctr.y) * k };
+  return { group: outer, extent: ext, length: L, scale: k, bottom: (box.min.y - ctr.y) * k, lying: lie };
 }
 
 const UP = new THREE.Vector3(0, 1, 0), AX = new THREE.Vector3(1, 0, 0);
@@ -209,8 +249,8 @@ function trunkProfile(segs, L) {
 
 /** A lofted strip of the trunk from x1 down to x0, at k x its radius, over angles a0..a1 (0 the right flank, pi/2
  *  the back). Its v texture coordinate runs from the belly (0) to the back (1), for the countershading. */
-function loft(prof, x0, x1, k, a0, a1, L) {
-  const nx = Math.max(3, Math.ceil(64 * (x1 - x0) / L)) + 1, na = 40;
+function loft(prof, x0, x1, k, a0, a1, L, _open, D = DETAIL.lab) {
+  const nx = Math.max(3, Math.ceil(D.nx * (x1 - x0) / L)) + 1, na = D.na;
   const pos = new Float32Array((nx + 1) * (na + 1) * 3), uv = new Float32Array((nx + 1) * (na + 1) * 2), idx = [];
   let p = 0, q = 0;
   for (let i = 0; i <= nx; i++) {
@@ -249,11 +289,11 @@ function fringes(g, mat, part, count, cx, l, w, h, rel, prof) {
       o.scale.set(len * 0.18, len, len * 0.18);
       o.updateMatrix(); im.setMatrixAt(n++, o.matrix);
     }
-  im.userData.part = part; g.add(im);
+  im.userData.part = part; im.userData.rig = { kind: 'gill' }; g.add(im);
 }
 
-function fringeAlong(g, mat, part, link, d, ll, chord, ev) {
-  const per = Math.max(2, Math.round(3 + 14 * ev));
+function fringeAlong(g, mat, part, link, d, ll, chord, ev, rig, k = 1) {
+  const per = Math.max(2, Math.round((3 + 14 * ev) * k));
   const im = new THREE.InstancedMesh(FRINGE, mat, per);
   const o = new THREE.Object3D();
   const back = new THREE.Vector3(-1, 0, 0);
@@ -264,18 +304,18 @@ function fringeAlong(g, mat, part, link, d, ll, chord, ev) {
     o.scale.set(fl * 0.15, fl, fl * 0.15);
     o.updateMatrix(); im.setMatrixAt(i, o.matrix);
   }
-  im.userData.part = part; g.add(im);
+  im.userData.part = part; im.userData.rig = rig; g.add(im);
 }
 
-function openings(g, mat, part, count, cx, l, w, h, prof) {
+function openings(g, mat, part, count, cx, l, w, h, prof, sphere = SPHERE_LO) {
   for (const side of [1, -1])
     for (let i = 0; i < count; i++) {
       const x = cx + ((i + 0.5) / count - 0.5) * l * 0.7;
       const [ry, rz] = prof(x), a = 0.16;   // a little above the flank's widest line
-      const m = new THREE.Mesh(SPHERE_LO, mat);
+      const m = new THREE.Mesh(sphere, mat);
       const r = Math.min(l / count, h) * 0.1;
       m.scale.set(r, r, r * 0.35); m.position.set(x, ry * Math.sin(a), side * rz * Math.cos(a) * 0.99);
-      m.userData.part = part; g.add(m);
+      m.userData.part = part; m.userData.rig = { kind: 'dark' }; g.add(m);
     }
 }
 
