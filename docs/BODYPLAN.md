@@ -1476,7 +1476,7 @@ Every class was run in its own test process on the code of this round:
   - `docs/CONSTANTS.md` was regenerated (it was stale since phase 2c's EXP_FLY_AVAIL), and the test passes from the
     repository.
 - **Re-pinned:** `DefaultStepIsBitIdenticalToBefore`, 10104198921116109538 → 5632958963462331332 (the dives).
-- **Retired** (skipped, with the reason in the attribute; listed in §13.7 and §13.13): 16 tests of labelled-gene
+- **Retired** (skipped, with the reason in the attribute; listed in §13.7 and §13.13): 15 tests of labelled-gene
   formulas.
 
 ## References
