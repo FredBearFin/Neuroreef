@@ -224,8 +224,10 @@ public static class Translate
         float wingLen = WING_LEN * (0.4f + 0.6f * l.Wings) * (l.Wings > VESTIGE ? 1f : 0f);
         float wingAR = 5f + 10f * l.WingShape;
         float wingC = 2f * wingLen / wingAR, wingT = wingC / WING_FLAT;
-        // a thorax under 0.02 cube sides (a near-vestigial wing) may clamp at the least segment length, as vestigial appendages do
-        Span<float> seg = stackalloc float[] { hs * L, thorax * L >= 0.02f ? thorax * L : rest * L, rest * L, ts * L, W, H };
+        // the wing thorax never sets the scale: a short one (a small wing gene) clamps at the least segment length, as
+        // vestigial appendages do (phase 2c: a 0.03-side thorax for a 0.05 wing gene forced the scale up until the legs
+        // clamped at their longest gene, 30% short)
+        Span<float> seg = stackalloc float[] { hs * L, rest * L, ts * L, W, H };
         Span<float> app = stackalloc float[] { legLen, legT, finLen, finC, finT, bladeLen, bladeC, bladeT, wingLen, wingC, wingT };
         float cLo = 0f, cHi = float.PositiveInfinity;
         foreach (var v in seg) { cLo = MathF.Max(cLo, Development.SEG_L_LO / v); cHi = MathF.Min(cHi, Development.SEG_L_HI / v); }
@@ -282,7 +284,10 @@ public static class Translate
                 var a = new AppGene { Innov = IN_LEG + (uint)k };
                 a.P[AP.LEN] = AL(legLen); a.P[AP.CHORD] = AC(legT); a.P[AP.THICK] = AT(legT);
                 a.P[AP.DROOP] = LEG_DROOP; a.P[AP.JOINTS] = 3.5f / (Development.MAX_JOINTS + 1);
-                a.P[AP.MUSCLE] = LEG_MUSCLE * l.Legs; a.P[AP.MINERAL] = 1f; a.P[AP.WALL] = (LEG_WALL - 0.02f) / 0.98f; a.P[AP.EXO] = 0f; a.P[AP.HOLLOW] = LEG_HOLLOW / Mat.HOLLOW_MAX;
+                // the leg gene sets the whole body's leg muscle (LEG_MUSCLE x 0.6 of the trunk's tissue x legs), however many
+                // trunk segments the fins need: fewer leg pairs than segments each take more of their own (at most 0.6 of
+                // it). Phase 2c: one leg pair among four fin segments had a quarter of a walker's leg muscle
+                a.P[AP.MUSCLE] = Clamp01(LEG_MUSCLE * l.Legs * n / Math.Max(1, Math.Min(n, l.LegPairs))); a.P[AP.MINERAL] = 1f; a.P[AP.WALL] = (LEG_WALL - 0.02f) / 0.98f; a.P[AP.EXO] = 0f; a.P[AP.HOLLOW] = LEG_HOLLOW / Mat.HOLLOW_MAX;
                 s.Apps.Add(a);
             }
             if (k < l.FinPairs && l.Fins > VESTIGE)
@@ -290,7 +295,7 @@ public static class Translate
                 var a = new AppGene { Innov = IN_FIN + (uint)k };
                 a.P[AP.LEN] = AL(finLen); a.P[AP.CHORD] = AC(finC); a.P[AP.THICK] = AT(finT);
                 a.P[AP.DROOP] = 0f; a.P[AP.JOINTS] = 2.5f / (Development.MAX_JOINTS + 1);
-                a.P[AP.MUSCLE] = LEG_MUSCLE * l.Fins; a.P[AP.MINERAL] = 0.2f; a.P[AP.WALL] = 0.3f; a.P[AP.EXO] = 0f;
+                a.P[AP.MUSCLE] = Clamp01(LEG_MUSCLE * l.Fins * n / Math.Max(1, Math.Min(n, l.FinPairs))); a.P[AP.MINERAL] = 0.2f;   // likewise a.P[AP.WALL] = 0.3f; a.P[AP.EXO] = 0f;
                 s.Apps.Add(a);
             }
             g.Segs.Add(s);
