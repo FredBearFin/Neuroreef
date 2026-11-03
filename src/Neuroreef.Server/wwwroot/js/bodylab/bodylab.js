@@ -105,9 +105,18 @@ function showFrame(i) {
   main.add(mainObj);
   buildTiles(f, look);
   const b = f.champion;
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  if (data.source === 'world') {
+    // a live world's real animals (--world-bodies): each lineage's first adult; the step is the world's
+    $('main-lab').innerHTML = `<b>step ${f.gen.toLocaleString()}</b> · lineage ${esc(b.lineage)} · ${b.size.toLocaleString()} alive · ${mass(b.mass)}, ${len(b.length)} long · ${b.mode}`;
+    $('tl-gen').textContent = `step ${f.gen.toLocaleString()} of ${data.generations.toLocaleString()}`;
+    $('tl-note').textContent = `${data.env}, seed ${data.seed} · ${f.species} lineages alive · the largest has ${Math.round(f.best).toLocaleString()} animals`;
+  } else {
   $('main-lab').innerHTML = `<b>generation ${f.gen + 1}</b> · champion · ${mass(b.mass)}, ${len(b.length)} long · ${b.mode} · fitness ${fx(b.fitness)}`;
   $('tl-gen').textContent = `generation ${f.gen + 1} of ${data.generations}${live && !data.done ? ' (evolving…)' : ''}`;
   $('tl-note').textContent = `${data.env}, seed ${data.seed}, ${data.population} bodies · ${f.species} species · best ${fx(f.best)}, mean ${fx(f.mean)}`;
+  }
+  document.querySelectorAll('#tiles-head').forEach((e) => { e.textContent = data.source === 'world' ? 'largest lineages at this step' : 'species at this generation'; });
   sidePanel(b);
   drawSpark();
 }
@@ -134,7 +143,8 @@ function buildTiles(f, look) {
     cam.userData.at = new THREE.Vector3(k * 8, -0.1, 0);
     const el = document.createElement('div');
     el.className = 'tile-lab';
-    el.innerHTML = `<b>${k === 0 ? 'champion' : 'species ' + (k + 1)}</b>${b.size ? ` · ${b.size} bodies` : ''} · fit ${fx(b.fitness)}<br>${mass(b.mass)} · ${b.segments} seg · ${b.pairCount || 0} pairs · ${b.mode}${b.rigidity > 0.5 ? ' · rigid' : ''}`;
+    const nm = String(b.lineage ?? '').replace(/[&<>"']/g, '');
+    el.innerHTML = (data.source === 'world' ? `<b>${nm}</b> · ${b.size} alive<br>` : `<b>${k === 0 ? 'champion' : 'species ' + (k + 1)}</b>${b.size ? ` · ${b.size} bodies` : ''} · fit ${fx(b.fitness)}<br>`) + `${mass(b.mass)} · ${b.segments} seg · ${b.pairCount || 0} pairs · ${b.mode}${b.rigidity > 0.5 ? ' · rigid' : ''}`;
     $('tiles').appendChild(el);
     tiles.push({ obj, cam, el, b, spin: k * 0.9 });
   });

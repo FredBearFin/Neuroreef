@@ -32,6 +32,9 @@ public sealed class LabFile
     /// <summary>The final generation: its champion and the best of every species, best first.</summary>
     public LabSnapshot? Final { get; set; }
     public string? Table { get; set; }
+    /// <summary>Set for a file exported from a live world (--world-bodies): "world". The bodies are its real animals, each
+    /// lineage's first adult, grown at its own mass; Gen is the world's step and Best/Mean its lineage sizes.</summary>
+    public string? Source { get; set; }
     public string? Detail { get; set; }
 }
 
@@ -135,6 +138,7 @@ public sealed class LabPair
 
 public sealed class LabBody
 {
+    public string? Lineage { get; set; }   // its lineage's name, for a body from a live world
     public LabGenome Genome { get; set; } = new();
     public float Fitness { get; set; }
     public int Size { get; set; }          // members of its species (0 for a lone champion)
@@ -197,9 +201,9 @@ public static class LabReport
     // the cross-section of a pair's muscle (m²): the same formula as Physics.MuscleArea (private there)
     static float MuscleArea(Morphology m, Pair a) => a.Muscle / (Mat.RHO_TISSUE * MathF.Max(m.Segs[a.Seg].L, 1e-3f));
 
-    public static LabBody Body(MorphGenome g, MorphEnv env, int size = 0)
+    public static LabBody Body(MorphGenome g, MorphEnv env, int size = 0, float massKg = 0f)
     {
-        var m = Development.Grow(g);
+        var m = massKg > 0f ? Development.Grow(g, massKg) : Development.Grow(g);
         var e = Physics.Evaluate(m, env);
         var b = new LabBody
         {

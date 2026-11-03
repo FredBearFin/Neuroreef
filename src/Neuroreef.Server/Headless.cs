@@ -22,6 +22,14 @@ public static class Headless
         Console.WriteLine($"start: {(bank != null ? $"the world, brains from gene bank ({bank.Total} genomes), no spawning" : "the world, RANDOM BRAINS, no spawning")}   alive {w.AliveCount}");
         Console.Write(CladeLoco(w)); Console.WriteLine(LocoReport(w));
         Header(w);
+        // the world's real bodies for the Body Lab (--world-bodies): each lineage's first adult at every report
+        var labEnv = o.WorldBodies != null ? LabReport.EnvOf(o.Ocean ? "open-water" : "land") : null;
+        var lab = o.WorldBodies != null ? new LabFile
+        {
+            Source = "world", Env = (o.Ocean ? "ocean world" : "land world") + ", real animals", EnvKey = o.Ocean ? "open-water" : "land",
+            Seed = o.Seed, Every = o.ReportEvery, Created = DateTime.Now.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+        } : null;
+        if (lab != null) lab.Snapshots.Add(WorldSnapshot(w, labEnv!));
         var sw = Stopwatch.StartNew();
         long lastT = 0; ulong lastStep = 0;
         bool stop = false;
@@ -45,6 +53,7 @@ public static class Headless
             {
                 double dt = (sw.ElapsedMilliseconds - lastT) / 1000.0;
                 Report(sim, (w.Step - lastStep) / Math.Max(dt, 1e-3));
+                if (lab != null) lab.Snapshots.Add(WorldSnapshot(w, labEnv!));
                 lastT = sw.ElapsedMilliseconds; lastStep = w.Step;
             }
             if (o.SaveBank != null && w.Step % 50000 == 0) GeneBank.Save(w, o.SaveBank);
@@ -52,6 +61,13 @@ public static class Headless
         Console.WriteLine($"done: {w.Step} steps in {sw.Elapsed.TotalSeconds:F1} s ({w.Step / sw.Elapsed.TotalSeconds:F0} steps/s)");
         string summary = Summary(sim) + Environment.NewLine + water.Report(w) + (eco != null ? Environment.NewLine + eco.Report(sim) : "");
         Console.Write(summary);
+        if (lab != null)
+        {
+            lab.Generations = (int)w.Step; lab.Done = true; lab.Final = lab.Snapshots[^1];
+            lab.Population = lab.Final.Champion.Size + lab.Final.Reps.Sum(r => r.Size);
+            File.WriteAllText(o.WorldBodies!, LabReport.Serialize(lab));
+            Console.WriteLine($"wrote the world's bodies to {o.WorldBodies} ({lab.Snapshots.Count} snapshots); open it in the Body Lab");
+        }
         if (Diag.D != null) Console.Write(Diag.D.Report());
         if (units)
         {
@@ -274,6 +290,37 @@ public static class Headless
     }
 
     /// <summary>Per clade (living): how many, the share that flies, mean mass, wings, legs and leg pairs (reporting only).</summary>
+    /// <summary>The world's real bodies now: each living lineage's first adult by slot (a juvenile if none is grown; eggs and embryos are not counted),
+    /// grown from its own module genome at its own mass, the largest lineage as the "champion" and up to 11 more by size.
+    /// Gen is the step; Best is the largest lineage's size, Mean the mean lineage size, Species the living lineages.</summary>
+    static LabSnapshot WorldSnapshot(World w, Neuroreef.Morph.MorphEnv env)
+    {
+        var count = new int[w.NS]; var rep = new int[w.NS]; Array.Fill(rep, -1);
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] < St.Juvenile) continue;   // hatched or born: eggs and embryos are not counted
+            int s = w.Spc[i]; if (s < 0 || s >= w.NS) continue;
+            count[s]++;
+            if (rep[s] < 0 || (w.StageOf[rep[s]] != St.Adult && w.StageOf[i] == St.Adult)) rep[s] = i;
+        }
+        var order = Enumerable.Range(0, w.NS).Where(s => count[s] > 0).OrderByDescending(s => count[s]).ToList();
+        var snap = new LabSnapshot { Gen = (int)w.Step, Species = order.Count };
+        if (order.Count == 0) return snap;
+        snap.Best = count[order[0]]; snap.Mean = (float)order.Average(s => count[s]);
+        LabBody Of(int s)
+        {
+            int i = rep[s];
+            ReadOnlySpan<sbyte> gn = w.Genome.Slot(i);
+            var g = Neuroreef.Morph.Codec.Decode(Neuroreef.Morph.Codec.Block(gn)) ?? Neuroreef.Morph.Codec.FromLabelled(gn);
+            var b = LabReport.Body(g, env, count[s], w.PM[i]);
+            b.Lineage = w.Sp[s].Name;
+            return b;
+        }
+        snap.Champion = Of(order[0]);
+        foreach (int s in order.Skip(1).Take(11)) snap.Reps.Add(Of(s));
+        return snap;
+    }
+
     public static string CladeLoco(World w)
     {
         var T = w.T; var o = new StringBuilder();

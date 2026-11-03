@@ -19,7 +19,7 @@ public sealed class Options
     public string? ReportTxt;
     public long Steps = 100000;
     public int ReportEvery = 2000;
-    public string? LoadBank, SaveBank, Csv, CheckpointPath;
+    public string? LoadBank, SaveBank, Csv, CheckpointPath, WorldBodies;
     public double CheckpointMinutes = 30;
     public int BigBrains = -1, BigBrainUnits = 0, Founders = 0, BranchSlots;   // BranchSlots 0 until Parse: World.DefaultSlots(Branches)
     // the map of a prehistory and of the world: a valley by default (2026-11-01, the owner: "the worlds are too damn big ...
@@ -150,6 +150,8 @@ public sealed class Options
   --rate N              steps per second of the world (default 3, 0 = as fast as possible)
   --no-browser          do not open the browser
   --save-bank FILE      where to save evolved brains (default evolved.nrbank next to the exe)
+  --world-bodies FILE   headless: write the world's real bodies (each lineage's first adult, every report) as a
+                        Body Lab file, to open in the Body Lab (bodylab-*.json in its folder, or open file...)
 
   --evolve              the prehistory without the console (headless): saves evolved.nrbank and
                         evolve-report.txt/.csv next to the exe (what Evolve.bat runs). It saves its
@@ -248,6 +250,7 @@ public sealed class Options
                 case "--no-browser": o.NoBrowser = true; break;
                 case "--load-bank": o.LoadBank = Next(); break;
                 case "--save-bank": o.SaveBank = Next(); break;
+                case "--world-bodies": o.WorldBodies = Next(); break;
                 case "--prehistory-steps": o.PrehistorySteps = int.Parse(Next()); break;
                 case "--prehistory-years": years = double.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--branches": o.Branches = Math.Clamp(int.Parse(Next()), 1, 8); o.NoSetup = true; break;
