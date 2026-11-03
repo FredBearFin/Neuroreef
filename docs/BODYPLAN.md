@@ -1461,6 +1461,24 @@ Every class was run in its own test process on the code after §13.11. Classes n
    - Not changed in this round. A physical label would compare the cost of moving a metre in each medium (cheaper in
      water: Swim) rather than top speeds. The depth limit (pressure on gas spaces) remains a gap; it does not
      mislabel anyone.
+### 13.16 Test status, third round (2026-11-03)
+
+Every class was run in its own test process on the code of this round:
+
+- **Green in full:** Ecology, Ecosystem, Respiration, Diving, Ocean, Founding, FeedingBudget, Climate, Locomotion,
+  Wading, Feeding, Metabolism, Decision, Brain, Explore, Appearance, Units, Wire, BodySize, MorphLive, Morph, Shadow,
+  Checkpoint, Prehistory, WaterCycle, NutrientBalance, StepLength, Voice, BodyLab, Geology, Hydrology, Wetland, Plant,
+  PlantProduction, Options, MemoryReset, Vehicle, Pathogen, Caves.
+- **Engineering:**
+  - 9 of 10 green, `StepLoopDoesNotAllocate` included.
+  - `ConstantsDocumentMatchesCode` failed only because that run used a copy of the binaries outside the repository
+    (it reads the repository's `docs/CONSTANTS.md`).
+  - `docs/CONSTANTS.md` was regenerated (it was stale since phase 2c's EXP_FLY_AVAIL), and the test passes from the
+    repository.
+- **Re-pinned:** `DefaultStepIsBitIdenticalToBefore`, 10104198921116109538 → 5632958963462331332 (the dives).
+- **Retired** (skipped, with the reason in the attribute; listed in §13.7 and §13.13): 16 tests of labelled-gene
+  formulas.
+
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
