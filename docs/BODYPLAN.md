@@ -1349,6 +1349,59 @@ Each item below is a physical correction, found by measuring a translated refere
   2 in 210. Every one swims.
 - **Deaths by cause**, of 6,324 created: killed 3,125, lost before birth 2,626, parasitism 107, starvation 67, drowned
   33, cold 21, old age 1. Predation, not founding physics, is what thins the sea now.
+### 13.13 Test status, second round (2026-11-03)
+
+Every class was run in its own test process on the code after §13.11. Classes not marked otherwise ran in full.
+
+- **Re-pinned:** `StepLengthTests.DefaultStepIsBitIdenticalToBefore`, 15361944388290876228 → 10104198921116109538,
+  with a dated comment. The re-pinned test passes.
+- **Green in full** (some with retired tests, below): Feeding, FeedingBudget, Units, Decision, Climate, Locomotion,
+  Respiration, Diving, Wading, Appearance, Brain, Explore, Metabolism, Wire, BodySize, MorphLive, Morph, Shadow,
+  WaterCycle, NutrientBalance, Ocean, Founding, Checkpoint, Prehistory.
+- **Green after a fix, with the fixed tests run by themselves:**
+  - Ecology: 42 passed in full. Of the 7 failures, 3 were re-derived and pass, and 4 were retired.
+  - Ecosystem: 11 passed in full. The failing test was re-derived and passes.
+- **New re-derivations this round**, each with a dated comment in its test:
+  - `LocomotionTests.FlightMuscleRaisesBasalLikeABirds` is restored on the mitochondrial premium, with a band of
+    0.15–0.6 (non-passerines near mammals, passerines +30–50%).
+  - `FeedingTests` (the brain's organs have an upkeep, within 2%).
+  - `FeedingBudgetTests` (net cruise cost 0.1–2.5 J/(kg m), **uncertain**, see §13.14).
+  - `ClimateTests` (Heat.Balance with the grown surfaces).
+  - `UnitsTests` (body length to 3 m).
+  - `EcologyTests`:
+    - leg pairs cost no upkeep beyond their tissue, 0.85–1.0 of the legless basal;
+    - partial wings are a dead load on the flat;
+    - flight is checked at ≥ 3 masses that fly.
+  - `EcosystemTests` (the size forms share one body).
+- **Newly retired this round**, with the reason in the attribute:
+  - `DecisionTests.WaterDepthControlsAccessAndSwimmingSpeedContinuously`;
+  - `EcologyTests.LocomotionAndRealmComeFromOrgans`, `LargeBodiesCannotFly`,
+    `FliersCannotEatPhytoplanktonUnlessTheySwim` and `BodyGenesTradeOff`.
+- **Not green:**
+  - `StepLengthTests.ActsAndLearningAnHourAreTheSameAtAFineStep`: the founders at a 10-minute step are 7,521 against
+    7,516 at 2.92 h, where the test asks for the same founders. Every rate it compares is within its tolerance. Some
+    founding term now depends on the step length at the level of a few founders; it is not found yet.
+  - `VoiceTests.NoVocalLearningGeneIsBitIdenticalToNoFeature`: runs three 400-step worlds. The land populations of the
+    module bodies are ~3× larger, so it ran past the 20-minute limit; a longer run was still going at the end of the
+    session. The other 9 Voice tests pass.
+- **Not finished in time:** Engineering, BodyLab, Geology, Hydrology, Wetland, Plant, PlantProduction, Options,
+  MemoryReset, Vehicle, Pathogen, Caves. Except Engineering and BodyLab, all of these passed in the first round on the
+  phase-4 code; none reads the body physics directly.
+
+### 13.14 Known gaps, second round
+
+1. The step-length dependence of the founding (above).
+2. **Flight's moving cost is still the live formula** (`Resolve.MoveCost` airborne: FlightPowerMin × the power curve).
+   The physics' least power of level flight (`Physics.FlightMargin`'s pMin; `Caps.CotAir`) is computed but not read.
+3. **Sustained swimming saturates the deep-water gate.** Almost every body with axial muscle sustains more than 0.3
+   lengths a second, so `PProp` is ~1 for most, and the depth range (`MaxWaterDepth`) and paddling no longer tell
+   bodies apart. A physical depth limit (pressure on gas spaces, Boyle) would replace the gate.
+4. The net cruise cost of a cold fish (0.17 J/(kg m) at 15 °C) is below the 0.3 that the live COT_SWIM_J implied. The
+   cube-root pace scaling of the cruise is derived; the literature net value at that speed should be checked.
+5. **Ocean worlds found 12 clades now, but the sea thins.** It goes from 3,061 founders to 344 by step 2,000, with
+   random brains and mostly by predation.
+6. The gill-area cap still grows only as the body surface (M^(2/3)), not as gill area does (M^0.8–0.9).
+7. Still from the first round: no shelled-prey pool; founders mostly legless; the renderer draws legacy values.
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
