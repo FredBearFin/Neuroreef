@@ -291,8 +291,13 @@ public class EcosystemTests
     [Fact] // Revision L: two forms that look clearly different but still breed together are a subspecies
     public void VisibleFormsThatStillInterbreedAreASubspecies()
     {
+        // (re-derived 2026-11-03, phase 4: the founders share one random body but for their mass. Each founder of
+        // Life.Found(empty) is a random labelled body, translated to a module body, so its segments, pairs and limb shapes are
+        // visible traits now and their spread hid the two size forms; the test is of size forms alone)
+        sbyte[]? first = null;
         var w = CladeWorld(83, (k, b) =>
         {
+            if (first == null) first = b.ToArray(); else first.CopyTo(b);
             bool form = k % 2 == 0;
             b[G.B_MASS - G.BODY] = (sbyte)(form ? -30 + k % 5 : 30 - k % 5);   // one form about 3x the mass of the other
         });
