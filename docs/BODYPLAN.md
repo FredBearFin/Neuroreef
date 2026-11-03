@@ -569,7 +569,7 @@ expressed by the new body:
 | P1b | finish the prototype: lower-size physics, roll stability, refuges and ambush, a moult hazard that grows with size; iterate until each environment's outcome stops moving between calibrations | 3–6 agent-hours |
 | P2a (done, §10) | shadow expression: translator, shadow capabilities in `World.D`, founders diagnostic, first calibration round (7 of 13 grounded capabilities within ~25%) | ~3 agent-hours |
 | P2b (done, §11) | gas volume and buoyancy, a volume-bounded lung, flight muscle up to 0.6 of a segment, tendon elastic storage, burst-swimming limit, thin-plate bending and roll in surge, telemetry of both expressions, jaw ablations; water cost, land speed and flight margin still outside 25% (§11.6) | ~3 agent-hours |
-| P2c | §11.6: folding passive pairs and fat, a tubular endoskeleton, capture by a bluff face, the flight-margin exponent | 3–4.5 agent-hours |
+| P2c (done, §12) | folding pairs in water, fat, a tubular skeleton, capture through a porous face, the flight-power exponent (live EXP_FLY_AVAIL 2/3 → 5/6, default world re-pinned); phase 4 can start after the head-exit fix (§12.7) | ~2.5 agent-hours |
 | P3 | storage: a fixed-capacity, variable-count body block in the slot layout (now with innovation numbers and the mass gene); checkpoint, `GeneBank` and AGENTS-format version bumps; a v13 → v14 translator; ICD update | 3–5 agent-hours |
 | P4 | expression from morphology: replace every reader of `PLegs`, `PFins`, `PWings`, `PLegPairs`, `PFinPairs`, `PLungs` and armour (Resolve, Respiration, Heat, Decide, Reflex, Clades, Species, Telemetry) with morphology-derived speeds per medium, O2 supply, armour, moult state, crushing and strike force, and turning radius; mutate and recombine with the new operators in LIFECYCLE | 10–20 agent-hours |
 | P5 | recalibration: the ~40 test files that assert body-dependent numbers (Locomotion, Wading, Diving, Respiration, Feeding, FeedingBudget, Founding, Ocean, Ecology, Metabolism, Appearance, StepLength, ...), the founding draw (`Clades.AncestorBody`) and the constants doc; long runs in each world type | 10–25 agent-hours, plus the wall-clock of long runs |
@@ -876,8 +876,142 @@ Effort for the rest of P2, in agent-hours: folding passive pairs and a fat share
 the limb mass check against Prange (1–1.5); the capture of a bluff face, and the compressed-body check over 20 seeds
 (1); a decision on the flight-margin exponent with the owner (0.5).
 
+## 12. Phase 2c: folding, fat, tubular bone, filtering faces and the flight-power exponent (2026-11-03)
+
+### 12.1 Folding pairs in water
+
+`Physics.SwimSet` builds the swimming properties three ways: every pair stroking, the drooped pairs (legs, droop
+over 45°) folded, and every articulated pair folded. `SwimBest` takes the cheapest one the muscle can hold at each
+speed, and the most sustainable one when none can. A folded pair lies along the trunk. It makes no thrust, lift or
+span. Its edge no longer meets the flow and one face lies on the body, each as far as its articulation lets it fold
+flat (seals, otters and diving birds tuck their limbs; murres half-fold their wings; Fish 1993; Lovvorn 2001;
+Thaxter et al. 2010). A walker on the floor keeps its legs out. A 1 kg neutrally buoyant walker at 0.5 m/s needs
+0.64 W with its legs out and 0.15 W with them folded (`ASwimmerFoldsItsLegsAndPaysLessThanDraggingThemOut`). A
+cruising fish folds its paired fins too, so the translated fish now costs 0.45–0.65 of COT_SWIM_J at 0.1–10 kg. That
+lies between the constant's own drag estimate for a streamlined 1 kg fish (~0.5 J/m) and its measured 1 J/m, and
+below its M^0.7 line at 10 kg.
+
+### 12.2 Fat, and a tubular skeleton
+
+- **Fat** (segment gene `fat`): up to 0.5 of a segment's tissue volume is adipose tissue at 900 kg/m³. It is neither
+  gut nor muscle, and it metabolises at 0.2 of the body's average per kg (Elia 1992). Kleiber's law was fitted to
+  animals that carry typical fat, ~0.075 M^1.19 kg (Pitts & Bullard 1968; Calder 1984). So the metabolic mass is the
+  mass, less the mineral and 0.8 × the fat beyond that typical share (a leaner body has more active tissue).
+  Translated bodies carry the typical fat. A 1 kg walker is now 7.4% fat and 1,044 kg/m³ (it was 1,094).
+- **Tubular bone** (appendage gene `hollow`): the internal skeleton is a tube of inner/outer diameter K ≤ 0.9 with
+  the rod's area, no wider than the limb. Its section modulus is (1 + K²)/√(1 − K²) × a rod's of the same mass: 1.7 at
+  K 0.6 (`AHollowBoneBearsMoreThanASolidRodOfTheSameMass`; Currey & Alexander 1985). Its bore holds the limb's soft
+  tissue, so it costs no mass. At K = 0 it is the old rod, bit for bit.
+- **Translator legs:** slenderness 0.08 → 0.06 (inside the cited cursorial 0.06–0.1), bone K 0.6 (terrestrial
+  mammals 0.55–0.6), and thickness ∝ length^(1/3), so every leg bears the body's weight at the same safety factor
+  (bending stress F L / d³ fixed; Alexander 1981). A full leg pair is now 14% of the body, its mineral 4.0% (whole
+  skeleton 5–7.5% at 0.1–10 kg; Prange et al. 1979); it was 22% and 6.5%. The plain walker's sprint is 1.27, 0.89 and
+  0.78 of Garland's at 0.1, 1 and 10 kg (it was 1.04, 0.73 and 0.66).
+- Two translator artefacts found on the way. (1) A small wing gene's short thorax set the genome's length scale until
+  the legs clamped at their longest gene, 30% short; the thorax no longer sets it. (2) The leg (and fin) gene now sets
+  the body's whole leg muscle, however many trunk segments the fins need (one leg pair among four fin segments had a
+  quarter of a walker's leg muscle).
+
+### 12.3 Plankton capture through a porous face
+
+Food is cleared only from the water that passes through the head: in at the mouth, out through its everted exchange
+surface (gill slits and rakers, a sponge's or a tunicate's pores). The water pushed round a solid face carries its
+particles round it (Rubenstein & Koehl 1977; Shimeta & Jumars 1991). The head's open fraction φ is its everted
+epithelium's unfolded area over its frontal area, at most 1. A screen of open fraction φ has the pressure-loss
+coefficient k = (1 − φ)/φ² and passes 1/(1 + k/4) of the oncoming flow (Taylor & Davies 1944; the leakiness of
+filters, Cheer & Koehl 1987): 0.67 at φ = 0.5, 0.04 at 0.1, 0 for a solid face. The 2b disc, solid, now clears
+nothing (`ASolidFaceClearsNoPlanktonAndAFilteringFaceClearsByItsOpenFraction`).
+
+### 12.4 The flight-power exponent: the live side was wrong
+
+The live margin was wings × (FLY_M_MAX/M)^(7/6 − 2/3), falling as M^(−1/2). The shadow's mechanistic margin falls as
+~M^(−1/3). The evidence:
+
+| line of evidence | power available ∝ | margin ∝ |
+|---|---|---|
+| Pennycuick 1968, 1975 (classic): fixed work per kg per beat, f ∝ M^(−1/3) | M^(2/3) | M^(−1/2) |
+| Pennycuick 1996, 2001: measured f ∝ M^(3/8) b^(−23/24) S^(−1/3) ρ^(−3/8), i.e. f ∝ M^(−1/6) for similar fliers; fixed work per beat (Askew & Marsh 2002) | M^(5/6) | M^(−1/3) |
+| Ellington 1991; Marden 1994: measured | M^(0.7–0.8) | M^(−0.37 to −0.47) |
+| Marden 2005: maximum force output of flight motors ∝ M^1.0; at a size-independent stroke velocity | up to M^1 | up to M^(−1/6) |
+
+Every line except the classic one lies above 2/3. The classic one rests on a wingbeat-frequency scaling that similar
+fliers do not follow. **Choice: EXP_FLY_AVAIL = 5/6**, the mechanistic value from the measured frequency allometry,
+inside the measured range and below Marden's upper bound. It agrees with the shadow's own wingbeat-frequency
+mechanism. The live side changed (`Constants.EXP_FLY_AVAIL`). The ceiling stays at FLY_M_MAX = 16 kg for full
+wings. Below it margins are smaller (5.4 instead of 12.6 at 0.1 kg; the shadow gives 4.2), and the half-wing ceiling
+is 2 kg (was 4).
+
+**It could not stay bit-identical.** The default world has fliers from its first step, so their margins, flight
+speeds and which bodies fly change. `StepLengthTests.DefaultStepIsBitIdenticalToBefore` is re-pinned with a dated
+comment (11681709169049197875 → 873474179074618927). `ClimateTests.NoClimateIsBitIdenticalToBefore` is unchanged. The
+flight-related live classes pass unchanged except the half-wing ceiling in `EcologyTests.LargeBodiesCannotFly` (now
+2 kg): Ecology, Diving, Locomotion and Wading (68 tests), Ocean (11).
+
+### 12.5 Shadow against live: the founders of seeds 1–5 (phase 2c)
+
+21,714 founders. Phase 2b's median in brackets.
+
+| capability | median (2b) | p10 | p90 | verdict |
+|---|---|---|---|---|
+| drag shape | **1.04** (1.05) | 0.98 | 1.68 | within 25% |
+| standing height | **1.10** (1.09) | 0.80 | 1.56 | within 25% |
+| land cost/m, legs ≥ 0.7 | **0.97** (0.98) | 0.78 | 2.92 | within 25% |
+| land speed (rel.) | 0.74 (0.86) | 0.31 | 1.19 | just outside; see below |
+| air cost/m | 1.31 (1.29) | 1.05 | 1.64 | just outside (profile drag on bluff fliers, §11.4); asserted ≤ 1.35 |
+| water cruise, fins ≥ 0.7 | 1.33 (0.96) | 1.05 | 2.98 | just outside: folding makes the least-cost cruise faster |
+| basal cost | 0.75 (0.74) | 0.66 | 0.86 | as before (the live organ-upkeep terms) |
+| O2 scope in air / water | **0.93 / 0.92** (0.93 / 0.91) | | | within 25% |
+| **water cost/m, fins ≥ 0.7 at a fish's shape** | **1.30** (2.52) | 0.92 | 2.03 | at the edge: folded fins and limbs, and fat |
+| water cost/m, fins ≥ 0.7 | 2.26 (3.83) | 1.58 | 5.57 | the rest is the founders' bluff shapes (fineness < 1.5), which the live cost ignores |
+| water cost/m, all | 3.34 (4.21) | 1.61 | 7.57 | the same |
+| land speed (m/s) | 0.64 (0.63) | 0.26 | 0.99 | outside; see below |
+| flight margin | 0.57 (0.57) | 0.14 | 1.46 | outside, for a different reason now; see below |
+| flies (agreement) | 82% (77%) | | | |
+
+Where the three still apart now stand:
+
+- **Flight margin.** The exponents now agree; full-winged reference fliers are at 0.77 (0.1 kg) and 0.69 (10 kg).
+  The median founder is still 0.57 because the live margin is linear in the wing gene and blind to shape, while
+  founders' fliers are bluff (parasite drag) and 75% weigh over 3 kg. That is live less physical.
+- **Land speed.** The plain walker is within 25% of Garland at 0.1–10 kg. The founders' median is pulled down by
+  bodies with every organ high at once. One clade in seed 1 (11–32 kg, one leg pair, four full fin pairs, wings 0.4,
+  a fish's axial muscle) runs at 1.3 m/s against the plain body's 11: its trunk cannot house all that muscle
+  (MUSCLE_MAX_SHARE 0.7), so its one leg pair holds 61% of its weight. Without the fins it runs at 8.3 m/s. The live
+  sim credits every organ gene in full, independently. That is live less physical too.
+- **Water cost.** At a fish's shape the founders are now at 1.30. The rest is shape.
+
+### 12.6 What the prototype evolved (phase 2c)
+
+| env | best bodies | compared with 2b |
+|---|---|---|
+| open water (6 seeds) | **6/6 are one-segment barrels**, 34–263 g, fineness 5.2–5.7, H/W 4.4–6.2, neutral, everted exchange 0.003–0.012 m², swimming at 0.24–0.28 m/s, fitness 2.97–2.98 | the face-on disc is gone: a solid face clears nothing. The 1 g undulators are gone too: they had no gill openings. In a one-segment body the head is the whole body, so its whole side counts as exit area: a salp-like barrel, water in at the front and out through porous sides. Salps and tunicates are such filters, but the open fraction should count only the exit near the mouth (the head's own length). **Suspect**, next correction |
+| sea floor (20 seeds) | **the crushing head pair in 6/20** (53–71 g, mineral 0.6–1.0, 6 joints, muscle 0.6, crush 3.6–5.1 N, 69–71% of intake as shelled prey, fitness 2.31–2.48); soft bottom swimmers otherwise (1.11–1.63). **New: in 1/20 (seed 15) a 2.1 kg rigid, moulting walker on three pairs of mineralised, jointed legs** (18 mm and 6 mm, 3–4 joints, droop 51–65°, "support"), gas 9% of the volume (1,018 kg/m³), fitness 1.41 | 8/20 in 2b, within noise. The armoured, legged walker that phase 1 never found now appears, though it is not the fittest plan. Jaw bodies' H/W is 2.9–16.2 (12–18 in 2b) |
+| land (6 seeds) | 1–2 g legless crawlers of 8–30 segments; rigid, moulting integument in 3/6 (rigidity 0.99–1.0; 0.41 in one more) | 4/6 in 2b |
+
+### 12.7 Can phase 4 start?
+
+§10.5 set the condition: water cost, flight margin and O2 supply within ~25%. Measured against the cases where the
+live side is physically grounded:
+
+- **O2 supply: met**, as a scope (0.93 / 0.92).
+- **Water cost: met at the body COT_SWIM_J describes** (1.30 at a fish's shape, at the edge). The raw founders (2.26)
+  differ by body shape, which the live cost ignores and the shadow does not. The shadow is the more physical side.
+- **Flight margin: the scaling is now agreed** (both M^−1/3; full wings 0.69–0.77). The median founder (0.57)
+  differs by body shape and by how the margin grows with the wing gene. Again the live side is the less physical.
+
+So the remaining disagreements are no longer shadow errors. They are the live sim's simplifications, which phase 4
+exists to replace. **Phase 4 can start**, with two conditions:
+
+1. The owner accepts that the live ecology will move where the shadow is more physical. Bluff swimmers and bluff
+   fliers lose (water cost ×2, margin ×0.6). Bodies with every organ gene high lose most (they cannot house the
+   muscle). The flight exponent change (§12.4) has already moved fliers in every world.
+2. The head-exit suspect (§12.6) is fixed first (~0.5 agent-hour), so the live sim does not inherit salp barrels.
+
+Land speed (0.64, relative 0.74) is not a gate in §10.5, and its gap is the same over-committed bodies.
+
 ## References
 
+- Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
 - Phase 2b (§11): Alexander, R. McN. (1966). Physical aspects of swimbladder function. *Biol. Rev.* 41. Alexander, R. McN. (1988). *Elastic Mechanisms in Animal Movement*. Cambridge. Bennett, M. B. & Taylor, G. C. (1995). Scaling of elastic strain energy in kangaroos and the benefits of being big. *Nature* 378. Biewener, A. A. & Blickhan, R. (1988). Kangaroo rat locomotion: design for elastic energy storage or acceleration? *J. Exp. Biol.* 140. Chai, P. & Millard, D. (1997). Flight and size constraints: hovering performance of large hummingbirds under maximal loading. *J. Exp. Biol.* 200. Fredsøe, J. & Deigaard, R. (1992). *Mechanics of Coastal Sediment Transport*. World Scientific. Gehr, P. et al. (1981). Design of the mammalian respiratory system. V. Scaling morphometric pulmonary diffusing capacity to body mass. *Respir. Physiol.* 44. Gemmell, B. J. et al. (2013). Passive energy recapture in jellyfish contributes to propulsive advantage over other metazoans. *PNAS* 110. Gibson, L. J. & Ashby, M. F. (1997). *Cellular Solids*, 2nd ed. Cambridge. Greenewalt, C. H. (1962). Dimensional relationships for flying animals. *Smithson. Misc. Collect.* 144. Jonsson, I. G. & Carlsen, N. A. (1976). Experimental and theoretical investigations in an oscillatory turbulent boundary layer. *J. Hydraul. Res.* 14. Marden, J. H. (1987). Maximum lift production during takeoff in flying animals. *J. Exp. Biol.* 130. Prange, H. D., Anderson, J. F. & Rahn, H. (1979). Scaling of skeletal mass to body mass in birds and mammals. *Am. Nat.* 113. Rubenstein, D. I. & Koehl, M. A. R. (1977). The mechanisms of filter feeding: some theoretical considerations. *Am. Nat.* 111. Stahl, W. R. (1967). Scaling of respiratory variables in mammals. *J. Appl. Physiol.* 22. Timoshenko, S. & Woinowsky-Krieger, S. (1959). *Theory of Plates and Shells*, 2nd ed. McGraw-Hill. Tucker, V. A. (1987). Gliding birds: the effect of variable wing span. *J. Exp. Biol.* 133. Videler, J. J. (1993). *Fish Swimming*. Chapman & Hall. Wardle, C. S. (1975). Limit of fish swimming speed. *Nature* 255. Webb, P. W. (2002). Control of posture, depth, and swimming trajectories of fishes. *Integr. Comp. Biol.* 42. Weibel, E. R. & Hoppeler, H. (2005). Exercise-induced maximal metabolic rate scales with muscle aerobic capacity. *J. Exp. Biol.* 208.
 - Aksnes, D. L. & Giske, J. (1993). A theoretical model of aquatic visual feeding. *Ecol. Model.* 67.
 - Boulding, E. G. (1984). Crab-resistant features of shells of burrowing bivalves. *J. Exp. Mar. Biol. Ecol.* 76.
