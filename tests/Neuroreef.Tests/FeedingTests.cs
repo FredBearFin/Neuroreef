@@ -88,7 +88,9 @@ public class FeedingTests
             float brain = K.COST_BRAIN * K.C_BASAL * w.PBrain[a] / K.BRAIN_REF;
             Assert.True(brain - brain0 > 0.1f * k, $"a big brain: {brain / k:F2} of Kleiber, from {brain0 / k:F2}");
             // its cost: the brain, and the gut that feeds it
-            Assert.Equal(basal0 + (brain - brain0) / (1f - K.GUT_SHARE), w.PBasal[a], 5);
+            // re-derived 2026-11-03 (phase 4): and the exchange surfaces built to serve the brain too (its organs are sized to
+            // its whole basal, symmorphosis: Morph.Codec.FromLabelled), whose epithelium has an upkeep: within 2%
+            Assert.InRange(w.PBasal[a] / (basal0 + (brain - brain0) / (1f - K.GUT_SHARE)), 1f - 1e-4f, 1.02f);
             // its gut absorbs and digests in proportion, and holds no more
             Assert.Equal(K.C_ABSORB / K.C_BASAL * w.PBasal[a], w.PAbsorb[a], 4);
             Assert.Equal(w.PAbsorb[a] / absorb0, w.PDig[a] / dig0, 3);

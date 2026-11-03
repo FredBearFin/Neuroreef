@@ -159,7 +159,11 @@ public class FeedingBudgetTests
             // standard metabolism within a factor of two of a teleost's (Clarke & Johnston 1999: 21 kJ/day at 1 kg, 15 C)
             Assert.InRange(rest, 0.5f * smr, 2f * smr);
             // cruising at a fish's cost of transport, not running's 10.7 J/(kg m) (Taylor et al. 1982)
-            Assert.InRange(cot, 0.3f, 2.5f);
+            // re-derived 2026-11-03 (phase 4): the net cost a metre at the cruise its metabolic pace sets (Respiration.CruiseMps:
+            // the least-gross-cost speed falls as the resting cost's cube root, and the net cost a metre as its square), so a fish
+            // at 15 °C cruises slower and cheaper than at T_BODY; net costs of salmonids near their optimum are ~0.1-0.5 J/(kg m)
+            // (Brett 1964; Videler & Nolet 1990). UNCERTAIN: the bound was 0.3 for the live COT_SWIM_J
+            Assert.InRange(cot, 0.1f, 2.5f);
             // clearance: menhaden of ~0.3 kg sweep 5.8-24.8 L/min (Durbin & Durbin 1975); x (1 / 0.3) for 1 kg by gape x speed ~ M
             Assert.InRange(lpm, 5.8f, 24.8f / 0.3f);
             // coastal plankton, 10-200 mg C/m3 (Chl 0.2-4 mg/m3 at C:Chl ~50; Geider 1987)

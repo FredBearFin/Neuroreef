@@ -125,7 +125,9 @@ public class UnitsTests
             int i = sim.FindSerial((uint)b[k]);
             Assert.True(i >= 0);
             Assert.Equal(Body.LengthM(w, i), b[k + 1], 3);
-            Assert.InRange(b[k + 1], 0.001, 1.0);
+            // (re-derived 2026-11-03, phase 4: the grown body's length; an elongate 40 kg body of fineness ~10 is ~2 m, an eel's or a
+            // python's proportions, so the bound is 3 m; it was 1 m for the live shape genes' fineness up to 9 at their scale)
+            Assert.InRange(b[k + 1], 0.001, 3.0);
         }
     }
 }

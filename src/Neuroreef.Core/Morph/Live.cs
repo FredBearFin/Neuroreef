@@ -119,6 +119,13 @@ public static class Live
         c.Basal = basal;
         // ---- water: burst top speed, sustained top speed, the cruise of least gross cost a metre and its net cost there
         var sps = Physics.SwimSet(m, Phys.RHO_W);
+        // sustained swimming is aerobic: its mechanical power can be no more than its muscle's efficiency x the oxygen its
+        // exchange surfaces deliver beyond its basal, in water or (a head at the surface) through its air-breathing ones
+        // (Brett 1964: a fish's critical swimming speed is set by its aerobic scope; Webb 1975). Phase 4 (2026-11-03): the
+        // muscle's sustained capacity alone (P_SPEC on all its axial muscle, most of which in a fish is anaerobic white muscle)
+        // gave a 1 kg fish 14 lengths a second sustained, against ~2-5 measured (Brett 1964; Videler 1993)
+        float o2Swim = MathF.Max(Physics.O2Supply(m, Medium.Water, out _), LungO2(m));
+        float aerobic = Phys.ETA_M * MathF.Max(0f, o2Swim - basal);
         float bestGross = float.PositiveInfinity, vWardle = Shadow.WardleSpeed(m.Length), burstCot = float.PositiveInfinity;
         foreach (float u in U)
         {
@@ -127,7 +134,7 @@ public static class Live
             {
                 float pw = Physics.SwimPower(sp, Phys.RHO_W, u);
                 if (pw <= k * sp.Cap) pBurst = MathF.Min(pBurst, pw);
-                if (pw <= sp.Cap) pCruise = MathF.Min(pCruise, pw);
+                if (pw <= MathF.Min(sp.Cap, aerobic)) pCruise = MathF.Min(pCruise, pw);
             }
             if (!float.IsPositiveInfinity(pBurst) && u <= vWardle) c.VWater = u;
             if (!float.IsPositiveInfinity(pBurst)) burstCot = MathF.Min(burstCot, Phys.ANAEROBIC * pBurst / Phys.ETA_M / u);
@@ -137,7 +144,7 @@ public static class Live
             if (gross < bestGross) { bestGross = gross; c.Cruise = u; c.CotWater = pCruise / Phys.ETA_M / u; }
         }
         if (c.VWater > 0f) { float kk = k; c.VWater = MathF.Min(vWardle, Refine(c.VWater, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= kk * sp.Cap) return true; return false; })); }
-        if (lc.VSust > 0f) lc.VSust = Refine(lc.VSust, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= sp.Cap) return true; return false; });
+        if (lc.VSust > 0f) lc.VSust = Refine(lc.VSust, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= MathF.Min(sp.Cap, aerobic)) return true; return false; });
         // a body that cannot sustain any swimming speed flounders on burst power, paid anaerobically (Phys.ANAEROBIC x),
         // so moving through water is never free; one that cannot move in water at all has no water cost (it cannot go there)
         if (c.CotWater <= 0f && !float.IsPositiveInfinity(burstCot)) c.CotWater = burstCot;
@@ -164,7 +171,11 @@ public static class Live
         var (trunk, apps) = HeatSurfaces(m);
         float a23 = MathK.Pow(m.Mass, 2f / 3f);
         lc.SurfK = trunk / (Ref.Value.trunk * a23);
-        lc.AppSurf = apps / (Ref.Value.trunk * a23);
+        // its appendages against the plain body's (legs, head and tail of a typical mammal), which carries the middle of the
+        // retired radiator gene (0.5) that Heat's K_COND, APP_LEAK and VASO were calibrated with (a bare 1 kg body
+        // thermoneutral down to 22 °C; Scholander et al. 1950): so the plain body loses heat as before, and longer, wider or
+        // more pairs lose more (Allen's rule)
+        lc.AppSurf = 0.5f * apps / MathF.Max(Ref.Value.apps * a23, 1e-12f);
         lc.EvapK = Evaporation(m, c.Basal) / (Ref.Value.evap * a23);
         return lc;
     }
@@ -201,11 +212,12 @@ public static class Live
     // ---- references: the live sim's plain body (Translate.Reference) at 1 kg, whose capabilities the per-step constants
     // C_TURN and DEF_BASE describe. Both scale out of mass: its integument t ~ M^(1/3) against a bite ~ M^(2/3) leaves its
     // crushing odds mass-free, and its least turning radius R = 2 m_eff / (rho C_L S) ~ M^(1/3).
-    static readonly Lazy<(float odds, float turnR, float trunk, float evap)> Ref = new(() =>
+    static readonly Lazy<(float odds, float turnR, float trunk, float evap, float apps)> Ref = new(() =>
     {
         var l = Translate.Reference(1f);
         var c = Shadow.Of(l, 1f, 0f, out var m);
-        return (Odds(m), Physics.TurnRadius(m, Phys.RHO_W, 1f), HeatSurfaces(m).trunk, Evaporation(m, c.Basal));
+        var hs = HeatSurfaces(m);
+        return (Odds(m), Physics.TurnRadius(m, Phys.RHO_W, 1f), hs.trunk, Evaporation(m, c.Basal), hs.apps);
     });
     public static float RefOdds => Ref.Value.odds;
     public static float RefTurnR(float mass) => Ref.Value.turnR * MathK.Cbrt(mass);

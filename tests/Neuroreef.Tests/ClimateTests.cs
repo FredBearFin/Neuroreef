@@ -318,7 +318,8 @@ public class ClimateTests
             // drying through the skin, and through gills if it has them (Respiration.Drying, 2026-11-01)
             float dry = MathF.Min(1f, K.C_THIRST * Nature.Thirst * w.PThirstK[i] * Respiration.Drying(w, i) * MathF.Max(0f, 1f - K.SOIL_WATER * w.Moisture[0]));
             float b = w.PBasal[i], top = Heat.Operative(w, 0, w.PInsul[i], false);
-            Heat.Balance(w.MassOf(i), w.PInsul[i], w.PAppend[i], top, false, b, b, out _, out float x, out _, out _);
+            // (phase 4: the grown body's heat-losing surfaces, World.PSurfK and PAppSurf, as Resolve passes them)
+            Heat.Balance(w.MassOf(i), w.PInsul[i], w.PAppSurf[i], top, false, b, b, out _, out float x, out _, out _, surf: w.PSurfK[i]);
             Resolve.Run(w, 1, 0);
             return (w.Thirst[i] - dry, K.EVAP_REL * K.C_THIRST * Nature.Thirst * x / (K.C_BASAL * w.MassOf(i)));
         }
