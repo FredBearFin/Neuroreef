@@ -549,7 +549,7 @@ public static class Physics
         // what legs of the same mass do (Walton, Jayne & Bennett 1990). The old sliding-friction cost (mu = 0.7 on the whole
         // weight, the same per kg at every size) made a 2 g crawler 3x cheaper than a 2 g walker (docs/BODYPLAN.md §8).
         float crawlW = MathF.Max(w.WEff, Phys.CRAWL_PRESS * m.Mass * Phys.G);
-        float wave = MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
+        float wave = MathF.Max(Phys.CRAWL_WAVE * m.WaveLength, 1e-3f);
         float crawlSup = Phys.KT * crawlW * u / wave;
         float kin = CrawlKinetic(m, u);
         float crawlMech = Phys.MU_SLIP * crawlW * u + drag + kin + crawlSup * Phys.ETA_M;
@@ -585,7 +585,7 @@ public static class Physics
 
     /// <summary>Lateral kinetic power of limbless undulation at speed u (W): CRAWL_KIN x M u³ / wave length. Without
     /// it a crawler's sprint had no limit but its slip and support costs, and a 1 kg fish "crawled" on land at 7 m/s.</summary>
-    public static float CrawlKinetic(Morphology m, float u) => Ablate.Crawl ? 0f : Phys.CRAWL_KIN * m.Mass * u * u * u / MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
+    public static float CrawlKinetic(Morphology m, float u) => Ablate.Crawl ? 0f : Phys.CRAWL_KIN * m.Mass * u * u * u / MathF.Max(Phys.CRAWL_WAVE * m.WaveLength, 1e-3f);
 
     /// <summary>Crossing obstacles of height h every gap metres at speed u. The centre of mass must rise by what the
     /// limbs do not already clear, ~h²/(h + clearance) (a crawler, clearance 0, lifts its whole weight by h), and the

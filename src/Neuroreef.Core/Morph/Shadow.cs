@@ -171,7 +171,7 @@ public static class Shadow
     internal static float LandMech(Morphology m, in Physics.WalkProps w, float u, float axBurst, float k)
     {
         float crawlW = MathF.Max(w.WEff, Phys.CRAWL_PRESS * m.Mass * Phys.G);
-        float wave = MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
+        float wave = MathF.Max(Phys.CRAWL_WAVE * m.WaveLength, 1e-3f);
         float crawlSup = Phys.KT * crawlW * u / wave;
         float kin = Physics.CrawlKinetic(m, u);
         float crawl = Phys.MU_SLIP * crawlW * u + kin + crawlSup * Phys.ETA_M - (axBurst + k * w.Cap);

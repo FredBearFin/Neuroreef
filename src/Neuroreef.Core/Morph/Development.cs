@@ -96,6 +96,7 @@ public sealed class Morphology
 
     // aggregates (Development.Finish)
     public float Mass, Volume, Length, MaxW, MaxH, TailH, Fineness, FrontalArea, StepArea;
+    public float WaveLength;                             // the length its mass is spread over (Finish), m: a crawling wave's reach
     public float IntMass, ExoMass, Rigidity;             // whole integument; the mineralised outer share; mass-weighted mineral of the outer skeleton
     public float ExchExt, ExchInt, SkinArea, SkinThick;  // exchange areas (after folding), m²; non-porous skin and its mean thickness
     public float GasV, ExchGas;                          // internal gas volume, m³; the exchange area lining it (air only), m²
@@ -112,7 +113,7 @@ public sealed class Morphology
     public void Clear()
     {
         Segs.Clear(); Pairs.Clear();
-        Mass = Volume = Length = MaxW = MaxH = TailH = Fineness = FrontalArea = StepArea = IntMass = ExoMass = Rigidity = 0f;
+        Mass = Volume = Length = WaveLength = MaxW = MaxH = TailH = Fineness = FrontalArea = StepArea = IntMass = ExoMass = Rigidity = 0f;
         ExchExt = ExchInt = SkinArea = SkinThick = GasV = ExchGas = GutMass = MuscleMass = TotalArea = InertMass = FatMass = 0f;
         JointCount = 0;
     }
@@ -381,5 +382,12 @@ public static class Development
         foreach (var s in m.Segs) wh = MathF.Max(wh, s.W * s.H);
         m.FrontalArea = MathF.PI / 4f * wh;
         m.Fineness = m.Length / MathF.Max(1e-6f, MathK.Sqrt(wh));
+        // the length its mass is spread over, (sum m)² / sum(m²/L): the whole length for a body of even thickness, about
+        // the head's for a head on a weightless thread. A crawling wave pushes on the ground with the body's weight and
+        // muscle, so a thread that has neither does not lengthen it (it made a 1.4 g head with a 10 cm thread of 0.4 mm
+        // the cheapest crawler; docs/BODYPLAN.md §8)
+        float sm = 0f, sm2 = 0f;
+        foreach (var s in m.Segs) { float ms = s.TissueMass + s.FatMass + s.IntMass; sm += ms; sm2 += ms * ms / MathF.Max(s.L, 1e-6f); }
+        m.WaveLength = sm2 > 0f ? MathF.Min(m.Length, sm * sm / sm2) : m.Length;
     }
 }
