@@ -70,7 +70,10 @@ public class StepLengthTests
         // Re-pinned 2026-11-03 (phase 4, docs/BODYPLAN.md §13.3; the owner approved the switch): every body is grown from its
         // module genome (founders from Clades.AncestorMorph) and every capability the world reads comes from the module
         // physics, so every body and every step changed. Was 873474179074618927.
-        Assert.Equal(15361944388290876228UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03 (second round, docs/BODYPLAN.md §13.11): the gill area cap, the cruise at its metabolic pace,
+        // sustained swimming limited by aerobic supply, protection as a kill-probability ratio, the flight-muscle premium and
+        // the appendage heat surface anchored on the plain body. Was 15361944388290876228.
+        Assert.Equal(10104198921116109538UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time
