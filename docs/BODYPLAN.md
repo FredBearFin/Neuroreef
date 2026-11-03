@@ -1384,7 +1384,11 @@ Every class was run in its own test process on the code after §13.11. Classes n
 - **VoiceTests is green** (10 of 10) when given time: `NoVocalLearningGeneIsBitIdenticalToNoFeature` runs three
   400-step worlds whose land populations are ~3× larger with module bodies, and it takes ~25 minutes, past the 20-minute
   per-class limit of the first run.
-- **Not finished in time:** Engineering, BodyLab, Geology, Hydrology, Wetland, Plant, PlantProduction, Options,
+- **EngineeringTests.StepLoopDoesNotAllocate fails:** 5.0 MB allocated over 300 steps. Every birth now decodes and
+  grows a module body (`Codec.Decode`, `Development.Grow` and `Physics` allocate lists and arrays). Needed: pooled,
+  per-thread morphology buffers, or a cached grown body per genome. The other 6 Engineering tests that ran passed;
+  the class was stopped.
+- **Not finished in time:** BodyLab, Geology, Hydrology, Wetland, Plant, PlantProduction, Options,
   MemoryReset, Vehicle, Pathogen, Caves. Except Engineering and BodyLab, all of these passed in the first round on the
   phase-4 code; none reads the body physics directly.
 
