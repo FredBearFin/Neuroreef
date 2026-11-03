@@ -50,12 +50,25 @@ public static class Live
         return u;
     }
 
+    /// <summary>The fastest speed between grid point u (where ok holds) and the next grid point up at which ok still holds,
+    /// by bisection (16 halvings: ~1e-6 of the step).</summary>
+    static float Refine(float u, Func<float, bool> ok)
+    {
+        float lo = u, hi = u * U[1] / U[0];
+        if (ok(hi)) return hi;
+        for (int k = 0; k < 16; k++) { float mid = 0.5f * (lo + hi); if (ok(mid)) lo = mid; else hi = mid; }
+        return lo;
+    }
+
     /// <summary>The flight muscle of a morphology (kg): the muscle of pairs that make lift, by their share of a flat,
     /// horizontal blade (as Shadow.Evaluate counts it; a leg's muscle is not a wing's).</summary>
     public static float FlightMuscle(Morphology m)
     {
         float f = 0f;
-        foreach (var a in m.Pairs) if (!a.Sagittal && a.Muscle > 0f && a.Artic > 0f) f += 2f * a.Muscle * MathK.Cos(a.Theta) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);
+        // only pairs held out near the horizontal (droop under 45°): a drooped pair (a leg) strokes across the lift it would
+        // make, and its muscle is not a wing's (phase 4: legs counted ~11% of their muscle as flight muscle, so a wingless
+        // walker "flapped" up slopes, World.GroundSpeed)
+        foreach (var a in m.Pairs) if (!a.Sagittal && a.Muscle > 0f && a.Artic > 0f && a.Theta < MathF.PI / 4f) f += 2f * a.Muscle * MathK.Cos(a.Theta) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);
         return f;
     }
 
@@ -83,6 +96,9 @@ public static class Live
             if (!float.IsPositiveInfinity(met)) { bestCot = MathF.Min(bestCot, met / u); topCot = met / u; }
         }
         c.CotLand = float.IsPositiveInfinity(bestCot) ? 0f : bestCot;
+        // the grid's steps are 4.4%; the top speed is refined between grid points by bisection, so it is a continuous
+        // function of the body (a gene step does not jump it by a grid step)
+        if (c.VLand > 0f) { float kk = k, ax = k * axCap; var wq = wp; c.VLand = Refine(c.VLand, u => Shadow.LandMech(m, wq, u, ax, kk) <= 0f); }
         lc.CotLandTop = MathF.Max(c.CotLand, topCot);
         // ---- basal, gut, moult (the moult is paid while growing only: Body.Express keeps it out of the basal)
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.ActiveMass), K.EXP_BASAL) * level;
@@ -109,6 +125,8 @@ public static class Live
             float gross = (pCruise / Phys.ETA_M + basal) / u;
             if (gross < bestGross) { bestGross = gross; c.Cruise = u; c.CotWater = pCruise / Phys.ETA_M / u; }
         }
+        if (c.VWater > 0f) { float kk = k; c.VWater = MathF.Min(vWardle, Refine(c.VWater, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= kk * sp.Cap) return true; return false; })); }
+        if (lc.VSust > 0f) lc.VSust = Refine(lc.VSust, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= sp.Cap) return true; return false; });
         // a body that cannot sustain any swimming speed flounders on burst power, paid anaerobically (Phys.ANAEROBIC x),
         // so moving through water is never free; one that cannot move in water at all has no water cost (it cannot go there)
         if (c.CotWater <= 0f && !float.IsPositiveInfinity(burstCot)) c.CotWater = burstCot;
@@ -219,6 +237,58 @@ public static class Live
             else roles[i] = "passive";
         }
         return roles;
+    }
+
+    static readonly string[] RoleNames = { "fly", "support", "swim", "handle", "steer", "passive" };
+
+    /// <summary>The body plans of the living (docs/BODYPLAN.md §13.6): per clade, its members' mean mass, segments and
+    /// pairs (World.PSegN, PPairN), the pairs by physics role over a sample of up to sample members (each grown from its
+    /// module genome; Roles), its loco, and one member's body (Describe); then the whole world's segment and pair counts.
+    /// Read-only.</summary>
+    public static string BodyPlanReport(World w, int sample = 40)
+    {
+        var c = System.Globalization.CultureInfo.InvariantCulture;
+        var sb = new StringBuilder();
+        sb.AppendLine("BODY PLANS (docs/BODYPLAN.md §13: grown from each animal's module genome): per clade, mean mass, segments and appendage pairs; pairs by physics role (fly/support/swim/handle/steer/passive) over up to " + sample + " members; one member's body");
+        var segHist = new int[33]; var pairHist = new int[17];
+        for (int sp = 0; sp < w.NS; sp++)
+        {
+            int n = 0, taken = 0, rep = -1; double mass = 0, segs = 0, pairs = 0, rigid = 0;
+            var roles = new int[RoleNames.Length];
+            for (int i = 0; i < w.Cap; i++)
+            {
+                if (w.StageOf[i] == St.Dead || w.Spc[i] != sp) continue;
+                n++; mass += w.PM[i]; segs += w.PSegN[i]; pairs += w.PPairN[i];
+                segHist[Math.Min(32, (int)w.PSegN[i])]++; pairHist[Math.Min(16, (int)w.PPairN[i])]++;
+                if (rep < 0 && w.StageOf[i] == St.Adult) rep = i;
+                if (taken < sample)
+                {
+                    taken++;
+                    var mo = Grown(w, i);
+                    rigid += mo.Rigidity;
+                    foreach (var r in Roles(mo)) roles[Array.IndexOf(RoleNames, r)]++;
+                }
+            }
+            if (n == 0) continue;
+            if (rep < 0) for (int i = 0; i < w.Cap && rep < 0; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == sp) rep = i;
+            var rl = new StringBuilder();
+            for (int k = 0; k < RoleNames.Length; k++) rl.Append(c, $" {RoleNames[k]} {roles[k]}");
+            sb.AppendLine(string.Format(c, "{0,-12} {1,6} {2,8:F3} kg  segs {3,5:F1}  pairs {4,5:F1}  rigidity {5:F2}  loco {6}  roles:{7}", w.Sp[sp].Name, n, mass / n, segs / n, pairs / n, rigid / Math.Max(1, taken), (Loco)w.PLoco[rep], rl));
+            sb.AppendLine("    e.g. " + Describe(Grown(w, rep)));
+        }
+        sb.Append("all living: segments");
+        for (int k = 0; k < segHist.Length; k++) if (segHist[k] > 0) sb.Append(c, $" {k}:{segHist[k]}");
+        sb.Append("; pairs");
+        for (int k = 0; k < pairHist.Length; k++) if (pairHist[k] > 0) sb.Append(c, $" {(k == 16 ? "16+" : k.ToString(c))}:{pairHist[k]}");
+        sb.AppendLine();
+        return sb.ToString();
+    }
+
+    /// <summary>Slot i's body grown from its genome at its adult mass.</summary>
+    public static Morphology Grown(World w, int i)
+    {
+        ReadOnlySpan<sbyte> gn = w.Genome.Slot(i);
+        return Development.Grow(Codec.Decode(Codec.Block(gn)) ?? Codec.FromLabelled(gn), w.PM[i]);
     }
 
     /// <summary>One line describing a grown body: segments (their lengths, mm), and each appendage pair: its segment, length

@@ -216,7 +216,8 @@ public static class Codec
         var l = LiveGenes.Of(genome, mass);
         float level = Heat.Level(l.Endo);
         var m0 = Development.Grow(Translate.FromLive(l, 0f), l.Mass);
-        float organBase = Shadow.BasalW(m0, level, Shadow.GeneBasalFactor(genome), 0f);
+        // its organs are built to its own tissues' basal and its brain's, as Respiration.OrganBase (symmorphosis)
+        float organBase = Shadow.BasalW(m0, level, Live.GeneFactor(genome), Shadow.BrainW(genome));
         return Translate.FromLive(l, organBase);
     }
 }

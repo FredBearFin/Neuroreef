@@ -437,7 +437,7 @@ public static class Headless
         o.AppendLine();
         o.Append(CladeLoco(w));
         o.AppendLine(LocoReport(w).Trim());
-        o.AppendLine(); o.Append(Neuroreef.Morph.ShadowDiag.SpeciesReport(w));   // both body expressions (docs/BODYPLAN.md §11)
+        o.AppendLine(); o.Append(Neuroreef.Morph.Live.BodyPlanReport(w));   // the module bodies (docs/BODYPLAN.md §13; the shadow comparison of §11 is retired)
         return o.ToString();
     }
 

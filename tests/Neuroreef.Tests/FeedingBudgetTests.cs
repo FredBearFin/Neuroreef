@@ -40,6 +40,9 @@ public class FeedingBudgetTests
         gn[G.B_BRAIN] = brainGene;
         for (int p = 0; p < Pools.N; p++) gn[G.B_DIET + p] = -127;
         gn[G.B_DIET + (int)Pool.Phyto] = 127;
+        // phase 4 (2026-11-03): a fish described by its labelled genes: the module block is emptied, so the body is the
+        // translator's reading of them (Morph.Codec.FromLabelled), whatever block the genome held
+        if (gn.Length >= G.LEN) gn.Slice(G.MORPH, G.MORPHN).Clear();
     }
 
     /// <summary>Runs the fish for `days` in a 40 m sea cell held at `phyto` units of plankton and `waterC` °C.</summary>

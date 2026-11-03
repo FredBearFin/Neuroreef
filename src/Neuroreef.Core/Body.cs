@@ -155,8 +155,10 @@ public static class Body
         w.PGut[i] = K.C_GUT * m;
         // a gut processes and absorbs at the pace of the tissues that build and run it (level): a reptile's food intake and
         // digestive throughput are a fraction of a mammal's of its size (Karasov & Diamond 1985; Nagy 2005)
-        w.PDig[i] = K.C_DIGEST * mPow * gut * level * dt;
-        w.PAbsorb[i] = K.C_ABSORB * mPow * gut * level * dt;   // energy the gut can take up a step (2026-11-01)
+        // (phase 4) the gut is built to the Kleiber cost of its active (non-mineral, lean) mass, as the basal is (Morph.Live.Of)
+        float mAct = MathK.Pow(MathF.Max(1e-6f, mo.ActiveMass), K.EXP_BASAL);
+        w.PDig[i] = K.C_DIGEST * mAct * gut * level * dt;
+        w.PAbsorb[i] = K.C_ABSORB * mAct * gut * level * dt;   // energy the gut can take up a step (2026-11-01)
         w.PBite[i] = K.C_BITE * mPow * dt;
         float t = MathK.Pow(m, K.EXP_LIFE);
         w.PMature[i] = K.C_MATURE * t * devel / dt;

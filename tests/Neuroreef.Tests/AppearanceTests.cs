@@ -93,7 +93,7 @@ public class AppearanceTests
         Assert.All(changed.Concat(fromMother).Concat(fromFather), Assert.True);
     }
 
-    [Fact]
+    [Fact(Skip = "Retired with the labelled body and shape genes (phase 4, 2026-11-03, docs/BODYPLAN.md 13.7): the body, its look and its clade traits are the grown module body's; to be re-derived on module genomes")]
     public void DimensionsAndLimbShapeHaveBoundedPhysicalEffects()
     {
         var w = new World(1, 2);
@@ -115,7 +115,7 @@ public class AppearanceTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Retired with the labelled body and shape genes (phase 4, 2026-11-03, docs/BODYPLAN.md 13.7): the body, its look and its clade traits are the grown module body's; to be re-derived on module genomes")]
     public void DimensionsMatchRenderedExponentialAxesAndConserveVolume()
     {
         foreach (sbyte a in new sbyte[] { -127, -63, 0, 63, 127 })
@@ -177,7 +177,7 @@ public class AppearanceTests
         return w;
     }
 
-    [Theory]
+    [Theory(Skip = "Retired with the labelled body and shape genes (phase 4, 2026-11-03, docs/BODYPLAN.md 13.7): the body, its look and its clade traits are the grown module body's; to be re-derived on module genomes")]
     [InlineData(G.B_LENGTH)]
     [InlineData(G.B_WIDTH)]
     [InlineData(G.B_HEIGHT)]
@@ -211,7 +211,7 @@ public class AppearanceTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Retired with the labelled body and shape genes (phase 4, 2026-11-03, docs/BODYPLAN.md 13.7): the body, its look and its clade traits are the grown module body's; to be re-derived on module genomes")]
     public void KinRecognitionSeesShapeAndColourWithoutDilutingEcologicalTraits()
     {
         var w = new World(2, 1);
@@ -255,7 +255,7 @@ public class AppearanceTests
         return bytes.AsSpan(0, length).ToArray();
     }
 
-    [Fact]
+    [Fact(Skip = "Retired with the labelled body and shape genes (phase 4, 2026-11-03, docs/BODYPLAN.md 13.7): the body, its look and its clade traits are the grown module body's; to be re-derived on module genomes")]
     public void SnapshotCarriesRawAppearanceForEveryVisibleStageAndIgnoresCladeColour()
     {
         var w = VisibleWorld();
@@ -284,7 +284,7 @@ public class AppearanceTests
         var w = VisibleWorld();
         using var bank = new MemoryStream();
         GeneBank.Save(w, bank);
-        Assert.Equal(13, GeneBank.Version);
+        Assert.Equal(14, GeneBank.Version);   // 14: the module body block (2026-11-03, docs/BODYPLAN.md §13.2)
         bank.Position = 0;
         var loaded = GeneBank.Load(bank);
         foreach (var genome in loaded.Genomes[0])
@@ -296,7 +296,7 @@ public class AppearanceTests
         try
         {
             Checkpoint.SaveWorld(w, path);
-            Assert.Equal(28, Checkpoint.Version);   // 28: the ocean (World.Ocean, DeepN; Nature.Ocean and Islands in the header); 27: the step of the world a prehistory founds; 26: the world's step length (World.StepH); 25: nutrient per dead pool and gut; 24: live wood per field cell (World.LiveWood); 23: the world's body sizes after the nature settings (BodySize); 22: respiration (genes, sense, depth and oxygen debt per slot, causes suffocated and drowned); 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
+            Assert.Equal(29, Checkpoint.Version);   // 29: the module body block (2026-11-03); 28: the ocean (World.Ocean, DeepN; Nature.Ocean and Islands in the header); 27: the step of the world a prehistory founds; 26: the world's step length (World.StepH); 25: nutrient per dead pool and gut; 24: live wood per field cell (World.LiveWood); 23: the world's body sizes after the nature settings (BodySize); 22: respiration (genes, sense, depth and oxygen debt per slot, causes suffocated and drowned); 21: a death cause "hunted" (Explore mode); 20: worlds of any size (slots in Kind.Slots, paged genomes); 19: i64 byte count per whole array; 18: a kind byte per field, slots in use only for the big per-slot arrays
             var restored = new World(w.Cap, w.Seed);
             Checkpoint.LoadWorld(restored, path);
             for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Assert.True(w.GenomeOf(i).SequenceEqual(restored.GenomeOf(i)), $"genome of slot {i}");
@@ -310,7 +310,7 @@ public class AppearanceTests
         finally { File.Delete(path); File.Delete(path + ".tmp"); }
     }
 
-    [Fact]
+    [Fact(Skip = "Retired with the labelled body and shape genes (phase 4, 2026-11-03, docs/BODYPLAN.md 13.7): the body, its look and its clade traits are the grown module body's; to be re-derived on module genomes")]
     public void FoundingHabitatConstraintSurvivesPlacementFallback()
     {
         var w = new World(4, 1);

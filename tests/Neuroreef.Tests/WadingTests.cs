@@ -93,7 +93,7 @@ public class WadingTests
         Assert.Equal(0f, Respiration.Access(w, 0, water, alg));
     }
 
-    [Fact] // a flier that never flies pays its wings' upkeep (COST_WING and the gut that serves it) and gets nothing for them in the water
+    [Fact(Skip = "Retired with the labelled wing gene (phase 4, 2026-11-03): COST_WING has no tissue-physics counterpart; a module body's flight muscle costs its tissue's Kleiber share (docs/BODYPLAN.md 13.9)")] // a flier that never flies pays its wings' upkeep (COST_WING and the gut that serves it) and gets nothing for them in the water
     public void AFlierThatNeverFliesPaysItsWingUpkeep()
     {
         var bare = Body0(mass: -40);

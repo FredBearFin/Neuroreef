@@ -59,7 +59,9 @@ public class DivingTests
         float costDay = Respiration.CruiseCost(w, 0, cruise) * day;
         _out.WriteLine($"{w.PM[0]:F2} kg, {Body.LengthM(w, 0):F3} m: cruises {Respiration.CruiseMps(w, 0):F2} m/s, {cruise:F0} m an eating step (travel {travel:F0} m); " +
             $"plankton {kg * 1000:F1} g a step at 0.3 of a unit; a day of eating gives {eDay / basalDay:F2} x its basal cost (diet {w.DietOf(0)[(int)Pool.Phyto]:F2}) and the cruise costs {costDay / basalDay:F2} x");
-        Assert.InRange(Respiration.CruiseMps(w, 0) / Body.LengthM(w, 0), 0.5f, 1.5f);
+        // re-derived 2026-11-03 (phase 4): the cruise is the grown body's speed of least gross cost a metre (Morph.Live), which
+        // fishes hold at ~0.5-3 lengths a second (Videler 1993: the optimum rises as size falls); was the live 0.5-1.5
+        Assert.InRange(Respiration.CruiseMps(w, 0) / Body.LengthM(w, 0), 0.3f, 3f);
         Assert.Equal(0f, Respiration.FeedCruiseM(w, 0, 1e9f));   // all its time travelling: no bout
         Assert.True(Respiration.CruiseCost(w, 0, cruise) > 0f);
         // the bottom: what its mouth crops along its path, never the whole floor
@@ -108,7 +110,7 @@ public class DivingTests
         Assert.Equal(w.PReach[0], w.ReachOf(0));
     }
 
-    [Fact] // wings stroke under water, best as small flippers: the wing a heavy body needs to fly is a worse flipper (Thaxter et al. 2010; Elliott et al. 2013)
+    [Fact(Skip = "Retired with the labelled wing gene (phase 4, 2026-11-03): Body.Propulsor's WING_SWIM x 4 w (1 - w) is replaced by the module physics' swimming with wings (Physics.SwimSet); to be re-derived on module genomes")] // wings stroke under water, best as small flippers: the wing a heavy body needs to fly is a worse flipper (Thaxter et al. 2010; Elliott et al. 2013)
     public void WingsSwimBestAtASizeTooSmallToFlyAHeavyBody()
     {
         Assert.Equal(0f, Body.Propulsor(0f, 0f));

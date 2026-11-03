@@ -346,9 +346,10 @@ public static class Checkpoint
         if (m.From < MorphVersion)
         {
             phenotype = true;
-            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Morph.Codec.TranslateInto(w.GenomeOf(i));
+            // (only genomes without a block: a save written with this layout keeps its own)
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead && !Morph.Codec.Has(w.GenomeOf(i))) Morph.Codec.TranslateInto(w.GenomeOf(i));
             for (int sp = 0; sp < w.ArchiveCount.Length; sp++)
-                for (int k = 0; k < w.ArchiveCount[sp]; k++) Morph.Codec.TranslateInto(new Span<sbyte>(w.Archive, (sp * K.ARCHIVE + k) * G.LEN, G.LEN));
+                for (int k = 0; k < w.ArchiveCount[sp]; k++) { var ag = new Span<sbyte>(w.Archive, (sp * K.ARCHIVE + k) * G.LEN, G.LEN); if (!Morph.Codec.Has(ag)) Morph.Codec.TranslateInto(ag); }
             m.Translated = true;
         }
         for (int i = 0; i < w.Cap; i++)

@@ -90,7 +90,7 @@ public class ShadowTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Retired with the switch (phase 4, 2026-11-03, docs/BODYPLAN.md 13.3): the shadow became the live expression, so there is no second expression to compare with")]
     public void ShadowAgainstLiveOverTheFoundersOfSeeds1To5()
     {
         var rows = Founders();

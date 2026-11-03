@@ -153,7 +153,7 @@ public class RespirationTests
         Assert.True(w.PBasal[i] > b0, "an amphibious body's basal cost is not above a gill-breather's");
     }
 
-    [Fact] // a gill-breather that keeps a lung it never uses pays for it, in water as anywhere
+    [Fact(Skip = "Retired with B_LUNGS (phase 4, 2026-11-03): Respiration.OrganUpkeep is replaced by the exchange epithelia's tissue upkeep in the basal (Morph.Live)")] // a gill-breather that keeps a lung it never uses pays for it, in water as anywhere
     public void AGillBreatherPaysUpkeepForUnusedLungs()
     {
         // a pure gill-breather and one with a fifth of its breathing organ as lung, in water (where the lung draws nothing
