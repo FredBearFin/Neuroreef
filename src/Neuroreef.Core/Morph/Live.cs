@@ -41,6 +41,9 @@ public static class Live
     public const float MOULT_SOFT_GROW = 0.15f;
     /// <summary>Days between moults of a growing body (Hartnoll 1982: ~10-30 days in juvenile crabs).</summary>
     public const float MOULT_DAYS = 20f;
+    /// <summary>Flight muscle's mitochondrial volume density over the whole body's mean (pigeon pectoralis ~0.2 against ~0.045, most of the body being tissue of 0.02-0.06; Mathieu-Costello
+    /// 1993; Suarez 1992; Else &amp; Hulbert 1985): what its resting upkeep is, per kg, against the body's.</summary>
+    public const float MITO_RATIO = 4.4f;
 
     static readonly float[] U = BuildSpeeds();
     static float[] BuildSpeeds()
@@ -104,7 +107,15 @@ public static class Live
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.ActiveMass), K.EXP_BASAL) * level;
         lc.MoultW = Phys.MOULT_COST * m.Rigidity * m.ExoMass;
         float modules = Phys.TURNOVER * m.IntMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
-        lc.Gut = Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + brainW, kleiber, out float basal);
+        // flight muscle's own upkeep (the avian premium, phase 4): resting metabolism goes with mitochondrial volume (proton
+        // leak through the inner membrane is ~20-30% of standard metabolism, and tissue rates rank with mitochondrial
+        // density; Rolfe & Brand 1997; Else & Hulbert 1985). Flight muscle holds ~MITO_RATIO times the body's mean
+        // mitochondrial volume density (pigeon pectoralis ~0.2, hummingbird 0.35, against ~0.045 for a whole body;
+        // Mathieu-Costello 1993; Suarez 1992), so it costs (MITO_RATIO - 1) x its share of the Kleiber rate on top. A full-winged
+        // body (~0.17 of it flight muscle) pays ~+30%, within the measured avian range (non-passerines near mammals, passerines
+        // +30-50%; McKechnie & Wolf 2004; Lasiewski & Dawson 1967), which COST_WING set by hand before
+        float flyPremium = (MITO_RATIO - 1f) * FlightMuscle(m) / MathF.Max(m.Mass, 1e-9f) * kleiber;
+        lc.Gut = Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + flyPremium + brainW, kleiber, out float basal);
         c.Basal = basal;
         // ---- water: burst top speed, sustained top speed, the cruise of least gross cost a metre and its net cost there
         var sps = Physics.SwimSet(m, Phys.RHO_W);
@@ -199,10 +210,10 @@ public static class Live
     public static float RefOdds => Ref.Value.odds;
     public static float RefTurnR(float mass) => Ref.Value.turnR * MathK.Cbrt(mass);
 
-    /// <summary>The live basal factor of the genes that stay genes: Shadow.GeneBasalFactor less the speed gene (retired in
+    /// <summary>The live basal factor of the genes that stay genes: Shadow.GeneBasalFactor less the retired speed gene and appendage (radiator) gene (retired in
     /// phase 4: speed comes from the muscle the morphology carries, so its cost goes with it).</summary>
     public static float GeneFactor(ReadOnlySpan<sbyte> gn)
-        => Shadow.GeneBasalFactor(gn) - K.COST_SPEED * (Body.Factor(gn[G.B_SPEED], K.BODY_RANGE_TRAIT) - 1f);
+        => Shadow.GeneBasalFactor(gn) - K.COST_SPEED * (Body.Factor(gn[G.B_SPEED], K.BODY_RANGE_TRAIT) - 1f) - K.COST_APP * Body.Organ(gn[G.B_APPEND]);
 
     // ------------------------------------------------------------------ summaries (console, telemetry, clades)
 

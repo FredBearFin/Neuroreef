@@ -18,6 +18,12 @@ public static class Mat
     public const float SIGMA_SOFT = 0.3e6f;     // failure stress of a soft (hydrostatic) support, Pa
     public const float SIGMA_RATIO = 500f;      // mineralised cuticle / bone ~150 MPa against it (Currey 2002; Vincent 1990)
     public const float MUSCLE_MAX_SHARE = 0.7f; // at most this share of a segment's tissue is muscle
+    /// <summary>The most of a segment's or appendage's surface that can be exchange epithelium (phase 4, docs/BODYPLAN.md
+    /// §13.11): all of it. It was 0.5, which held a fish's everted (gill) area to 5x its body surface, ~0.2 m²/kg at 3 kg,
+    /// against 0.5-1.2 m²/kg in active fishes and up to ~3 in tunas (Gray 1954; Palzenberger &amp; Pohla 1992). At 1 the
+    /// cap is ~0.6 m²/kg at 1 kg and the most a gill supplies ~15 W/kg there, a tuna's maximum (Brill 1996: 10-15 W/kg).
+    /// A wholly porous surface is wholly unprotected and wholly wet (PKill, evaporation), so the physics prices it.</summary>
+    public const float PORE_MAX = 1f;
     public const float FOLD = 10f;              // area amplification of a porous (lamellar, alveolar) exchange surface
     public const float GUT_SHARE = 0.4f;        // of the non-muscle trunk tissue
     public const float JOINT_MASS = 0.04f;      // each joint adds this share of the appendage's mass (hinge, membrane)
@@ -185,7 +191,7 @@ public static class Development
                     L = LogMap(sg.P[SP.LEN], SEG_L_LO, SEG_L_HI) * scale,
                     W = LogMap(sg.P[SP.WID], SEG_W_LO, SEG_W_HI) * scale,
                     H = LogMap(sg.P[SP.HEI], SEG_W_LO, SEG_W_HI) * scale,
-                    IntMin = sg.P[SP.INT_MIN], Pore = 0.5f * sg.P[SP.PORE], Invag = sg.P[SP.INVAG],
+                    IntMin = sg.P[SP.INT_MIN], Pore = Mat.PORE_MAX * sg.P[SP.PORE], Invag = sg.P[SP.INVAG],
                     AxShare = 0.4f * sg.P[SP.AXMUS], Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS], Fat = Mat.FAT_MAX * sg.P[SP.FAT],
                 };
                 s.IntT = LogMap(sg.P[SP.INT_T], INT_REL_LO, INT_REL_HI);   // relative here; made absolute in Finish
@@ -213,7 +219,7 @@ public static class Development
                         Joints = Joints(ag.P[AP.JOINTS]),
                         MuscleShare = Mat.PAIR_MUSCLE * ag.P[AP.MUSCLE],
                         Mineral = ag.P[AP.MINERAL], Wall = 0.02f + 0.98f * ag.P[AP.WALL], Exo = ag.P[AP.EXO], Hollow = Mat.HOLLOW_MAX * ag.P[AP.HOLLOW],
-                        Pore = 0.5f * ag.P[AP.PORE], Invag = ag.P[AP.INVAG],
+                        Pore = Mat.PORE_MAX * ag.P[AP.PORE], Invag = ag.P[AP.INVAG],
                     };
                     musShareSum += p.MuscleShare;
                     SkeletonOf(p);

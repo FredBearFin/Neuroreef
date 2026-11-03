@@ -204,9 +204,13 @@ public static class Body
         // (2026-11-02) a chase runs at the speed of the medium it is in (World.ReachOf)
         w.PReachLand[i] = ReachM(m, vLand / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
         w.PReachSwim[i] = ReachM(m, vWater / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
-        // protection: its integument's crushing odds against a bite scaled to its size (Physics.PKill) over the plain body's
-        // (Morph.Live.RefOdds, mass-free), as armour on the live scale where defence is mass x (DEF_BASE + armour)
-        float gain = c.Odds / MathF.Max(Morph.Live.RefOdds, 1e-9f);
+        // protection: how much its integument cuts the chance that a bite scaled to its size kills it (Physics.PKill), against
+        // the plain body's: PKill_ref / PKill = (1 + odds) / (1 + odds_ref), as armour on the live scale where defence is
+        // mass x (DEF_BASE + armour), so the live strike's kill chance ~ power / (power + defence) falls as PKill does. A
+        // probability ratio: it saturates as the plate makes the bite fail every time. (Phase 4, 2026-11-03, the armour check:
+        // it was the ratio of the odds, odds / odds_ref, and the plain body's skin crushes at 0.05 of a bite, so that ratio
+        // divided by a near-zero and gave a half-mineralised 1 kg body ~40x where its kill chance falls ~7x)
+        float gain = (1f + c.Odds) / (1f + Morph.Live.RefOdds);
         w.PArmour[i] = K.DEF_BASE * MathF.Max(0f, gain - 1f);
         // the rest of what the live sim reads of a body, from the physics (per unit of distance and per step at adult mass)
         float ePerUnitPerJm = K.M_PER_UNIT / Morph.Shadow.J_PER_E;   // energy units per world unit, per J/m

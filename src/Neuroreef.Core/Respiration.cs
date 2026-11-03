@@ -371,7 +371,15 @@ public static class Respiration
     /// size) x how well it is propelled there (0.1 + 0.9 x Body.Propulsor, as its swimming speed). Filter feeders and
     /// divers cruise near the speed of least cost of transport, ~0.5-1.5 lengths a second (Videler 1993; Sato et al. 2007).</summary>
     public static float CruiseMps(World w, int i)
-        => w.PCruise[i] * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-6f) / w.PM[i]);   // phase 4: the grown body's cruise of least cost a metre (Morph.Live), scaled with its length
+    {
+        // phase 4: the grown body's cruise of least gross cost a metre (Morph.Live), scaled with its length; and with its
+        // metabolic pace where it is (Pace: a cold-blooded body in cool water burns less at rest). The speed of least gross
+        // cost a metre, (P(u) + B) / u with drag power P ~ u³, is u* ~ (B / 2k)^(1/3), so it moves as the resting cost's
+        // cube root (Videler 1993; Ware 1978). Phase 4 (2026-11-03): without it a 1 kg fish in 15 °C water cruised at the
+        // optimum of a body at T_BODY, 3.2 lengths a second against fishes' 0.5-2 (Videler 1993)
+        float pace = Climate.On ? Pace(w, i, World.FIdx(w.X[i], w.Y[i]), false) : 1f;
+        return w.PCruise[i] * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-6f) / w.PM[i]) * MathK.Cbrt(MathF.Max(pace, 1e-3f));
+    }
 
     /// <summary>
     /// The seconds of a step body i spends feeding in water, and the metres it cruises doing it (2026-11-02): an eating
@@ -389,7 +397,12 @@ public static class Respiration
     /// <summary>The cost of cruising this many metres (swimming's cost of transport, SwimCost, a coat's drag included),
     /// energy per step.</summary>
     public static float CruiseCost(World w, int i, float metres)
-        => metres / K.M_PER_UNIT * SwimCost(w, i, MathF.Max(w.MassOf(i), 1e-4f)) * (1f + K.INS_MOVE * w.PInsul[i]);
+    {
+        // at the cruise its pace sets (CruiseMps): drag power ~ u³, so the net cost a metre ~ u², x pace^(2/3) (phase 4)
+        float pace = Climate.On ? MathF.Max(Pace(w, i, World.FIdx(w.X[i], w.Y[i]), false), 1e-3f) : 1f;
+        float c = MathK.Cbrt(pace);
+        return metres / K.M_PER_UNIT * SwimCost(w, i, MathF.Max(w.MassOf(i), 1e-4f)) * c * c * (1f + K.INS_MOVE * w.PInsul[i]);
+    }
 
     /// <summary>
     /// Swimming's net cost of transport for body i at this mass, energy per unit of distance (2026-11-02, the ocean audit):

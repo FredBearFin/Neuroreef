@@ -202,19 +202,25 @@ public class LocomotionTests
         Assert.Equal(vmp * MathK.Pow(1.3f, 0.5f), Body.LoadedTopAirSpeed(vmp, m, 0.3f, heavy), 3);
     }
 
-    [Fact] // phase 4 (2026-11-03, docs/BODYPLAN.md §13.7): the basal cost is the grown body's tissues (Kleiber on its active mass,
-           // integument turnover, exchange epithelia). The live COST_WING (a bird's BMR 30-50% above a mammal's; McKechnie & Wolf
-           // 2004) has no tissue-physics counterpart in the module body and is retired with the labelled wing gene: a flier's
-           // basal is a mammal's of its mass within 15%. KNOWN GAP: the avian premium (docs/BODYPLAN.md §13.9)
+    [Fact] // an endothermic flier pays a bird's basal metabolism: 30-50% above a mammal's of the same mass for wings that fly
+           // (McKechnie & Wolf 2004). Phase 4 (2026-11-03): from its flight muscle's mitochondrial density (Morph.Live.MITO_RATIO),
+           // no longer the hand-set COST_WING
     public void FlightMuscleRaisesBasalLikeABirds()
     {
         var w = new World(16, 1);
         w.Genome[G.B_LEGS] = 60; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127;
-        w.Genome[G.B_ENDO] = 127; Body.Express(w, 0);   // warm-blooded, as birds and mammals (2026-11-02: the level, Heat.Level, scales a cold body's cost)
+        w.Genome[G.B_ENDO] = 127; Body.Express(w, 0);   // warm-blooded, as birds and mammals
         float mammal = w.PBasal[0];
+        foreach (float organ in new[] { 0.6f, 0.8f, 1f })
+        {
+            w.Genome[G.B_WINGS] = (sbyte)MathF.Round(organ * 254f - 127f); Body.Express(w, 0);
+            if (w.LocoOf(0) != Loco.Fly) continue;
+            float ratio = (w.PBasal[0] - mammal) / mammal;
+            Console.WriteLine($"wings {organ}: flight muscle {w.PWings[0] * K.FLY_MUSCLE_MAX:F2} of the body, basal +{ratio:P0}");
+            Assert.InRange(ratio, 0.15f, 0.6f);   // non-passerines near mammals', passerines +30-50% (McKechnie & Wolf 2004; Lasiewski & Dawson 1967)
+        }
         w.Genome[G.B_WINGS] = 127; Body.Express(w, 0);
         Assert.Equal(Loco.Fly, w.LocoOf(0));
-        Assert.InRange(w.PBasal[0] / mammal, 0.85f, 1.15f);
     }
 
     [Fact] // a flier that kills ground prey from the air comes down on the kill to eat (raptors feed on the ground)

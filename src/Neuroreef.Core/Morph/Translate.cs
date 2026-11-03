@@ -145,8 +145,8 @@ public static class Translate
                 }
             }
             float segArea = 0f; foreach (var s in m1.Segs) segArea += s.Area;
-            float pore = P / (Mat.FOLD * MathF.Max(segArea, 1e-9f));   // Development: Pore = 0.5 x gene
-            g = Build(l, Clamp01(2f * pore), invag, gasG, fatG);
+            float pore = P / (Mat.FOLD * MathF.Max(segArea, 1e-9f));   // Development: Pore = PORE_MAX x gene
+            g = Build(l, Clamp01(pore / Mat.PORE_MAX), invag, gasG, fatG);
         }
         g.MassG = Clamp01(MathK.Log(l.Mass / Development.MASS_LO) / MathK.Log(Development.MASS_HI / Development.MASS_LO));
         return g;
