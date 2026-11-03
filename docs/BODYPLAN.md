@@ -1195,9 +1195,9 @@ The translated 1 kg plankton fish is fed 2.7× its need, against the 3× margin,
 module physics' speed of least gross cost a metre) costs 37% of its daily need. `FeedingBudgetTests` measures its
 clearance at 101 L/min, against the 6–83 L/min the menhaden data allow (Durbin & Durbin 1975).
 
-### 13.9 Known gaps
+### 13.9 Known gaps (first round; items 1, 3, 4, 8 and 9 are addressed in §13.11)
 
-1. **Ocean founding fails** (§13.8). Next step: measure which term moved the 1 kg fish from passing to failing. The
+1. **Ocean founding failed in the first round** (§13.8); fixed in the second (§13.11, §13.12). Next step: measure which term moved the 1 kg fish from passing to failing. The
    candidates are the faster cruise, the cruise cost, and the basal with its exchange upkeep. Then decide whether the
    sea's founding seed should start from the sea's realm (a translated marine draw) rather than the generic blob.
 2. **No shelled-prey pool.** The live diet model's pools are plants, plankton, algae, detritus, meat, blood, carrion
@@ -1231,7 +1231,7 @@ clearance at 101 L/min, against the 6–83 L/min the menhaden data allow (Durbin
    `COST_APP` in the next re-pin.
 10. **Heat in water.** A body's appendage surface now sets its heat loss (Allen's rule), so a warm-blooded body with big
     limbs dies of cold in water. This is physical, and it moved `RespirationTests`' gill-breather to a cold-blooded body.
-### 13.10 Test status at the end of this session (2026-11-03)
+### 13.10 Test status, first round (superseded by §13.13)
 
 Each class was run on its own (one test process at a time, with a timeout per class).
 
@@ -1254,6 +1254,101 @@ Each class was run on its own (one test process at a time, with a timeout per cl
 - **Not run:** FoundingTests, OceanTests (WhyDrawsPassOrFailFoundingAtSea fails; §13.8), EcologyTests,
   EcosystemTests, NutrientBalanceTests, EngineeringTests, BodyLabTests, PrehistoryTests.
 
+### 13.11 Second round (2026-11-03): ocean founding, gills, cruise, heat and water, the avian premium, armour
+
+Each item below is a physical correction, found by measuring a translated reference body against the literature.
+
+1. **The everted (gill) area cap was too low.**
+   - Before: `Development` held exchange epithelium to 0.5 of a surface (`Pore = 0.5 × gene`). That kept a fish's gill
+     area at 5× its body surface, ~0.2 m²/kg at 3 kg. Active fishes carry 0.5–1.2 m²/kg and tunas up to ~3 (Gray
+     1954; Palzenberger & Pohla 1992).
+   - Now: `Mat.PORE_MAX = 1`, so a surface can be wholly exchange epithelium. The cap is then ~0.6 m²/kg at 1 kg, and
+     the most gills supply there (25 W/m² × area) is ~15 W/kg, a tuna's maximum.
+   - The translator maps the same areas, so translated bodies are unchanged.
+   - A warm-blooded gill-breather of 1–3 kg can now meet its field metabolism (1.5 × basal) from water if it is nearly
+     all gill. The cap still grows only as the body surface (M^(2/3)), not as gill area does (M^0.8–0.9), so large
+     warm-blooded gill-breathers remain limited.
+2. **The feeding cruise ran at the optimum of a warm body.**
+   - The speed of least gross cost a metre is u* ∝ (basal / k)^(1/3). `PCruise` was computed with the basal at T_BODY,
+     so a 1 kg ectothermic fish in 15 °C water cruised at 3.2 lengths a second, against fishes' 0.5–2 (Videler 1993).
+   - `Respiration.CruiseMps` now scales the cruise by the cube root of its metabolic pace where it is (`Pace`), and
+     `CruiseCost` scales the net cost a metre by pace^(2/3) (drag power ∝ u³).
+   - The cost of transport at the cruise was within calibration all along: 0.64 J/(kg m) at 1 kg, against the live
+     1.0 and phase 2c's 0.45–0.65 of it.
+3. **Sustained swimming is aerobic.**
+   - The sustained-speed limit was each propulsor's muscle at P_SPEC (40 W/kg) on all its muscle. That gave a 1 kg
+     fish a sustained 3.8 m/s (14 lengths a second); most of a fish's myotome is anaerobic white muscle.
+   - Now sustained mechanical power is at most ETA_M × (the oxygen its surfaces deliver in water, or through its
+     air-breathing surfaces at the surface, − basal), as a fish's critical speed is set by its aerobic scope (Brett 1964).
+4. **The appendages' heat surface is anchored on the plain body.**
+   - Heat's K_COND, APP_LEAK and VASO were calibrated with the middle of the retired radiator gene (0.5) on a typical
+     body.
+   - `AppSurf` is now 0.5 × the body's appendage surface / the plain body's (legs, head and tail). The plain walker
+     loses heat as it did before the switch; longer, wider or more pairs lose more.
+   - Before this, a translated 1 kg walker carried 0.9–1.9 of the gene's scale: 2–4× the radiator.
+   - The trunk surface (`SurfK`) and evaporation (`EvapK`) were already relative to the plain body, so for it they
+     reproduce the live calibration (Scholander et al. 1950; the live thirst allometry).
+   - The thirst deaths of the first land check came from random bodies with everted gills or porous limbs (EvapK 8–25:
+     wet surface evaporates ~10 W/m², Physics.EVAP_EXT), not from the walker.
+5. **Protection is a ratio of kill probabilities.**
+   - The armour equivalent was the ratio of crushing odds over the plain body's. The plain body's skin crushes at
+     ~0.03 of a size-scaled bite (odds 0.028), so dividing by it gave a half-mineralised 1 kg body ~40×.
+   - It is now PKill_ref / PKill = (1 + odds) / (1 + odds_ref): how much the integument cuts the chance that a bite
+     kills. It saturates as the plate makes every bite fail.
+   - A fully mineralised integument on a 1 kg walker gives ×1.3 (odds 0.34). Its soft, unarmoured legs dilute it, and
+     armouring them (exoskeletal pairs) raises it.
+   - The bite allometry (10 N × (M / 0.25 kg)^(2/3): ~25 N at 1 kg, ~240 N at 30 kg, a dog's 300–1,000 N) is of the
+     measured order.
+6. **The avian premium comes from flight muscle.**
+   - Basal now includes (MITO_RATIO − 1) × flight muscle share × Kleiber. MITO_RATIO = 4.4 is a flight muscle's
+     mitochondrial volume density (pigeon pectoralis ~0.2) over a whole body's (~0.045) (Mathieu-Costello 1993;
+     Suarez 1992; Else & Hulbert 1985), since resting cost goes with mitochondrial membrane (Rolfe & Brand 1997).
+   - A full-winged 0.5 kg flier (0.17 of it flight muscle) pays +27%, inside the measured avian range (non-passerines near mammals, passerines
+     +30–50%; McKechnie & Wolf 2004).
+   - `COST_APP` (the retired radiator gene's upkeep) is removed from the gene factor.
+7. **FORAGE_MARGIN (3×) is kept.**
+   - It is not a safety factor on metabolism. It is measured: random-brained founders eat on 25–50% of steps, so one
+     eating step must cover 2–4 steps of need. A founder's sustained intake is bounded separately by its gut
+     (absorption ~C_ABSORB / C_BASAL × basal).
+   - In the sea that gut bound is what failed most draws (absorb cap 0.6–1.7× need), because a bluff body's feeding
+     cruise costs several times its basal.
+8. **The random founding growth is kept.**
+   - A one-segment seed with random parameters and up to 10 operator rounds is uninformed: segment proportions
+     log-uniform 5–150 mm per axis, appendages with every parameter random. Duplications halve the segment they copy,
+     so they do not lengthen the body; the fineness stays that of the random seed (often bluff).
+   - Bluff, randomly buoyant bodies rarely pay a sea forager's cruise. That is physics, and the founding's 256 draws
+     per ancestor find the ones that do.
+   - After items 1–3 the ocean valley founds 12 clades (it founded none before).
+### 13.12 Short checks, second round (valley map, seed 3, `--random-brains --no-checkpoint`)
+
+**Land, 1,500 steps** (3 steps/s):
+
+- **Census:**
+  - 15 of 16 ancestors founded, 5 of them water-founded (1 of 6 in the first round);
+  - 20,817 alive at the end, 15 clades, no splits;
+  - Anithmo is 0.33 kg, 2.1 segments and 3.4 pairs, soft, a swimmer; it grew to ~15,000.
+- **Body plans:**
+  - 1–17 segments: 2 segments in 12,826 animals; 3–6 segments in 6,232;
+  - 0 to 16 or more pairs: 3 pairs in 8,830 animals, 16 or more in 1,143.
+- **Pairs by physics role**, over up to 40 members of each clade: 1,574 passive, 339 swim, 221 steer, 170 handle, 80
+  support, 0 fly.
+- **Locomotion:** 741 walk, 494 wade, 7,482 swim, 258 sessile; no fliers.
+- **Deaths by cause:** killed 3,578, thirst 2,244, lost before birth 2,228, starvation 1,879, parasitism 853, cold 493,
+  drowned 331, fire 38, suffocated 28, disease 7.
+  - Cold deaths fell from 760 after the appendage-surface anchor.
+  - Thirst rose with the population: the thirst deaths are of random bodies with everted gills or porous limbs on land,
+    the first round's Dovdov and Tete among them.
+
+**Ocean (`--ocean`), 2,000 steps:**
+
+- **Census:**
+  - **12 clades founded, 3,061 founders** (none in the first round);
+  - 344 alive at step 2,000, in 4 clades: Narithqu 111, Vimolo 59, Osvi 8, Melel 1. They are random brains with no
+    prehistory, and the banner warns most species will die out.
+- **Body plans of the living:** 2–15 segments, with 12 segments in 158 animals; 0–6 pairs, with none in 92 animals and
+  2 in 210. Every one swims.
+- **Deaths by cause**, of 6,324 created: killed 3,125, lost before birth 2,626, parasitism 107, starvation 67, drowned
+  33, cold 21, old age 1. Predation, not founding physics, is what thins the sea now.
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
