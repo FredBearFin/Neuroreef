@@ -124,6 +124,35 @@ Options (run from a command prompt in this folder):
   Neuroreef.exe --headless --steps 200000 --csv run.csv   long run without the console
   Neuroreef.exe --help               all options
 
+BODY LAB (the body-plan prototype, docs/BODYPLAN.md)
+  A separate experiment, not the world: bodies start as one soft blob and evolve a growing list of
+  segments and appendages with no labelled organs; physics alone decides what each part does. It does
+  not touch your world or prehistory and saves nothing but its own files. Double-click BodyLab.bat, or
+  from a command prompt in this folder:
+    Neuroreef.exe --bodylab                                   all three environments, seed 1, 800 generations
+    Neuroreef.exe --bodylab --env sea-floor --seeds 3          seeds 1, 2 and 3 on the sea floor
+    Neuroreef.exe --bodylab --env land --seed 7 --generations 400 --population 150
+  --env open-water | sea-floor | land | all     --seeds N (from --seed, default 1) or a list: --seeds 3,7,9
+  --generations N (default 800)   --population N (default 200)   --every N (a snapshot every N generations)
+  --out FOLDER (default: the bodylab folder next to the exe)   --no-serve (run, write the files, exit)
+  A run of 800 generations takes seconds to a minute. The window prints a line per batch of generations
+  (best fitness, species, the champion's mass, segments, appendage pairs, how it moves, rigid or soft),
+  then a table like the prototype's demo report and a full account of each run's best body.
+  Each run is written to bodylab\bodylab-<env>-<seed>.json: the champion every few generations, the best
+  of each species, and what the physics says each part does.
+  Your browser opens the Body Lab page at http://localhost:5800/bodylab.html (--port N, --no-browser):
+  - the champion turns slowly in 3D (drag to orbit, wheel to zoom, double-click to frame it again);
+  - the timeline under it goes from generation 1, the blob, to the last; press Play to watch it change;
+  - the strip below shows the best body of each species at that generation, side by side;
+  - the right panel says what each part does, from the physics' numbers (thrust, support, crushing,
+    gas exchange, protection). Click a part there to move the camera to it; tick "role colours" to
+    colour every part by its role. Tissue colour: pink soft skin, amber cuticle, ivory mineral; a shiny
+    shell over the back is a rigid integument; red fringes are gills; dark openings are folded-in
+    exchange (lungs, tracheae); knuckles on an appendage are its joints.
+  - "Run live" evolves a new run on the page while you watch (one at a time).
+  The window keeps serving the page until you press Ctrl+C. The page also opens from the normal console
+  ("body lab" in its top bar): there it shows bodylab-*.json files you open with "open file...".
+
 ECOLOGY REPORT (NR_ECO=1)
   A headless run with the environment variable NR_ECO=1 also prints an ecology census every 300 steps
   (animals and biomass by trophic level, plant production and how much of it is eaten, deaths by cause,

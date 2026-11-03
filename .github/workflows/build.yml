@@ -44,12 +44,18 @@ jobs:
           dist\Neuroreef.exe --evolve --no-setup --map valley --steps 600 --capacity 16384
           if (!(Test-Path dist\evolved.nrbank)) { throw 'evolved.nrbank not written' }
           Remove-Item dist\evolved.nrbank, dist\evolve-report.*
+      - name: Smoke test (body lab, 20 generations)
+        run: |
+          dist\Neuroreef.exe --bodylab --env sea-floor --generations 20 --population 40 --no-serve --out dist\bodylab-smoke
+          if (!(Test-Path dist\bodylab-smoke\bodylab-sea-floor-1.json)) { throw 'bodylab json not written' }
+          Remove-Item -Recurse dist\bodylab-smoke
       - name: Add run instructions
         shell: pwsh
         run: |
           Copy-Item RUN.txt dist/RUN.txt
           Copy-Item Evolve.bat dist/Evolve.bat
           Copy-Item LongRun.bat dist/LongRun.bat
+          Copy-Item BodyLab.bat dist/BodyLab.bat
       - uses: actions/upload-artifact@v4
         with:
           name: Neuroreef-win-x64
@@ -58,3 +64,4 @@ jobs:
             dist/RUN.txt
             dist/Evolve.bat
             dist/LongRun.bat
+            dist/BodyLab.bat

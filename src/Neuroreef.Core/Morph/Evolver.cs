@@ -27,6 +27,17 @@ public sealed class EvolveResult
     public readonly List<(MorphGenome G, float Fitness, int Size)> Champions = new();
 }
 
+/// <summary>What a progress observer sees after each generation is evaluated and speciated (read only: the arrays are
+/// the evolver's own and change in the next generation, so clone a genome to keep it).</summary>
+public sealed class GenerationInfo
+{
+    public int Gen, Generations, Best, SpeciesCount;
+    public MorphGenome[] Pop = Array.Empty<MorphGenome>();
+    public float[] Fit = Array.Empty<float>();
+    /// <summary>Each species' best member (an index into Pop) and its size, in the evolver's species order.</summary>
+    public readonly List<(int Best, int Size)> Species = new();
+}
+
 public sealed class SearchOptions
 {
     public bool Speciate = true;
@@ -45,7 +56,8 @@ public static class Evolver
         public int Stale;
     }
 
-    public static EvolveResult Run(MorphEnv env, uint seed, int population = 120, int generations = 600, MutationRates? rates = null, SearchOptions? opt = null)
+    public static EvolveResult Run(MorphEnv env, uint seed, int population = 120, int generations = 600, MutationRates? rates = null, SearchOptions? opt = null,
+        Action<GenerationInfo>? progress = null)
     {
         rates ??= new MutationRates();
         opt ??= new SearchOptions();
@@ -92,6 +104,18 @@ public static class Evolver
                 float sb = float.NegativeInfinity;
                 foreach (int i in s.Members) sb = MathF.Max(sb, fit[i]);
                 if (sb > s.BestEver + 1e-4f) { s.BestEver = sb; s.Stale = 0; } else s.Stale++;
+            }
+            if (progress != null)
+            {
+                // an observer (the Body Lab, Server/BodyLab.cs): it reads the generation and changes nothing
+                var gi = new GenerationInfo { Gen = gen, Generations = generations, Best = gBest, SpeciesCount = species.Count, Pop = pop, Fit = fit };
+                foreach (var s in species)
+                {
+                    int sb = s.Members[0];
+                    foreach (int i in s.Members) if (fit[i] > fit[sb]) sb = i;
+                    gi.Species.Add((sb, s.Members.Count));
+                }
+                progress(gi);
             }
             if (opt.Speciate) thresh = species.Count > opt.TargetSpecies ? thresh * 1.05f : species.Count < opt.TargetSpecies ? MathF.Max(0.1f, thresh / 1.05f) : thresh;
 

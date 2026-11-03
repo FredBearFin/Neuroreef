@@ -56,6 +56,23 @@ public sealed class Options
     // --validate N (Validate.cs): N seeds, each run normally and with the memory-reset control
     public int ValidateSeeds, BigBrainMin = 64;
     public bool SeedSet;
+    // --bodylab (BodyLab.cs): the body-plan prototype on its own, with its 3D page. --seeds N runs seeds --seed .. --seed+N-1
+    // (from 1 by default); --seeds 3,7,9 runs those
+    public bool BodyLab, LabServe = true;
+    public string LabEnv = "all";
+    public string? LabOut;
+    public int LabSeeds = 1, LabGenerations = 800, LabPopulation = 200, LabEvery;
+    public uint[]? LabSeedArray;
+
+    /// <summary>The Body Lab's seeds: the --seeds list, or --seeds N from --seed (default 1).</summary>
+    public uint[] LabSeedList()
+    {
+        if (LabSeedArray != null) return LabSeedArray;
+        uint first = SeedSet ? Seed : 1u;
+        var s = new uint[Math.Max(1, LabSeeds)];
+        for (int i = 0; i < s.Length; i++) s[i] = first + (uint)i;
+        return s;
+    }
 
     /// <summary>Apply the nature settings and the map for what is about to be built (not when resuming a save).</summary>
     public void ApplyNature(bool prehistory)
@@ -184,6 +201,17 @@ public sealed class Options
                         weights kept). Prints survival of lineages and big-brained lineages, population, brain size, steps/s
   --big-brain-min N     validate: memory units from which a lineage or animal counts as big-brained (default 64)
   --print-constants     print docs/CONSTANTS.md and exit
+
+  BODY LAB (the body-plan prototype, docs/BODYPLAN.md; it does not start the world)
+  --bodylab             evolve bodies from one soft blob by physics alone, print the progress and a table,
+                        write bodylab-<env>-<seed>.json, and show them in 3D at http://localhost:5800/bodylab.html
+  --env E               open-water, sea-floor, land or all (default all)
+  --seeds N             seeds --seed .. --seed+N-1 (default 1 seed, from 1); or a list: --seeds 3,7,9
+  --generations N       generations per run (default 800)
+  --population N        bodies per generation (default 200)
+  --every N             a snapshot of the champion and the species every N generations (default: generations/100)
+  --out DIR             where to write the JSON files (default: the bodylab folder next to the exe)
+  --no-serve            run, write the files and exit without the page
 ";
 
     /// <summary>What limits a run, printed at start: the slots it starts with, their memory, and how far memory (or
@@ -269,6 +297,23 @@ public sealed class Options
                 case "--validate": o.ValidateSeeds = Math.Max(1, int.Parse(Next())); o.Headless = true; break;
                 case "--big-brain-min": o.BigBrainMin = Math.Clamp(int.Parse(Next()), K.BRAIN_MIN, G.NH); break;
                 case "--print-constants": o.PrintConstants = true; break;
+                case "--bodylab": o.BodyLab = true; break;
+                case "--env":
+                    o.LabEnv = Next().ToLowerInvariant().Replace('_', '-');
+                    if (o.LabEnv != "all" && Array.IndexOf(LabReport.EnvKeys, o.LabEnv) < 0) throw new ArgumentException("--env open-water|sea-floor|land|all");
+                    break;
+                case "--seeds":
+                {
+                    string v = Next();
+                    if (v.Contains(',')) { o.LabSeedArray = Array.ConvertAll(v.Split(',', StringSplitOptions.RemoveEmptyEntries), x => Math.Max(1u, uint.Parse(x))); o.LabSeeds = o.LabSeedArray.Length; }
+                    else o.LabSeeds = Math.Clamp(int.Parse(v), 1, 1000);
+                    break;
+                }
+                case "--generations": o.LabGenerations = Math.Clamp(int.Parse(Next()), 2, 100000); break;
+                case "--population": o.LabPopulation = Math.Clamp(int.Parse(Next()), 10, 5000); break;
+                case "--every": o.LabEvery = Math.Clamp(int.Parse(Next()), 1, 100000); break;
+                case "--out": o.LabOut = Next(); break;
+                case "--no-serve": o.LabServe = false; break;
                 case "-h": case "--help": case "/?": o.Help = true; break;
                 default: throw new ArgumentException("unknown option " + s + " (try --help)");
             }

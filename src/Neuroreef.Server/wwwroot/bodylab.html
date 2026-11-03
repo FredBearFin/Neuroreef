@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neuroreef Body Lab</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+<style>
+  #lab { position: absolute; top: 46px; bottom: 0; left: 0; right: 0; display: flex; }
+  #stage { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #glwrap { position: relative; flex: 1; min-height: 0; }
+  #gl { width: 100%; height: 100%; display: block; touch-action: none; }
+  #side { width: 380px; flex-shrink: 0; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; padding: 12px 14px 20px; }
+  #side h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; font-weight: 600; }
+  #side h2:first-child { margin-top: 0; }
+  #champ-title { font-size: 15px; font-weight: 600; color: #fff; }
+  #champ-sum { color: var(--dim); margin-top: 4px; }
+  .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; margin-top: 8px; }
+  .kv div { display: flex; flex-direction: column; line-height: 1.15; }
+  .kv .k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); }
+  .kv .v { font-family: var(--mono); font-size: 13px; }
+  .part { padding: 7px 8px; border-radius: 6px; border: 1px solid transparent; margin: 2px -8px; cursor: default; }
+  .part:hover, .part.hot { background: #142130; border-color: var(--line2); }
+  .part .t { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .part .t .n { color: var(--faint); font-weight: 400; font-size: 11px; }
+  .part p { margin: 3px 0 0; color: var(--dim); font-size: 12px; }
+  .chip { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 1px 6px; border-radius: 10px; color: #0b1118; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+  #legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--dim); }
+  #timeline { height: 98px; flex-shrink: 0; border-top: 1px solid var(--line); background: var(--bg2); padding: 6px 14px 8px; display: flex; flex-direction: column; gap: 4px; }
+  #tl-top { display: flex; align-items: center; gap: 10px; }
+  #tl-gen { font-family: var(--mono); color: var(--fg); min-width: 210px; }
+  #tl-note { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #spark { width: 100%; height: 34px; display: block; }
+  #slider { width: 100%; accent-color: var(--accent); margin: 0; }
+  #tiles { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; pointer-events: none; }
+  #tiles { border-top: 1px solid var(--line); }
+  .tile-lab { position: absolute; bottom: 4px; transform: translateX(-50%); font-size: 10.5px; color: var(--dim); text-align: center; text-shadow: 0 1px 2px #000; line-height: 1.25; }
+  .tile-lab b { color: var(--fg); font-weight: 600; }
+  #tiles-head { position: absolute; left: 10px; top: 6px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); background: #070b10a0; padding: 2px 6px; border-radius: 4px; }
+  #main-lab { position: absolute; left: 14px; top: 10px; font-size: 12px; color: var(--dim); pointer-events: none; text-shadow: 0 1px 2px #000; }
+  #main-lab b { color: #fff; font-size: 14px; }
+  #tip { position: absolute; pointer-events: none; max-width: 340px; background: #0b121bee; border: 1px solid var(--line2); border-radius: 6px; padding: 7px 9px; font-size: 12px; color: var(--fg); display: none; }
+  #tip .t { font-weight: 600; margin-bottom: 2px; }
+  #runbox { display: flex; gap: 6px; align-items: center; }
+  #runbox input[type=number] { width: 66px; font: inherit; color: var(--fg); background: var(--bg2); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 6px; }
+  #runbox .k { font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: .07em; }
+  #status { color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--dim); padding: 30px; }
+  #empty code { color: var(--accent); }
+  label.btn input { margin: 0; }
+  @media (max-width: 1100px) { #side { width: 300px; } #runbox .opt { display: none; } }
+</style>
+</head>
+<body>
+<header id="bar">
+  <div class="brand" title="Neuroreef Body Lab"><span class="logo"></span><span class="name">NEUROREEF</span></div>
+  <div class="badge" title="The body-plan prototype (docs/BODYPLAN.md): bodies evolve from one soft blob; nothing is labelled, the physics decides what a part does.">BODY LAB</div>
+  <select id="runsel" title="A run: live in this session, or a bodylab-*.json file"></select>
+  <label class="btn" title="Open a bodylab-*.json file from your computer"><input id="file" type="file" accept=".json,application/json" hidden>open file…</label>
+  <label class="btn" title="Colour every part by what the physics says it does, instead of its tissue"><input id="roles" type="checkbox"> role colours</label>
+  <div class="grow" id="status"></div>
+  <div id="runbox" class="hidden" title="Evolve a new run on the server and watch it as it goes">
+    <select id="r-env"><option value="sea-floor">sea floor</option><option value="open-water">open water</option><option value="land">land</option></select>
+    <span class="k opt">seed</span><input id="r-seed" type="number" min="1" value="1">
+    <span class="k opt">gens</span><input id="r-gens" type="number" min="2" value="800" class="opt">
+    <span class="k opt">pop</span><input id="r-pop" type="number" min="10" value="200" class="opt">
+    <button id="r-go">Run live</button>
+  </div>
+</header>
+<div id="lab">
+  <div id="stage">
+    <div id="glwrap">
+      <canvas id="gl"></canvas>
+      <div id="main-lab"></div>
+      <div id="tiles"><div id="tiles-head">species at this generation</div></div>
+      <div id="tip"></div>
+      <div id="empty" class="hidden"></div>
+    </div>
+    <div id="timeline">
+      <div id="tl-top">
+        <button id="play" title="Play the lineage from the first blob">▶</button>
+        <span id="tl-gen">–</span>
+        <span id="tl-note"></span>
+      </div>
+      <canvas id="spark"></canvas>
+      <input id="slider" type="range" min="0" max="0" value="0">
+    </div>
+  </div>
+  <aside id="side">
+    <h2>champion</h2>
+    <div id="champ-title">–</div>
+    <div id="champ-sum"></div>
+    <div class="kv" id="champ-kv"></div>
+    <h2>what each part does (by the physics)</h2>
+    <div id="parts"></div>
+    <h2>role colours</h2>
+    <div id="legend"></div>
+  </aside>
+</div>
+<script type="module" src="js/bodylab/bodylab.js"></script>
+</body>
+</html>
