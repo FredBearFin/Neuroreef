@@ -1,7 +1,10 @@
 # NEUROREEF: OPEN-ENDED BODY PLANS (design and prototype)
 
 Status: design, plus a working prototype in `src/Neuroreef.Core/Morph/` (namespace `Neuroreef.Morph`).
-The prototype is **not wired into the live simulation**. Tests are in `tests/Neuroreef.Tests/MorphTests.cs`.
+Phase 2 (shadow expression, §10) has started: every live body is also translated to a module genome and its
+capabilities computed from the developed morphology, alongside `Body.Express`, into `World.D` (write-only: the live
+simulation reads none of it and is bit-identical). Tests are in `tests/Neuroreef.Tests/MorphTests.cs` and
+`tests/Neuroreef.Tests/ShadowTests.cs`.
 
 ## 1. The problem
 
@@ -222,6 +225,8 @@ Taylor, Heglund & Maloiy 1982):
 lift-based profile efficiency, against the induced power of hovering on the actuator disk of the span:
 1.2 W^1.5 / √(2 ρ A). The margin grows with span and muscle and falls with size (power ∝ M against need ∝ M^(7/6)).
 A 10 g body with long, flat, muscled appendages flies (tested). Flight is evaluated but not yet an environment.
+Phase 2 replaced the hovering bound with the least power of level flight and wingbeat-frequency-limited muscle
+power (§10.3).
 
 **Gas exchange** (Fick's law; Schmidt-Nielsen 1997; Dejours 1981):
 
@@ -562,7 +567,8 @@ expressed by the new body:
 | P0 (done) | prototype, physics, operators, tests, evolution harness | ~3 agent-hours |
 | P1a (done) | mass gene and allometry, food handling (Holling, crushing, strikes), turning and Howland escape, obstacle energetics, patchy food, NEAT speciation and crossover; 13 new tests; 7 loopholes fixed | ~2 agent-hours |
 | P1b | finish the prototype: lower-size physics, roll stability, refuges and ambush, a moult hazard that grows with size; iterate until each environment's outcome stops moving between calibrations | 3–6 agent-hours |
-| P2 | shadow expression: translate every live genome (table above) and compute Morph capabilities *alongside* `Body.Express`; report both in telemetry; calibrate the module physics until the translated bodies of today's ancestors match today's speeds and costs within ~20% | 4–8 agent-hours |
+| P2a (done, §10) | shadow expression: translator, shadow capabilities in `World.D`, founders diagnostic, first calibration round (7 of 13 grounded capabilities within ~25%) | ~3 agent-hours |
+| P2b | the rest of P2 (§10.5): gas volume and buoyancy, a volume-bounded lung, flight muscle beyond 0.3 of a segment, tendon elastic storage, telemetry of both expressions; re-run the evolution demo against phase 1 | 4–7 agent-hours |
 | P3 | storage: a fixed-capacity, variable-count body block in the slot layout (now with innovation numbers and the mass gene); checkpoint, `GeneBank` and AGENTS-format version bumps; a v13 → v14 translator; ICD update | 3–5 agent-hours |
 | P4 | expression from morphology: replace every reader of `PLegs`, `PFins`, `PWings`, `PLegPairs`, `PFinPairs`, `PLungs` and armour (Resolve, Respiration, Heat, Decide, Reflex, Clades, Species, Telemetry) with morphology-derived speeds per medium, O2 supply, armour, moult state, crushing and strike force, and turning radius; mutate and recombine with the new operators in LIFECYCLE | 10–20 agent-hours |
 | P5 | recalibration: the ~40 test files that assert body-dependent numbers (Locomotion, Wading, Diving, Respiration, Feeding, FeedingBudget, Founding, Ocean, Ecology, Metabolism, Appearance, StepLength, ...), the founding draw (`Clades.AncestorBody`) and the constants doc; long runs in each world type | 10–25 agent-hours, plus the wall-clock of long runs |
@@ -574,6 +580,161 @@ Total: roughly **35–70 agent-hours** for P1b–P6. This is based on the pace s
 simulation runs are included. The largest risks are P4 and P5: the live ecology is tuned around today's speeds and
 costs, and every one of them will move. Each phase-1 calibration round also moved the evolved outcome, so P5
 should expect several rounds, not one.
+
+## 10. Phase 2a: shadow expression (2026-11-03)
+
+Every live body is now expressed twice. `Body.Express` reads the labelled genes as before; at its end,
+`Morph.Shadow.Express` translates the same genes to a module genome (`Morph/Translate.cs`), grows it at the live body's
+own mass (`Development.Grow(g, mass)`, a new overload with no static state), and computes its capabilities from the
+morphology with the prototype's physics (`Morph/Shadow.cs`). The results go to per-slot arrays in `World.D` (`Derived`:
+`MVLand`, `MVWater`, `MVAir`, `MCruise`, `MCotLand`, `MCotWater`, `MCotAir`, `MMargin`, `MFlies`, `MStand`, `MO2Air`,
+`MO2Water`, `MOdds`, `MBasal`, `MStream`, `MTurnR`).
+
+- **Write-only.** Nothing in the simulation reads them. They use no random numbers and write only their own slot.
+- **Not saved.** `Derived` is not walked by `Checkpoint`, so the checkpoint format is unchanged. `Derived.Refresh`
+  (run after a load) recomputes them from the genomes.
+- **Pinned hashes unchanged.** `StepLengthTests.DefaultStepIsBitIdenticalToBefore` and
+  `ClimateTests.NoClimateIsBitIdenticalToBefore` pass unchanged.
+- **Switch.** `Shadow.Enabled` (on by default) turns the computation off.
+
+### 10.1 The translator
+
+Lengths are in cube sides of the live body (`Body.Dimensions` makes length × width × height = 1). Development rescales
+the whole body to its mass, so only proportions matter.
+
+| live gene(s) | module genome |
+|---|---|
+| `B_LENGTH`, `B_WIDTH`, `B_HEIGHT` | a head, `max(B_LEGN, B_FINN)` trunk segments and a tail. Every segment has the live width and height (no steps), so the fineness is the live body's |
+| `B_HEAD`, `B_TAIL` | the head's share of the length, 0.10–0.20, and the tail's, 0.08–0.20 |
+| `B_LEGS` × `B_LEGN` | one support pair per trunk segment: length 1.86 × legs cube sides (the live standing height `STAND_H` M^(1/3) (0.3 + 0.7 legs); Garcia & da Silva 2006). Droop 70°, 3 joints, round (chord = thickness = 0.08 × length), bone (mineral 1, skeleton 35% of the section, endoskeletal), muscle gene = legs |
+| `B_FINS` × `B_FINN`, `B_FIN_SHAPE` | one flat lateral pair per trunk segment: length 0.2 × body length × fins, aspect ratio 1–4 from the shape gene, flatness 8, 2 joints, soft (mineral 0.2), muscle gene = fins. A sagittal tail blade of 0.8 × body height × fins. Axial muscle gene 0.25 + 0.75 fins (AxShare 0.1 for a walker's back, 0.4 for a fish's myotomes) |
+| `B_WINGS`, `B_WING_SHAPE` | one flat lateral pair on the thorax: length 4.5 × (0.4 + 0.6 wings) cube sides (a 1 kg bird's ~1 m span; Pennycuick 2008), aspect ratio 5–15, flatness 12, 3 joints, mineral 0.6, hollow (exoskeletal share 0.8), muscle gene = wings. The thorax takes (1 − wings)/n + 0.85 wings of the trunk, so it houses the flight muscle |
+| `B_ARMOUR` (0–3) | integument thickness 2% × (1 + armour) of the half-thickness, and mineral armour / 3, on every segment |
+| `B_LUNGS` | exchange surface sized to the live organs' scopes over the body's own basal metabolism: folded-in area LUNG_SCOPE × lungs × basal / S_AIR_INT, everted area GILL_SCOPE × gills × basal / S_WATER_EXT. It is spread over every segment's surface (FOLD × pore share, at most 0.5) |
+| an organ gene below 0.02 | no module at all |
+| `B_MASS`, `B_FLOOR` | the live mass. The genome's mass gene is set where the prototype's 1 g–10 kg range holds it |
+| `B_ENDO` | kept as a gene. It sets the metabolic level (`Heat.Level`) that scales Kleiber's basal |
+| speed, sight, strike, eyes, life history, immunity, water economy, voice, `B_INSUL`, `B_APPEND`, brain | kept as genes. Their basal factor and the brain's cost pass through unchanged (`Shadow.GeneBasalFactor`, `BrainW`) |
+
+Innovation numbers are fixed per role: trunk 1, head 2, further trunk segments 3–5, tail 7, legs 10+, fins 20+, tail
+blade 30, wings 40. So translated genomes line up homologously for crossover and distance.
+
+### 10.2 The capabilities, and how the live values are put in the same units
+
+| capability | shadow (from the morphology) | live, converted |
+|---|---|---|
+| land, water, air speed (m/s) | top speed on flat ground, in water and in level flight, with muscle at P_BURST = 250 W/kg (Weis-Fogh & Alexander 1977). Air: v_mp × `Body.TopFlightSpeed(margin)` | a step's travel is a day range (DMD_M), not a speed. The live sim reads it as a speed through Garland's sprint × its speed over the plain body's (`Body.ReachM`); so does the comparison |
+| cruise in water (m/s) | the speed of least gross cost a metre (basal included; Videler 1993) | `Respiration.CruiseMps` (1 length a second × the propulsor) |
+| cost per metre (J/m, net) | land: least of `WalkMetabolic`/u. Water: at the cruise. Air: least power / ETA_M / v_mp | land: COT_J M^0.7 × (stance + swing at half speed). Water: `Respiration.SwimCost`. Air: `Resolve.MoveCost` per distance |
+| flight margin; flies | `Physics.FlightMargin`. Flies if margin ≥ 1 and flight muscle ≥ FLY_WING_MIN × FLY_MUSCLE_MAX of the mass (Marden 1987) | `Body.FlightMargin`; `PLoco == Fly` |
+| standing height (m) | limb clearance + trunk height | `Respiration.StandM` (adult) |
+| O2 supply in air, in water (W) | `Physics.O2Supply` | organ base × scopes + skin (`Respiration.UptakeAt`, at sea level and saturated water) |
+| protection | crushing odds 1/PKill − 1 against the size-scaled bite. Compared as the gain over the same body unarmoured | (DEF_BASE + armour)/DEF_BASE, the odds factor in `Resolve.Strike` |
+| basal cost (W) | Kleiber on the non-mineral mass × level × gene factor, + integument turnover and moult, exchange-epithelium upkeep and the brain, then `Body.GutScale` | PBasal |
+| drag shape | (drag of a cube of its trunk volume / its own)^(1/3), by the wetted-area drag | `Body.Streamlining` (Hoerner's volume drag) |
+| turning | least radius in water at 1 m/s. Compared as the plain body's radius over its own | PTurn / (C_TURN M^EXP_TURN) |
+
+### 10.3 Calibrations made, and which side is more physical
+
+Each change is a physical correction. Each was tested on the reference bodies (`ShadowTests`) before it was compared
+with the founders. All 28 fast `MorphTests` and the `EvolutionDemo` still pass.
+
+1. **Limb swing (Morph was wrong).** It was 4 m_leg u³ / stride: the whole limb at the foot's speed, at the walking
+   stride. That held a 1 kg walker's sprint to ~2 m/s against Garland's 8.4. Now:
+   - a limb's mass is proximal, so SWING_K = 0.16 of it moves at the foot's speed (radius of gyration ~0.4 L;
+     Hildebrand 1985);
+   - the stride lengthens with speed by Alexander's dynamic similarity, 2.3 h Fr^0.3 (Alexander & Jayes 1983);
+   - `Physics.StrideAt` and `SwingPower` do this.
+2. **Undulation's lateral kinetic work (Morph was missing it).** A limbless crawler's speed had no limit but slip and
+   support, and a 1 kg fish "crawled" on land at 7 m/s. Now CRAWL_KIN × M u³ / wave length is paid (slip angles
+   ~45°; Gray 1946; Jayne 1986; `CrawlKinetic`).
+3. **Walking cost KT 0.10 → 0.12 (calibrated).** KT had been set on a hand-made 0.2 kg walker with 5 cm strides. The
+   translated legs stand a body at the live STAND_H, which is empirical. To match Taylor, Heglund & Maloiy's
+   10.7 M^0.7 J/m:
+   - the plain walker needs 0.14 (at 0.12 it is at 0.76–0.88 of Taylor over 0.1–10 kg);
+   - the full-legged founders need 0.10.
+   0.12 puts their median at 1.05. Taylor's line is the more physical side.
+4. **Flight margin (Morph was wrong).** It was flight-muscle power at a fixed 150 W/kg against the induced power of
+   *hovering*, an upper bound about twice the least power of level flight. That gave a 1 kg bird with a 0.9 m span a
+   margin of 0.8. Now:
+   - **required power** is Pennycuick's least power of level flight: induced K_IND W²/(2ρ S_d v) on the span's disk,
+     plus the body's parasite drag, at its minimum;
+   - **stall limit:** no slower than stalling the lifting area at CL 1.6. A leg or rod has span but no area, and once
+     "flew";
+   - **available power** is W_FLAP = 17 J/kg a wingbeat (Askew & Marsh 2002) at the wingbeat frequency of its wing
+     (Pennycuick 1996: f = M^(3/8) g^(1/2) b^(−23/24) S^(−1/3) ρ^(−3/8)). So the margin falls as ~M^(−1/3) for
+     similar shapes;
+   - the live sim's M^(−1/2) (available power ∝ M^(2/3)) sits at the other end of the measured 0.67–0.8 exponent of
+     available power (Ellington 1991; Marden 1994). Neither exponent is clearly more physical; the shadow's is
+     mechanistic.
+5. **Gills in air (live was right).** An everted surface in air supplied 15 W/m², 60% of its value in water. Soft
+   lamellae collapse and stick in air, and only a few % stay open (Graham 1997), as the live GILL_AIR (0.02) says.
+   S_AIR_EXT is now 0.5 W/m². Skin, which does not collapse, keeps the old value for skin breathing in air
+   (S_AIR_SKIN = 15). Stiffened everted gills (land crabs) are not modelled.
+6. **Translator choices (not fitted).** Limb slenderness 0.08 (it was 0.12, which made limbs 30% of the body), and
+   P_BURST 250 W/kg. Both are literature values, chosen before the comparison.
+
+**Effect on the prototype's evolution (6 seeds × 1,000 generations, re-run with these changes).**
+
+- **Open water:** as in phase 1 (1 g undulators; one raptorial striker).
+- **Land:** rigid, moulting crawlers in 4/6 (3/6 in phase 1).
+- **Sea floor:** the crushing head pair evolved in **1/6** runs (seed 5: mineral 0.9, 5 joints, muscle 0.30, 3.5 N,
+  69% of intake as shelled prey), against 4/6 in phase 1. The other runs are soft swimmers along the bottom. Which
+  change moved it (the dearer walking and crawling, most likely) is not yet known. P2b should run the ablations.
+
+### 10.4 Shadow against live: the founders of seeds 1–5
+
+`ShadowTests.ShadowAgainstLiveOverTheFoundersOfSeeds1To5`:
+
+- **Sample:** every founder of `new Simulation(1024, seed, 2)` for seeds 1–5, with no step run: 17,521 animals,
+  ~15 s a seed;
+- **Measure:** the ratio shadow / live per capability: median, 10th and 90th percentile;
+- **Assertion:** the calibrated rows are asserted within ~25%.
+
+| capability | live grounded? | n | median | p10 | p90 | verdict |
+|---|---|---|---|---|---|---|
+| drag shape | yes (Hoerner) | 17,521 | **1.05** | 0.97 | 1.75 | calibrated; the tail is flat, wide bodies, where wetted-area drag punishes more than Hoerner's body of revolution |
+| standing height | yes (Garcia & da Silva) | 17,521 | **1.04** | 0.71 | 1.40 | calibrated |
+| land cost/m, legs ≥ 0.7 | yes (Taylor et al.) | 5,975 | **1.05** | 0.85 | 4.46 | calibrated. The tail is few-legged armoured bodies |
+| land cost/m, all | yes | 17,521 | 1.58 | 0.95 | 5.30 | **Morph more physical for crawlers.** A short legless body's body wave (0.25 L) is a short stride, so it pays several times a walker's cost a metre. The live sim charges legless bodies the stance cost of walking. Walton et al. (1990) found snakes, which are long, near walking's cost, and the Morph agrees for long bodies |
+| land speed (rel. to the plain body) | yes | 17,521 | **1.14** | 0.40 | 1.89 | calibrated (legs, pairs, armour, wings) |
+| land speed (m/s) | yes (Garland) | 17,521 | 0.67 | 0.23 | 1.22 | **live more physical.** The shadow matches Garland at 0.1 kg (4.0 m/s) but reaches only 0.66 of it at 1 kg and 0.55 at 10 kg: the Morph has no tendon elastic storage (Alexander 1988; Bennett & Taylor 1995), which grows with size. Next phase |
+| air cost/m | yes (Tucker; Pennycuick) | 787 | **1.17** | 0.82 | 1.55 | calibrated |
+| flight margin | yes (FLY_M_MAX 16 kg) | 17,066 | 0.32 | 0.08 | 1.23 | **live more physical.** A pair gene drives with at most 0.3 of its segment's tissue (`Development`), so flight muscle stops near 0.2–0.27 of the body against a bird's 0.35, and most founders' bodies are bluff (parasite drag). A 1 kg full-winged body has margin 1.6 (live 4.0); a 10 kg one cannot fly (live 1.26) |
+| flies (agreement) | yes | 17,521 | 76% agree | | | follows from the margin |
+| water cruise, fins ≥ 0.7 | yes (Videler) | 2,841 | **1.13** | 0.78 | 2.17 | calibrated |
+| water cruise, all | no | 17,521 | 2.67 | 1.06 | 6.60 | the live 0.1 lengths a second of a finless body is a hand-set floor. The shadow's optimum is physics |
+| water cost/m, fins ≥ 0.7 | yes (COT_SWIM_J) | 2,841 | 7.15 | 4.16 | 30.9 | **live more physical** (see the buoyancy note below) |
+| water cost/m, all | yes | 17,521 | 10.0 | 3.93 | 31.2 | the same |
+| O2 supply in air | yes (Weibel's scope 10) | 17,521 | 0.52 | 0.24 | 0.75 | **live more physical.** The folded-in area is bounded by 0.5 of the body surface × FOLD 10, so an endotherm's lungs at full scope do not fit. An ectotherm's do (within 4%). A lung's area is bounded by volume, not surface: next phase |
+| O2 supply in water | yes (scope 2–5) | 17,447 | 0.78 | 0.31 | 2.74 | the same bound for endothermic gills; the high tail is lungs counted as water pockets (12 W/m²), which a vertebrate lung is not |
+| basal cost | yes (Kleiber × level) | 17,521 | **0.75** | 0.65 | 0.85 | within the asserted 0.7–1.05. The 25% gap is the live organs' upkeep terms (COST_LIMB for fins, COST_WING, COST_ARMOUR_ABS, `OrganUpkeep`), which have no tissue-physics counterpart in the Morph. For birds the live sim is grounded (BMR +30–50%; McKechnie & Wolf 2004). For fins and armour its terms are qualitative |
+| water speed (m/s; rel.) | no | 17,521 | 0.34; 0.56 | | | the live water speed is Garland's running sprint × a hand-set factor. A 1 kg shadow fish bursts at 5.6 m/s (22 lengths/s, high: no lactate limit) |
+| air speed | no | 787 | 0.92 | 0.49 | 1.12 | the live air speed is a day's travel × FLY_VMP, not a flight speed |
+| protection gain | no (DEF_BASE is HT) | 17,521 | 1.65 | 0.87 | 8.22 | not calibrated. The plate physics (σ t²) gives armour 3 a ~50× crushing gain on the trunk, diluted by unarmoured limbs |
+| turning (rel.) | no (C_TURN, FIN_TURN are HT) | 17,521 | 2.93 | 1.54 | 4.96 | not calibrated: the live turn rate is a hand-set allometry |
+
+**Buoyancy, the largest disagreement.** Translated bodies are ~1,160 kg/m³ (tissue at 1,060 plus mineral bone) and
+carry no gas. In water they pay to hold their depth. The plain 1 kg walker's least cost a metre is 9.3 J/m, and 0.38 J/m if it
+were neutrally buoyant (`Probe`). Real animals are close to neutral, with lungs (~57 mL/kg; Schmidt-Nielsen 1984), swim
+bladders (~5% of volume; Alexander 1966) or fat. The live sim assumes it, and charges lungs' buoyancy separately
+(BUOY_COST). So **the live sim is more physical here**, and the Morph needs a gas volume: lung air in folded-in
+air-breathing surfaces, and a gas bladder from a gut pocket. A translated fish with no dense limbs matches COT_SWIM_J
+within 20% at 0.1–10 kg even now.
+
+### 10.5 Next: the rest of phase 2 (P2b), in agent-hours
+
+| work | effort |
+|---|---|
+| Gas volume and buoyancy in the Morph (lung air, a swim bladder as a folded-in gas pocket), and its cost of depth (Boyle) | 1–1.5 |
+| Folded-in exchange area bounded by internal volume, not body surface (Weibel's alveolar area) | 0.5–1 |
+| A pair's muscle share up to a flier's (flight muscle 0.35 of the body), re-checking the MorphTests that set muscle genes | 0.5–1 |
+| Tendon elastic storage in running (and the lactate limit of burst swimming) | 1 |
+| Telemetry of both expressions (the shadow's speeds, costs and margins beside the live ones), and the `--bodylab` viewer's hook | 0.5–1 |
+| Ablations of the sea-floor jaw against the §10.3 changes; re-run the evolution demo; re-calibrate the founders table | 1–1.5 |
+
+Total ~4.5–7 agent-hours before phase 3 (storage) can start. Phase 4 (expression from morphology) should not start
+until water cost, flight margin and O2 supply are also within ~25%, because the live ecology rests on them.
 
 ## References
 

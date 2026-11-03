@@ -112,10 +112,15 @@ public static class Development
 
     public static float MassOf(MorphGenome g) => FixedMass > 0f ? FixedMass : LogMap(g.MassG, MASS_LO, MASS_HI);
 
-    public static Morphology Grow(MorphGenome g)
+    public static Morphology Grow(MorphGenome g) => Grow(g, MassOf(g));
+
+    /// <summary>Grows the genome's body at an explicit adult mass (kg), whatever its mass gene: the live simulation's
+    /// mass range differs from the prototype's gene range, and the shadow expression (Shadow.cs) grows a translated live
+    /// genome at the live body's own mass. Pure (no static state), so it is safe on any thread.</summary>
+    public static Morphology Grow(MorphGenome g, float massKg)
     {
         var m1 = GrowAt(g, 1f);
-        var m = GrowAt(g, m1.Mass > 0f ? MathK.Cbrt(MassOf(g) / m1.Mass) : 1f);
+        var m = GrowAt(g, m1.Mass > 0f ? MathK.Cbrt(massKg / m1.Mass) : 1f);
         return m;
     }
 
