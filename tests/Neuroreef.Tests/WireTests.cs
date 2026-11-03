@@ -33,8 +33,10 @@ public class WireTests
             Assert.InRange(MathF.Abs(x - w.X[i]), 0f, 0.02f);
             Assert.InRange(MathF.Abs(y - w.Y[i]), 0f, 0.02f);
             Assert.Equal(w.Spc[i], r[5] & 31);
+            // phase 4 (2026-11-03, docs/ICD.md): bytes 26-28 (length, width, height) are the grown body's proportions
+            // (World.PShapeG), the rest the appearance genes
             for (int gene = 0; gene < G.NAPPEARANCE; gene++)
-                Assert.Equal(w.Genome[i * G.LEN + G.APPEARANCE + gene], unchecked((sbyte)r[26 + gene]));
+                Assert.Equal(gene < 3 ? w.PShapeG[i * 3 + gene] : w.Genome[i * G.LEN + G.APPEARANCE + gene], unchecked((sbyte)r[26 + gene]));
             // format 7: depth in decimetres, time at depth, lungs and oxygen debt (Respiration.cs)
             Assert.InRange(MathF.Abs(BinaryPrimitives.ReadUInt16LittleEndian(r.Slice(42)) / 10f - w.Z[i]), 0f, 0.051f);
             Assert.Equal((int)MathF.Round(w.ZShare[i] * 255f), r[44]);

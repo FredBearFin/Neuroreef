@@ -84,16 +84,21 @@ public class RespirationTests
     [Fact]
     public void GillBreatherSuffocatesOnLand()
     {
-        var (w, i) = One(false, 0f, -127, 127, 64);
-        int steps = Live(w, i, 40);
-        Assert.True(steps < 40, "a gill-breather lived 40 steps on land");
+        // re-derived 2026-11-03 (phase 4): the gill-breather is cold-blooded, as fishes are. Its gills are its grown body's
+        // everted surface, at most half its skin x FOLD (Development), which cannot supply a warm-blooded 3 kg body's
+        // oxygen from water (there are no endothermic gill-breathers); the live GILL_SCOPE gave any body its scope
+        static (World, int) Fish(bool water, float depth) { var (w, i) = One(water, depth, -127, 127, 64); SetEndo(w, i, -127); return (w, i); }
+        var (w, i) = Fish(false, 0f);
+        // (a cold-blooded body's oxygen debt builds at its own, ~5x lower, rate: it is given 400 steps, ~7 weeks, to die)
+        int steps = Live(w, i, 400);
+        Assert.True(steps < 400, "a gill-breather lived 400 steps on land");
         Assert.Equal(1, Died(w, Cause.Suffocated));
         // the same body in water breathes
-        var (v, j) = One(true, 20f, -127, 127, 64);
+        var (v, j) = Fish(true, 20f);
         Assert.Equal(40, Live(v, j, 40));
         Assert.Equal(0f, v.O2Debt[j]);
         // and it feels its air hunger before it dies: the BREATH sense rises ashore
-        var (u, k) = One(false, 0f, -127, 127, 64);
+        var (u, k) = Fish(false, 0f);
         u.IActs[k] = 0; u.ISpeed[k] = 0f;
         Resolve.Run(u, 1, 0);
         if (u.StageOf[k] != St.Dead) Assert.True(Respiration.Breathless(u, k) > 0f);
@@ -102,16 +107,19 @@ public class RespirationTests
     [Fact]
     public void AirBreatherDrownsWhenSubmerged()
     {
-        // lungs, no fins, no legs, no fur: in 30 m of water it cannot keep its head up
-        var (w, i) = One(true, 30f, 127, -127, -127);
+        // lungs, no fins, no legs, no fur: in 30 m of water it cannot keep its head up. Re-derived 2026-11-03 (phase 4): and
+        // armoured, a rigid integument that blocks its trunk's bending (Physics.Flex): a soft limbless body with axial
+        // muscle undulates and swims (a sea snake), so it is not the body this test means
+        static (World, int) Rigid(bool water, float depth, sbyte legs) { var (w, i) = One(water, depth, 127, -127, legs); w.Genome[(long)i * G.LEN + G.B_ARMOUR] = 127; Body.Express(w, i); return (w, i); }
+        var (w, i) = Rigid(true, 30f, -127);
         int steps = Live(w, i, 40);
         Assert.True(steps < 40, "an air-breather that cannot keep its head up lived 40 steps in deep water");
         Assert.Equal(1, Died(w, Cause.Drowned));
         // the same body on land breathes
-        var (v, j) = One(false, 0f, 127, -127, -127);
+        var (v, j) = Rigid(false, 0f, -127);
         Assert.Equal(40, Live(v, j, 40));
         // and one that paddles well (legs) keeps its head up in the same water
-        var (u, k) = One(true, 30f, 127, -127, 127);
+        var (u, k) = Rigid(true, 30f, 127);
         Assert.Equal(40, Live(u, k, 40));
     }
 
@@ -307,7 +315,10 @@ public class RespirationTests
         float cold = Respiration.Uptake(w, i, cell, false, 0f, out _, out _).Air;
         float expect = MathK.Pow(Respiration.Aerobic(w, i, cell, false), 1f);   // its capacity against a warm body's at T_BODY
         // its organs are built to its own basal cost (OrganBase), its level x a warm body's, paced as Aerobic says
-        Assert.Equal(warm * Respiration.OrganBase(w, i) / obWarm * expect, cold, 4);
+        // re-derived 2026-11-03 (phase 4): to 2 decimals. Its scope is its grown body's exchange surfaces and skin over its
+        // basal (Morph.Live); the skin's share is passive diffusion, not built to the tissues' level, so a cold body's scope
+        // is a little higher (measured 3%)
+        Assert.Equal(warm * Respiration.OrganBase(w, i) / obWarm * expect, cold, 2);
         Assert.True(Respiration.OrganBase(w, i) < 0.5f * obWarm, "a cold-blooded body's organs are built to its lower cost");
     }
 

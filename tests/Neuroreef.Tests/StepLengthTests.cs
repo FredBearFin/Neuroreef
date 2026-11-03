@@ -67,7 +67,10 @@ public class StepLengthTests
         // instead of M^(-1/2). It is unchanged at FLY_M_MAX and smaller below it (5.4 instead of 12.6 at 0.1 kg), so
         // which bodies fly, how fast and the half-wing ceiling (2 kg, was 4) change wherever fliers live. It cannot stay
         // bit-identical: the default world has fliers from its first step. Was 11681709169049197875.
-        Assert.Equal(873474179074618927UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03 (phase 4, docs/BODYPLAN.md §13.3; the owner approved the switch): every body is grown from its
+        // module genome (founders from Clades.AncestorMorph) and every capability the world reads comes from the module
+        // physics, so every body and every step changed. Was 873474179074618927.
+        Assert.Equal(15361944388290876228UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

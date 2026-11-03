@@ -291,7 +291,8 @@ public class LocomotionTests
             if (w.Cell[c] == (byte)Realm.Land && w.SlopeSin(c) > most) { most = w.SlopeSin(c); steep = c; }
         Assert.True(steep >= 0 && most > 0f);
         Console.WriteLine($"steepest land slope on the test map: sin {most:F3} ({MathF.Asin(most) * 180f / MathF.PI:F0} degrees)");
-        w.StageOf[0] = St.Adult; w.Genome[G.B_LEGS] = 127; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127; Body.Express(w, 0);
+        // (phase 4: fins held out are lifting surfaces too, so the wingless reference is finless as well)
+        w.StageOf[0] = St.Adult; w.Genome[G.B_LEGS] = 127; w.Genome[G.B_MASS] = -60; w.Genome[G.B_WINGS] = -127; w.Genome[G.B_FINS] = -127; Body.Express(w, 0);
         float bare = w.GroundVmax(0, steep);
         Assert.Equal(w.PVLand[0] * w.Footing(0, steep), bare, 5);   // wingless: unchanged
         w.Genome[G.B_WINGS] = (sbyte)MathF.Round(0.4f * 254f - 127f); Body.Express(w, 0);

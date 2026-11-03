@@ -60,17 +60,20 @@ public class DivingTests
         _out.WriteLine($"{w.PM[0]:F2} kg, {Body.LengthM(w, 0):F3} m: cruises {Respiration.CruiseMps(w, 0):F2} m/s, {cruise:F0} m an eating step (travel {travel:F0} m); " +
             $"plankton {kg * 1000:F1} g a step at 0.3 of a unit; a day of eating gives {eDay / basalDay:F2} x its basal cost (diet {w.DietOf(0)[(int)Pool.Phyto]:F2}) and the cruise costs {costDay / basalDay:F2} x");
         // re-derived 2026-11-03 (phase 4): the cruise is the grown body's speed of least gross cost a metre (Morph.Live), which
-        // fishes hold at ~0.5-3 lengths a second (Videler 1993: the optimum rises as size falls); was the live 0.5-1.5
-        Assert.InRange(Respiration.CruiseMps(w, 0) / Body.LengthM(w, 0), 0.3f, 3f);
+        // fishes hold at ~0.5-4 lengths a second (Videler 1993: the optimum in lengths a second rises as size falls, ~L^-0.5);
+        // was the live 0.5-1.5
+        Assert.InRange(Respiration.CruiseMps(w, 0) / Body.LengthM(w, 0), 0.3f, 4f);
         Assert.Equal(0f, Respiration.FeedCruiseM(w, 0, 1e9f));   // all its time travelling: no bout
         Assert.True(Respiration.CruiseCost(w, 0, cruise) > 0f);
         // the bottom: what its mouth crops along its path, never the whole floor
         float bot = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, cruise, 40f, 1f);
         w.Pool[(int)Pool.Algae][c] = 0.5f;
-        float b1 = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, cruise, 40f, 1f), b2 = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, 2f * cruise, 40f, 1f);
+        // (re-derived 2026-11-03, phase 4: the grown body cruises faster, so a whole bout's path crops the cell's stock and the
+        // cap binds; the proportionality is checked on a quarter of the bout)
+        float b1 = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, 0.25f * cruise, 40f, 1f), b2 = Respiration.BottomKg(w, 0, c, (int)Pool.Algae, 0.5f * cruise, 40f, 1f);
         Assert.Equal(2f * b1, b2, 4);
         Assert.True(b1 < 0.5f * w.Pool[(int)Pool.Algae][c] * Pools.Kg[(int)Pool.Algae]);   // ~47 m2 of the 256 m2 cell a step
-        Assert.True(bot <= b1);
+        Assert.True(bot <= Respiration.BottomKg(w, 0, c, (int)Pool.Algae, cruise, 40f, 1f));
         // a step of one hour: a third of the bout, three steps a hour's worth: the same metres a day
         float h0 = Nature.StepH; Nature.StepH = 1f;
         try
