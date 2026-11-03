@@ -520,6 +520,29 @@ physics, and every fix was a physical correction, not a nudge toward a target fo
 the structural cost of a deep, thin, soft body are not modelled (Fish 2002; Weihs 2002), and they are the obvious
 next correction.
 
+**Live-world loopholes (2026-11-03, after phase 5; details, numbers and tests in §13.17).** Found by measuring the real
+animals of the seed-3 check worlds (Body Lab `--world-bodies`). Each was a body dimension or part that gave the live world
+something without the tissue to back it:
+
+- **A weightless thread lengthening the crawl.** Crawling's body wave ran over nose-to-tail length, so a 1.4 g head on a
+  10 cm, 0.4 mm thread was the cheapest crawler in every Body Lab land run. Fix: the wave runs over the length the mass
+  is spread over, (Σm)² / Σ(m²/L) (`Morphology.WaveLength`).
+- **A gut with no trunk to hold it.** The live gut was built to the body's basal whatever its trunk, so a body that was
+  93% appendage (the land world's most common lineage: a 22 g trunk under 287 g of porous plates) digested and held a
+  gut-full like a plain body of its mass. Its trunk has room for 0.15 of a reference gut. Fix: the gut is tissue in the
+  trunk, at most its visceral tissue over a reference gut's (`Live.GutRoom`, `GUT_TISSUE`).
+- **Standing tall on a narrow base.** Standing height was the tallest segment's, whatever its base, so a 9 kg body of
+  46 cm-tall, 2–4 cm-wide plates "stood" 47 cm in water (head in the air, the bottom in reach). Fix: the posture it can
+  hold on rough ground: a body that tips past the ground's slopes lies on its side, as high as it is wide
+  (`Live.StandPosture`, `Physics.Topple`).
+- **A weightless thread raising the burst-swimming limit.** Wardle's twitch limit ran on nose-to-tail length, so a thread
+  of 2% of the mass raised a swimmer's burst speed 30–60%. Fix: the limit runs on `WaveLength` too.
+
+Checked and not loopholes: housed muscle (axial + appendage) is at most `MUSCLE_MAX_SHARE` of its own segment's tissue,
+and the gut share is of what is left, so no segment holds more than its volume; a tall soft plate holds itself upright
+under its own weight on 14° slopes with a safety factor of 5 or more, through its integument as sandwich faces; passive
+pairs pay their tissue's basal, carriage, drag, heat loss, evaporation and growth (and now the trunk room they take).
+
 **Limits of the prototype, after phase 1:**
 
 1. **No lower size physics.** Open water and land run to the 1 g bound of the mass gene. Viscous swimming at low Re
@@ -1478,6 +1501,118 @@ Every class was run in its own test process on the code of this round:
 - **Re-pinned:** `DefaultStepIsBitIdenticalToBefore`, 10104198921116109538 → 5632958963462331332 (the dives).
 - **Retired** (skipped, with the reason in the attribute; listed in §13.7 and §13.13): 15 tests of labelled-gene
   formulas.
+
+### 13.17 Fourth round (2026-11-03): loopholes in the live check worlds' animals
+
+The real animals of the seed-3 check worlds (§13.12's runs on this round's code before the fixes: land 21,142 alive in
+15 clades at step 1,500, ocean 754 in 4 at step 2,000), exported with `--world-bodies` and grown again from their module
+genomes at their live mass, showed shapes that look impossible. Each was measured against the plain body of the same mass
+(`Translate.Reference`) before anything was changed.
+
+1. **The gut had no trunk to hold it.**
+   - Measured: the land world's most common clade, Anithmo (0.309 kg, 15,215 of the living), is a 2-segment trunk of 22 g
+     (5.2 × 43 × 57 mm and 3.2 × 73 × 68 mm) under three pairs of porous plates up to 79 mm long, 287 g of it. Its segments'
+     visceral tissue (`Morphology.GutMass`, `Mat.GUT_SHARE` of their non-muscle tissue) is 3.4 g, 0.053 of the plain
+     body's per kg, yet its live gut was 1.15 reference guts, built to its basal (`Body.GutScale`), with the plain body's
+     gut-full (`C_GUT` × M). Fapulnar (9.3 kg; trunk 0.69 kg, pairs 8.6 kg): room 0.041 of the plain body's, gut 1.12.
+     Dovdov: 0.027, gut 1.18. Robri, the legged walker: 0.18, gut 1.28.
+   - What was not a loophole: housed muscle. A segment's axial and appendage muscle are at most `MUSCLE_MAX_SHARE` (0.7)
+     of its own tissue, scaled down together, and the gut share is of what is left, so no segment holds more than its
+     volume (Anithmo's: 2.4 g axial and 3.5 g appendage muscle in an 8.3 g segment). A limb's moving muscle cannot exceed
+     the trunk that houses it; the reverse (a 2.8 kg plate on 12 g of muscle, Fapulnar) is power-limited by that muscle
+     wherever the plate is used.
+   - Fix (physical bound: tissue cannot exceed the volume it is in): a reference gut is `Live.GUT_TISSUE` = 7% of body mass
+     (the gastrointestinal tract is ~5–10% of body mass, Huntington & Reynolds 1987, Cant, McBride & Croom 1996, the
+     sources of `K.GUT_SHARE`; decapods' digestive gland 3–8%), so the trunk has room for `GutRoom` = GutMass / (0.07 M)
+     reference guts, and `Body.GutScale` builds no more than that (its upkeep falls with it). The gut-full is × min(1,
+     room). The plain body holds ~0.2 of its mass as visceral tissue, room for ~2.9 guts, above `GUT_FLEX_MAX` (2.5), so
+     it is unchanged at 0.01–30 kg. Now Anithmo builds 0.15 of a gut (absorbs ~1× its reference basal), Fapulnar 0.11,
+     Dovdov 0.07, Robri 0.51.
+   - Test: `MorphLiveTests.AGutMustFitInTheTrunkSoABodyOfAppendagesCannotDigestLikeAPlainOne` (Anithmo's own genome;
+     absorption and gut-full under 0.3 of a one-segment body of the same mass gene in the live world; the plain body
+     unbound at 4 masses).
+2. **Standing tall on a narrow base.**
+   - Measured: standing height (`Caps.Stand`: wading depth, the head in the air in water, the bottom in reach from the
+     surface, the legs equivalent) was clearance + the tallest segment. Fapulnar's segments are 11–22 mm long, 15–37 mm
+     wide and 17–46 cm high: it stood 0.47 m. Vimolo (40 kg, 12–20 cm wide, 0.66–1.76 m high) stood 1.76 m, the plain
+     body of its mass 0.96 m; Tete 0.27 m on 4 cm, Narithqu 0.26 m on 4 cm.
+   - What was not a loophole: structural support of the plate under its own weight. On a 14° slope (Physics.Topple's
+     rough ground) the base moment of every check-world segment, ρ g sin θ W H² / 2 per metre, is at most a fifth of what
+     its section bears (σ_soft W²/6 plus its integument as sandwich faces, `FacePressureCap`'s terms): the integument holds
+     the plates up, and its mass and mineral are paid. Drag in air is negligible, and in water its frontal area and wetted
+     area are already charged.
+   - Fix: `Live.StandPosture`. A centre of mass at height z over a base of half-width b tips past slopes steeper than
+     atan(b/z) (McGhee & Frank 1968; Ting, Blickhan & Full 1994), and a body that tips lies on its side, as high as it is
+     wide. Standing height is the upright height weighted by the chance it stays upright on the prototype land's slopes
+     (`Physics.Topple` at `GROUND_ROUGH` 0.5, tan up to 0.25) and its width by the chance it tips (z and b mass-weighted
+     over its segments, its feet's spread widening the base). Fapulnar now stands 0.08 m, Vimolo 0.30 m, Tete 0.07 m; a
+     round body and the plain body stand their height (the plain body 3–4% lower: Topple is a smooth step).
+   - Test: `MorphLiveTests.ATallThinPlateLiesOnItsSideAndStandsNoHigherThanItIsWide`.
+3. **Passive pairs.** Robri had 449 passive of 632 sampled pairs, Fapulnar 601 of 683. Checked term by term, a pair pays
+   for its tissue: Kleiber's basal on the active mass, which includes it (mineral excepted, being inert); its weight in
+   crawling, walking and holding depth; its edge and face drag in water, folded or not (§12.1); its surface's heat loss
+   (`AppSurf`) and evaporation; exchange-epithelium upkeep; and its growth (tissue cost by mass at birth). What it did not
+   pay was the trunk it displaces at a fixed mass: that is item 1, now paid as gut room. Many "passive" pairs were also
+   where the body breathes (Fapulnar's 0.29 m mineralised plates carry 2 m² of folded-in epithelium): `Live.Roles` now
+   names a pair "breathe" when a tenth or more of its oxygen supply in air or water passes through it, checked just
+   before "passive", so the old passive count is passive + breathe.
+4. **A weightless thread raising the burst-swimming limit** (the crawling-wave family, §8). Wardle's twitch limit
+   (`Shadow.WardleSpeed`) ran on nose-to-tail length; a 0.5 mm thread of 2.3% of the mass, trailing a 45–300 mm swimmer,
+   raised its burst speed 1.18 → 1.91 m/s at 10 g, 2.21 → 3.41 at 0.3 kg, 3.37 → 4.39 at 3 kg. The body wave is made by
+   its muscle and mass; fix: the limit runs on `Morphology.WaveLength` (live and shadow). Now 1.21, 2.25, 3.44 (the
+   thread's own little mass). Test: `MorphLiveTests.AWeightlessThreadDoesNotRaiseTheBurstSwimmingLimit`.
+5. **Searched and left:** other places a dimension pays without mass. Nose-to-tail length also sets the live reach
+   (`Body.ReachM`: length + 15 s of sprint, so length is < 1% of it), the least turning radius (0.1 L: a cost), and the
+   swimming-ability scale (lengths a second: a cost). The axial sweep is the tail segment's height × 0.2 L, so a thin
+   tail shrinks it. The prototype's crushing and walking strength use the full chord of a pair's root even where it is
+   up to 14× the segment's length (Fapulnar's plates); in the live world that binds nothing measured (the support pairs
+   have chord ≤ 0.9 of their segment, and the crushing force is reported only), so it is not changed. Roll stability in
+   open water and obstacles on land are still prototype-only (not read by the live world).
+
+**Short checks** (valley map, seed 3, `--random-brains --no-checkpoint`, the same commands as before the fixes).
+
+Land, 1,500 steps: **8,533 alive in 10 clades** (before: 21,142 in 15); 12 of 16 ancestors left descendants (16
+before). BODY PLANS (mean mass, segments, pairs; pairs by role over up to 40 members; before → after; the old "passive"
+is now passive + breathe):
+
+| clade | before | after |
+|---|---|---|
+| Anithmo | 15,215: 0.325 kg, 2.1 seg, 3.4 pairs (swim 85, handle 40, passive 21) | **not founded** (0 created; its gut is now 0.15 of a reference gut, so presumably the founding's feeding test, not traced) |
+| Robri | 1,172: 5.25 kg, 4.1 seg, 16.2 pairs (support 107, handle 40, steer 32, passive 449) | **extinct by step 1,500** (1,921 created; its gut is bound at 0.51 of a reference gut) |
+| Fapulnar | 21: 7.3 kg, 11.7 seg, 32.5 pairs (passive 601 of 683); segments 11–22 mm long, 15–37 mm wide, 17–46 cm high | 1,557: 9.6 kg, 4.8 seg, 7.9 pairs (swim 65, handle 9, steer 17, breathe 9, passive 217); segments 21–63 mm long, **271–753 mm wide and 63–111 mm high**: a plate lying flat, not on edge |
+| Nice | 504: 3.8 kg, 6.0 seg, 10.1 pairs (passive 199 of 410) | 701: 6.8 kg, 8.3 seg, 5.9 pairs (support 20, swim 80, steer 41, breathe 46, passive 46) |
+| Dovdov | 13: 3.5 kg, 10.8 seg, 7.2 pairs (trunk 4.5% of its mass) | 106: 7.1 kg, 3.0 seg, 0 pairs |
+| Tete | 109: 1.2 kg, 2.8 seg | 1,730: 20.5 kg, 2.1 seg, 0.3 pairs; segments 87 mm long, 1.05 m wide, 14 cm high |
+| Vimolo | 1,613: 35.4 kg, 4.2 seg (0.66–1.76 m high, 12–20 cm wide) | 1,574: 35.6 kg, 4.2 seg, the same founder shape; it now stands 0.30 m, not 1.76 |
+| Osvi, Elos, Axce, Melel, Narithqu | 1–4 seg, almost no pairs | about the same |
+| Penarax, Briqu, Nishanar | 2–4 alive | not founded (Penarax, Briqu) or extinct (Nishanar) |
+
+All living, pairs per body: 0 in 5,435, 6–8 in 1,824, 16 or more in 2 (before: 3 in 8,926, 16 or more in 1,133).
+Deaths in the run 8,496 (11,616 before), of which 229 suffocated (29 before): mostly Robri (202) and Nishanar (27).
+
+Ocean (`--ocean`), 2,000 steps: **202 alive in 1 clade** (before: 754 in 4); 9 of 16 ancestors left descendants (12
+before). Melel (8.8 kg, 3.0 seg, 0.1 pairs) is the survivor. The sea's Vimolo (before: 253 alive at step 2,000, 0.22
+kg, 6.3 seg, 18.9 pairs, 575 of 783 passive) was founded, 840 created, and died out, mostly killed (717); Narithqu (10.4
+kg, 11.8 seg) and Tete were not founded. Random brains and no prehistory, as before: the banner warns most species die
+out.
+
+Are the shapes gone? The bodies that were mostly appendage (Anithmo, Robri, the old Fapulnar, the sea's Vimolo, Dovdov)
+are gone from both worlds or rebuilt with a trunk. The plates on edge are gone except Vimolo, a founder that kept its
+shape but no longer stands on it; the flat bodies that replaced them (Fapulnar, Tete: up to 1 m wide and 6–14 cm high)
+lie flat, which is a stable posture, so the physics does not price them further. Whether a 1 m-wide, 14 cm-thick disc
+should pay more on land (it is a sheet of tissue crawling; its bending under its own weight across its width, and its
+skin's evaporation and heat loss, are paid) is the next thing to measure. The populations are smaller: much of the
+previous land world was a body that could not have held its food.
+
+**Test status** (each class in its own process): green in full: MorphLive (8, the 3 new tests included), Morph (38), Shadow, Locomotion,
+Diving, Respiration, Wading, Feeding, FeedingBudget, BodyLab, Founding, Ocean, Climate (`NoClimateIsBitIdenticalToBefore`
+unchanged: it has no animals), Engineering (10 of 10: `StepLoopDoesNotAllocate` passes, and no constant of
+`Constants.cs` was added, so `docs/CONSTANTS.md` is unchanged; the new constants are the Morph prototype's). Ecology: 44
+of 45 in full; `LegSwingCostRisesWithPairsAndSpeed` re-derived (a 2 kg body on four pairs of full legs has trunk room
+for 1.33 reference guts, less than its basal asks for, so its basal with the smaller gut is 0.849 of the legless one's;
+the band's floor 0.85 → 0.8) and passes. StepLength: `DefaultStepIsBitIdenticalToBefore` re-pinned 11947864240597378162
+→ 7475422619767155745 with a dated comment; the other 8 pass. Not run this round: the classes this change does not
+touch (Voice, Geology, Hydrology, Plant and the rest of §13.16).
 
 ## References
 
