@@ -66,8 +66,9 @@ public static class Translate
     /// (a cube side is BODY_L_M M^(1/3) = 0.1 m at 1 kg); at 70° droop that is a 1.86-side leg.</summary>
     public const float LEG_LEN = 1.86f;
     public const float LEG_DROOP = 70f / 90f;   // gene value: 70° below the horizontal, a sprawling-to-upright posture
-    public const float LEG_ROUND = 0.08f;       // chord and thickness as a share of its length: a slender limb, its muscle housed in the trunk (cursorial mammals ~0.06-0.1; Alexander 1983)
+    public const float LEG_ROUND = 0.06f;       // chord and thickness as a share of its length: a slender limb, its muscle housed in the trunk (cursorial mammals ~0.06-0.1; Alexander 1983). Phase 2c: 0.08 with a solid-rod bone made the legs 22% of the body, their bone ~4x an appendicular skeleton (Prange et al. 1979); a tubular bone bears the load at 0.06
     public const float LEG_WALL = 0.35f;        // bone share of the limb's section (Currey 2002: cortical bone 20-40%)
+    public const float LEG_HOLLOW = 0.6f;       // a long bone's inner / outer diameter K (terrestrial mammals ~0.55-0.6; Currey & Alexander 1985)
     /// <summary>Fin length per unit of fin gene, as a share of the body's length (pectoral fins ~0.15-0.25 of a fish's length).</summary>
     public const float FIN_LEN = 0.2f;
     public const float FIN_FLAT = 8f;           // chord / thickness of a fin (a ray-stiffened membrane)
@@ -109,11 +110,20 @@ public static class Translate
     /// </summary>
     public static MorphGenome FromLive(in LiveGenes l, float organBaseW = 0f)
     {
-        var g = Build(l, 0f, 0f, 0f);
-        float gasG = Clamp01(GasShare(l, Development.Grow(g, l.Mass)) / Mat.GAS_MAX);
+        // fat first (it sets the tissue's density), then the gas that makes the body what it should be in water
+        float fatG = FatGene(l);
+        {
+            // FatGene assumes tissue is ~0.9 of the body; one growth corrects it to the allometry exactly enough
+            var mf = Development.Grow(Build(l, 0f, 0f, 0f, fatG), l.Mass);
+            float want = MathF.Min(0.3f, FAT_K * MathK.Pow(MathF.Max(l.Mass, 1e-4f), FAT_EXP));
+            if (mf.FatMass > 0f) fatG = Clamp01(fatG * want / (mf.FatMass / mf.Mass));
+        }
+        var g = Build(l, 0f, 0f, 0f, fatG);
+        float fat = Mat.FAT_MAX * fatG, rhoTis = (1f - fat) * Mat.RHO_TISSUE + fat * Mat.RHO_FAT;
+        float gasG = Clamp01(GasShare(l, Development.Grow(g, l.Mass), rhoTis) / Mat.GAS_MAX);
         if (organBaseW > 0f || gasG > 0f)
         {
-            var m1 = Development.Grow(Build(l, 0f, 0f, gasG), l.Mass);
+            var m1 = Development.Grow(Build(l, 0f, 0f, gasG, fatG), l.Mass);
             // the exchange surfaces, sized as the live organs are (their scopes over the organ base): the lungs are the
             // lining of the gas space (the invagination share of it: Development.GasLining per m³), the gills everted
             // surface (FOLD x pore share of the skin, at most 0.5 of it)
@@ -136,7 +146,7 @@ public static class Translate
             }
             float segArea = 0f; foreach (var s in m1.Segs) segArea += s.Area;
             float pore = P / (Mat.FOLD * MathF.Max(segArea, 1e-9f));   // Development: Pore = 0.5 x gene
-            g = Build(l, Clamp01(2f * pore), invag, gasG);
+            g = Build(l, Clamp01(2f * pore), invag, gasG, fatG);
         }
         g.MassG = Clamp01(MathK.Log(l.Mass / Development.MASS_LO) / MathK.Log(Development.MASS_HI / Development.MASS_LO));
         return g;
@@ -153,15 +163,29 @@ public static class Translate
     /// tissue, and Development scales the body back up to M, so neutrality needs f = (M - rho_w V0) / (core0 rho_t),
     /// and a gas volume T needs f = T / (core0 (1 + T rho_t / M)) (core0, V0: m0's core and whole volume).
     /// </summary>
-    public static float GasShare(in LiveGenes l, Morphology m0)
+    public static float GasShare(in LiveGenes l, Morphology m0, float rhoTissue = Mat.RHO_TISSUE)
     {
         float core = 0f; foreach (var s in m0.Segs) core += s.L * s.W * s.H * (MathF.PI / 4f);
         if (core <= 0f) return 0f;
         float t = LUNG_AIR_KG * l.Lungs * l.Mass;
-        float lung = t / (core * (1f + t * Mat.RHO_TISSUE / l.Mass));
+        float lung = t / (core * (1f + t * rhoTissue / l.Mass));
         bool deep = 0.1f + 0.9f * Body.Propulsor(l.Fins, l.Wings) >= K.DEEP_SWIM;
-        float neutral = deep ? MathF.Max(0f, (l.Mass - Phys.RHO_W * m0.Volume) / (core * Mat.RHO_TISSUE)) : 0f;
+        float neutral = deep ? MathF.Max(0f, (l.Mass - Phys.RHO_W * m0.Volume) / (core * rhoTissue)) : 0f;
         return MathF.Max(lung, neutral);
+    }
+
+    /// <summary>Body fat of mammals, ~0.075 M^1.19 kg (Pitts &amp; Bullard 1968; Calder 1984): 5% at 0.1 kg, 7.5% at
+    /// 1 kg, 12% at 10 kg, at most 0.3 of the mass. The live genes carry no fat; this is the body the labels stand for.</summary>
+    public const float FAT_K = 0.075f, FAT_EXP = 0.19f;
+
+    /// <summary>The segment fat gene that gives the body FAT_K M^FAT_EXP of its mass in fat: fat is a share phi of the
+    /// tissue volume, so its mass share is phi rho_f / ((1 - phi) rho_t + phi rho_f) of the tissue, and the tissue
+    /// ~0.9 of the body (the rest integument, limbs and skeleton).</summary>
+    public static float FatGene(in LiveGenes l)
+    {
+        float share = MathF.Min(0.3f, FAT_K * MathK.Pow(MathF.Max(l.Mass, 1e-4f), FAT_EXP)) / 0.9f;
+        float phi = share * Mat.RHO_TISSUE / (Mat.RHO_FAT + share * (Mat.RHO_TISSUE - Mat.RHO_FAT));
+        return Clamp01(phi / Mat.FAT_MAX);
     }
 
     /// <summary>The live reference body of a mass: full legs on two pairs, no fins, wings or armour, a cube, the middle
@@ -173,7 +197,7 @@ public static class Translate
         LimbShape = 0.5f, FinShape = 0.5f, WingShape = 0.5f,
     };
 
-    static MorphGenome Build(in LiveGenes l, float poreGene, float invag, float gasGene)
+    static MorphGenome Build(in LiveGenes l, float poreGene, float invag, float gasGene, float fatGene)
     {
         // a winged body has a wing-bearing thorax of its own, THORAX_WING x wings of the trunk, whose tissue is the flight
         // muscle's; its legs and fins grow on the trunk segments behind it, which share the rest evenly. So flight muscle
@@ -190,7 +214,9 @@ public static class Translate
         // every length in cube sides; the raw scale c (m per cube side) is chosen so each lies inside its gene's range,
         // as far as it can (Development rescales the whole body to its mass afterwards, so c changes nothing else)
         float legLen = LEG_LEN * l.Legs;
-        float legT = LEG_ROUND * legLen;
+        // a leg bears the body's weight at the same safety factor whatever its length (Alexander 1981): its bending stress
+        // F L / d³ is fixed when d ~ L^(1/3), so a short leg is stout (LEG_ROUND of its length on full legs)
+        float legT = LEG_ROUND * LEG_LEN * MathK.Cbrt(MathF.Max(l.Legs, 1e-6f));
         float finLen = FIN_LEN * L * l.Fins;
         float finAR = 1f + 3f * l.FinShape;                 // 2 x length / chord
         float finC = 2f * finLen / finAR, finT = finC / FIN_FLAT;
@@ -234,7 +260,7 @@ public static class Translate
             var s = new SegGene { Innov = innov };
             s.P[SP.LEN] = SL(len); s.P[SP.WID] = SW(W); s.P[SP.HEI] = SW(H);
             s.P[SP.TAPER] = 0.5f; s.P[SP.REPEAT] = 0f;
-            s.P[SP.INT_T] = intG; s.P[SP.INT_MIN] = intMin; s.P[SP.PORE] = poreGene; s.P[SP.INVAG] = invag; s.P[SP.AXMUS] = axMus; s.P[SP.GAS] = gasGene;
+            s.P[SP.INT_T] = intG; s.P[SP.INT_MIN] = intMin; s.P[SP.PORE] = poreGene; s.P[SP.INVAG] = invag; s.P[SP.AXMUS] = axMus; s.P[SP.GAS] = gasGene; s.P[SP.FAT] = fatGene;
             return s;
         }
         g.Segs.Add(Seg(IN_HEAD, hs * L));
@@ -256,7 +282,7 @@ public static class Translate
                 var a = new AppGene { Innov = IN_LEG + (uint)k };
                 a.P[AP.LEN] = AL(legLen); a.P[AP.CHORD] = AC(legT); a.P[AP.THICK] = AT(legT);
                 a.P[AP.DROOP] = LEG_DROOP; a.P[AP.JOINTS] = 3.5f / (Development.MAX_JOINTS + 1);
-                a.P[AP.MUSCLE] = LEG_MUSCLE * l.Legs; a.P[AP.MINERAL] = 1f; a.P[AP.WALL] = (LEG_WALL - 0.02f) / 0.98f; a.P[AP.EXO] = 0f;
+                a.P[AP.MUSCLE] = LEG_MUSCLE * l.Legs; a.P[AP.MINERAL] = 1f; a.P[AP.WALL] = (LEG_WALL - 0.02f) / 0.98f; a.P[AP.EXO] = 0f; a.P[AP.HOLLOW] = LEG_HOLLOW / Mat.HOLLOW_MAX;
                 s.Apps.Add(a);
             }
             if (k < l.FinPairs && l.Fins > VESTIGE)

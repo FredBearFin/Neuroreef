@@ -30,17 +30,17 @@ namespace Neuroreef.Morph;
 /// <summary>Parameters of a segment gene (all stored in [0,1]).</summary>
 public static class SP
 {
-    public const int LEN = 0, WID = 1, HEI = 2, TAPER = 3, REPEAT = 4, INT_T = 5, INT_MIN = 6, PORE = 7, INVAG = 8, AXMUS = 9, GAS = 10;
-    public const int N = 11;
-    public static readonly string[] Names = { "len", "wid", "hei", "taper", "repeat", "intT", "intMin", "pore", "invag", "axMus", "gas" };
+    public const int LEN = 0, WID = 1, HEI = 2, TAPER = 3, REPEAT = 4, INT_T = 5, INT_MIN = 6, PORE = 7, INVAG = 8, AXMUS = 9, GAS = 10, FAT = 11;
+    public const int N = 12;
+    public static readonly string[] Names = { "len", "wid", "hei", "taper", "repeat", "intT", "intMin", "pore", "invag", "axMus", "gas", "fat" };
 }
 
 /// <summary>Parameters of an appendage gene (a bilateral pair; all stored in [0,1]).</summary>
 public static class AP
 {
-    public const int LEN = 0, CHORD = 1, THICK = 2, DROOP = 3, JOINTS = 4, MUSCLE = 5, MINERAL = 6, WALL = 7, EXO = 8, PORE = 9, INVAG = 10, ROLL = 11;
-    public const int N = 12;
-    public static readonly string[] Names = { "len", "chord", "thick", "droop", "joints", "muscle", "mineral", "wall", "exo", "pore", "invag", "roll" };
+    public const int LEN = 0, CHORD = 1, THICK = 2, DROOP = 3, JOINTS = 4, MUSCLE = 5, MINERAL = 6, WALL = 7, EXO = 8, PORE = 9, INVAG = 10, ROLL = 11, HOLLOW = 12;
+    public const int N = 13;
+    public static readonly string[] Names = { "len", "chord", "thick", "droop", "joints", "muscle", "mineral", "wall", "exo", "pore", "invag", "roll", "hollow" };
 }
 
 public sealed class AppGene
@@ -95,7 +95,7 @@ public sealed class MorphGenome
         var s = new SegGene { Innov = 1 };   // every founder's trunk is homologous
         s.P[SP.LEN] = 0.75f; s.P[SP.WID] = 0.75f; s.P[SP.HEI] = 0.75f;   // ~6 cm each way
         s.P[SP.TAPER] = 0.5f; s.P[SP.REPEAT] = 0f;
-        s.P[SP.INT_T] = 0.1f; s.P[SP.INT_MIN] = 0f; s.P[SP.PORE] = 0f; s.P[SP.INVAG] = 0.5f; s.P[SP.AXMUS] = 0.2f; s.P[SP.GAS] = 0f;
+        s.P[SP.INT_T] = 0.1f; s.P[SP.INT_MIN] = 0f; s.P[SP.PORE] = 0f; s.P[SP.INVAG] = 0.5f; s.P[SP.AXMUS] = 0.2f; s.P[SP.GAS] = 0f; s.P[SP.FAT] = 0f;
         g.Segs.Add(s);
         return g;
     }

@@ -262,7 +262,43 @@ public static class Physics
         return sh;
     }
 
-    public static SwimProps Swim(Morphology m, float rho, float nu = Phys.NU_W)
+    /// <summary>Which pairs a swimmer folds against its body (phase 2c, docs/BODYPLAN.md §12.1): none; its drooped pairs
+    /// (legs, droop over 45°); or every articulated pair. Swimming takes whichever is cheapest at each speed.</summary>
+    public const int FOLD_NONE = 0, FOLD_LEGS = 1, FOLD_ALL = 2, FOLD_N = 3;
+
+    static bool Folds(Pair a, int fold) => fold == FOLD_ALL || fold == FOLD_LEGS && !a.Sagittal && a.Theta > MathF.PI / 4f;
+
+    /// <summary>The swimming properties in each folding (FOLD_NONE, FOLD_LEGS, FOLD_ALL).</summary>
+    public static SwimProps[] SwimSet(Morphology m, float rho, float nu = Phys.NU_W)
+    {
+        var s = new SwimProps[FOLD_N];
+        for (int k = 0; k < FOLD_N; k++) s[k] = Swim(m, rho, nu, k);
+        return s;
+    }
+
+    /// <summary>Mechanical power to swim at u in the cheapest folding its muscle can hold steadily (cap: that folding's
+    /// muscle power); if none can, the folding that comes closest (the largest share cap / power).</summary>
+    public static float SwimBest(SwimProps[] set, float rho, float u, out float cap)
+    {
+        float best = float.PositiveInfinity, bestDuty = -1f, weak = float.PositiveInfinity, weakCap = 0f;
+        cap = 0f;
+        foreach (var p in set)
+        {
+            float pw = SwimPower(p, rho, u);
+            if (float.IsPositiveInfinity(pw)) continue;
+            if (pw <= p.Cap) { if (pw < best) { best = pw; cap = p.Cap; } }
+            else { float d = p.Cap / pw; if (d > bestDuty) { bestDuty = d; weak = pw; weakCap = p.Cap; } }
+        }
+        if (!float.IsPositiveInfinity(best)) return best;
+        cap = weakCap;
+        return weak;
+    }
+
+    /// <summary>Swimming properties with every pair stroking (or, with fold, some folded against the body: a folded pair
+    /// lies along the trunk, so it makes no thrust, lift or span; its edge no longer meets the flow, and one face lies on
+    /// the body, both as far as its articulation lets it fold flat. Seals, otters and diving birds swim with their
+    /// hind or fore limbs tucked, and murres half-fold their wings; Fish 1993; Lovvorn 2001; Thaxter et al. 2010).</summary>
+    public static SwimProps Swim(Morphology m, float rho, float nu = Phys.NU_W, int fold = FOLD_NONE)
     {
         var p = new SwimProps { Nu = nu, Len = MathF.Max(m.Length, 1e-3f), Frontal = m.FrontalArea, Step = m.StepArea, FormK = FormFactor(m.Fineness) };
         foreach (var s in m.Segs) p.Wet += s.Area;
@@ -274,6 +310,13 @@ public static class Physics
         foreach (var a in m.Pairs)
         {
             float flat = a.Chord / a.Thick, cos = a.Sagittal ? 0f : MathK.Cos(a.Theta);
+            if (fold != FOLD_NONE && Folds(a, fold) && a.Artic > 0f)
+            {
+                float f = a.Artic, cdE = 1.1f - 0.8f * flat / (flat + 3f);
+                p.AppEdge += (1f - f) * 2f * a.Len * a.Thick * cdE;
+                p.AppFace += (2f - f) * 2f * a.Len * a.Chord;
+                continue;
+            }
             float cdEdge = 1.1f - 0.8f * flat / (flat + 3f);
             p.AppEdge += 2f * a.Len * a.Thick * cdEdge;
             p.AppFace += 2f * 2f * a.Len * a.Chord;
@@ -737,12 +780,40 @@ public static class Physics
     /// around its head, CAPTURE x the head's frontal area (a planktivore's reaction field and gape scale with its head;
     /// Eggers 1977; Aksnes &amp; Giske 1993). CAPTURE = 1.7 gives a fineness-6 fish the old 0.5 V^(2/3). An earlier
     /// 0.5 V^(2/3), whatever the shape, let a 2 g thread of fineness 160 take a fish's catch on a frontal area 60x
-    /// smaller (docs/BODYPLAN.md §8).</summary>
+    /// smaller (docs/BODYPLAN.md §8).
+    /// Phase 2c (docs/BODYPLAN.md §12.3): food is cleared only from the water that passes THROUGH the head (in at the
+    /// mouth, out through its everted exchange surface: gill slits and rakers, a sponge's or a tunicate's pores), not
+    /// from the water that is pushed round it: particles at these Stokes numbers follow the streamlines round a solid
+    /// face (Rubenstein &amp; Koehl 1977; Shimeta &amp; Jumars 1991). The head's open fraction phi is the exit area its
+    /// everted epithelium gives (pore x everted share x its surface, unfolded) over its frontal area, at most 1; a screen
+    /// of open fraction phi has the pressure-loss coefficient k = (1 - phi) / phi² and passes 1 / (1 + k/4) of the flow
+    /// that meets it (Taylor &amp; Davies 1944; the leakiness of a filter, Cheer &amp; Koehl 1987). A solid face (phi 0)
+    /// clears nothing; a fish's head, with gill slits of ~half its section, clears ~0.7 of the reaction field. Before, a
+    /// solid face-on disc 1.8 mm thick "sieved" plankton across its whole face.</summary>
     public static float Capture(Morphology m)
     {
         if (m.Segs.Count == 0) return 0f;
         var h = m.Segs[0];
-        return Phys.CAPTURE * MathF.PI / 4f * h.W * h.H;
+        float frontal = MathF.PI / 4f * h.W * h.H;
+        return Phys.CAPTURE * frontal * ThroughFlow(HeadOpenFraction(m));
+    }
+
+    /// <summary>The head's open fraction for water passing through it (see Capture).</summary>
+    public static float HeadOpenFraction(Morphology m)
+    {
+        if (m.Segs.Count == 0) return 0f;
+        var h = m.Segs[0];
+        float frontal = MathF.PI / 4f * h.W * h.H;
+        return frontal > 0f ? MathF.Min(1f, h.Pore * (1f - h.Invag) * h.Area / frontal) : 0f;
+    }
+
+    /// <summary>Share of the oncoming flow a screen of open fraction phi passes: 1 / (1 + k/4), k = (1 - phi) / phi²
+    /// (Taylor &amp; Davies 1944).</summary>
+    public static float ThroughFlow(float phi)
+    {
+        if (phi <= 1e-4f) return 0f;
+        float k = (1f - phi) / (phi * phi);
+        return 1f / (1f + 0.25f * k);
     }
 
     /// <summary>Gut throughput of raw food (W): gut capacity ~ M but retention time ~ M^0.25, so throughput per kg of gut
@@ -758,7 +829,7 @@ public static class Physics
         float rho = env.Rho;
         bool water = env.Medium == Medium.Water;
         float sizeK = m.Mass / Development.M_REF;
-        float basal = Kleiber(m.Mass - m.InertMass);   // mineral does not metabolise
+        float basal = Kleiber(m.ActiveMass);   // mineral does not metabolise, fat little
         e.Basal = basal;
         float o2 = O2Supply(m, env.Medium, out float vent);
         float intO2 = m.ExchInt * (water ? Phys.S_WATER_INT : Phys.S_AIR_INT) + (water ? 0f : m.ExchGas * Phys.S_AIR_INT);
@@ -785,7 +856,8 @@ public static class Physics
         // follow it between 0.3 m boulders, and sea-floor bodies ran to the 10 kg cap (docs/BODYPLAN.md §8)
         if (env.Clutter > 0f) predR = MathF.Min(predR, 0.5f * env.Clutter);
 
-        var sp = Swim(m, rho, env.Nu);
+        var sp = Swim(m, rho, env.Nu);   // every pair out: a walker on the floor in water
+        var sps = water ? SwimSet(m, rho, env.Nu) : new[] { sp };   // a swimmer folds what does not pay to stroke
         var wp = Walk(m, rho);
         float itemEscape = env.ItemDensity > 0f ? env.ItemEscape : 0f;
         var hd = Handle(m, rho, itemEscape);
@@ -820,8 +892,8 @@ public static class Physics
             float zc = wp.Clear + 0.5f * m.MaxH, b = 0.5f * m.MaxW + wp.Span;
             float topple = (wp.WEff + wp.Hook) * b / (drag * zc);
             holdWalk = MathF.Min(1f, MathF.Min(slide, topple));
-            float ps = SwimPower(sp, rho, env.Surge);
-            holdSwim = float.IsPositiveInfinity(ps) ? 0f : MathF.Min(1f, sp.Cap / MathF.Max(ps, 1e-9f));
+            float ps = SwimBest(sps, rho, env.Surge, out float psCap);
+            holdSwim = float.IsPositiveInfinity(ps) ? 0f : MathF.Min(1f, psCap / MathF.Max(ps, 1e-9f));
             // and it must not roll over in the surge's shear (phase 2b; docs/BODYPLAN.md §11)
             float rollHold = RollHold(m, rho, env.Surge, wp.WEff);
             holdSwim *= rollHold;   // walkers: the toppling test above
@@ -859,14 +931,14 @@ public static class Physics
                 }
                 else
                 {
-                    float mech = SwimPower(sp, rho, u);
+                    float mech = SwimBest(sps, rho, u, out float cap);
                     if (float.IsPositiveInfinity(mech)) continue;
-                    if (mech > sp.Cap)
+                    if (mech > cap)
                     {
                         // too weak to hold this pace (or its depth) steadily: it swims flat out for the share of the time its
                         // muscle allows, and sinks or drifts the rest
-                        if (!(sp.Cap > 0f)) continue;
-                        duty = sp.Cap / mech; mech = sp.Cap;
+                        if (!(cap > 0f)) continue;
+                        duty = cap / mech; mech = cap;
                     }
                     loco = mech / Phys.ETA_M;
                 }
