@@ -391,8 +391,8 @@ public static class Life
         bool immersed = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
         float top = Heat.Operative(w, cell, w.PInsul[c], immersed), core = Heat.Core(top, w.PEndo[c]);
         float basal = w.PBasal[c] * Heat.Activity(core, w.PEndo[c]);   // its core's temperature and metabolic level (2026-11-01)
-        Heat.Balance(w.PM[c], w.PInsul[c], w.PAppend[c], top, immersed, basal, w.PBasal[c], out float thermo, out _, out float cold, out _, core, w.Dt);
-        cold += Heat.Freeze(w.PM[c], w.PInsul[c], w.PAppend[c], immersed, core, w.Dt);   // a frost a cold-blooded body cannot survive
+        Heat.Balance(w.PM[c], w.PInsul[c], w.PAppSurf[c], top, immersed, basal, w.PBasal[c], out float thermo, out _, out float cold, out _, core, w.Dt, w.PSurfK[c]);
+        cold += Heat.Freeze(w.PM[c], w.PInsul[c], w.PAppSurf[c], immersed, core, w.Dt, w.PSurfK[c]);   // a frost a cold-blooded body cannot survive
         return K.FIELD_METAB * basal + thermo + cold;   // heat it cannot make counts as a cost too: it must not live there
     }
 
@@ -468,6 +468,8 @@ public static class Life
             Brain.RandomGenome(w.GenomeOf(c), w.Seed, (uint)w.Step, key);
             Clades.AncestorBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, clade % (K.ANCESTORS_LAND + K.ANCESTORS_WATER), true);
             Clades.VaryBody(w.GenomeOf(c).Slice(G.BODY, G.NBODY), w.Seed, key);
+            // no module block: its body is its labelled genes translated (Morph.Codec.FromLabelled), so a test can still
+            // describe "a 1 kg legged walker" by those genes; the live founding draws module bodies (Clades.AncestorMorph)
         }
         else { genome.CopyTo(w.GenomeOf(c)); if (mutate) Brain.Mutate(w.GenomeOf(c), w.Seed, (uint)w.Step, key + 0x20000u, w.Evo); }
         Body.Express(w, c);

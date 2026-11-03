@@ -221,6 +221,7 @@ public sealed class Simulation : IDisposable
             anc.CopyTo(tmpl, 0);
             Brain.VaryBrain(tmpl, seed, key, units);
             Clades.VaryBody(new Span<sbyte>(tmpl, G.BODY, G.NBODY), seed, key);
+            Clades.VaryMorph(tmpl, seed, key);
             Life.Found(w, clade, tmpl, Rng.U(seed, 0, key, Rs.Founder) < 0.7f, key, gx, gy, realm);
         }
         return true;
@@ -249,6 +250,7 @@ public sealed class Simulation : IDisposable
         Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)draw);
         Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, draw, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES,
             sea: w.Ocean && Nature.Islands <= 0f);   // ancestors spread over the size classes; at sea, sea diets (2026-11-02)
+        Clades.AncestorMorph(anc, seed, draw, sea: w.Ocean && Nature.Islands <= 0f);   // its module body (phase 4, docs/BODYPLAN.md §13.4)
     }
 
     /// <summary>What a home range can feed of animals with this genome, and the range's radius: one is made, measured and removed again.</summary>
@@ -342,8 +344,11 @@ public sealed class Simulation : IDisposable
     /// <summary>Where a founder from this genome can be placed: water if it swims better than it walks, else land.</summary>
     static Realm RealmOfGenome(sbyte[] g)
     {
-        float legs = Body.Organ(g[G.B_LEGS]), fins = Body.Organ(g[G.B_FINS]);
-        return K.SWIM_SPEED * (0.1f + 0.9f * fins) > K.CRAWL + (1f - K.CRAWL) * legs ? Realm.Water : Realm.Land;
+        // phase 4: from its grown body's physics (Morph.Live): its top speed in water against on land
+        var mg = Morph.Codec.Decode(Morph.Codec.Block((ReadOnlySpan<sbyte>)g)) ?? Morph.Codec.FromLabelled(g);
+        float m = Morph.LiveGenes.MassOf(g);
+        var lc = Morph.Live.Of(Morph.Development.Grow(mg, m), Heat.Level(Body.Organ(g[G.B_ENDO])), 1f, 0f);
+        return lc.C.VWater > lc.C.VLand ? Realm.Water : Realm.Land;
     }
 
     /// <summary>Accumulated wall time per phase (ms): build, decide, resolve, life, fields, fire, telemetry.</summary>

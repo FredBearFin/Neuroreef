@@ -45,8 +45,9 @@ public static class Brain
             g[k] = (sbyte)(int)(Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 255f - 128f);
         for (int k = G.BODY; k < G.REFLEX; k++) g[k] = 0;  // founder body and care = the species body plan
         // reflexes: small random links by the same rule as the output layer, plus the innate starter kit
-        for (int k = G.REFLEX; k < G.LEN; k++)
+        for (int k = G.REFLEX; k < G.MORPH; k++)
             g[k] = (sbyte)MathF.Round((Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f) * K.FOUNDER_W2);
+        g.Slice(G.MORPH, G.MORPHN).Clear();   // no module genome yet: the ancestor's body writes it (Clades.AncestorMorph)
         foreach (var (c, p) in Reflex.Kit) g[G.REFLEX + p * G.NC + c] = (sbyte)Math.Clamp(K.KIT_W + g[G.REFLEX + p * G.NC + c], -127, 127);
     }
 
@@ -55,7 +56,7 @@ public static class Brain
     {
         // the memory rows of units the brain does not use are left as the ancestor's (Revision M: with 256 units,
         // varying every byte of every founder took most of the founding time); they vary once they are grown
-        for (int k = 0; k < G.LEN; k++)
+        for (int k = 0; k < G.MORPH; k++)   // the module block varies by its own operators (Clades.VaryMorph)
         {
             if (k == units * G.NIN && k < G.W2) { k = G.W2 - 1; continue; }
             if (k == G.BODY) { k = G.BODY + G.NBODY - 1; continue; }
@@ -80,7 +81,10 @@ public static class Brain
         sbyte floor = g[G.B_FLOOR];
         Segment(g, 0, G.BODY, e.MutRate, seed, step, key, e, ref j);
         Segment(g, G.BODY, G.BODY + G.NBODY, e.MutBody, seed, step, key, e, ref j);
-        Segment(g, G.BODY + G.NBODY, G.LEN, e.MutRate, seed, step, key, e, ref j);
+        Segment(g, G.BODY + G.NBODY, G.MORPH, e.MutRate, seed, step, key, e, ref j);
+        // the module body genome: duplication, divergence, insertion and deletion of segment and appendage genes, point
+        // mutation and the repeat count (Morph.Mutate, via Morph.Codec; docs/BODYPLAN.md §13.2)
+        Morph.Codec.MutateBlock(g, seed, step, key);
         // the size class is copied exactly, and only rarely steps up or down one class
         float u = Rng.U(seed, step, key, Rs.Mutate + 0x3FFFFFF0u);
         if (u < K.FLOOR_MUT) floor = (sbyte)Math.Clamp(floor + (u < K.FLOOR_MUT * 0.5f ? -1 : 1), 0, K.FLOOR_CLASSES - 1);
@@ -121,6 +125,8 @@ public static class Brain
             bool fromFather = Rng.U(seed, step, key, Rs.Cross + 5000u + (uint)p) < 0.5f;
             (fromFather ? father : mother).Slice(off, G.NC).CopyTo(child.Slice(off, G.NC));
         }
+        // the module body genome: homologous modules aligned by innovation number (NEAT; Morph.Homology.Cross)
+        Morph.Codec.CrossBlock(child, mother, father, seed, step, key);
     }
 
     /// <summary>Reset the life-time state of slot i from its genome: working weights, traces, hidden state.</summary>

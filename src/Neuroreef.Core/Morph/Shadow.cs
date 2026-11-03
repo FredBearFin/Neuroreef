@@ -168,7 +168,7 @@ public static class Shadow
 
     /// <summary>Mechanical power short of a sprint at speed u on flat ground (negative or 0: it can), the better of
     /// crawling and walking, with muscle at k x its sustained power (P_BURST). The same terms as Physics.WalkMetabolic.</summary>
-    static float LandMech(Morphology m, in Physics.WalkProps w, float u, float axBurst, float k)
+    internal static float LandMech(Morphology m, in Physics.WalkProps w, float u, float axBurst, float k)
     {
         float crawlW = MathF.Max(w.WEff, Phys.CRAWL_PRESS * m.Mass * Phys.G);
         float wave = MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);

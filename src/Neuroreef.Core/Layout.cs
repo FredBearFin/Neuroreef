@@ -140,7 +140,13 @@ public static class G
     public const int NC = 13;                    // reflex inputs (Reflex.Inputs)
     public const int REFLEX = BODY + NBODY;
     public const int REFLEXN = P.N * NC;         // 546
-    public const int LEN = REFLEX + REFLEXN;     
+    // the module body genome (docs/BODYPLAN.md §13.2, phase 3): a fixed-capacity, variable-count block of segment and
+    // appendage genes with NEAT innovation numbers (Morph.Codec), after every other gene. Since phase 4 the body is grown
+    // from it (Body.Express); the labelled body genes (B_LEGS, B_FINS, B_WINGS, B_LEGN, B_FINN, B_ARMOUR, B_LUNGS, the
+    // shape genes) are retired: kept in the layout, read only to translate a genome that has no block (Morph.Translate)
+    public const int MORPH = REFLEX + REFLEXN;
+    public const int MORPHN = Morph.Codec.SIZE;  // 681
+    public const int LEN = MORPH + MORPHN;
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>
     public static float Gene(sbyte b, float lo, float hi) => lo + (hi - lo) * ((b + 128) / 255f);

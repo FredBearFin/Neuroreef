@@ -61,6 +61,21 @@ public sealed class World
     [PerSlot] public float[] PBirth, PFovCos, PGest, PCool, PLegs, PFins, PWings, PVLand, PVWater, PVAir, PSexRatio, PImmune;
     [PerSlot] public byte[] PLoco, PRealm, PSexual, PLive, PParasite, PLegPairs, PFinPairs, PEyePairs, PHerm;
     [PerSlot] public ushort[] PBrain;       // memory units in use (up to G.NH = 256: a byte held at most 255, so 256 read as 0)
+    // ---- agents: the body grown from its module genome (docs/BODYPLAN.md §13.3, phase 4; Morph.Live), at its adult mass.
+    // Every capability above that is a body's (speeds, PTurn, PArmour, PBasal, PLoco, PRealm) is now set from these physics;
+    // PLegs, PFins, PWings, PLungs, PLegPairs and PFinPairs hold the physics' equivalents of the retired organ genes
+    // (Body.Express says how each is derived), for the renderer, telemetry and the gates that still read them
+    [PerSlot] public float[] PProp;            // swimming ability: its sustained swimming speed in lengths a second, as (v / (CRUISE_BL L) - 0.1) / 0.9 (0..1)
+    [PerSlot] public float[] PMargin;          // flight power margin at its adult mass (Physics.FlightMargin)
+    [PerSlot] public float[] PStand;           // standing height at its adult mass, m (limb clearance + trunk height)
+    [PerSlot] public float[] PCruise;          // swimming speed of least gross cost a metre at its adult mass, m/s
+    [PerSlot] public float[] PCotLand, PCotLandTop, PCotWater;   // net cost a unit of distance at adult mass, energy units: walking at its cheapest and at its top speed; swimming at its cruise
+    [PerSlot] public float[] PScopeAir, PScopeLung, PScopeWater;  // aerobic scopes over its basal: all its surfaces and skin in air; its air-breathing surfaces in air; all in water
+    [PerSlot] public float[] PMoultW, PMoultSoft;  // moulting while it grows: cost (energy per step at adult mass) and the share of the time it is soft
+    [PerSlot] public float[] PCrush, PDensity; // crushing force at the mouth (N); body density (kg/m³)
+    [PerSlot] public byte[] PSegN, PPairN;     // segments and appendage pairs grown
+    [PerSlot] public float[] PSurfK, PAppSurf, PEvapK;   // heat-losing trunk surface and appendage surface over the plain body's (x M^(2/3)); evaporation over the plain body's (Morph.Live)
+    [PerSlot] public float[] PMorphVis;        // Cap * Body.NMVIS: the developed body's visible traits (Body.MorphVisible), for clades
     // ---- agents: care and disease (DESIGN §7.8, §9.6)
     [PerSlot] public float[] CareLeft;         // care a mother can still give this step
     [PerSlot] public uint[] CareStep;          // step + 1 that CareLeft refers to (0 = never)
@@ -368,6 +383,9 @@ public sealed class World
         PInsul = new float[c]; PAppend = new float[c]; PEndo = new float[c]; PReadyE = new float[c]; PWire = new float[c]; ThermStrain = new float[c]; HeatNeed = new float[c]; TOp = new float[c]; Array.Fill(TOp, K.T_REF);
         PFinPairs = new byte[c]; PEyePairs = new byte[c]; PBrain = new ushort[c]; PHerm = new byte[c];
         PLungs = new float[c]; PDive = new float[c]; Z = new float[c]; ZShare = new float[c]; O2Debt = new float[c];
+        PProp = new float[c]; PMargin = new float[c]; PStand = new float[c]; PCruise = new float[c]; PCotLand = new float[c]; PCotLandTop = new float[c]; PCotWater = new float[c];
+        PScopeAir = new float[c]; PScopeLung = new float[c]; PScopeWater = new float[c]; PMoultW = new float[c]; PMoultSoft = new float[c]; PCrush = new float[c]; PDensity = new float[c];
+        PSegN = new byte[c]; PPairN = new byte[c]; PSurfK = new float[c]; PAppSurf = new float[c]; PEvapK = new float[c]; PMorphVis = new float[c * Body.NMVIS];
         for (int k = 0; k < K.CLADES; k++) Sp[k] = new Species { Id = k };
         CareLeft = new float[c]; CareStep = new uint[c];
         PgLoad = new float[c]; PgGene = new byte[c * PG.N]; Strain = new sbyte[c * G.NMHC]; PgFit = new float[c]; ImmEff = new float[c]; ImmMem = new float[c];
@@ -581,11 +599,32 @@ public sealed class World
 
     /// <summary>Top speed in the cell: a flier's top air speed, otherwise its speed on the ground there (GroundVmax).</summary>
     public float Vmax(int i, int cell)
-        => (PLoco[i] == (byte)Neuroreef.Loco.Fly ? PVAir[i] : GroundSpeed(i, cell)) * MathF.Max(0.3f, MassOf(i) / PM[i]);
+        => (PLoco[i] == (byte)Neuroreef.Loco.Fly ? PVAir[i] : GroundSpeed(i, cell)) * MathF.Max(0.3f, MassOf(i) / PM[i]) * MoultSpeed(i);
 
     /// <summary>Top speed on the ground in this cell, the young's smallness included: walking on land, blended from
     /// wading to swimming in water. A landed flier walks at it (2026-10-31).</summary>
-    public float GroundVmax(int i, int cell) => GroundSpeed(i, cell) * MathF.Max(0.3f, MassOf(i) / PM[i]);
+    public float GroundVmax(int i, int cell) => GroundSpeed(i, cell) * MathF.Max(0.3f, MassOf(i) / PM[i]) * MoultSpeed(i);
+
+    /// <summary>
+    /// Is body i soft in a moult now (docs/BODYPLAN.md §13.3)? A rigid outer skeleton cannot stretch: a growing body must
+    /// shed it and harden a new, larger one, and until it hardens it is soft (Drach 1939; Hartnoll 1982). It moults every
+    /// Morph.Live.MOULT_DAYS while it grows (a juvenile below adult size) and is soft for PMoultSoft of that time
+    /// (its rigidity x MOULT_SOFT_GROW), in a phase of its own (its serial). Adults no longer grow and do not moult.
+    /// Deterministic: a function of its age and serial.
+    /// </summary>
+    public bool Moulting(int i)
+    {
+        float soft = PMoultSoft[i];
+        if (soft <= 0f || StageOf[i] != St.Juvenile || Grown[i] >= 1f) return false;
+        float period = Morph.Live.MOULT_DAYS * Nature.SeasonLength / 365.25f / Dt;   // steps between moults
+        float phase = (Age[i] + (Serial[i] % 997u) * 0.618034f * period) / MathF.Max(period, 1e-3f);
+        return phase - MathF.Floor(phase) < soft;
+    }
+
+    /// <summary>Speed kept in a moult: muscles pull on the skeleton they attach to, and a soft one gives them nothing to
+    /// pull on, so a moulting body keeps (1 - its rigidity) of its speed (a soft-shelled crab hides rather than flees:
+    /// Hartnoll 1982). 1 outside a moult.</summary>
+    public float MoultSpeed(int i) => Moulting(i) ? 1f - PMoultSoft[i] / Morph.Live.MOULT_SOFT_GROW : 1f;
 
     float GroundSpeed(int i, int cell)
     {
@@ -663,7 +702,7 @@ public sealed class World
     public bool CellAllows(int cell, Realm r) => (Cell[cell] & (byte)r) != 0;
 
     /// <summary>The deepest water body i can go in, in elevation as Depth is: SHALLOW x (1 + SWIM_DEPTH_RANGE x fins) m.</summary>
-    public float MaxWaterDepth(int i) => ShallowE * (1f + K.SWIM_DEPTH_RANGE * Body.Propulsor(PFins[i], PWings[i]));
+    public float MaxWaterDepth(int i) => ShallowE * (1f + K.SWIM_DEPTH_RANGE * PProp[i]);   // its swimming ability from the physics (Body.Express)
 
     /// <summary>How far body i reaches in a step where it is now (units, 2026-11-02): its chase at its flight speed in the
     /// air (PReach), at its swimming speed in water, at its running speed on land (Body.ReachM).</summary>
@@ -682,7 +721,7 @@ public sealed class World
         if (PLoco[i] != (byte)Neuroreef.Loco.Fly) return CellAllows(i, cell);
         byte kind = Cell[cell];
         if ((kind & (byte)Realm.Land) != 0) return true;
-        return (kind & (byte)Body.GroundRealm(PLegs[i], Body.Propulsor(PFins[i], PWings[i]))) != 0 && Depth[cell] <= MaxWaterDepth(i);
+        return (kind & (byte)Body.GroundRealm(PLegs[i], PProp[i])) != 0 && Depth[cell] <= MaxWaterDepth(i);
     }
 
     /// <summary>Is flier i in the air? Since 2026-11-01 its last step says (Flag.Aloft, Flag.Landed: Resolve decides, and a
@@ -750,7 +789,7 @@ public sealed class Derived
     /// <summary>Recompute every living slot's values from its genome.</summary>
     public void Refresh(World w)
     {
-        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) { Body.Signature(w, i); Morph.Shadow.Express(w, i); }
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Body.Signature(w, i);   // (the shadow is retired with the switch, phase 4)
     }
 }
 

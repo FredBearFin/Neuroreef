@@ -93,27 +93,23 @@ public static class Body
     public static void Express(World w, int i)
     {
         var gn = w.Genome.Slot(i);
-        Signature(w, i);   // its look and MHC diversity, cached for DECIDE and LIFECYCLE (see Signature)
         float floor = Floors[Math.Clamp((int)gn[G.B_FLOOR], 0, K.FLOOR_CLASSES - 1)];
         w.PFloor[i] = floor;
         float m = MathF.Max(floor, G.GeneLog(gn[G.B_MASS], BodySize.Min, BodySize.Max));   // its size class's floor; free above it (the world's range, BodySize)
-        float fs = Mul(gn[G.B_SPEED], K.BODY_RANGE_TRAIT);
         float fsi = Mul(gn[G.B_SIGHT], K.BODY_RANGE_TRAIT);
-        float armour = Organ(gn[G.B_ARMOUR]) * K.ARMOUR_MAX;
         float strike = Organ(gn[G.B_STRIKE]) * K.STRIKE_MAX;
-        float legs = Organ(gn[G.B_LEGS]), fins = Organ(gn[G.B_FINS]), wings = Organ(gn[G.B_WINGS]);
-        int legPairs = Pairs(gn[G.B_LEGN]), finPairs = Pairs(gn[G.B_FINN]), eyePairs = Pairs(gn[G.B_EYEN]);
+        int eyePairs = Pairs(gn[G.B_EYEN]);
         float fov = MathF.Min(360f, G.Gene(gn[G.B_FOV], K.FOV_LO, K.FOV_HI) * (1f + K.EYE_FOV * (eyePairs - 1)));
         float life = Mul(gn[G.B_LIFE], K.LIFE_RANGE), devel = Mul(gn[G.B_DEVEL], K.LIFE_RANGE);
         float imm = Organ(gn[G.B_IMMUNE]);
         float wecon = Organ(gn[G.B_WATER]);
         float voice = Organ(gn[G.B_VOICE]);
-        // body heat (Revision O): fur keeps heat in; appendages (ears, limbs, tail) shed it when the body is warm
-        float ins = Organ(gn[G.B_INSUL]), app = Organ(gn[G.B_APPEND]);
-        w.PInsul[i] = ins; w.PAppend[i] = app;
+        // body heat (Revision O): fur keeps heat in (a covering gene, kept). Since phase 4 the surface that loses heat, and
+        // the appendages that shed it, are the grown body's own (PSurfK, PAppSurf below); B_APPEND is retired
+        float ins = Organ(gn[G.B_INSUL]);
+        w.PInsul[i] = ins;
         w.PEndo[i] = Organ(gn[G.B_ENDO]);
-        // breathing (2026-11-01): gills or lungs or both at a share, and where in the water column it holds (Respiration.cs)
-        w.PLungs[i] = Organ(gn[G.B_LUNGS]); w.PDive[i] = Organ(gn[G.B_DIVE]);
+        w.PDive[i] = Organ(gn[G.B_DIVE]);   // where in the water column it holds (Respiration.cs)
         w.PReadyE[i] = K.READY_LO + (K.READY_HI - K.READY_LO) * Organ(gn[G.B_BREEDE]);
         w.PVoice[i] = voice;
         // vocal learning (Revision N): how strongly matching a remembered tutor reinforces its own calls, and for how
@@ -123,35 +119,38 @@ public static class Body
         w.PImitAge[i] = K.IMIT_AGE_LO + (1f - K.IMIT_AGE_LO) * Organ(gn[G.B_IMIT_AGE]);
         int brain = Units(gn[G.B_BRAIN]);
         bool herm = gn[G.B_HERM] >= 0;
-        w.PLegs[i] = legs; w.PFins[i] = fins; w.PWings[i] = wings;
-        w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)finPairs; w.PEyePairs[i] = (byte)eyePairs;
+        w.PEyePairs[i] = (byte)eyePairs;
         w.PBrain[i] = (ushort)brain; w.PHerm[i] = (byte)(herm ? 1 : 0); w.PImmune[i] = imm;
         w.PWire[i] = WireScale(gn, brain);   // after the brain size: it scales the units in use
         w.PSexRatio[i] = Organ(gn[G.B_SEXRATIO]);
 
         w.PM[i] = m;
         w.PWaterEcon[i] = wecon;
-        w.PThirstK[i] = MathK.Pow(m, K.EXP_THIRST) * (1f - K.WATER_ECON * wecon);
         float mPow = MathK.Pow(m, K.EXP_BASAL);
-        float basalF = 1f + K.COST_SPEED * (fs - 1f) + K.COST_SIGHT * (fsi - 1f) + K.COST_ARMOUR_ABS * armour + K.COST_STRIKE_ABS * strike
-                     + K.COST_LIMB * fins * finPairs * 0.5f + K.COST_WING * wings   // legs pay while they walk (LEG_SWING), flight while airborne
-                     + K.COST_EYE * eyePairs + K.COST_LONGEVITY * (life - 1f)
-                     + (herm ? K.COST_HERM : 0f) + K.COST_IMMUNE * imm + K.COST_WATERECON * wecon + K.COST_VOICE * voice
-                     + K.COST_INS * ins + K.COST_APP * app
-                     + Respiration.OrganUpkeep(w.PLungs[i]);   // lungs and gills, with their fixed overheads (2026-11-01)
-        // brain tissue costs the same per unit whatever the body (Revision M, ecology review: energy per neuron is about
-        // constant, Herculano-Houzel 2011; Aiello & Wheeler 1995): a big brain needs a big body to pay for it
-        // (2026-11-02) its gut is built to its own basal cost (GutScale): absorption and digestion grow with it, and so does
-        // the gut's upkeep, part of that cost
-        // (2026-11-02) its tissues' metabolic level (Heat.Level: a cold-blooded body's standard metabolism is ~1/5 of a
-        // warm-blooded one's of its mass at the same body temperature) sets its body's resting cost, its gut (built to that
-        // cost) and its organs' capacity (Respiration.OrganBase), in every world; the brain costs per unit whatever the body
-        float level = Heat.Level(w.PEndo[i]);
-        float kleiber = K.C_BASAL * mPow * level;
-        float gut = GutScale(kleiber * MathF.Max(0.5f, basalF) + K.COST_BRAIN * K.C_BASAL * brain / K.BRAIN_REF, kleiber, out float basal);
-        // rates are per step (x World.Dt: the constants are per reference step of K.STEP_H) and durations in steps (/ Dt):
-        // at the default step Dt is 1 and these are the constants' values bit for bit (2026-11-02)
         float dt = w.Dt;
+        // (2026-11-02) its tissues' metabolic level (Heat.Level: a cold-blooded body's standard metabolism is ~1/5 of a
+        // warm-blooded one's of its mass at the same body temperature) sets its body's resting cost, its gut and its
+        // organs' capacity, in every world; the brain costs per unit whatever the body (Herculano-Houzel 2011)
+        float level = Heat.Level(w.PEndo[i]);
+
+        // ---- the body (docs/BODYPLAN.md §13.3, phase 4): grown from its module genome at its mass (Morph.Codec,
+        // Development.Grow), every capability from the physics of that morphology (Morph.Live). The labelled body genes
+        // (B_LEGS, B_FINS, B_WINGS, B_LEGN, B_FINN, B_ARMOUR, B_LUNGS, B_SPEED, B_APPEND, the shape genes) are retired: a
+        // genome with no module block (an older save, a hand-made genome) is translated from them first (Morph.Translate),
+        // and nothing else reads them
+        var mg = Morph.Codec.Decode(Morph.Codec.Block((ReadOnlySpan<sbyte>)gn)) ?? Morph.Codec.FromLabelled(gn);
+        var mo = Morph.Development.Grow(mg, m);
+        float geneF = Morph.Live.GeneFactor(gn);
+        float toW = K.BMR_W / K.C_BASAL;   // W per energy unit a reference step
+        float brainW = K.COST_BRAIN * K.BMR_W * brain / K.BRAIN_REF;
+        var lc = Morph.Live.Of(mo, level, geneF, brainW);
+        var c = lc.C;
+        // basal: Kleiber on its active (non-mineral, lean) mass at its level x the genes that stay genes, its integument's
+        // turnover and its exchange epithelia's upkeep from their physics, its brain, and the gut built to all of it
+        // (Body.GutScale). The labelled organs' upkeep terms (COST_LIMB, COST_WING, COST_ARMOUR_ABS, OrganUpkeep) are gone:
+        // their tissue is in the morphology now. Moulting is paid while it grows (PMoultW: Resolve)
+        float basal = c.Basal / toW;
+        float gut = lc.Gut;
         w.PBasal[i] = basal * dt;
         w.PGut[i] = K.C_GUT * m;
         // a gut processes and absorbs at the pace of the tissues that build and run it (level): a reptile's food intake and
@@ -166,41 +165,25 @@ public static class Body
         // C_SIGHT_M = 60 m at 1 kg, eye size and acuity ~M^0.2 (Kiltie 2000; Burton 2008)
         w.PSight[i] = MathF.Min(BodySize.MaxSight, K.C_SIGHT * MathK.Pow(m, K.EXP_SIGHT) * fsi * (1.6f - fov / 360f));
         w.PFovCos[i] = MathK.Cos(fov * 0.5f * MathF.PI / 180f);
-        w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * (1f + K.FIN_TURN * (finPairs - 1) * fins);
 
-        // locomotion: smooth speeds in each medium from the organ sizes. On land the legs carry the body's weight and its
-        // armour, and the bones' safety factor limits how fast it can go (BoneLoad). In water and air armour only adds drag
-        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * dt;   // a step's travel at top speed (DMD_M, TRAVEL_SHARE) of a plain body of this mass
-        float v0 = v0Ref * fs;
-        float v = v0 / (1f + K.ARMOUR_DRAG * armour * 0.70710678f);
-        float vLand = v0 * LandLoadFactor(m, armour, legs >= K.LIMB_MIN ? legPairs : 1) * (K.CRAWL + (1f - K.CRAWL) * legs);
-        float prop = Propulsor(fins, wings);   // fins, and wings stroked under water (2026-11-02)
-        float vWater = v * K.SWIM_SPEED * (0.1f + 0.9f * prop);
-        Dimensions(gn[G.B_LENGTH], gn[G.B_WIDTH], gn[G.B_HEIGHT], out float length, out float width, out float height);
-        float lengthShare = length;   // of the cube of its volume (LengthM)
-        float whShare = width * height;   // its cross-section, of the cube's face
-        const float invLn2 = 1.442695041f;   // log2 through MathK.Log: the same on every machine (NR-104)
-        length = MathK.Log(length) * invLn2 * 0.5f; width = MathK.Log(width) * invLn2 * 0.5f; height = MathK.Log(height) * invLn2 * 0.5f;
-        float limbShape = Organ(gn[G.B_LIMB_SHAPE]) - 0.5f;
-        // Long, narrow bodies slip through water but turn more slowly; tall, slender limbs favour stride
-        // over paddling. Each bounded factor stays near one, so organs and mass still govern viability.
-        // (2026-11-02) drag of a body of revolution at a given volume against its fineness ratio f = length / sqrt(width x
-        // height): C_DV ~ 4 f^(1/3) + 6 f^(-7/6) + 24 f^(-8/3) (Hoerner 1965), least near f = 4.5, as fishes' and
-        // cetaceans' bodies are (Webb 1975; Fish 1993); at a given power, speed goes as drag^(-1/3), against a cube's
-        // (f = 1). Was a bounded linear guess (0.75-1.25)
-        float streamlining = Streamlining(lengthShare, whShare);
-        vLand *= 1f + 0.15f * height + 0.2f * limbShape * legs - 0.1f * width;
-        vWater *= streamlining * (1f - 0.2f * limbShape * legs);
-        w.PTurn[i] *= 1f - 0.2f * length + 0.1f * width;
-        // flight (2026-10-31): a body flies when the power its flight muscles deliver (~ wings x M^(2/3)) reaches the least
-        // power flight requires (~M^(7/6)) and its flight muscle can lift its weight at all (FLY_WING_MIN); the margin
-        // sets how far above the speed of least power it can fly
-        float margin = FlightMargin(wings, m);
-        bool flies = margin >= 1f && wings >= K.FLY_WING_MIN;   // and enough flight muscle to take off at all (Marden 1987)
-        vLand *= WingGroundFactor(wings);   // the flight muscle's dead load on the flat; flapping helps on slopes (World.GroundSpeed, WingInclineGain)
-        float vAir = flies ? MathF.Min(K.FLY_V_CAP * dt, v * K.FLY_VMP * TopFlightSpeed(margin) * streamlining) : 0f;
+        // speeds: a step's travel is a day range, which the live sim reads as a speed through Garland's sprint for the mass
+        // x its speed against the plain body's (ReachM); so a physical top speed (m/s) is v0Ref x v / Garland's sprint
+        float v0Ref = K.C_SPEED * MathK.Pow(m, K.EXP_SPEED) * dt;   // a step's travel at top speed of a plain body of this mass
+        float perMps = v0Ref / SprintMps(m);
+        float vLand = c.VLand * perMps, vWater = c.VWater * perMps;
+        // flight: its flight-muscle power over the least power of level flight (Physics.FlightMargin), and enough flight
+        // muscle to lift its weight at all (Marden 1987)
+        bool flies = c.Flies > 0f;
+        float vAir = flies ? MathF.Min(K.FLY_V_CAP * dt, c.VAir * perMps) : 0f;
+        // swimming ability: its fastest sustained swimming speed in body lengths a second, read on the live scale where a
+        // propulsor of 0..1 cruises at CRUISE_BL x (0.1 + 0.9 propulsor) lengths a second (Respiration.CruiseMps): the
+        // gates that read it (deep water, how deep it goes, paddling) keep their meaning
+        float prop = Math.Clamp((lc.VSust / MathF.Max(K.CRUISE_BL * lc.Length, 1e-6f) - 0.1f) / 0.9f, 0f, 1f);
+        // legs: what its limbs do on land, read on the live scale where legs 0..1 stand a body at STAND_H M^(1/3) (0.3 + 0.7
+        // legs): the share of its weight they bear x how far they raise it
+        float legs = Math.Clamp((c.Stand / (K.STAND_H * MathK.Cbrt(m)) - 0.3f) / 0.7f, 0f, 1f) * lc.Support;
         bool deep = 0.1f + 0.9f * prop >= K.DEEP_SWIM;   // swims well enough to stay up in open water
-        bool settled = legs < K.LIMB_MIN * 0.2f && prop < K.LIMB_MIN * 0.2f && !flies;
+        bool settled = vLand <= 0f && vWater <= 0f && !flies;
         if (settled) { vLand = 0; vWater = 0; }
         w.PVLand[i] = vLand; w.PVWater[i] = vWater; w.PVAir[i] = vAir;
         Realm realm = flies ? Realm.Any : Realm.Land | Realm.Shallow | (deep ? Realm.Deep : 0);
@@ -210,16 +193,47 @@ public static class Body
         Realm reach = flies ? GroundRealm(legs, prop) : realm;
         w.PLoco[i] = (byte)loco; w.PRealm[i] = (byte)realm;
         w.PVmax[i] = MathF.Max(vAir, MathF.Max(vLand, vWater));
+        // turning: the turn rate of the plain body of its mass (C_TURN M^EXP_TURN) x the plain body's least turning radius
+        // over its own (Physics.TurnRadius: its mobile surfaces and bending trunk against its inertia)
+        w.PTurn[i] = K.C_TURN * MathK.Pow(m, K.EXP_TURN) * Morph.Live.RefTurnR(m) / MathF.Max(c.TurnR, 1e-6f);
         // reach in a step (2026-11-01): its body and the distance it sprints in a chase (ReachM)
-        w.PLen[i] = LengthM(m, lengthShare);
+        w.PLen[i] = lc.Length;
         w.PReach[i] = ReachM(m, w.PVmax[i] / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
-        // (2026-11-02) a chase runs at the speed of the medium it is in: its swimming speed in water, its running speed on
-        // land, its flight speed only in the air (World.ReachOf). Before, every body chased at its fastest speed anywhere,
-        // so a flier that never flew struck under water as far as it could fly
+        // (2026-11-02) a chase runs at the speed of the medium it is in (World.ReachOf)
         w.PReachLand[i] = ReachM(m, vLand / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
         w.PReachSwim[i] = ReachM(m, vWater / v0Ref, w.PLen[i]) / K.M_PER_UNIT;
+        // protection: its integument's crushing odds against a bite scaled to its size (Physics.PKill) over the plain body's
+        // (Morph.Live.RefOdds, mass-free), as armour on the live scale where defence is mass x (DEF_BASE + armour)
+        float gain = c.Odds / MathF.Max(Morph.Live.RefOdds, 1e-9f);
+        w.PArmour[i] = K.DEF_BASE * MathF.Max(0f, gain - 1f);
+        // the rest of what the live sim reads of a body, from the physics (per unit of distance and per step at adult mass)
+        float ePerUnitPerJm = K.M_PER_UNIT / Morph.Shadow.J_PER_E;   // energy units per world unit, per J/m
+        w.PProp[i] = prop; w.PMargin[i] = c.Margin; w.PStand[i] = c.Stand; w.PCruise[i] = c.Cruise;
+        w.PCotLand[i] = c.CotLand * ePerUnitPerJm; w.PCotLandTop[i] = lc.CotLandTop * ePerUnitPerJm; w.PCotWater[i] = c.CotWater * ePerUnitPerJm;
+        float basalW = MathF.Max(c.Basal, 1e-9f);
+        w.PScopeAir[i] = c.O2Air / basalW; w.PScopeLung[i] = lc.O2Lung / basalW; w.PScopeWater[i] = c.O2Water / basalW;
+        w.PMoultW[i] = lc.MoultW / toW * dt; w.PMoultSoft[i] = lc.MoultSoft;
+        w.PCrush[i] = lc.Crush; w.PDensity[i] = lc.Density;
+        w.PSegN[i] = (byte)Math.Min(255, mo.SegmentCount); w.PPairN[i] = (byte)Math.Min(255, mo.PairCount);
+        // heat and water from the grown body's surface (docs/BODYPLAN.md §13.3): its whole surface (segments and pairs) over
+        // a cube's of its volume, the share of it on its appendages (Allen's rule: radiators), and its evaporation through its
+        // exposed exchange surface and skin, less through a thick integument (cuticle and wax), against a plain body's
+        w.PSurfK[i] = lc.SurfK; w.PAppSurf[i] = lc.AppSurf; w.PAppend[i] = lc.AppSurf;
+        w.PEvapK[i] = lc.EvapK;
+        w.PThirstK[i] = MathK.Pow(m, K.EXP_THIRST) * lc.EvapK * (1f - K.WATER_ECON * wecon);
+        // the physics' equivalents of the retired organ genes, for the renderer, telemetry and the gates that read them:
+        // legs and swimming ability as above; wings, its flight muscle over a full-winged body's (FLY_MUSCLE_MAX of its mass);
+        // lungs, the share of its aerobic scope in air that its air-breathing surfaces give, against its scope in water;
+        // leg pairs, its limbs on the ground; fin pairs, its flat pairs that are not legs
+        w.PLegs[i] = legs; w.PFins[i] = prop;
+        w.PWings[i] = Math.Clamp(lc.FlyMuscle / (K.FLY_MUSCLE_MAX * m), 0f, 1f);
+        w.PLungs[i] = w.PScopeLung[i] + w.PScopeWater[i] > 0f ? w.PScopeLung[i] / (w.PScopeLung[i] + w.PScopeWater[i]) : 0.5f;
+        int legPairs = Math.Clamp((int)MathF.Round(lc.NLegs * 0.5f), 1, 4), finPairs = 0;
+        foreach (var a in mo.Pairs) if (a.Chord >= 3f * a.Thick && a.Theta < MathF.PI / 4f) finPairs++;
+        w.PLegPairs[i] = (byte)legPairs; w.PFinPairs[i] = (byte)Math.Clamp(finPairs, 1, 4);
+        MorphVisible(mo, new Span<float>(w.PMorphVis, i * NMVIS, NMVIS));
+        Signature(w, i);   // its look and MHC diversity, cached for DECIDE and LIFECYCLE (see Signature), from the body above
 
-        w.PArmour[i] = armour;
         w.PStrike[i] = strike;
         w.PLitter[i] = (byte)Math.Clamp((int)MathF.Round(MathK.Exp(Organ(gn[G.B_LITTER]) * MathK.Log(K.LITTER_MAX))), 1, K.LITTER_MAX);
         float birth = G.GeneLog(gn[G.B_BIRTH], K.BIRTH_LO, K.BIRTH_HI);
@@ -240,9 +254,33 @@ public static class Body
         // drain or kill is a matter of degree (ecology review): the share of successful strikes that drain blood
         w.PDrain[i] = blood + meat > 1e-4f ? blood / (blood + meat) : 0f;
         w.PParasite[i] = (byte)(w.PDrain[i] >= 0.5f ? 1 : 0);   // a label (and whom it targets): mostly a blood-drinker
-        // the shadow expression (docs/BODYPLAN.md §10): the same genes as a module body, its capabilities from physics,
-        // written to World.D and read by nothing here (write-only: the simulation is unchanged bit for bit)
-        Morph.Shadow.Express(w, i);
+        // the shadow comparison (docs/BODYPLAN.md §10-12) is retired with the switch: what it compared against is gone
+    }
+
+    /// <summary>Visible traits of a developed body for clade splitting (Clades.Vis), NMVIS of them, each in visible units
+    /// (1 = a difference you notice at a glance): segments (half again as many a unit), pairs (one a unit), fineness and
+    /// height over width (x1.5 a unit), its longest pair's length over its body length (0.15 a unit), mean pair droop (15°
+    /// a unit), mean flatness (x1.5 a unit), integument rigidity (0.15 a unit), exchange surface over body surface (x1.5 a
+    /// unit, from 1%), mean joints per pair (one a unit).</summary>
+    public const int NMVIS = 10;
+    public static readonly string[] MorphVisName = { "segments", "appendage pairs", "fineness", "body depth", "limb length", "limb angle", "limb flatness", "armour", "gills or lungs", "joints" };
+    public static void MorphVisible(Morph.Morphology m, Span<float> v)
+    {
+        float l15 = 1f / MathK.Log(1.5f);
+        v[0] = MathK.Log(MathF.Max(1, m.SegmentCount)) * l15;
+        v[1] = m.PairCount;
+        v[2] = MathK.Log(MathF.Max(m.Fineness, 1e-3f)) * l15;
+        float hw = 0f; foreach (var s in m.Segs) hw = MathF.Max(hw, s.H / MathF.Max(s.W, 1e-6f));
+        v[3] = MathK.Log(MathF.Max(hw, 1e-3f)) * l15;
+        float longest = 0f, droop = 0f, flat = 0f, joints = 0f;
+        foreach (var a in m.Pairs) { longest = MathF.Max(longest, a.Len); droop += a.Theta; flat += MathK.Log(a.Chord / MathF.Max(a.Thick, 1e-9f)); joints += a.Joints; }
+        int np = Math.Max(1, m.PairCount);
+        v[4] = longest / MathF.Max(m.Length, 1e-6f) / 0.15f;
+        v[5] = droop / np * (180f / MathF.PI) / 15f;
+        v[6] = flat / np * l15;
+        v[7] = m.Rigidity / 0.15f;
+        v[8] = MathK.Log(MathF.Max(0.01f, (m.ExchExt + m.ExchInt + m.ExchGas) / MathF.Max(m.TotalArea, 1e-9f)) / 0.01f) * l15;
+        v[9] = joints / np;
     }
 
     /// <summary>Body length in metres (2026-11-01): the side of a cube of its volume at the density of water, BODY_L_M x
@@ -445,6 +483,21 @@ public static class Body
     public static float LoadedMargin(float wings, float pm, float mass, float load, float rateT)
         => FlightMargin(wings * FlightMuscleGrown(mass, pm), mass) * rateT * MathK.Pow(mass / (mass + load), 1.5f);
 
+    /// <summary>Phase 4 (docs/BODYPLAN.md §13.3): the loaded margin of a body whose adult margin margin0 comes from its grown
+    /// morphology (Physics.FlightMargin, World.PMargin): its grown flight muscle's share (FlightMuscleGrown), its smaller size
+    /// ((pm / mass)^(EXP_FLY_REQ - EXP_FLY_AVAIL): power required falls faster with size than power available), its muscle
+    /// temperature and its load, as LoadedMargin.</summary>
+    public static float LoadedMarginOf(float margin0, float pm, float mass, float load, float rateT)
+        => margin0 * FlightMuscleGrown(mass, pm) * MathK.Pow(pm / MathF.Max(mass, 1e-6f), K.EXP_FLY_REQ - K.EXP_FLY_AVAIL) * rateT * MathK.Pow(mass / (mass + load), 1.5f);
+
+    /// <summary>CanTakeOff for a grown morphology (phase 4): wings is its flight muscle over a full-winged body's (World.PWings,
+    /// from the physics), margin0 its adult flight margin (World.PMargin).</summary>
+    public static bool CanTakeOffOf(float wings, float margin0, float pm, float mass, float load, float rateT)
+    {
+        float body = mass / (mass + load);
+        return wings * FlightMuscleGrown(mass, pm) * rateT * body >= K.FLY_WING_MIN && LoadedMarginOf(margin0, pm, mass, load, rateT) >= 1f;
+    }
+
     /// <summary>
     /// Top air speed with a load (2026-11-01): the speed of least power rises as the square root of the weight (vmp, the
     /// unloaded body's, given), and the fastest level flight is where the power curve meets the loaded margin
@@ -519,28 +572,22 @@ public static class Body
         var ga = w.Genome.Slot(a).Slice(G.BODY); var gb = w.Genome.Slot(b).Slice(G.BODY); float s = 0;
         const int N = G.APPEARANCE - G.BODY;
         for (int k = 0; k < N; k++) { float d = (ga[k] - gb[k]) * (1f / 127f); s += d * d; }
-        return MathF.Sqrt(s / N);
+        float body = s / N;
+        // phase 3 (docs/BODYPLAN.md §13.2): and the module body genome, by innovation number (Morph.Codec.Distance: matched
+        // modules by their parameters, unmatched ones as unrelated genes), on the same per-gene RMS scale, weighted equally
+        // with the other body genes. Genomes without a block (hand-made) compare by their body genes alone
+        var fa = w.Genome.Slot(a); var fb = w.Genome.Slot(b);
+        if (!Morph.Codec.Has(fa) || !Morph.Codec.Has(fb)) return MathF.Sqrt(body);
+        float dm = Morph.Codec.Distance(fa, fb);
+        return MathF.Sqrt(0.5f * body + 0.5f * dm * dm);
     }
 
     static readonly int[] Visible = { G.B_MASS, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_ARMOUR, G.B_STRIKE, G.B_LEGN, G.B_FINN };
 
     /// <summary>Does b look like a's kind? Ecological traits and appearance each pass their own RMS test,
     /// so new cosmetic genes cannot dilute an existing visible ecological difference.</summary>
-    public static bool LooksAlike(World w, int a, int b)
-    {
-        var ga = w.Genome.Slot(a); var gb = w.Genome.Slot(b); float s = 0;
-        foreach (int k in Visible) { float d = (ga[k] - gb[k]) * (1f / 127f); s += d * d; }
-        if (s >= K.KIN_LOOK * K.KIN_LOOK * Visible.Length) return false;
-        float shape = 0f, colour = 0f;
-        for (int k = G.APPEARANCE; k < G.B_MHC; k++)
-        {
-            float d = MathF.Abs(ga[k] - gb[k]) * (1f / 127f);
-            if (k == G.B_HUE || k == G.B_PATTERN_HUE) d = MathF.Min(d, 2f - d);
-            if (k < G.B_HUE) shape += d * d;
-            else colour += d * d;
-        }
-        return shape < K.KIN_LOOK * K.KIN_LOOK * 10 && colour < K.KIN_LOOK * K.KIN_LOOK * 6;
-    }
+    /// Phase 4: what it looks like is its grown body (Signature), so this compares the cached signatures.
+    public static bool LooksAlike(World w, int a, int b) => LooksAlikeCached(w, a, b);
 
     // ------------------------------------------------------------------ cached look (2026-10-31, performance only)
 
@@ -559,8 +606,17 @@ public static class Body
     {
         int o = i * NLOOK;
         var gn = w.Genome.Slot(i); var s = w.D.Look;
-        for (int k = 0; k < NVISIBLE; k++) s[o + k] = gn[Visible[k]];
+        // phase 4 (docs/BODYPLAN.md §13.5): the visible body is the grown one. Its organs as the physics' equivalents of the
+        // retired genes (Express), on those genes' byte scales: legs, fins (swimming), wings (flight muscle), armour, leg and
+        // fin pairs; its shape (the first 10 appearance bytes, once the shape genes) its visible morphology (MorphVisible),
+        // 19 bytes (0.15 of a gene's range) a visible unit. Mass, weapons and pigment stay genes
+        static sbyte Org(float v) => (sbyte)Math.Clamp((int)MathF.Round(v * 254f - 127f), -127, 127);
+        static sbyte PairsB(int n) => Org((n - 1) / 4f + 0.125f);
+        s[o + 0] = gn[G.B_MASS]; s[o + 1] = Org(w.PLegs[i]); s[o + 2] = Org(w.PFins[i]); s[o + 3] = Org(w.PWings[i]);
+        s[o + 4] = Org(w.PArmour[i] / K.ARMOUR_MAX); s[o + 5] = gn[G.B_STRIKE]; s[o + 6] = PairsB(w.PLegPairs[i]); s[o + 7] = PairsB(w.PFinPairs[i]);
         for (int k = 0; k < G.NAPPEARANCE; k++) s[o + NVISIBLE + k] = gn[G.APPEARANCE + k];
+        for (int k = 0; k < NMVIS && k < G.B_HUE - G.APPEARANCE; k++)
+            s[o + NVISIBLE + k] = (sbyte)Math.Clamp((int)MathF.Round(w.PMorphVis[i * NMVIS + k] * 19f), -127, 127);
         w.D.MhcDiv[i] = Pathogens.Diversity(w, i);
     }
 

@@ -14,7 +14,7 @@ namespace Neuroreef;
 
 public static class GeneBank
 {
-    public const ushort Version = 13;   // 13: respiration (lungs and depth-preference genes, the BREATH sense, two breath reflex inputs; 2026-11-01); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
+    public const ushort Version = 14;   // 14: the module body genome (docs/BODYPLAN.md §13.2: genomes end in a G.MORPHN-byte block; version 13 banks are read at their old length G.MORPH and translated from their labelled body genes, Morph.Codec.TranslateInto; 2026-11-03); 13: respiration (lungs and depth-preference genes, the BREATH sense, two breath reflex inputs; 2026-11-01); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: int32 genome length
 
     public sealed class CladeInfo
     {
@@ -28,6 +28,9 @@ public static class GeneBank
         public List<CladeInfo> Clades = new();
         public int Total { get { int n = 0; foreach (var l in Genomes) n += l.Count; return n; } }
     }
+
+    /// <summary>The bank version before the module body block (G.MORPH-byte genomes), which Load translates.</summary>
+    public const ushort MorphFrom = 13;
 
     public static void Save(World w, Stream s)
     {
@@ -72,10 +75,11 @@ public static class GeneBank
         var magic = br.ReadBytes(4);
         if (magic.Length != 4 || magic[0] != 'N' || magic[1] != 'R' || magic[2] != 'B' || magic[3] != 'K') throw new InvalidDataException("not a gene bank");
         ushort ver = br.ReadUInt16();
-        if (ver != Version)
+        bool old = ver == MorphFrom;   // the last version before the module block: translated (below)
+        if (ver != Version && !old)
             throw new InvalidDataException(ver < Version ? $"gene bank version {ver}: it was made with older rules (a different brain or sense layout); run a new prehistory" : $"gene bank version {ver} is from a newer program");
         ushort ns = br.ReadUInt16(); int len = br.ReadInt32();
-        if (len != G.LEN) throw new InvalidDataException($"gene bank genome length {len}, expected {G.LEN} (genome layout changed)");
+        if (len != (old ? G.MORPH : G.LEN)) throw new InvalidDataException($"gene bank genome length {len}, expected {(old ? G.MORPH : G.LEN)} (genome layout changed)");
         if (ns != K.CLADES) throw new InvalidDataException($"gene bank has {ns} clade slots, expected {K.CLADES}");
         br.ReadUInt32();
         var d = new Data { Step = br.ReadUInt64(), Seed = br.ReadUInt32(), Genomes = new List<sbyte[]>[ns] };
@@ -92,7 +96,8 @@ public static class GeneBank
             {
                 br.ReadSingle();
                 var g = new sbyte[G.LEN];
-                br.BaseStream.ReadExactly(System.Runtime.InteropServices.MemoryMarshal.AsBytes(g.AsSpan()));
+                br.BaseStream.ReadExactly(System.Runtime.InteropServices.MemoryMarshal.AsBytes(g.AsSpan(0, len)));
+                if (old) Morph.Codec.TranslateInto(g);   // its module body from its labelled body genes (Morph.Translate)
                 d.Genomes[sp].Add(g);
             }
             d.Clades.Add(c);

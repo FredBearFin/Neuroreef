@@ -208,29 +208,31 @@ public static class Respiration
     static Breath UptakeAt(World w, int i, int cell, bool airborne, float debt, out float z, out float share)
     {
         float m = MathF.Max(w.MassOf(i), 1e-4f), basal = OrganBase(w, i) * Aerobic(w, i, cell, airborne);
-        float L = w.PLungs[i], Gi = 1f - L;
-        // the skin is passive diffusion: it does not grow with what the body's tissues cost, only with its surface
-        float skin = K.SKIN * K.C_BASAL * MathK.Pow(m, K.EXP_BASAL) * w.Dt / basal / MathK.Cbrt(m) * (1f - w.PInsul[i]);
+        // phase 4 (docs/BODYPLAN.md §13.3): its organs' scopes are its grown body's exchange surfaces (Morph.Live,
+        // Physics.O2Supply: everted and folded-in surfaces, the gas space's lining, and its skin through its integument)
+        // over its basal: sAir all of them in air, sLung its air-breathing ones (what a head at the surface breathes), sW all
+        // of them in water. The skin is in them (skin 0 here); the medium's oxygen and the altitude's partial pressure scale them
+        float sAir = w.PScopeAir[i], sLung = w.PScopeLung[i], sW = w.PScopeWater[i];
+        const float skin = 0f;
         float aAir = AirO2(SurfaceM(w, cell), AirT(w, cell));
         var b = new Breath { AAir = aAir, AWater = 1f };
         z = 0f; share = 0f;
         if (airborne || (w.Cell[cell] & (byte)Realm.Water) == 0)
         {
-            b.Air = basal * aAir * (K.LUNG_SCOPE * L + K.GILL_SCOPE * K.GILL_AIR * Gi);
-            b.Skin = basal * aAir * skin;
+            b.Air = basal * aAir * sAir;
             return b;
         }
         float col = ColumnM(w, cell);
         float aW0 = WaterO2(w, cell, 0f);
-        float swim = 0.1f + 0.9f * Body.Propulsor(w.PFins[i], w.PWings[i]);   // fins and wings (2026-11-02)
+        float swim = 0.1f + 0.9f * w.PProp[i];   // its sustained swimming from the physics (Body.Express)
         if (swim >= K.DEEP_SWIM)
         {
             // a swimmer: its preferred depth, pulled up as it runs out of breath
             float need = K.FIELD_METAB * OrganBase(w, i) * Pace(w, i, cell, airborne);   // what it burns (its capacity is basal x scope)
             float zt = ForageDepth(w, i, cell, col) * (1f - MathF.Min(1f, debt / DebtMax(w, i)));
-            float us = basal * (aAir * K.LUNG_SCOPE * L + aW0 * (K.GILL_SCOPE * Gi + skin));
-            if (zt <= 0f) { b.Air = basal * aAir * K.LUNG_SCOPE * L; b.Water = basal * aW0 * K.GILL_SCOPE * Gi; b.Skin = basal * aW0 * skin; b.AWater = aW0; return b; }
-            float aZ = WaterO2(w, cell, zt), uz = basal * aZ * (K.GILL_SCOPE * Gi + skin);
+            float us = basal * (aAir * sLung + aW0 * sW);
+            if (zt <= 0f) { b.Air = basal * aAir * sLung; b.Water = basal * aW0 * sW; b.AWater = aW0; return b; }
+            float aZ = WaterO2(w, cell, zt), uz = basal * aZ * sW;
             float f = 1f, tDive = 0f;
             if (uz < need)
             {
@@ -240,7 +242,7 @@ public static class Respiration
                 tDive = store / MathF.Max(need - uz, 1e-9f) * StepSeconds * w.Dt;   // seconds its store lasts a dive
                 float zlim = K.DIVE_V * tDive * 0.5f;
                 // at most half its store spent travelling: a dive to the limit would leave no time down there
-                if (zt > 0.5f * zlim) { zt = 0.5f * zlim; aZ = WaterO2(w, cell, zt); uz = basal * aZ * (K.GILL_SCOPE * Gi + skin); }
+                if (zt > 0.5f * zlim) { zt = 0.5f * zlim; aZ = WaterO2(w, cell, zt); uz = basal * aZ * sW; }
                 f = us > uz ? Math.Clamp((us - need) / (us - uz), 0f, 1f) : 0f;
                 f *= zlim > 0f ? MathF.Max(0f, 1f - zt / zlim) : 0f;
             }
@@ -248,9 +250,8 @@ public static class Respiration
             // down and up: once a step if it can stay down (it breathes there), else as many breath-hold dives as fill its
             // share of the step at depth, each lasting what its store lasts
             if (z > 0f) b.DiveM = 2f * z * (tDive > 0f ? MathF.Max(1f, share * StepSeconds * w.Dt / tDive) : 1f);
-            b.Air = (1f - share) * basal * aAir * K.LUNG_SCOPE * L;
-            b.Water = basal * K.GILL_SCOPE * Gi * ((1f - share) * aW0 + share * aZ);
-            b.Skin = basal * skin * ((1f - share) * aW0 + share * aZ);
+            b.Air = (1f - share) * basal * aAir * sLung;
+            b.Water = basal * sW * ((1f - share) * aW0 + share * aZ);
             b.AWater = (1f - share) * aW0 + share * aZ;
             return b;
         }
@@ -259,15 +260,15 @@ public static class Respiration
         float stand = StandM(w, i);
         float aB = WaterO2(w, cell, col);
         float headUp = col <= stand ? 1f : 0f;
-        float ub = basal * (headUp * aAir * K.LUNG_SCOPE * L + aB * (K.GILL_SCOPE * Gi + skin));
-        float up = MathF.Min(1f, (0.9f * Body.Propulsor(w.PFins[i], w.PWings[i]) + K.LEG_PADDLE * w.PLegs[i]) / K.DEEP_SWIM);   // fins and legs paddle; a limbless body cannot
-        float usf = basal * (up * aAir * K.LUNG_SCOPE * L + aW0 * (K.GILL_SCOPE * Gi + skin));
+        float ub = basal * (headUp * aAir * sLung + aB * sW);
+        float up = MathF.Min(1f, (0.9f * w.PProp[i] + K.LEG_PADDLE * w.PLegs[i]) / K.DEEP_SWIM);   // its swimming and its legs paddle; a limbless body cannot
+        float usf = basal * (up * aAir * sLung + aW0 * sW);
         if (ub >= usf)
         {
             z = col; share = 1f;
-            b.Air = basal * headUp * aAir * K.LUNG_SCOPE * L; b.Water = basal * aB * K.GILL_SCOPE * Gi; b.Skin = basal * aB * skin; b.AWater = aB;
+            b.Air = basal * headUp * aAir * sLung; b.Water = basal * aB * sW; b.AWater = aB;
         }
-        else { b.Air = basal * up * aAir * K.LUNG_SCOPE * L; b.Water = basal * aW0 * K.GILL_SCOPE * Gi; b.Skin = basal * aW0 * skin; b.AWater = aW0; }
+        else { b.Air = basal * up * aAir * sLung; b.Water = basal * aW0 * sW; b.AWater = aW0; }
         return b;
     }
 
@@ -310,7 +311,9 @@ public static class Respiration
     public static float Stamina(World w, int i) => 1f - 0.9f * Breathless(w, i);
 
     /// <summary>How much faster than its skin alone body i dries out of water: its gills' wet surface evaporates (GILL_EVAP).</summary>
-    public static float Drying(World w, int i) => 1f + K.GILL_EVAP * (1f - w.PLungs[i]);
+    /// Phase 4 (docs/BODYPLAN.md §13.3): its everted exchange surface's evaporation is in its evaporation factor from the
+    /// grown body (World.PEvapK, in PThirstK), so this is 1.
+    public static float Drying(World w, int i) => 1f;
 
     /// <summary>Can body i live here at rest: does it draw what a day of living needs (FIELD_METAB x basal), with
     /// breathing's cost, at the depth it would hold? (Founding: Life.RangeCapacity, Simulation.ProbeCapacity.)</summary>
@@ -329,7 +332,8 @@ public static class Respiration
     /// of a body on full legs (Garcia &amp; da Silva 2006), its belly's height on none. Water shallower than this leaves its
     /// head and back in the air and its feet on the bottom: it stands and wades. Deeper, its trunk is under water, and a
     /// body about as dense as water (Schmidt-Nielsen 1984) floats off its feet: it swims or paddles (2026-11-02).</summary>
-    public static float StandM(World w, int i) => K.STAND_H * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-4f)) * (0.3f + 0.7f * w.PLegs[i]);
+    /// Phase 4: its grown body's standing height (limb clearance + trunk height; World.PStand), at its present size.
+    public static float StandM(World w, int i) => w.PStand[i] * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-4f) / w.PM[i]);
 
     /// <summary>Its leg length (hip height, m): WADE_LEG of its standing height. The depth against which wading's cost is
     /// measured (World.WadeFactor).</summary>
@@ -367,7 +371,7 @@ public static class Respiration
     /// size) x how well it is propelled there (0.1 + 0.9 x Body.Propulsor, as its swimming speed). Filter feeders and
     /// divers cruise near the speed of least cost of transport, ~0.5-1.5 lengths a second (Videler 1993; Sato et al. 2007).</summary>
     public static float CruiseMps(World w, int i)
-        => K.CRUISE_BL * Body.LengthM(w, i) * (0.1f + 0.9f * Body.Propulsor(w.PFins[i], w.PWings[i]));
+        => w.PCruise[i] * MathK.Cbrt(MathF.Max(w.MassOf(i), 1e-6f) / w.PM[i]);   // phase 4: the grown body's cruise of least cost a metre (Morph.Live), scaled with its length
 
     /// <summary>
     /// The seconds of a step body i spends feeding in water, and the metres it cruises doing it (2026-11-02): an eating
@@ -396,8 +400,10 @@ public static class Respiration
     /// </summary>
     public static float SwimCost(World w, int i, float mass)
     {
-        float eta = K.ETA_PADDLE + (K.ETA_LIFT - K.ETA_PADDLE) * Body.Propulsor(w.PFins[i], w.PWings[i]);
-        return K.C_MOVE * (K.COT_SWIM_J / K.COT_J) * (K.ETA_LIFT / eta) * MathK.Pow(mass, K.EXP_MOVE);
+        // phase 4 (docs/BODYPLAN.md §13.3): the grown body's net cost a metre at its cruise (Physics.SwimPower: its drag by
+        // shape and Reynolds number, holding its depth by its buoyancy, its propulsors' efficiencies), at adult mass, and
+        // for a smaller body x (mass / adult)^EXP_MOVE
+        return w.PCotWater[i] * MathK.Pow(MathF.Max(mass, 1e-6f) / w.PM[i], K.EXP_MOVE);
     }
 
     /// <summary>

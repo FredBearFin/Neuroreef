@@ -86,10 +86,10 @@ public static class Resolve
                     bool wet = (w.Cell[c0] & (byte)Realm.Water) != 0;
                     muscleT = Heat.Rate(Heat.Core(Heat.Operative(w, c0, w.PInsul[i], wet), w.PEndo[i]));
                 }
-                if (!Body.CanTakeOff(w.PWings[i], w.PM[i], mass, load, muscleT)) airborne = false;
+                if (!Body.CanTakeOffOf(w.PWings[i], w.PMargin[i], w.PM[i], mass, load, muscleT)) airborne = false;
             }
             // one in the air stays up only while its power holds level flight with its load (Body.LoadedMargin)
-            else if (airborne && Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f) < 1f) airborne = false;
+            else if (airborne && Body.LoadedMarginOf(w.PMargin[i], w.PM[i], mass, load, 1f) < 1f) airborne = false;
             // over water it cannot stand in, one that cannot fly is in the water (2026-11-01: a newborn placed there counted
             // as airborne and escaped the fledging rule): it swims or paddles at its speed there, breathes as its organs let
             // it (Respiration) and is immersed, until it reaches ground it can stand on or can take off
@@ -97,8 +97,8 @@ public static class Resolve
             // in the air its load (and a juvenile's smaller flight muscle) sets how fast it can fly (Body.LoadedTopAirSpeed)
             if (airborne)
             {
-                float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i]));
-                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMargin(w.PWings[i], w.PM[i], mass, load, 1f), w.Dt));
+                float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(w.PMargin[i]);
+                spd = MathF.Min(spd, Body.LoadedTopAirSpeed(vmp, mass, load, Body.LoadedMarginOf(w.PMargin[i], w.PM[i], mass, load, 1f), w.Dt));
             }
             if (!airborne) spd = MathF.Min(spd, vGround);
             w.Flags[i] = (byte)((w.Flags[i] & ~(Flag.Aloft | Flag.Landed)) | (airborne ? Flag.Aloft : Flag.Landed));
@@ -365,6 +365,9 @@ public static class Resolve
         if (w.StageOf[i] == St.Juvenile && w.Grown[i] < 1f)
         {
             float tissue = w.PM[i] * (1f - w.PBirth[i]) * K.TISSUE_E / K.GROWTH_EFF;   // energy to build all of it (TissueCost)
+            // a rigid outer skeleton must be moulted to grow: the cuticle it sheds and rebuilds (Physics' MOULT_COST per kg of
+            // rigid integument, Morph.Live.MoultW) is paid while it grows (docs/BODYPLAN.md §13.3)
+            w.Energy[i] -= w.PMoultW[i] * mf;
             grow = Math.Clamp(MathF.Min(tissue / w.PMature[i] * w.Energy[i] / emax, w.Energy[i] - K.GROW_RESERVE * emax), 0f, tissue / w.PMature[i]);
             float m0 = w.MassOf(i);
             w.Grown[i] = MathF.Min(1f, w.Grown[i] + grow / tissue);
@@ -375,11 +378,11 @@ public static class Resolve
         float thermo = 0f, evap = 0f, shortCold = 0f, shortHot = 0f;
         if (Climate.On)
         {
-            Heat.Balance(mass, w.PInsul[i], w.PAppend[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core, w.Dt);
+            Heat.Balance(mass, w.PInsul[i], w.PAppSurf[i], top, immersed, basal + moveCost, fullBasal, out thermo, out evap, out shortCold, out shortHot, core, w.Dt, w.PSurfK[i]);
             // a body kept below T_BODY that makes more heat than it loses just runs a little warmer: it need not shed it
             if (core < K.T_BODY) { evap = 0f; shortHot = 0f; }
             // a core below freezing is a cold shortfall it cannot make up (2026-11-01: before, a cold-blooded body took any frost)
-            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppend[i], immersed, core, w.Dt);
+            shortCold += Heat.Freeze(mass, w.PInsul[i], w.PAppSurf[i], immersed, core, w.Dt, w.PSurfK[i]);
             // shivering and non-shivering heat are aerobic: a body makes no more heat than its oxygen uptake leaves room for
             // above its other needs; the rest is a cold shortfall, not an oxygen debt (2026-11-02: an endotherm at extreme
             // cold "suffocated" when its heat demand outran its lungs; the summit metabolism of cold-exposed mammals is set
@@ -490,7 +493,7 @@ public static class Resolve
             // (total / body)^(3/2) and the speed of least power as its square root, so the cost per distance rises in
             // proportion to the weight (induced power ~W^2 / V, V_mp ~W^(1/2): Pennycuick 1975, 2008) (2026-11-01)
             float wl = (mass + Body.FlightLoad(w, i)) / mass, wlRoot = MathK.Pow(wl, 0.5f), pLoad = wl * wlRoot;
-            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(Body.FlightMargin(w.PWings[i], w.PM[i])) * wlRoot;
+            float vmp = w.PVAir[i] * MathF.Max(0.3f, mf) / Body.TopFlightSpeed(w.PMargin[i]) * wlRoot;
             float pMin = Body.FlightPowerMin(mass) * pLoad * w.Dt;   // per step (World.Dt)
             float p = pMin * Body.PowerCurve(spd / MathF.Max(vmp, 1e-4f));
             float duty = canLand ? MathF.Min(1f, spd / (Body.FlightFullStep(mass) * w.Dt * wlRoot)) : 1f;
@@ -500,7 +503,10 @@ public static class Resolve
             return (MathF.Max(0f, p - K.C_BASAL * MathK.Pow(mass, K.EXP_BASAL) * w.Dt) * duty + takeoff) * coat;
         }
         if (spd <= 0f) return 0f;
-        float cot = K.C_MOVE * MathK.Pow(mass, K.EXP_MOVE) * spd * coat;   // C_MOVE: per unit distance (Taylor et al. 1982, 2026-11-01)
+        // phase 4 (docs/BODYPLAN.md §13.3): the grown body's net cost a unit of distance on land (Physics.WalkMetabolic: support
+        // per stride, limb swing, crawling and slip; Kram & Taylor 1990), at its adult mass, x (mass / adult)^EXP_MOVE, from its
+        // cheapest speed's to its top speed's as it runs faster (below)
+        float cot = w.PCotLand[i] * MathK.Pow(MathF.Max(mass, 1e-6f) / w.PM[i], K.EXP_MOVE) * spd * coat;
         // in water deeper than it stands it floats and swims (2026-11-02: before, any body in water under SHALLOW, 2 m,
         // walked at land's cost, whatever its legs); shallower it wades, at WadeFactor of land's cost a metre
         bool water = (w.Cell[cell] & (byte)Realm.Water) != 0;
@@ -515,7 +521,7 @@ public static class Resolve
             if (w.PVWater[i] >= w.PVLand[i] / wade) return swim;   // it swims faster there than it wades: it swims
         }
         float rel = MathF.Min(1f, spd / MathF.Max(w.GroundVmax(i, cell), 1e-4f));
-        return cot * wade * (1f - K.LEG_SWING + K.LEG_SWING * w.PLegs[i] * w.PLegPairs[i] / K.LEG_PAIRS_REF * rel);
+        return cot * wade * (1f + (w.PCotLandTop[i] / MathF.Max(w.PCotLand[i], 1e-12f) - 1f) * rel);
     }
 
     /// <summary>Squared distance from (tx, ty) to the way organism i went this step, from (x0, y0) to where it is now
@@ -680,7 +686,8 @@ public static class Resolve
         bool egg = w.StageOf[v] == St.Egg;
         // the victim's own body resists (DEF_BASE per unit mass) and armour adds to it; an egg's shell is its
         // inherited armour; a juvenile's tissues are softer (DESIGN §9.4, Revision H)
-        float defence = w.ApparentMass(v) * (K.DEF_BASE + w.PArmour[v]) * (w.StageOf[v] == St.Juvenile ? K.JUV_DEFENCE : 1f);
+        // phase 4: its armour is its integument's crushing strength (Body.Express); in a moult it has none (World.Moulting)
+        float defence = w.ApparentMass(v) * (K.DEF_BASE + (w.Moulting(v) ? 0f : w.PArmour[v])) * (w.StageOf[v] == St.Juvenile ? K.JUV_DEFENCE : 1f);
         float p = K.P0_STRIKE * power / (power + defence + 1e-6f)
                   * (egg ? 1f : (1f + 0.8f * w.Fatigue[v]) * (1f - 0.5f * w.IScanning[v]) / (1f + K.C_CONF * w.IKinDensity[v]));
         float rew = 0;

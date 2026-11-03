@@ -41,7 +41,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 28;   // 28: the ocean (Nature.Ocean and Nature.Islands after the world's step; World.Ocean, World.DeepN; older saves are worlds with land; 2026-11-02); 27: the step of the world a prehistory founds after its own (Nature.WorldStepH; older saves: the save's own step; 2026-11-02); 26: the length of a step after the body sizes (World.StepH, a world setting; older saves ran at K.STEP_H = 2.92 h; 2026-11-02); 25: nutrient held by dead wood, detritus, carrion, dung and peat per cell and by each gut (World.WoodN.., GutN; older saves start them from the pools' mass, Nutrients.InitPools; 2026-11-02); 24: live wood per cell (World.LiveWood; older saves start it from their woody cover, Plants.InitWood, and keep their land; 2026-11-01); 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 29;   // 29: the module body genome (docs/BODYPLAN.md §13.2: a G.MORPHN-byte block at G.MORPH ends every genome, G.LEN grows by it; the body is grown from it; older saves' genomes and archives are read at their old length and translated from their labelled body genes, Morph.Codec.TranslateInto, and every animal is expressed again; 2026-11-03); 28: the ocean (Nature.Ocean and Nature.Islands after the world's step; World.Ocean, World.DeepN; older saves are worlds with land; 2026-11-02); 27: the step of the world a prehistory founds after its own (Nature.WorldStepH; older saves: the save's own step; 2026-11-02); 26: the length of a step after the body sizes (World.StepH, a world setting; older saves ran at K.STEP_H = 2.92 h; 2026-11-02); 25: nutrient held by dead wood, detritus, carrion, dung and peat per cell and by each gut (World.WoodN.., GutN; older saves start them from the pools' mass, Nutrients.InitPools; 2026-11-02); 24: live wood per cell (World.LiveWood; older saves start it from their woody cover, Plants.InitWood, and keep their land; 2026-11-01); 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     /// <summary>The oldest save format this program can read. A save is continued only if its genome length (G.LEN) is this
     /// program's, which it has not been for saves before 22 (GeneBank.Version 13 changed the genome layout): those are refused
     /// by that check.</summary>
@@ -118,7 +118,7 @@ public static class Checkpoint
     public sealed class Migration
     {
         public int From, To = Version;
-        public bool LandRebuilt, Reexpressed;
+        public bool LandRebuilt, Reexpressed, Translated;   // Translated: genomes got their module body from their labelled genes (MorphVersion)
         public uint TerrainSeed; public ulong Step; public int Animals, Clades, Moved;
         public readonly SortedSet<string> Kept = new(StringComparer.Ordinal), Missing = new(StringComparer.Ordinal),
             Changed = new(StringComparer.Ordinal), Dropped = new(StringComparer.Ordinal);
@@ -166,6 +166,9 @@ public static class Checkpoint
         // the ocean (format 28 on; before, every world had land)
         if (version >= OceanVersion) { Nature.Ocean = br.ReadBoolean(); Nature.Islands = br.ReadSingle(); } else { Nature.Ocean = false; Nature.Islands = 0f; }
     }
+    /// <summary>The first version whose genomes end in the module body block (G.MORPH..G.LEN); older genomes are G.MORPH long.</summary>
+    public const ushort MorphVersion = 29;
+    static bool LenFits(int len, int version) => len == G.LEN || version < MorphVersion && len == G.MORPH;
     const ushort OceanVersion = 28;   // the first version with the ocean settings after the world's step
     const ushort WorldStepVersion = 27;   // the first version with the world's step after it
     const ushort StepVersion = 26;   // the first version with the length of a step after the body sizes
@@ -205,7 +208,7 @@ public static class Checkpoint
         using var br = new BinaryReader(fs);
         ushort v = ReadVersion(br, "NRCK", "prehistory checkpoint");
         int len = br.ReadInt32();
-        if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
+        if (!LenFits(len, v)) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
         var h = (br.ReadInt32(), br.ReadInt32(), br.ReadUInt32());
         Nature.Read(br); ReadBodySize(br, v);   // the map, nature and body sizes it was made with: applied, so the prehistory is rebuilt to fit
         return h;
@@ -226,7 +229,7 @@ public static class Checkpoint
         if (side != Map.W) throw new InvalidDataException($"checkpoint map is {side} units, this run's is {Map.W}");
         Nature.Read(br); ReadBodySize(br, v);
         foreach (var s in pre.B) s.W.SetStepH(Nature.StepH);
-        if (len != G.LEN) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
+        if (!LenFits(len, v)) throw new InvalidDataException($"checkpoint genome length {len}, this program uses {G.LEN} (the rules changed)");
         if (n != pre.B.Length || seed != pre.B[0].W.Seed)
             throw new InvalidDataException($"checkpoint has {n} branches, seed {seed}; start with the same --branches and --seed");
         var ms = new Migration[n];
@@ -280,7 +283,7 @@ public static class Checkpoint
         using var br = new BinaryReader(fs);
         version = ReadVersion(br, "NRWK", "saved world");
         int len = br.ReadInt32();
-        if (len != G.LEN) throw new InvalidDataException($"saved world genome length {len}, this program uses {G.LEN} (the rules changed)");
+        if (!LenFits(len, version)) throw new InvalidDataException($"saved world genome length {len}, this program uses {G.LEN} (the rules changed)");
         var h = (br.ReadInt32(), br.ReadUInt32(), br.ReadUInt32());
         Nature.Read(br); ReadBodySize(br, version);   // the map, nature and body sizes it was made with: applied, so the world is rebuilt to fit
         return h;
@@ -338,6 +341,16 @@ public static class Checkpoint
         // traits the save did not hold: every animal's body expressed again from its genome, as at its birth
         bool phenotype = m.Missing.Concat(m.Changed).Any(p => p.Length > 1 && p[0] == 'P' && char.IsUpper(p[1]) && !LandFields.Contains(p));
         bool pathogens = Lost("PgLoad");
+        // a save before the module body (MorphVersion): every genome in use, and the archive's, gets its module genome from
+        // its labelled body genes (Morph.Translate), so its young inherit and mutate a module body from now on
+        if (m.From < MorphVersion)
+        {
+            phenotype = true;
+            for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Morph.Codec.TranslateInto(w.GenomeOf(i));
+            for (int sp = 0; sp < w.ArchiveCount.Length; sp++)
+                for (int k = 0; k < w.ArchiveCount[sp]; k++) Morph.Codec.TranslateInto(new Span<sbyte>(w.Archive, (sp * K.ARCHIVE + k) * G.LEN, G.LEN));
+            m.Translated = true;
+        }
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] == St.Dead) continue;
@@ -673,6 +686,19 @@ public static class Checkpoint
         int len = br.ReadInt32();
         if (len < 0) return true;   // written as null: nothing to take
         long bytes = c.Version >= LongBytesVersion ? br.ReadInt64() : br.ReadInt32();
+        // genomes of a save before the module block (the archive: genomes of G.MORPH bytes, now G.LEN): each into the head of its new place
+        if (a is sbyte[] sa && c.Version < MorphVersion && sa.Length % G.LEN == 0 && len == sa.Length / G.LEN * G.MORPH && bytes == len)
+        {
+            if (!take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return true; }
+            Array.Clear(sa);
+            var one = new byte[G.MORPH];
+            for (int k = 0; k < sa.Length / G.LEN; k++)
+            {
+                br.BaseStream.ReadExactly(one);
+                Buffer.BlockCopy(one, 0, sa, k * G.LEN, G.MORPH);
+            }
+            return true;
+        }
         bool ok = a != null && a.Length == len && bytes == ByteLength(a)
             && (!c.Tagged || Type.GetTypeCode(a.GetType().GetElementType()!) == code);
         if (!ok || !take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return ok; }
@@ -700,6 +726,21 @@ public static class Checkpoint
             ISlotArray s when s.Slots == slots && s.Stride == stride && CodeOf(s) == code => s,
             _ => null,
         };
+        // a genome of a save before the module block (MorphVersion): each slot's G.MORPH bytes into the first G.MORPH of its
+        // G.LEN, the block left empty (AfterMigration translates it from the labelled body genes)
+        if (a == null && c.Version < MorphVersion && target is ISlotArray g && g.Stride == G.LEN && stride == G.MORPH && g.Slots == slots && CodeOf(g) == TypeCode.SByte)
+        {
+            if (!take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return true; }
+            foreach (var (s0, n0) in runs)
+                for (int q = s0; q < s0 + n0; q++)
+                {
+                    var span = g.Bytes(q, 1);
+                    span.Clear();
+                    var head = span[..G.MORPH];
+                    while (head.Length > 0) { int r = br.Read(head); if (r <= 0) throw new EndOfStreamException(); head = head[r..]; }
+                }
+            return true;
+        }
         if (a == null || !take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return a != null; }
         foreach (var (s, n) in Pieces(a, runs))
         {

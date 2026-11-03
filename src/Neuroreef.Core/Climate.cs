@@ -310,13 +310,15 @@ public static class Heat
 
     /// <summary>Dry conductance of a body (energy per step per K): least (cold, vasoconstricted) and most (warm, vasodilated).
     /// dt: the step in reference steps (World.Dt; heat lost a step is x dt).</summary>
-    public static void Conductance(float mass, float ins, float app, bool immersed, out float cmin, out float cmax, float dt = 1f)
+    /// <param name="surf">its trunk's heat-losing surface over the plain body's of its mass (Morph.Live.SurfK; phase 4: from
+    /// the grown body's segments through their integument); app is its appendages' on the same scale (Allen's rule)</param>
+    public static void Conductance(float mass, float ins, float app, bool immersed, out float cmin, out float cmax, float dt = 1f, float surf = 1f)
     {
         float c = MathK.Cbrt(mass), ac = c * c;
         float ie = ins * MathF.Min(1f, c);                 // a small body cannot carry a thick coat
         float kw = 1f;
         if (immersed) { ie *= K.FUR_WET; kw = K.K_WATER; }
-        float core = ac / (1f + K.R_INS * ie);
+        float core = surf * ac / (1f + K.R_INS * ie);
         float g = kw * K.K_COND * K.C_BASAL * dt;
         cmin = g * (core + K.APP_LEAK * app * ac);
         cmax = g * (K.VASO * core + app * ac);
@@ -328,9 +330,9 @@ public static class Heat
     /// (none under water), and the shortfalls beyond the caps (cold, hot).
     /// </summary>
     public static void Balance(float mass, float ins, float app, float top, bool immersed, float h, float basal,
-        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY, float dt = 1f)
+        out float thermo, out float evap, out float cold, out float hot, float core = K.T_BODY, float dt = 1f, float surf = 1f)
     {
-        Conductance(mass, ins, app, immersed, out float cmin, out float cmax, dt);
+        Conductance(mass, ins, app, immersed, out float cmin, out float cmax, dt, surf);
         float dT = core - top;
         thermo = 0; evap = 0; cold = 0; hot = 0;
         float lossMin = cmin * dT;
@@ -377,10 +379,10 @@ public static class Heat
     /// core is below T_FREEZE. A cold-blooded body cannot make it, so it is all shortfall (strain, death by cold): on land
     /// in a frost an ectotherm freezes, in water (never below T_WATER_MIN) it does not.
     /// </summary>
-    public static float Freeze(float mass, float ins, float app, bool immersed, float core, float dt = 1f)
+    public static float Freeze(float mass, float ins, float app, bool immersed, float core, float dt = 1f, float surf = 1f)
     {
         if (core >= K.T_FREEZE) return 0f;
-        Conductance(mass, ins, app, immersed, out float cmin, out _, dt);
+        Conductance(mass, ins, app, immersed, out float cmin, out _, dt, surf);
         return cmin * (K.T_FREEZE - core);
     }
 

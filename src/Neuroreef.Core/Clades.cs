@@ -182,6 +182,76 @@ public static class Clades
         }
     }
 
+    /// <summary>
+    /// The module body of a random ancestor (docs/BODYPLAN.md §13.4, phase 4): grown from the generic seed
+    /// (MorphGenome.Blob, one segment) with its parameters drawn anywhere in their ranges, then FOUND_ROUNDS_MAX random
+    /// rounds at most of the module operators: a tandem duplication of a segment gene (then diverged), a de novo appendage
+    /// (a bud with every parameter random, so limbs of any length, shape, stiffness, angle and muscle), a duplicated
+    /// appendage (then diverged), or a deleted one; and each segment gene's serial repeat is random. Nothing says leg, fin or
+    /// wing: whether the body can live where it starts is the founding's test (Life.RangeCapacity: it must breathe there,
+    /// move there and be fed), as for every other ancestor gene. In a world of open sea (sea) the same draw is made; the sea's
+    /// realm is the founding's (the ancestor must live in water), as for its diet (SeaFoods).
+    /// </summary>
+    public const int FOUND_ROUNDS_MAX = 10;
+    public static void AncestorMorph(Span<sbyte> genome, uint seed, int ancestor, bool sea = false)
+    {
+        var r = new Rng.Seq(Rng.Hash(seed, (uint)ancestor, 0x5EEDu, Rs.Founder + 7100u));
+        var inn = new Morph.Innovations(Morph.Codec.LIVE_INNOV_LO | (Rng.Hash(seed, (uint)ancestor, 0x1A0Bu, Rs.Founder + 7101u) & 0xFFFFFF00u));
+        var g = Morph.MorphGenome.Blob();
+        var s0 = g.Segs[0];
+        for (int k = 0; k < Morph.SP.N; k++) s0.P[k] = r.Next();
+        int rounds = (int)(r.Next() * (FOUND_ROUNDS_MAX + 1));
+        for (int t = 0; t < rounds; t++)
+        {
+            float u = r.Next();
+            int i = Math.Min(g.Segs.Count - 1, (int)(r.Next() * g.Segs.Count));
+            if (u < 0.35f)
+            {
+                if (Morph.Mutate.DuplicateSegment(g, i, inn)) DivergeAll(g.Segs[i + 1].P, ref r, 0.15f);
+            }
+            else if (u < 0.75f)
+            {
+                if (Morph.Mutate.InsertAppendage(g, i, ref r, inn))
+                {
+                    var a = g.Segs[i].Apps[^1];
+                    for (int k = 0; k < Morph.AP.N; k++) a.P[k] = r.Next();
+                }
+            }
+            else if (u < 0.9f)
+            {
+                var s = g.Segs[i];
+                if (s.Apps.Count > 0)
+                {
+                    int j = Math.Min(s.Apps.Count - 1, (int)(r.Next() * s.Apps.Count));
+                    int target = Math.Clamp(i + (r.Next() < 0.5f ? 0 : r.Next() < 0.5f ? -1 : 1), 0, g.Segs.Count - 1);
+                    if (Morph.Mutate.DuplicateAppendage(g, i, j, target, inn)) DivergeAll(g.Segs[target].Apps[^1].P, ref r, 0.15f);
+                }
+            }
+            else
+            {
+                var s = g.Segs[i];
+                if (s.Apps.Count > 0) Morph.Mutate.DeleteAppendage(g, i, Math.Min(s.Apps.Count - 1, (int)(r.Next() * s.Apps.Count)));
+            }
+        }
+        Morph.Codec.Encode(g, Morph.Codec.Block(genome));
+    }
+
+    static void DivergeAll(float[] p, ref Rng.Seq r, float sigma)
+    {
+        for (int k = 0; k < p.Length; k++) p[k] = Math.Clamp(p[k] + sigma * (r.Next() + r.Next() + r.Next() - 1.5f) * 2f, 0f, 1f);
+    }
+
+    /// <summary>Standing variation of the module body: every parameter of every module varies by FOUNDER_BODY_SD on the
+    /// body genes' byte scale (/254 of its [0,1] range), as VaryBody varies the other body genes. Structure is copied.</summary>
+    public static void VaryMorph(Span<sbyte> genome, uint seed, uint key)
+    {
+        var g = Morph.Codec.Decode(Morph.Codec.Block((ReadOnlySpan<sbyte>)genome));
+        if (g == null) return;
+        var r = new Rng.Seq(Rng.Hash(seed, 0, key, Rs.Founder + 9700u));
+        Morph.Mutate.Point(g, ref r, 1f, K.FOUNDER_BODY_SD / 254f);
+        Morph.Codec.Encode(g, Morph.Codec.Block(genome));
+    }
+
     /// <summary>The foods a world of open sea has (AncestorBody's sea diets): plankton, attached algae, detritus (carcasses
     /// and dung fall into it in water: Resolve.Die), prey and its blood. Carrion and dung lie only on land.</summary>
     static readonly int[] SeaFoods = { (int)Pool.Algae, (int)Pool.Phyto, (int)Pool.Detritus, (int)Pool.Meat, (int)Pool.Blood };
@@ -222,23 +292,20 @@ public static class Clades
     // The traits you can see on a body, each in "visible units": 1 unit is a difference you notice at a glance
     // (Revision L, the user: "subspeciation that is very clearly visual"): half again the body mass, 0.15 of an
     // organ's range (legs, fins, wings, armour, weapons, eyes), or one more pair of legs, fins or eyes.
-    static readonly int[] VisGene = { G.B_MASS, G.B_SIGHT, G.B_ARMOUR, G.B_STRIKE, G.B_LEGS, G.B_FINS, G.B_WINGS, G.B_LEGN, G.B_FINN, G.B_EYEN,
-        G.B_LENGTH, G.B_WIDTH, G.B_HEIGHT, G.B_HEAD, G.B_NECK, G.B_TAIL, G.B_LIMB_POS, G.B_LIMB_SHAPE, G.B_FIN_SHAPE, G.B_WING_SHAPE };
-    static readonly string[] VisName = { "size", "eyes", "armour", "weapons", "legs", "fins", "wings", "leg pairs", "fin pairs", "eye pairs",
-        "body length", "body width", "body height", "head size", "neck length", "tail length", "limb position", "limb shape", "fin shape", "wing shape" };
-    const int V = 20;
+    // Phase 4 (docs/BODYPLAN.md §13.5): the body's visible traits are its grown morphology's (Body.MorphVisible: segments,
+    // pairs, fineness, depth, limb length, angle and flatness, armour, exchange surface, joints), not the retired organ and
+    // shape genes; size, eyes, weapons and eye pairs stay genes
+    static readonly int[] VisGene = { G.B_MASS, G.B_SIGHT, G.B_STRIKE, G.B_EYEN };
+    static readonly string[] VisName = { "size", "eyes", "weapons", "eye pairs", "segments", "appendage pairs", "fineness", "body depth", "limb length", "limb angle", "limb flatness", "armour", "gills or lungs", "joints" };
+    const int V = 4 + Body.NMVIS;
     static float MassUnit => MathK.Log(1.5f) / MathK.Log(BodySize.Max / BodySize.Min) * 254f;   // on the world's mass-gene scale (BodySize)
-    static bool PairTrait(int k) => k >= 7 && k <= 9;
-    static float VisUnit(int k) => k == 0 ? MassUnit : PairTrait(k) ? 254f / 4f : 0.15f * 254f;
+    static bool PairTrait(int k) => k == 3 || k == 5;
+    static float VisUnit(int k) => k == 0 ? MassUnit : k == 3 ? 254f / 4f : 0.15f * 254f;
     // size is the body's actual size (its class floor included), not the mass gene alone
     static float Vis(World w, int i, int k)
     {
+        if (k >= 4) return w.PMorphVis[i * Body.NMVIS + k - 4];   // already in visible units (Body.MorphVisible)
         var g = w.Genome.Slot(i);
-        if (k >= 10 && k <= 12)
-        {
-            Body.Dimensions(g[G.B_LENGTH], g[G.B_WIDTH], g[G.B_HEIGHT], out float length, out float width, out float height);
-            return MathK.Log(k == 10 ? length : k == 11 ? width : height) / MathK.Log(1.5f);
-        }
         return k == 0 ? MathK.Log(w.PM[i] / BodySize.Min) / MathK.Log(1.5f) : g[VisGene[k]] / VisUnit(k);
     }
 
