@@ -1009,6 +1009,33 @@ exists to replace. **Phase 4 can start**, with two conditions:
 
 Land speed (0.64, relative 0.74) is not a gate in §10.5, and its gap is the same over-committed bodies.
 
+## 13. Phases 3-5: the module body goes live (2026-11-03)
+
+### 13.1 The head-exit fix (the salp barrel of §12.6)
+
+`Physics.HeadOpenFraction` now counts only the everted epithelium on the flow path: within `PHARYNX_D` = 1 section
+diameter (√(W H) of the head) of the mouth. Water that enters the mouth leaves through the pharynx's walls within about
+one diameter; farther along a closed tube it has to travel the tube first, and the resistance of that path grows with its
+length (Hagen-Poiseuille; Vogel 1994). A fish's gill slits lie within about a head depth behind its mouth (Liem 1980).
+Test: `OnlyTheExitNearTheMouthFiltersSoALongPorousBarrelClearsNoMoreThanItsHead` (a barrel of L/D 3.9 now has an open
+fraction of 0.34, against 0.45 for a head of L/D 1 with the same pores).
+
+Open-water demo, 6 seeds x 1,000 generations, after the fix:
+
+| seed | fitness | mass | segments | pairs | fineness | exchange (everted) | mode |
+|---|---|---|---|---|---|---|---|
+| 1 | 2.97 | 219 g | 6 | 0 | 5.3 | 0.0100 m², all on the head segment | undulating swim 0.28 m/s |
+| 2 | 2.87 | 138 g | 8 | 0 | 6.3 | 0.0056 | 0.32 m/s |
+| 3 | 2.94 | 211 g | 8 | 0 | 5.0 | 0.0095 | 0.28 m/s |
+| 4 | 2.94 | 9 g | 9 | 2 (1 mm passive buds) | 4.6 | 0.0012 | 0.20 m/s |
+| 5 | 2.93 | 32 g | 8 | 0 | 5.3 | 0.0028 | 0.24 m/s |
+| 6 | 2.98 | 149 g | 6 | 0 | 5.5 | 0.0080 | 0.28 m/s |
+
+The one-segment barrels are gone in 6/6. Every best body is now a multi-segment undulator of fishlike fineness whose
+porous (gill) surface is confined to its first segment: a head with gill openings and a muscular trunk behind it.
+Fitness is ~1% below the barrels' (2.87-2.98 against 2.97-2.98), so the barrel had been exploiting the loophole by
+only a little, but it set every run's body plan.
+
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.

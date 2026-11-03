@@ -156,6 +156,9 @@ public static class Phys
     public const float CRAWL_PRESS = 0.1f;    // share of its weight a crawling body presses on the ground (adhesion; Denny 1980)
     public const float EMA = 0.25f;           // effective mechanical advantage of limb muscles (Biewener 1989: ~0.1-1)
     public const float SWATH = 0.8f;          // the width a body searches with its mouth and senses, x V^(1/3)
+    /// <summary>Length of the flow path from the mouth through which filtered water leaves, in section diameters of the
+    /// head (Physics.HeadOpenFraction; phase 4): ~1, a fish's gill slits within about a head depth of its mouth.</summary>
+    public const float PHARYNX_D = 1f;
     public const float CAPTURE = 1.7f;        // suspended food is cleared from this many times the head's frontal area
     // food handling
     public const float MA_CLAW = 0.3f;        // lever ratio of a pincer or jaw (crab chelae 0.2-0.5; Warner & Jones 1976; Alexander 1983)
@@ -798,13 +801,22 @@ public static class Physics
         return Phys.CAPTURE * frontal * ThroughFlow(HeadOpenFraction(m));
     }
 
-    /// <summary>The head's open fraction for water passing through it (see Capture).</summary>
+    /// <summary>The head's open fraction for water passing through it (see Capture). Phase 4 (docs/BODYPLAN.md §13.1):
+    /// only the exit area on the flow path counts, the everted epithelium within PHARYNX_D section diameters of the mouth
+    /// (sqrt(W H) of the head). Water that enters the mouth leaves through the pharynx's walls (gill slits, a basket's
+    /// stigmata) within about one diameter of the mouth; farther along a closed tube the flow has to travel the tube's
+    /// length first, and its resistance grows with that length (Hagen-Poiseuille: Δp ∝ L / r⁴ at these Reynolds numbers;
+    /// Vogel 1994), so the far walls pass little of the stream. A fish's gill slits lie within ~one head depth behind its
+    /// mouth (Liem 1980). Before (phase 2c), a one-segment barrel's whole porous side counted as the head's exit, and
+    /// every open-water run evolved a salp-like barrel (docs/BODYPLAN.md §12.6).</summary>
     public static float HeadOpenFraction(Morphology m)
     {
         if (m.Segs.Count == 0) return 0f;
         var h = m.Segs[0];
         float frontal = MathF.PI / 4f * h.W * h.H;
-        return frontal > 0f ? MathF.Min(1f, h.Pore * (1f - h.Invag) * h.Area / frontal) : 0f;
+        if (frontal <= 0f) return 0f;
+        float near = MathF.Min(1f, Phys.PHARYNX_D * MathK.Sqrt(h.W * h.H) / MathF.Max(h.L, 1e-9f));   // share of its length on the flow path
+        return MathF.Min(1f, h.Pore * (1f - h.Invag) * h.Area * near / frontal);
     }
 
     /// <summary>Share of the oncoming flow a screen of open fraction phi passes: 1 / (1 + k/4), k = (1 - phi) / phi²

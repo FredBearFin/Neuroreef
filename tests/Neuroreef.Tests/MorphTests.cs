@@ -486,6 +486,20 @@ public class MorphTests
     }
 
     [Fact]
+    public void OnlyTheExitNearTheMouthFiltersSoALongPorousBarrelClearsNoMoreThanItsHead()
+    {
+        // phase 4 (docs/BODYPLAN.md §13.1): the 2c salp barrel. A one-segment barrel 4x as long as wide with porous sides,
+        // against a short segment of the same section and pores: water leaves within ~one diameter of the mouth, so the
+        // long barrel's extra side area is not on the flow path and its open fraction is the short head's
+        Morphology Barrel(float lenG) => Development.Grow(Probe(1, 0.05f, 0f, 0.15f, 0f, 0.05f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, lenG: lenG, widG: 0.5f, heiG: 0.5f), 0.05f);
+        var shortHead = Barrel(0.5f); var longBarrel = Barrel(0.9f);
+        float fs = Physics.HeadOpenFraction(shortHead), fl = Physics.HeadOpenFraction(longBarrel);
+        _out.WriteLine($"L/D short {shortHead.Segs[0].L / MathF.Sqrt(shortHead.Segs[0].W * shortHead.Segs[0].H):F2} open {fs:F3}; long {longBarrel.Segs[0].L / MathF.Sqrt(longBarrel.Segs[0].W * longBarrel.Segs[0].H):F2} open {fl:F3}");
+        Assert.True(longBarrel.Segs[0].L > 2f * MathF.Sqrt(longBarrel.Segs[0].W * longBarrel.Segs[0].H));
+        Assert.True(fl <= fs * 1.05f);
+    }
+
+    [Fact]
     public void AHollowBoneBearsMoreThanASolidRodOfTheSameMass()
     {
         Pair Leg(float hollow) { var p = new Pair { Len = 0.1f, Chord = 0.006f, Thick = 0.006f, Mineral = 1f, Wall = 0.35f, Exo = 0f, Hollow = hollow, Joints = 3 }; Development.SkeletonOf(p); return p; }
