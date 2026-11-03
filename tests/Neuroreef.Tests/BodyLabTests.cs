@@ -74,4 +74,28 @@ public class BodyLabTests
         Assert.Contains(b.Segs[0].Roles, r => r.Role == "thrust" && r.Share > 0.9f);
         Assert.Empty(b.Pairs);
     }
+    [Fact] // the posture the drawings use (BodyPose.Topple: LabBody.Topple, the clade table's morph.topple) is the one the
+           // sim's standing height weights: a tall thin plate would topple and is drawn lying on its side, a round body
+           // stands (2026-11-03: Body Lab drew such plates on edge)
+    public void TheDrawnPostureIsTheSimsToppleChance()
+    {
+        MorphGenome Trunk(float wid, float hei)
+        {
+            var g = MorphGenome.Blob();
+            g.Segs[0].P[SP.LEN] = 0.5f; g.Segs[0].P[SP.WID] = wid; g.Segs[0].P[SP.HEI] = hei; g.Segs[0].P[SP.AXMUS] = 0.6f;
+            return g;
+        }
+        foreach (var (wid, hei, lies) in new[] { (0.2f, 1f, true), (0.6f, 0.6f, false), (1f, 0.2f, false) })
+        {
+            var g = Trunk(wid, hei);
+            var m = Development.Grow(g, 9f);
+            float p = BodyPose.Topple(m);
+            Assert.InRange(p, 0f, 1f);
+            Assert.Equal(lies, p > 0.5f);
+            var wp = Physics.Walk(m, Phys.RHO_A);
+            float stand = Live.StandPosture(m, wp);
+            Assert.Equal((1f - p) * (wp.Clear + m.MaxH) + p * m.MaxW, stand, 4);
+            Assert.Equal(p, LabReport.Body(g, MorphEnv.Land(), 0, 9f).Topple, 2);
+        }
+    }
 }

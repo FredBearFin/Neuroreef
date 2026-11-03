@@ -512,8 +512,12 @@ public static class Wire
         {
             meanSegments = R((float)meanSegs, 1), meanPairs = R((float)meanPairs, 1), segments = m.SegmentCount, pairs = m.PairCount,
             massKg = R(w.PM[i], 3), lengthM = R(m.Length, 3), fineness = R(m.Fineness, 2), density = R(m.Mass / MathF.Max(m.Volume, 1e-12f), 0), rigidity = R(m.Rigidity, 2),
-            modules = m.Segs.Select(x => new { l = R(1000f * x.L, 1), w = R(1000f * x.W, 1), h = R(1000f * x.H, 1), rigid = R(x.IntMin, 2), pore = R(x.Pore, 3), gas = R(x.Gas, 3) }).ToArray(),
-            appendages = m.Pairs.Select((a, k) => new { seg = a.Seg, len = R(1000f * a.Len, 1), flat = R(a.Chord / MathF.Max(a.Thick, 1e-9f), 1), joints = a.Joints, rigid = R(a.Mineral, 2), pore = R(a.Pore, 3), droop = R(a.Theta * 180f / MathF.PI, 0), sagittal = a.Sagittal, role = roles[k] }).ToArray(),
+            // (2026-11-03, for drawing the body itself: its integument's thickness and the folded-in share of the exchange
+            // surface per segment; each pair's chord, thickness and outer-tube share; the chance it topples, BodyPose)
+            topple = R(BodyPose.Topple(m), 2),
+            modules = m.Segs.Select(x => new { l = R(1000f * x.L, 1), w = R(1000f * x.W, 1), h = R(1000f * x.H, 1), rigid = R(x.IntMin, 2), pore = R(x.Pore, 3), gas = R(x.Gas, 3), intT = R(1000f * x.IntT, 2), invag = R(x.Invag, 2) }).ToArray(),
+            appendages = m.Pairs.Select((a, k) => new { seg = a.Seg, len = R(1000f * a.Len, 1), flat = R(a.Chord / MathF.Max(a.Thick, 1e-9f), 1), joints = a.Joints, rigid = R(a.Mineral, 2), pore = R(a.Pore, 3), droop = R(a.Theta * 180f / MathF.PI, 0), sagittal = a.Sagittal, role = roles[k],
+                chord = R(1000f * a.Chord, 2), thick = R(1000f * a.Thick, 2), exo = R(a.Exo, 2), invag = R(a.Invag, 2) }).ToArray(),
             legacy = new { legs = R(w.PLegs[i], 2), fins = R(w.PFins[i], 2), wings = R(w.PWings[i], 2), armour = R(w.PArmour[i], 2), legPairs = (int)w.PLegPairs[i], finPairs = (int)w.PFinPairs[i] },
         };
     }
