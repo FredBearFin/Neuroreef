@@ -115,7 +115,7 @@ public static class Translate
         {
             // FatGene assumes tissue is ~0.9 of the body; one growth corrects it to the allometry exactly enough
             var mf = Development.Grow(Build(l, 0f, 0f, 0f, fatG), l.Mass);
-            float want = MathF.Min(0.3f, FAT_K * MathK.Pow(MathF.Max(l.Mass, 1e-4f), FAT_EXP));
+            float want = Mat.TypicalFat(l.Mass);
             if (mf.FatMass > 0f) fatG = Clamp01(fatG * want / (mf.FatMass / mf.Mass));
         }
         var g = Build(l, 0f, 0f, 0f, fatG);
@@ -174,16 +174,13 @@ public static class Translate
         return MathF.Max(lung, neutral);
     }
 
-    /// <summary>Body fat of mammals, ~0.075 M^1.19 kg (Pitts &amp; Bullard 1968; Calder 1984): 5% at 0.1 kg, 7.5% at
-    /// 1 kg, 12% at 10 kg, at most 0.3 of the mass. The live genes carry no fat; this is the body the labels stand for.</summary>
-    public const float FAT_K = 0.075f, FAT_EXP = 0.19f;
-
-    /// <summary>The segment fat gene that gives the body FAT_K M^FAT_EXP of its mass in fat: fat is a share phi of the
-    /// tissue volume, so its mass share is phi rho_f / ((1 - phi) rho_t + phi rho_f) of the tissue, and the tissue
-    /// ~0.9 of the body (the rest integument, limbs and skeleton).</summary>
+    /// <summary>The segment fat gene that gives the body the typical fat of its mass (Mat.TypicalFat; the live genes
+    /// carry no fat, and this is the body the labels stand for): fat is a share phi of the tissue volume, so its mass
+    /// share is phi rho_f / ((1 - phi) rho_t + phi rho_f) of the tissue, and the tissue ~0.9 of the body (the rest
+    /// integument, limbs and skeleton); FromLive corrects that guess with one growth.</summary>
     public static float FatGene(in LiveGenes l)
     {
-        float share = MathF.Min(0.3f, FAT_K * MathK.Pow(MathF.Max(l.Mass, 1e-4f), FAT_EXP)) / 0.9f;
+        float share = Mat.TypicalFat(l.Mass) / 0.9f;
         float phi = share * Mat.RHO_TISSUE / (Mat.RHO_FAT + share * (Mat.RHO_TISSUE - Mat.RHO_FAT));
         return Clamp01(phi / Mat.FAT_MAX);
     }

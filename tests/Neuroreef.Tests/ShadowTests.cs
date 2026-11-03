@@ -107,7 +107,9 @@ public class ShadowTests
         // legs run faster, and founders with every organ gene high (legs, four fin pairs, wings, a fish's axial muscle)
         // cannot house all that muscle in one trunk (MUSCLE_MAX_SHARE), which the live sim never asks (docs/BODYPLAN.md §12.5)
         Assert.InRange(Med("land speed (rel.)"), 0.7f, 1.3f);
-        Assert.InRange(Med("air cost/m"), 0.7f, 1.3f);              // flight's cost a metre at the speed of least power
+        // flight's cost a metre at the speed of least power; ~1.3 since phase 2b's wing profile drag (Pennycuick 2008),
+        // on founders' fliers that are bluff (fineness < 1.5), which the live cost ignores (docs/BODYPLAN.md §11.4)
+        Assert.InRange(Med("air cost/m"), 0.7f, 1.35f);
         Assert.InRange(Med("water cruise, fins>=0.7"), 0.7f, 1.4f); // Videler's ~1 length a second
         Assert.InRange(Med("basal cost"), 0.7f, 1.05f);             // Kleiber at the metabolic level, less the labelled organs' upkeep
         // phase 2b (docs/BODYPLAN.md §11): the lung is the lining of a gas space bounded by volume, so the aerobic scope

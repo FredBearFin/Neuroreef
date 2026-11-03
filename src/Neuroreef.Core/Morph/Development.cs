@@ -36,6 +36,10 @@ public static class Mat
     /// nor muscle and metabolises at FAT_MET of the body's average per kg (human adipose ~4.5 kcal/kg/day against
     /// ~24 for the whole body; Elia 1992).</summary>
     public const float FAT_MAX = 0.5f, RHO_FAT = 900f, FAT_MET = 0.2f;
+    /// <summary>Body fat of mammals as a share of the mass, 0.075 M^0.19 (fat ~0.075 M^1.19 kg; Pitts &amp; Bullard 1968;
+    /// Calder 1984): 5% at 0.1 kg, 7.5% at 1 kg, 12% at 10 kg, at most 0.3.</summary>
+    public const float FAT_K = 0.075f, FAT_EXP = 0.19f;
+    public static float TypicalFat(float mass) => MathF.Min(0.3f, FAT_K * MathK.Pow(MathF.Max(mass, 1e-4f), FAT_EXP));
     /// <summary>The most hollow an internal skeleton can be: inner over outer diameter K up to 0.9 (bird and pterosaur
     /// long bones; terrestrial mammals ~0.55-0.6; Currey &amp; Alexander 1985).</summary>
     public const float HOLLOW_MAX = 0.9f;
@@ -88,8 +92,10 @@ public sealed class Morphology
     public float GutMass, MuscleMass, TotalArea;
     public float InertMass;                              // the mineral in integument and skeleton: no metabolism of its own
     public float FatMass;                                // adipose tissue, kg: metabolises at Mat.FAT_MET of the average
-    /// <summary>The mass Kleiber's metabolism is taken on: less the inert mineral and most of the fat.</summary>
-    public float ActiveMass => Mass - InertMass - (1f - Mat.FAT_MET) * FatMass;
+    /// <summary>The mass Kleiber's metabolism is taken on: less the inert mineral, and less most of the fat beyond what
+    /// the animals Kleiber's law was fitted to carry (Mat.TypicalFat: ~0.075 M^1.19 kg; Pitts &amp; Bullard 1968), or more
+    /// for a body leaner than them: its lean tissue is the more of its mass.</summary>
+    public float ActiveMass => Mass - InertMass - (1f - Mat.FAT_MET) * (FatMass - Mat.TypicalFat(Mass) * Mass);
     public int JointCount;
 
     public int SegmentCount => Segs.Count;
