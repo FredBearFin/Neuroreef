@@ -37,6 +37,16 @@ public static class Shadow
     /// <summary>Peak power of muscle in a brief sprint, W per kg of muscle: ~5x the sustained P_SPEC (Weis-Fogh &amp;
     /// Alexander 1977: ~250 W/kg; Askew &amp; Marsh 2002: 390 W/kg in quail flight muscle; Josephson 1993).</summary>
     public const float P_BURST = 250f;
+    /// <summary>Elastic return of a running stride (phase 2b): the share of the limbs' mechanical work its tendons store and
+    /// give back, R_TENDON x h / (h + H_TENDON) for hip height h: ~0.12 for a 0.1 kg runner (kangaroo rats' tendons are
+    /// too thick to stretch much: Biewener &amp; Blickhan 1988), ~0.33 at 10 kg, ~0.45-0.5 in horses and kangaroos (Alexander
+    /// 1988; Bennett &amp; Taylor 1995).</summary>
+    public const float R_TENDON = 0.6f, H_TENDON = 0.25f;
+    /// <summary>Burst swimming is limited by how fast the muscle can contract (Wardle 1975): at most one body wave of
+    /// ~0.7 lengths a tail beat, a tail beat lasting at least twice the muscle's twitch time, 19 ms at 0.1 m and longer
+    /// as L^0.45 (Wardle 1975: cod, saithe, mackerel; Videler 1993).</summary>
+    public const float TWITCH_S = 0.019f, TWITCH_EXP = 0.45f, WAVE_PER_BEAT = 0.7f;
+    public static float WardleSpeed(float length) => WAVE_PER_BEAT * length / (2f * TWITCH_S * MathK.Pow(MathF.Max(length, 1e-3f) / 0.1f, TWITCH_EXP));
     /// <summary>Joules per live energy unit (C_BASAL is Kleiber's BMR_W for a step of STEP_S).</summary>
     public const float J_PER_E = K.BMR_W * K.STEP_S / K.C_BASAL;
 
@@ -89,7 +99,7 @@ public static class Shadow
     public static float BasalW(Morphology m, float level, float geneFactor, float brainW)
     {
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.Mass - m.InertMass), K.EXP_BASAL) * level;
-        float modules = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt);
+        float modules = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
         Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + brainW, kleiber, out float basal);
         return basal;
     }
@@ -120,14 +130,15 @@ public static class Shadow
         {
             float p = Physics.SwimPower(sp, Phys.RHO_W, u);
             if (float.IsPositiveInfinity(p)) continue;
-            if (p <= k * sp.Cap) c.VWater = u;
+            if (p <= k * sp.Cap && u <= WardleSpeed(m.Length)) c.VWater = u;
             float gross = (p / Phys.ETA_M + basal) / u;
             if (p <= sp.Cap && gross < bestGross) { bestGross = gross; c.Cruise = u; c.CotWater = p / Phys.ETA_M / u; }
         }
         // ---- air: margin over the least power of level flight; the cost a metre at the speed of least power
         c.Margin = Physics.FlightMargin(m, out float pMin, out float vmp);
         float flightMuscle = 0f;
-        foreach (var a in m.Pairs) if (!a.Sagittal && a.Muscle > 0f && a.Artic > 0f) flightMuscle += 2f * a.Muscle;
+        // flight muscle: the muscle of pairs that make lift, by their share of a flat, horizontal blade (a leg's muscle is not a wing's)
+        foreach (var a in m.Pairs) if (!a.Sagittal && a.Muscle > 0f && a.Artic > 0f) flightMuscle += 2f * a.Muscle * MathK.Cos(a.Theta) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);
         bool flies = c.Margin >= 1f && flightMuscle >= K.FLY_WING_MIN * K.FLY_MUSCLE_MAX * m.Mass;   // Marden (1987): ~16% flight muscle
         c.Flies = flies ? 1f : 0f;
         if (flies)
@@ -163,7 +174,8 @@ public static class Shadow
             float sup = Phys.KT * w.WEff * w.Support * u / w.Stride;
             float swing = Physics.SwingPower(w, u);
             float rest = 1f - w.Support;
-            float legMech = swing + rest * (Phys.MU_SLIP * crawlW * u + kin + crawlSup * Phys.ETA_M) + sup * Phys.ETA_M;
+            float elastic = 1f - R_TENDON * w.Stride / (w.Stride + H_TENDON);   // tendons return part of the limbs' work
+            float legMech = (swing + sup * Phys.ETA_M) * elastic + rest * (Phys.MU_SLIP * crawlW * u + kin + crawlSup * Phys.ETA_M);
             best = MathF.Min(best, legMech - (k * w.Cap + axBurst * rest));
         }
         return best;
@@ -281,10 +293,11 @@ public static class ShadowDiag
         "land speed", "water speed", "air speed", "water cruise speed", "land cost/m", "water cost/m", "air cost/m",
         "flight margin", "flies", "standing height", "O2 supply in air", "O2 supply in water", "protection gain",
         "basal cost", "drag shape", "turning (rel.)", "land speed (rel.)", "water speed (rel.)",
-        "land cost/m, legs>=0.7", "water cost/m, fins>=0.7", "water cruise, fins>=0.7",
+        "land cost/m, legs>=0.7", "water cost/m, fins>=0.7", "water cruise, fins>=0.7", "water cost/m, fins>=0.7, fish shape",
+        "O2 scope in air", "O2 scope in water",
     };
     /// <summary>Which live values are physically grounded (docs/BODYPLAN.md §10.2).</summary>
-    static readonly bool[] Grounded = { true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true };
+    static readonly bool[] Grounded = { true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, true, true };
 
     public static Row[] NewRows()
     {
@@ -328,7 +341,54 @@ public static class ShadowDiag
             // the bodies the live calibrations were made for: walkers on full legs, swimmers on full fins
             if (lg.Legs >= 0.7f) Add(rows[18], s.CotLand, l.CotLand);
             if (lg.Fins >= 0.7f) { Add(rows[19], s.CotWater, l.CotWater); Add(rows[20], s.Cruise, l.Cruise); }
+            // the body COT_SWIM_J describes is a fish (Videler & Nolet 1990), at a fish's fineness. The live cost a metre
+            // does not depend on shape; the physics does (a cube has ~2-3x a fineness-4 body's drag; Hoerner 1965), and
+            // the founders are bluff (fineness < 1.5 in ~90% of them). So: the same genes at fineness 4 (length share 2.5,
+            // the least drag for the volume; Webb 1975), against the same live value
+            if (lg.Fins >= 0.7f)
+            {
+                var fish = lg; fish.LengthShare = 2.5f; fish.WidthShare = fish.HeightShare = MathK.Sqrt(1f / 2.5f);
+                Add(rows[21], Shadow.Of(fish, Shadow.GeneBasalFactor(gn), Shadow.BrainW(gn)).CotWater, l.CotWater);
+            }
+            // aerobic scope: each expression builds its organs to its own basal (symmorphosis; Respiration.OrganBase), and
+            // the shadow's basal is ~0.75 of the live one (the live organ-upkeep terms, docs/BODYPLAN.md §10.4), so the
+            // absolute supply inherits that gap. The grounded quantity is the scope: ~10 in air for full lungs (Weibel &
+            // Hoppeler 2005), 2-5 in water for gills (Killen et al. 2016)
+            if (s.Basal > 0f && l.Basal > 0f) { Add(rows[22], s.O2Air / s.Basal, l.O2Air / l.Basal); Add(rows[23], s.O2Water / s.Basal, l.O2Water / l.Basal); }
         }
+    }
+
+    /// <summary>Telemetry of both expressions (phase 2b, docs/BODYPLAN.md §11): per living clade, the mean live and
+    /// shadow values of the main capabilities in SI units (speeds m/s, costs J/m, basal and O2 W), in one pass over the
+    /// slots. Read-only: it reads World.D's shadow arrays and the live per-slot values, and writes nothing.</summary>
+    public static string SpeciesReport(World w)
+    {
+        const int NV = 9;
+        var n = new int[w.NS]; var mass = new double[w.NS];
+        var L = new double[w.NS, NV]; var S = new double[w.NS, NV];
+        Span<float> lv = stackalloc float[NV], sv = stackalloc float[NV];
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] == St.Dead) continue;
+            int sp = w.Spc[i];
+            if (sp < 0 || sp >= w.NS) continue;
+            var l = Shadow.Live(w, i); var s = Shadow.Stored(w, i);
+            n[sp]++; mass[sp] += w.PM[i];
+            lv[0] = l.VLand; lv[1] = l.VWater; lv[2] = l.VAir; lv[3] = l.CotLand; lv[4] = l.CotWater; lv[5] = l.CotAir; lv[6] = l.Basal; lv[7] = l.O2Air; lv[8] = l.Flies;
+            sv[0] = s.VLand; sv[1] = s.VWater; sv[2] = s.VAir; sv[3] = s.CotLand; sv[4] = s.CotWater; sv[5] = s.CotAir; sv[6] = s.Basal; sv[7] = s.O2Air; sv[8] = s.Flies;
+            for (int k = 0; k < NV; k++) { L[sp, k] += lv[k]; S[sp, k] += sv[k]; }
+        }
+        var sb = new StringBuilder();
+        sb.AppendLine("BODY PLAN SHADOW (docs/BODYPLAN.md §10-11): per clade, live / shadow (module physics), means over the living; write-only, nothing reads it");
+        sb.AppendLine("clade             n   mass kg  land m/s     water m/s    air m/s      land J/m       water J/m      air J/m      basal W        O2 air W       flies %");
+        for (int sp = 0; sp < w.NS; sp++)
+        {
+            if (n[sp] == 0) continue;
+            double k = 1.0 / n[sp];
+            string P(int v, string f) => (L[sp, v] * k).ToString(f, System.Globalization.CultureInfo.InvariantCulture) + "/" + (S[sp, v] * k).ToString(f, System.Globalization.CultureInfo.InvariantCulture);
+            sb.AppendLine($"{w.Sp[sp].Name,-12} {n[sp],6} {mass[sp] * k,8:F3}  {P(0, "F2"),-12} {P(1, "F2"),-12} {P(2, "F1"),-12} {P(3, "F1"),-14} {P(4, "F1"),-14} {P(5, "F2"),-12} {P(6, "F2"),-14} {P(7, "F1"),-14} {100 * L[sp, 8] * k:F0}/{100 * S[sp, 8] * k:F0}");
+        }
+        return sb.ToString();
     }
 
     public static string Format(Row[] rows)

@@ -11,11 +11,13 @@
 //   fins x B_FINN, B_FIN_SHAPE             B_FINN flat lateral pairs (droop 0°, flatness 8, aspect ratio from the shape
 //                                         gene, muscle from the fin gene), plus a sagittal tail blade; the trunk's
 //                                         axial muscle grows with the fin gene (a fish's myotomes are its propulsor)
-//   wings, B_WING_SHAPE                   one long, flat, high-aspect-ratio lateral pair on an enlarged thorax holding
-//                                         the flight muscle
+//   wings, B_WING_SHAPE                   one long, flat, high-aspect-ratio lateral pair on a thorax of its own, whose
+//                                         share of the trunk (and so the flight muscle) grows with the wing gene
 //   armour                                integument thickness and mineral on every segment
 //   B_LUNGS                               exchange surface sized to the oxygen the live organs supply (LUNG_SCOPE,
-//                                         GILL_SCOPE x the organ base): lungs folded in, gills everted
+//                                         GILL_SCOPE x the organ base): lungs as the lined gas space (lung air), gills
+//                                         everted; a body that lives in deep water fills its gas space to neutral
+//                                         (a swim bladder; docs/BODYPLAN.md §11.2)
 //   B_MASS, B_ENDO, B_INSUL, B_APPEND, diet, life history, brain, senses, appearance: kept as genes (they are physiology
 //                                         or behaviour, not structure); the shadow reads B_ENDO for the metabolic level
 // All maths through MathK.
@@ -74,7 +76,9 @@ public static class Translate
     /// <summary>Wing length (one side) on full wings, cube sides: a 1 kg bird's span is ~1 m (Pennycuick 2008: span
     /// ~1.17 M^0.39 m), 10 cube sides, so each wing is ~4.5 sides beyond the body.</summary>
     public const float WING_LEN = 4.5f;
-    public const float WING_FLAT = 12f;
+    /// <summary>A wing is a membrane or a feathered vane: its solid section is ~1/40 of its chord, so a full wing pair
+    /// is ~10% of the body (bird wings 8-13% of body mass with feathers; Pennycuick 2008). At 12 the pair was a third of it.</summary>
+    public const float WING_FLAT = 40f;
     /// <summary>Share of the trunk's length (and so its mass) in the wing-bearing thorax on full wings: a bird's flight
     /// muscle is 15-35% of its mass (FLY_MUSCLE_MAX), and a pair gene drives with at most 0.3 of its segment's tissue.</summary>
     public const float THORAX_WING = 0.85f;
@@ -83,10 +87,16 @@ public static class Translate
     public const float SKIN_REL = 0.02f;
     /// <summary>An organ gene below this grows no module at all (a vestige the live body carries at no size).</summary>
     public const float VESTIGE = 0.02f;
+    /// <summary>Lung air on full lungs, m³ per kg of body: ~57 mL/kg (mammals' lung volume ~53.5 M^1.06 mL, Stahl
+    /// 1967; Schmidt-Nielsen 1984).</summary>
+    public const float LUNG_AIR_KG = 5.7e-5f;
+    /// <summary>Muscle gene of a leg or fin pair per unit of its organ gene: 0.3 of its segment's tissue (Development's
+    /// PAIR_MUSCLE 0.6 x 0.5), the share phase 2a used; a wing pair's gene is the wing gene itself (0.6 of the thorax).</summary>
+    public const float LEG_MUSCLE = 0.5f;
 
     // innovation numbers of the translated modules: the same role gets the same number in every translated genome, so
     // homologous modules line up for crossover and distance (Homology)
-    public const uint IN_TRUNK0 = 1, IN_HEAD = 2, IN_TRUNK1 = 3, IN_TAIL = 7, IN_LEG = 10, IN_FIN = 20, IN_BLADE = 30, IN_WING = 40;
+    public const uint IN_TRUNK0 = 1, IN_HEAD = 2, IN_TRUNK1 = 3, IN_THORAX = 6, IN_TAIL = 7, IN_LEG = 10, IN_FIN = 20, IN_BLADE = 30, IN_WING = 40;
 
     static float Clamp01(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
     static float Inv(float x, float lo, float hi) => x <= 0f ? 0f : Clamp01(MathK.Log(x / lo) / MathK.Log(hi / lo));
@@ -99,22 +109,59 @@ public static class Translate
     /// </summary>
     public static MorphGenome FromLive(in LiveGenes l, float organBaseW = 0f)
     {
-        var g = Build(l, 0f, 0f);
-        if (organBaseW > 0f)
+        var g = Build(l, 0f, 0f, 0f);
+        float gasG = Clamp01(GasShare(l, Development.Grow(g, l.Mass)) / Mat.GAS_MAX);
+        if (organBaseW > 0f || gasG > 0f)
         {
-            // the exchange surfaces: lungs folded in, gills everted, sized as the live organs are (their scopes over the
-            // organ base), spread over every segment's surface (FOLD x pore share, at most 0.5 of it)
+            var m1 = Development.Grow(Build(l, 0f, 0f, gasG), l.Mass);
+            // the exchange surfaces, sized as the live organs are (their scopes over the organ base): the lungs are the
+            // lining of the gas space (the invagination share of it: Development.GasLining per m³), the gills everted
+            // surface (FOLD x pore share of the skin, at most 0.5 of it)
             float aLung = K.LUNG_SCOPE * l.Lungs * organBaseW / Phys.S_AIR_INT;
             float aGill = K.GILL_SCOPE * (1f - l.Lungs) * organBaseW / Phys.S_WATER_EXT;
-            var m0 = Development.Grow(g, l.Mass);
-            float segArea = 0f; foreach (var s in m0.Segs) segArea += s.Area;
-            float need = aLung + aGill;
-            float pore = need / (Mat.FOLD * MathF.Max(segArea, 1e-9f));   // Development: Pore = 0.5 x gene
-            float invag = need > 0f ? aLung / need : 0.5f;
-            g = Build(l, Clamp01(2f * pore), invag);
+            // One invagination share i serves both: the gas space's lining is respiratory over i of it (G = GasV x GasLining
+            // when wholly so), and of the surface's exchange epithelium P, i is folded in and 1 - i everted. So
+            // P (1 - i) = aGill and i (P + G) = aLung, i.e. G i² - (aGill + G + aLung) i + aLung = 0, whose root in
+            // [0, 1] is exact. A lung larger than its gas space can line (i = 1) puts the rest in surface pockets.
+            float G = m1.GasV * Development.GasLining(m1.Mass), need = aLung + aGill, invag = 0f, P = 0f;
+            if (need > 0f)
+            {
+                if (G <= 0f) { invag = aLung / need; P = need; }
+                else
+                {
+                    float sum = need + G;
+                    invag = Clamp01((sum - MathK.Sqrt(MathF.Max(0f, sum * sum - 4f * G * aLung))) / (2f * G));
+                    P = invag < 0.999f ? aGill / (1f - invag) : MathF.Max(0f, aLung - G);
+                }
+            }
+            float segArea = 0f; foreach (var s in m1.Segs) segArea += s.Area;
+            float pore = P / (Mat.FOLD * MathF.Max(segArea, 1e-9f));   // Development: Pore = 0.5 x gene
+            g = Build(l, Clamp01(2f * pore), invag, gasG);
         }
         g.MassG = Clamp01(MathK.Log(l.Mass / Development.MASS_LO) / MathK.Log(Development.MASS_HI / Development.MASS_LO));
         return g;
+    }
+
+    /// <summary>
+    /// The share of every segment's core that is an internal gas space (docs/BODYPLAN.md §11), for a body m0 grown
+    /// without one at the live mass M. Two readings of the live genes:
+    ///   lung air: LUNG_AIR_KG x lungs x M of gas (Stahl 1967; Schmidt-Nielsen 1984);
+    ///   a swim bladder: a body the live simulation lets live in deep water (Body.GroundRealm: 0.1 + 0.9 x its
+    ///   propulsor at least DEEP_SWIM) holds its depth by buoyancy, as teleosts regulate their swim bladders and
+    ///   diving tetrapods their lungs and fat (Alexander 1966; Webb 1975), so its gas fills what makes it neutral.
+    /// The larger of the two. Both are exact: at a fixed mass, a gas share f of the core removes f core0 rho_t of
+    /// tissue, and Development scales the body back up to M, so neutrality needs f = (M - rho_w V0) / (core0 rho_t),
+    /// and a gas volume T needs f = T / (core0 (1 + T rho_t / M)) (core0, V0: m0's core and whole volume).
+    /// </summary>
+    public static float GasShare(in LiveGenes l, Morphology m0)
+    {
+        float core = 0f; foreach (var s in m0.Segs) core += s.L * s.W * s.H * (MathF.PI / 4f);
+        if (core <= 0f) return 0f;
+        float t = LUNG_AIR_KG * l.Lungs * l.Mass;
+        float lung = t / (core * (1f + t * Mat.RHO_TISSUE / l.Mass));
+        bool deep = 0.1f + 0.9f * Body.Propulsor(l.Fins, l.Wings) >= K.DEEP_SWIM;
+        float neutral = deep ? MathF.Max(0f, (l.Mass - Phys.RHO_W * m0.Volume) / (core * Mat.RHO_TISSUE)) : 0f;
+        return MathF.Max(lung, neutral);
     }
 
     /// <summary>The live reference body of a mass: full legs on two pairs, no fins, wings or armour, a cube, the middle
@@ -126,14 +173,19 @@ public static class Translate
         LimbShape = 0.5f, FinShape = 0.5f, WingShape = 0.5f,
     };
 
-    static MorphGenome Build(in LiveGenes l, float poreGene, float invag)
+    static MorphGenome Build(in LiveGenes l, float poreGene, float invag, float gasGene)
     {
-        int n = Math.Max(1, Math.Max(l.LegPairs, l.FinPairs));
+        // a winged body has a wing-bearing thorax of its own, THORAX_WING x wings of the trunk, whose tissue is the flight
+        // muscle's; its legs and fins grow on the trunk segments behind it, which share the rest evenly. So flight muscle
+        // grows with the wing gene as the live FLY_MUSCLE_MAX x wings does, and a vestigial wing takes almost nothing
+        // from the legs (phase 2b: a thorax of an even trunk share, whatever the wing gene, shrank every slightly
+        // winged founder's leg segments, and their muscle, by a third)
+        bool winged = l.Wings > VESTIGE;
+        int n = Math.Min(MorphGenome.MAX_SEG_GENES - (winged ? 3 : 2), Math.Max(1, Math.Max(l.LegPairs, l.FinPairs)));
         float L = l.LengthShare, W = l.WidthShare, H = l.HeightShare;
         float hs = 0.10f + 0.10f * l.Head, ts = 0.08f + 0.12f * l.Tail, trunk = 1f - hs - ts;
-        // the thorax: an even share of the trunk without wings, most of it with full wings (it houses the flight muscle)
-        float thorax = n == 1 ? trunk : trunk * ((1f - l.Wings) / n + l.Wings * THORAX_WING);
-        float rest = n == 1 ? 0f : (trunk - thorax) / (n - 1);
+        float thorax = winged ? trunk * THORAX_WING * l.Wings : 0f;
+        float rest = (trunk - thorax) / n;
 
         // every length in cube sides; the raw scale c (m per cube side) is chosen so each lies inside its gene's range,
         // as far as it can (Development rescales the whole body to its mass afterwards, so c changes nothing else)
@@ -146,7 +198,8 @@ public static class Translate
         float wingLen = WING_LEN * (0.4f + 0.6f * l.Wings) * (l.Wings > VESTIGE ? 1f : 0f);
         float wingAR = 5f + 10f * l.WingShape;
         float wingC = 2f * wingLen / wingAR, wingT = wingC / WING_FLAT;
-        Span<float> seg = stackalloc float[] { hs * L, thorax * L, n > 1 ? rest * L : thorax * L, ts * L, W, H };
+        // a thorax under 0.02 cube sides (a near-vestigial wing) may clamp at the least segment length, as vestigial appendages do
+        Span<float> seg = stackalloc float[] { hs * L, thorax * L >= 0.02f ? thorax * L : rest * L, rest * L, ts * L, W, H };
         Span<float> app = stackalloc float[] { legLen, legT, finLen, finC, finT, bladeLen, bladeC, bladeT, wingLen, wingC, wingT };
         float cLo = 0f, cHi = float.PositiveInfinity;
         foreach (var v in seg) { cLo = MathF.Max(cLo, Development.SEG_L_LO / v); cHi = MathF.Min(cHi, Development.SEG_L_HI / v); }
@@ -181,19 +234,29 @@ public static class Translate
             var s = new SegGene { Innov = innov };
             s.P[SP.LEN] = SL(len); s.P[SP.WID] = SW(W); s.P[SP.HEI] = SW(H);
             s.P[SP.TAPER] = 0.5f; s.P[SP.REPEAT] = 0f;
-            s.P[SP.INT_T] = intG; s.P[SP.INT_MIN] = intMin; s.P[SP.PORE] = poreGene; s.P[SP.INVAG] = invag; s.P[SP.AXMUS] = axMus;
+            s.P[SP.INT_T] = intG; s.P[SP.INT_MIN] = intMin; s.P[SP.PORE] = poreGene; s.P[SP.INVAG] = invag; s.P[SP.AXMUS] = axMus; s.P[SP.GAS] = gasGene;
             return s;
         }
         g.Segs.Add(Seg(IN_HEAD, hs * L));
+        if (winged)
+        {
+            var th = Seg(IN_THORAX, thorax * L);
+            var a = new AppGene { Innov = IN_WING };
+            a.P[AP.LEN] = AL(wingLen); a.P[AP.CHORD] = AC(wingC); a.P[AP.THICK] = AT(wingT);
+            a.P[AP.DROOP] = 0f; a.P[AP.JOINTS] = 3.5f / (Development.MAX_JOINTS + 1);
+            a.P[AP.MUSCLE] = 1f; a.P[AP.MINERAL] = 0.6f; a.P[AP.WALL] = 0.1f; a.P[AP.EXO] = 0.8f;
+            th.Apps.Add(a);
+            g.Segs.Add(th);
+        }
         for (int k = 0; k < n; k++)
         {
-            var s = Seg(k == 0 ? IN_TRUNK0 : IN_TRUNK1 + (uint)(k - 1), (k == 0 ? thorax : rest) * L);
+            var s = Seg(k == 0 ? IN_TRUNK0 : IN_TRUNK1 + (uint)(k - 1), rest * L);
             if (k < l.LegPairs && l.Legs > VESTIGE)
             {
                 var a = new AppGene { Innov = IN_LEG + (uint)k };
                 a.P[AP.LEN] = AL(legLen); a.P[AP.CHORD] = AC(legT); a.P[AP.THICK] = AT(legT);
                 a.P[AP.DROOP] = LEG_DROOP; a.P[AP.JOINTS] = 3.5f / (Development.MAX_JOINTS + 1);
-                a.P[AP.MUSCLE] = l.Legs; a.P[AP.MINERAL] = 1f; a.P[AP.WALL] = (LEG_WALL - 0.02f) / 0.98f; a.P[AP.EXO] = 0f;
+                a.P[AP.MUSCLE] = LEG_MUSCLE * l.Legs; a.P[AP.MINERAL] = 1f; a.P[AP.WALL] = (LEG_WALL - 0.02f) / 0.98f; a.P[AP.EXO] = 0f;
                 s.Apps.Add(a);
             }
             if (k < l.FinPairs && l.Fins > VESTIGE)
@@ -201,15 +264,7 @@ public static class Translate
                 var a = new AppGene { Innov = IN_FIN + (uint)k };
                 a.P[AP.LEN] = AL(finLen); a.P[AP.CHORD] = AC(finC); a.P[AP.THICK] = AT(finT);
                 a.P[AP.DROOP] = 0f; a.P[AP.JOINTS] = 2.5f / (Development.MAX_JOINTS + 1);
-                a.P[AP.MUSCLE] = l.Fins; a.P[AP.MINERAL] = 0.2f; a.P[AP.WALL] = 0.3f; a.P[AP.EXO] = 0f;
-                s.Apps.Add(a);
-            }
-            if (k == 0 && l.Wings > VESTIGE)
-            {
-                var a = new AppGene { Innov = IN_WING };
-                a.P[AP.LEN] = AL(wingLen); a.P[AP.CHORD] = AC(wingC); a.P[AP.THICK] = AT(wingT);
-                a.P[AP.DROOP] = 0f; a.P[AP.JOINTS] = 3.5f / (Development.MAX_JOINTS + 1);
-                a.P[AP.MUSCLE] = l.Wings; a.P[AP.MINERAL] = 0.6f; a.P[AP.WALL] = 0.1f; a.P[AP.EXO] = 0.8f;
+                a.P[AP.MUSCLE] = LEG_MUSCLE * l.Fins; a.P[AP.MINERAL] = 0.2f; a.P[AP.WALL] = 0.3f; a.P[AP.EXO] = 0f;
                 s.Apps.Add(a);
             }
             g.Segs.Add(s);

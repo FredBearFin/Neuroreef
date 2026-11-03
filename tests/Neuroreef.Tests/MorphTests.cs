@@ -466,6 +466,83 @@ public class MorphTests
         for (int i = 1; i < r.BestByGen.Length; i++) Assert.True(r.BestByGen[i] >= r.BestByGen[i - 1] - 1e-5f);   // the best is always kept
     }
 
+    // ---------- phase 2b (docs/BODYPLAN.md §11)
+
+    static MorphGenome WithGas(MorphGenome g, float gas, float invag)
+    {
+        foreach (var s in g.Segs) { s.P[SP.GAS] = gas; s.P[SP.INVAG] = invag; }
+        return g;
+    }
+
+    [Fact]
+    public void AGasSpaceMakesASwimmerNeutralAndTooMuchGasPaysAgain()
+    {
+        float Power(float gas)
+        {
+            var m = Development.Grow(WithGas(Probe(4, 0.1f, 0f, 0f, 0f, 0.8f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, lenG: 0.7f), gas, 0f), 0.1f);
+            return Physics.SwimPower(Physics.Swim(m, Phys.RHO_W), Phys.RHO_W, 0.2f);
+        }
+        var m0 = Development.Grow(Probe(4, 0.1f, 0f, 0f, 0f, 0.8f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, lenG: 0.7f), 0.1f);
+        float best = float.PositiveInfinity, bestG = 0f;
+        for (float gg = 0f; gg <= 1f; gg += 0.02f) { float p = Power(gg); if (p < best) { best = p; bestG = gg; } }
+        var mn = Development.Grow(WithGas(Probe(4, 0.1f, 0f, 0f, 0f, 0.8f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, lenG: 0.7f), bestG, 0f), 0.1f);
+        _out.WriteLine($"no gas {m0.Mass / m0.Volume:F0} kg/m3, {Power(0f) * 1000f:F2} mW; best gas gene {bestG:F2}: {mn.Mass / mn.Volume:F0} kg/m3, {best * 1000f:F2} mW; full gas {Power(1f) * 1000f:F2} mW");
+        Assert.True(m0.Mass / m0.Volume > Phys.RHO_W);
+        Assert.InRange(mn.Mass / mn.Volume, Phys.RHO_W * 0.98f, Phys.RHO_W * 1.02f);   // the least cost is at neutral buoyancy
+        Assert.True(best < 0.8f * Power(0f));
+        Assert.True(Power(1f) > 1.2f * best);                                           // an over-light body holds itself down
+        Assert.Equal(m0.Mass, mn.Mass, 3);                                               // the gas lightens the body by its volume, not its mass
+    }
+
+    [Fact]
+    public void AGasSpaceLinedWithExchangeEpitheliumIsALungBoundedByVolumeThatBreathesAirOnly()
+    {
+        var g = WithGas(Probe(4, 0.1f, 0f, 0f, 0f, 0.3f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 0.6f, 1f);
+        var small = Development.Grow(g, 0.1f); var big = Development.Grow(g, 10f);
+        float area(Morphology m) { float a = 0f; foreach (var s in m.Segs) a += s.Area; return a; }
+        float o2Air = Physics.O2Supply(big, Medium.Air, out _), o2Water = Physics.O2Supply(big, Medium.Water, out _);
+        var bladder = Development.Grow(WithGas(Probe(4, 0.1f, 0f, 0f, 0f, 0.3f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), 0.6f, 0f), 10f);
+        _out.WriteLine($"lung area 0.1 -> 10 kg: x{big.ExchGas / small.ExchGas:F1} (gas x{big.GasV / small.GasV:F0}, body surface x{area(big) / area(small):F1}); 10 kg O2 air {o2Air:F1} W, water {o2Water:F2} W, unlined bladder air {Physics.O2Supply(bladder, Medium.Air, out _):F2} W");
+        Assert.InRange(big.ExchGas / small.ExchGas, 0.9f * MathK.Pow(100f, 0.89f), 1.1f * MathK.Pow(100f, 0.89f));   // ~M^0.95 / M^0.06 (Gehr et al. 1981; Stahl 1967)
+        Assert.True(big.ExchGas / small.ExchGas > 2f * area(big) / area(small));      // it outgrows the surface (M^(2/3))
+        Assert.True(o2Air > 20f * o2Water);                                            // under water it holds a breath, not a supply
+        Assert.True(Physics.O2Supply(bladder, Medium.Air, out _) < 0.05f * o2Air);     // an unlined gas space is a swim bladder
+    }
+
+    [Fact]
+    public void AThinDeepSheetBendsAndRollsOverWhereARoundBodyOfTheSameMassHoldsUpright()
+    {
+        // the Body Lab's sea-floor sheet: 77 mm deep, 2.6 mm thin, soft
+        var sheet = new Segment { L = 0.1f, W = 0.0026f, H = 0.077f, IntT = 2.6e-5f, IntMin = 0f };
+        float cap = Physics.FacePressureCap(sheet);
+        float qEscape = 0.5f * Phys.RHO_W * 1.5f * 1.5f;
+        _out.WriteLine($"sheet face bears {cap:F0} Pa against {qEscape:F0} Pa at a 1.5 m/s escape");
+        Assert.InRange(cap, 150f, 350f);
+        Assert.True(cap < 0.3f * qEscape);
+        float Hold(float widG, float heiG, out float plate)
+        {
+            var m = Development.Grow(Probe(4, 0.1f, 0f, 0f, 0f, 0.8f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, widG: widG, heiG: heiG), 0.05f);
+            plate = Physics.PlateFactor(m, qEscape * Phys.CL_MAX);
+            return Physics.RollHold(m, Phys.RHO_W, 0.3f, Physics.Walk(m, Phys.RHO_W).WEff);
+        }
+        float flat = Hold(0f, 1f, out float pf), round = Hold(0.5f, 0.5f, out float pr);
+        _out.WriteLine($"roll hold in 0.3 m/s surge: sheet {flat:F3}, round {round:F3}; share of turning load borne: sheet {pf:F2}, round {pr:F2}");
+        Assert.True(flat < 0.2f);
+        Assert.True(round > 0.8f && round > 20f * flat);
+        Assert.True(pf < 0.5f && pr > 0.99f);
+    }
+
+    [Fact]
+    public void APairCanCarryAFliersShareOfFlightMuscle()
+    {
+        // one segment, one pair at full muscle and no axial muscle: 0.6 of the tissue, a bird's 0.35 of its body possible
+        var g = Probe(1, 0.05f, 0f, 0f, 0f, 0f, 1, 0.8f, 0.7f, 0.1f, 0f, 0.5f, 1f, 0.6f, 0.1f, 0.8f);
+        var m = Development.Grow(g, 0.1f);
+        float fm = 0f; foreach (var a in m.Pairs) fm += 2f * a.Muscle;
+        _out.WriteLine($"flight muscle {fm / m.Mass:F2} of the body");
+        Assert.True(fm / m.Mass >= 0.35f);
+    }
+
     /// <summary>A hand-set genome, for probing the landscape only (never seeded into evolution).</summary>
     internal static MorphGenome Probe(int segs, float intT, float intMin, float pore, float invag, float axMus, int pairsPerSeg,
         float len, float chord, float thick, float droop, float joints, float muscle, float mineral, float wall, float exo, float lenG = 0.5f, float widG = 0.5f, float heiG = 0.5f)
@@ -567,10 +644,10 @@ public class MorphTests
                 }
                 string spp = string.Join(",", System.Linq.Enumerable.Select(modes, kv => kv.Key + ":" + kv.Value));
                 sb.AppendLine(string.Format(c,
-                    "{0,-11} {1,4} {2,5:F2} {3,8:F3} {4,4} {5,5} {6,5:F1} {7,5:F2} {8,5:F1} {9,5:F3} {10,7:F4} {11,7:F4}  {12,-6} {13,5:F2} {14,6:F1} {15,5:F0} {16,5:F2} {17,3} [{18}]  {19}",
+                    "{0,-11} {1,4} {2,5:F2} {3,8:F3} {4,4} {5,5} {6,5:F1} {7,5:F2} {8,5:F1} {9,5:F3} {10,7:F4} {11,7:F4}  {12,-6} {13,5:F2} {14,6:F1} {15,5:F0} {16,5:F2} {17,3} [{18}]  H/W {20,5:F1} gas {21,4:F2} rho {22,4:F0}  {19}",
                     env.Name, seed, e.Fitness, m.Mass, m.SegmentCount, m.PairCount, m.Fineness, m.Rigidity, 100f * m.IntMass / m.Mass, e.MoultShare,
                     m.ExchExt, m.ExchInt, Evolver.Mode(e), e.Speed, e.CrushForce, 100f * e.ItemShare, MathF.Min(e.TurnR, 99f), r.Species, spp,
-                    Evolver.PairLine(m, env, e)));
+                    Evolver.PairLine(m, env, e), System.Linq.Enumerable.Max(m.Segs, s => s.H / s.W), m.GasV / m.Volume, m.Mass / m.Volume));
                 if (seed == 1)
                 {
                     detail += $"== {env.Name} (seed 1)  final population: mean segments {r.MeanSegments:F1}, mean pairs {r.MeanPairs:F1}, species {r.Species}\n" + Evolver.Describe(m, e, env) + "\n";

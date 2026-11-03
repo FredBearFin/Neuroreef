@@ -34,6 +34,13 @@ public class ShadowTests
             _out.WriteLine(Line($"legless {m}", Shadow.Of(legless, 1f, 0f)));
             var fish = r; fish.Legs = 0f; fish.Fins = 1f; fish.Lungs = 0f; fish.Endo = 0f; fish.LengthShare = 2.5f; fish.WidthShare = fish.HeightShare = MathF.Sqrt(1f / 2.5f);
             _out.WriteLine(Line($"fish {m}", Shadow.Of(fish, 1f, 0f)));
+            var cubeFish = fish; cubeFish.LengthShare = cubeFish.WidthShare = cubeFish.HeightShare = 1f;
+            _out.WriteLine(Line($"cube fish {m}", Shadow.Of(cubeFish, 1f, 0f, out var mcf)));
+            var legFish = fish; legFish.Legs = 0.6f;
+            _out.WriteLine(Line($"leg fish {m}", Shadow.Of(legFish, 1f, 0f, out var mlf)));
+            var halfFin = fish; halfFin.Fins = 0.7f; halfFin.FinPairs = 3;
+            _out.WriteLine(Line($"fins0.7x3 {m}", Shadow.Of(halfFin, 1f, 0f, out var mhf)));
+            _out.WriteLine($"  densities: cube fish {mcf.Mass / mcf.Volume:F0}, leg fish {mlf.Mass / mlf.Volume:F0}, fins0.7x3 {mhf.Mass / mhf.Volume:F0}; live cot {K.COT_SWIM_J * MathK.Pow(m, K.EXP_MOVE) * K.ETA_LIFT / (K.ETA_PADDLE + (K.ETA_LIFT - K.ETA_PADDLE) * 0.7f):F3} at fins 0.7");
             var bird = r; bird.Wings = 1f; bird.LegPairs = 1;
             _out.WriteLine(Line($"bird {m}", Shadow.Of(bird, 1f, 0f, out var mb)));
             var arm = r; arm.Armour = 3f;
@@ -49,7 +56,7 @@ public class ShadowTests
                 }
                 _out.WriteLine($"  walker in water: least cost/m {best:F2} J/m, neutrally buoyant {best0:F2} J/m; density {mo.Mass / mo.Volume:F0} kg/m3");
             }
-            _out.WriteLine($"  walker mass {mo.Mass:F3} L {mo.Length:F3} maxH {mo.MaxH:F3} pairs {mo.PairCount} muscle {mo.MuscleMass:F3} bird muscle {mb.MuscleMass:F3}");
+            { float fm = 0f, segT = 0f; foreach (var a in mb.Pairs) if (a.Theta < 0.1f && a.Muscle > 0f) fm += 2f * a.Muscle; segT = mb.Segs[1].TissueMass; _out.WriteLine($"  walker mass {mo.Mass:F3} L {mo.Length:F3} maxH {mo.MaxH:F3} pairs {mo.PairCount} muscle {mo.MuscleMass:F3}; bird flight muscle {fm / mb.Mass:F3} of its mass, thorax tissue {segT / mb.Mass:F2}, density {mb.Mass / mb.Volume:F0}, segs {mb.SegmentCount}"); }
         }
     }
 
@@ -69,7 +76,11 @@ public class ShadowTests
             for (uint seed = 1; seed <= 5; seed++)
             {
                 var t = System.Diagnostics.Stopwatch.StartNew();
-                using (var sim = new Simulation(1024, seed, 2)) ShadowDiag.Collect(sim.W, rows);
+                using (var sim = new Simulation(1024, seed, 2))
+                {
+                    ShadowDiag.Collect(sim.W, rows);
+                    if (seed == 1) Log.Add(ShadowDiag.SpeciesReport(sim.W));   // the Headless telemetry of both expressions
+                }
                 GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();   // one world at a time: the machine is shared
                 Log.Add($"seed {seed}: {t.ElapsedMilliseconds} ms, {GC.GetTotalMemory(false) / 1048576} MB after");
             }
@@ -94,6 +105,10 @@ public class ShadowTests
         Assert.InRange(Med("air cost/m"), 0.7f, 1.3f);              // flight's cost a metre at the speed of least power
         Assert.InRange(Med("water cruise, fins>=0.7"), 0.7f, 1.4f); // Videler's ~1 length a second
         Assert.InRange(Med("basal cost"), 0.7f, 1.05f);             // Kleiber at the metabolic level, less the labelled organs' upkeep
+        // phase 2b (docs/BODYPLAN.md §11): the lung is the lining of a gas space bounded by volume, so the aerobic scope
+        // each expression builds (Weibel & Hoppeler's ~10 in air, fishes' 2-5 in water) agrees
+        Assert.InRange(Med("O2 scope in air"), 0.8f, 1.2f);
+        Assert.InRange(Med("O2 scope in water"), 0.75f, 1.25f);
     }
 
     // ---------- the translator carries the live genes' key capabilities over
@@ -133,7 +148,7 @@ public class ShadowTests
             Caps f = S(fish), n = S(finless);
             float live = K.COT_SWIM_J * MathK.Pow(m, K.EXP_MOVE), liveStream = Body.Streamlining(fish.LengthShare, fish.WidthShare * fish.HeightShare);
             _out.WriteLine($"{m} kg: swim {n.VWater:F2} -> {f.VWater:F2} m/s, cost/m {n.CotWater:F3} -> {f.CotWater:F3} (live {live:F3}), cruise {f.Cruise:F2} m/s, drag shape {f.Stream:F2} (live {liveStream:F2})");
-            Assert.True(f.VWater > n.VWater);
+            Assert.True(f.VWater >= n.VWater);   // both may reach the twitch-time limit of burst swimming (Wardle 1975)
             Assert.True(f.CotWater < n.CotWater);
             Assert.InRange(f.CotWater / live, 0.7f, 1.3f);    // COT_SWIM_J ~1 J/(kg m) at 1 kg x M^0.7 (Videler & Nolet 1990)
             Assert.InRange(f.Stream / liveStream, 0.8f, 1.25f);
