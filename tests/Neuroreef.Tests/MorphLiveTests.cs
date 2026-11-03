@@ -220,4 +220,58 @@ public class MorphLiveTests
             Assert.True(vThread < 1.05f * vFish, $"at {mass} kg: {vThread} m/s with the thread against {vFish}");
         }
     }
+
+    [Fact] // a segment's side is its elliptic section's perimeter x its length (Ramanujan 1914); pi (a + b) was exact for a round
+           // section and up to 21% short for a flat one, so a 1 m-wide crawling disc grew and paid for 13% too little side
+           // (docs/BODYPLAN.md §13.18)
+    public void AFlatSegmentHasTheWholeSurfaceOfItsSection()
+    {
+        static double Exact(double w, double h)
+        {
+            double a = 0.5 * w, b = 0.5 * h, sum = 0; int n = 20000;
+            for (int k = 0; k < n; k++) { double t = (k + 0.5) * 2 * Math.PI / n; sum += Math.Sqrt(a * a * Math.Sin(t) * Math.Sin(t) + b * b * Math.Cos(t) * Math.Cos(t)); }
+            return sum * 2 * Math.PI / n;
+        }
+        foreach (var (w, h) in new[] { (0.1f, 0.1f), (0.3f, 0.1f), (1.05f, 0.143f), (0.75f, 0.025f) })
+        {
+            double ex = Exact(w, h);
+            Assert.InRange(Development.EllipsePerimeter(w, h) / ex, 0.999, 1.001);
+        }
+        Assert.True(Math.PI * 0.5 * (1.05 + 0.143) / Exact(1.05, 0.143) < 0.88);   // the old side of Tete's segments: 13% short
+        // grown: a flat segment's side is the perimeter x its length (its exposed ends are added on top); a round one's is pi W L
+        foreach (float wid in new[] { 0.75f, 1f })
+        {
+            var g = MorphGenome.Blob();
+            g.Segs[0].P[SP.LEN] = 0.2f; g.Segs[0].P[SP.WID] = wid; g.Segs[0].P[SP.HEI] = 0.75f;
+            var m = Development.Grow(g, 20f);
+            var s = m.Segs[0];
+            float ends = 2f * MathF.PI / 4f * s.W * s.H;
+            Assert.InRange((s.Area - ends) / (float)(Exact(s.W, s.H) * s.L), 0.999f, 1.001f);
+            if (wid == 0.75f) Assert.InRange((s.Area - ends) / (MathF.PI * s.W * s.L), 0.9999f, 1.0001f);
+        }
+    }
+
+    [Fact] // a cold-blooded body's skin and gills are its own tissue, respiring at its metabolic level as its Kleiber term and its
+           // gut do (Else & Hulbert 1981); at a warm body's rate a 12.6 kg cold fish paid its gills 54% of its Kleiber rate,
+           // where gill tissue is a few to ~10% of a fish's standard metabolism (docs/BODYPLAN.md §13.18)
+    public void AColdBodysSkinAndGillsCostItsMetabolicLevel()
+    {
+        var g = MorphGenome.Blob();
+        g.Segs[0].P[SP.LEN] = 0.9f; g.Segs[0].P[SP.WID] = 0.6f; g.Segs[0].P[SP.HEI] = 0.6f; g.Segs[0].P[SP.PORE] = 1f; g.Segs[0].P[SP.INVAG] = 0.5f;
+        g.Segs[0].P[SP.INT_T] = 0.3f;
+        var m = Development.Grow(g, 12.6f);
+        float cold = Heat.Level(0f);
+        Assert.InRange(cold, 0.15f, 0.25f);
+        Assert.Equal(cold * Live.ModuleUpkeep(m, 1f), Live.ModuleUpkeep(m, cold), 5);
+        // the same shape builds the same gut, in reference guts, cold or warm (every term of its basal scales with its level)
+        var lcCold = Live.Of(m, cold, 1f, 0f); var lcWarm = Live.Of(m, 1f, 1f, 0f);
+        Assert.InRange(lcCold.Gut / lcWarm.Gut, 0.999f, 1.001f);
+        Assert.InRange(lcCold.C.Basal / lcWarm.C.Basal, cold - 0.001f, cold + 0.001f);
+        // its exchange epithelium's share of its Kleiber rate is a warm body's (0.04 here, at ~0.3 m² a kg), 1 / level less than
+        // before (0.19)
+        float kleiber = K.BMR_W * MathF.Pow(m.ActiveMass, K.EXP_BASAL) * cold;
+        float gill = Phys.EXCH_TISSUE * cold * (m.ExchExt + m.ExchInt + m.ExchGas);
+        Assert.InRange((m.ExchExt + m.ExchInt) / m.Mass, 0.15f, 0.5f);
+        Assert.InRange(gill / kleiber, 0.02f, 0.15f);
+    }
 }

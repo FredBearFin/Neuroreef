@@ -99,7 +99,7 @@ public static class Shadow
     public static float BasalW(Morphology m, float level, float geneFactor, float brainW)
     {
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.ActiveMass), K.EXP_BASAL) * level;
-        float modules = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
+        float modules = Neuroreef.Morph.Live.ModuleUpkeep(m, level) + Phys.MOULT_COST * m.Rigidity * m.ExoMass;   // tissue upkeep at its level (§13.18)
         Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + brainW, kleiber, out float basal);
         return basal;
     }

@@ -81,7 +81,10 @@ public class StepLengthTests
         // than its visceral tissue holds, and the gut-full with it), standing height is the posture the body holds on rough
         // ground (a tall, narrow trunk lies on its side), and the burst-swimming twitch limit runs on the length the mass is
         // spread over. Was 11947864240597378162.
-        Assert.Equal(7475422619767155745UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03 (fifth round, docs/BODYPLAN.md §13.18): a cold-blooded body's integument turnover and exchange
+        // epithelia cost its metabolic level (Live.ModuleUpkeep), and a segment's side is its elliptic section's perimeter
+        // (Ramanujan), not pi (a + b), which was short for flat sections. Was 7475422619767155745.
+        Assert.Equal(2255307997004125111UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

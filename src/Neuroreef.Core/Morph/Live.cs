@@ -129,6 +129,16 @@ public static class Live
     /// space's lining (Physics.O2Supply's internal terms in air). What a swimmer's head at the surface breathes.</summary>
     public static float LungO2(Morphology m) => m.ExchInt * Phys.S_AIR_INT + m.ExchGas * Phys.S_AIR_INT;
 
+    /// <summary>What its integument's turnover and its exchange epithelia cost at rest (W), at its tissues' metabolic level
+    /// (docs/BODYPLAN.md §13.18). Phys.TURNOVER and Phys.EXCH_TISSUE are a warm-blooded body's tissue rates; an ectotherm's
+    /// tissues respire at ~1/4-1/5 of a mammal's at the same temperature (Else &amp; Hulbert 1981; K.ECTO_LEVEL), and its skin
+    /// and gills are such tissues, as its Kleiber term and its gut already are. Before, a 12.6 kg cold fish paid its 8.4 m²
+    /// of gill epithelium 2.5 W, 54% of its Kleiber rate, where gill tissue is measured at a few to ~10% of a fish's
+    /// standard metabolism (Mommsen 1984; Morgan &amp; Iwama 1999), and a gut built to that basal outgrew its trunk (GutRoom).
+    /// A moult's cost (Phys.MOULT_COST) is the energy of the tissue it rebuilds, not a rate, so it is not scaled.</summary>
+    public static float ModuleUpkeep(Morphology m, float level)
+        => level * (Phys.TURNOVER * m.IntMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas));
+
     /// <summary>Everything the live sim takes from a morphology grown at its live mass. level: Heat.Level of its
     /// endothermy; geneFactor: the basal factor of the genes that stay genes (GeneFactor); brainW its brain's cost.</summary>
     public static LiveCaps Of(Morphology m, float level, float geneFactor, float brainW)
@@ -156,7 +166,7 @@ public static class Live
         // ---- basal, gut, moult (the moult is paid while growing only: Body.Express keeps it out of the basal)
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.ActiveMass), K.EXP_BASAL) * level;
         lc.MoultW = Phys.MOULT_COST * m.Rigidity * m.ExoMass;
-        float modules = Phys.TURNOVER * m.IntMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
+        float modules = ModuleUpkeep(m, level);
         // flight muscle's own upkeep (the avian premium, phase 4): resting metabolism goes with mitochondrial volume (proton
         // leak through the inner membrane is ~20-30% of standard metabolism, and tissue rates rank with mitochondrial
         // density; Rolfe & Brand 1997; Else & Hulbert 1985). Flight muscle holds ~MITO_RATIO times the body's mean

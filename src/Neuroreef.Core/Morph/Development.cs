@@ -166,6 +166,20 @@ public static class Development
     public static int Joints(float g) => Math.Min(MAX_JOINTS, (int)(g * (MAX_JOINTS + 1)));
     public static float Taper(float g) => 0.7f + 0.6f * g;
 
+    /// <summary>Perimeter of an ellipse of axes w and h (m), by Ramanujan's (1914) second approximation, pi (a + b) (1 +
+    /// 3 k / (10 + sqrt(4 - 3 k))), k = ((a - b) / (a + b))², a and b the semi-axes: within 0.04% of the exact elliptic
+    /// integral at every aspect
+    /// (docs/BODYPLAN.md §13.18). Before, a segment's side was pi (a + b) x its length, exact for a round section but short
+    /// by up to 21% for a flat one (4a against pi a): the sides of a 1.05 m-wide, 14 cm-high crawling disc (the land world's
+    /// Tete) were 13% short, so it grew, armoured, heated and wetted 0.58 m² of surface where it has 0.63.</summary>
+    public static float EllipsePerimeter(float w, float h)
+    {
+        float a = 0.5f * w, b = 0.5f * h, s = a + b;
+        if (s <= 0f) return 0f;
+        float k = (a - b) / s; k *= k;
+        return MathF.PI * s * (1f + 3f * k / (10f + MathK.Sqrt(4f - 3f * k)));
+    }
+
     /// <summary>Failure stress of a support with this mineral share: log-interpolated, soft to mineralised.</summary>
     public static float Sigma(float mineral) => Mat.SIGMA_SOFT * MathK.Exp(mineral * MathK.Log(Mat.SIGMA_RATIO));
     public static float Density(float soft, float mineral) => soft + Mat.RHO_MINERAL_ADD * mineral;
@@ -239,7 +253,7 @@ public static class Development
                 s.AxShare = 0.4f * sg.P[SP.AXMUS]; s.Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS]; s.Fat = Mat.FAT_MAX * sg.P[SP.FAT];
                 s.IntT = LogMap(sg.P[SP.INT_T], INT_REL_LO, INT_REL_HI);   // relative here; made absolute in Finish
                 float core = s.L * s.W * s.H * (MathF.PI / 4f);
-                s.Area = MathF.PI * 0.5f * (s.W + s.H) * s.L;   // lateral surface of an elliptic cylinder (first order); exposed ends added in Finish
+                s.Area = EllipsePerimeter(s.W, s.H) * s.L;   // lateral surface of an elliptic cylinder; exposed ends added in Finish
                 s.GasV = core * s.Gas;
                 s.FatMass = (core - s.GasV) * s.Fat * Mat.RHO_FAT;
                 s.TissueMass = (core - s.GasV) * (1f - s.Fat) * Mat.RHO_TISSUE;   // the gas space holds no tissue; its fat is neither gut nor muscle

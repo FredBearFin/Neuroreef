@@ -537,6 +537,14 @@ something without the tissue to back it:
   (`Live.StandPosture`, `Physics.Topple`).
 - **A weightless thread raising the burst-swimming limit.** Wardle's twitch limit ran on nose-to-tail length, so a thread
   of 2% of the mass raised a swimmer's burst speed 30–60%. Fix: the limit runs on `WaveLength` too.
+- **A flat section's missing skin** (fifth round, §13.18). A segment's side was π(a + b) × its length, exact for a round
+  section and up to 21% short for a flat one, so flat and tall-thin trunks grew, armoured, heated and wetted less surface
+  than they have (the land world's 1.05 m-wide crawling disc, 13% short on its sides). Fix: Ramanujan's perimeter
+  (`Development.EllipsePerimeter`).
+- **A cold body paying warm tissue rates** (fifth round, §13.18; a physics error rather than a shape loophole). Integument
+  turnover and exchange-epithelium upkeep were charged at a warm body's rate on every body, so a cold fish paid its gills
+  half its Kleiber rate, and its gut, built to that basal, outgrew its trunk. Fix: they run at the body's metabolic level
+  (`Live.ModuleUpkeep`).
 
 Checked and not loopholes: housed muscle (axial + appendage) is at most `MUSCLE_MAX_SHARE` of its own segment's tissue,
 and the gut share is of what is left, so no segment holds more than its volume; a tall soft plate holds itself upright
@@ -1614,6 +1622,144 @@ the band's floor 0.85 → 0.8) and passes. StepLength: `DefaultStepIsBitIdentica
 → 7475422619767155745 with a dated comment; the other 8 pass. Not run this round: the classes this change does not
 touch (Voice, Geology, Hydrology, Plant and the rest of §13.16).
 
+### 13.18 Fifth round (2026-11-03): why the seed-3 sea keeps one lineage, and the flat discs on land
+
+**1. The ocean's one lineage (seed 3, `--ocean`, 2,000 steps).** Measured on the round's code (d3c8cc0) in a test
+harness that reproduces the check run (the same founders; Melel 2,681 created against the run's 2,650). The kill and
+embryo-loss counters were added for the measurement and removed afterwards.
+
+- **Founding.** 9 of 16 ancestors were founded, 2,040 founders: Vimolo 591 (0.45 kg), Osvi 245 (12.6 kg), Melel 600
+  (6.7–11.5 kg, the founder limit), Briqu 571 (2–3 kg), Anithmo 20, Fapulnar 5, Robri 4, Nice 2 and Penarax 2.
+  - With the gut bound switched off (for the measurement only), the founding is exactly the one before §13.17: Narithqu
+    365, Tete 600 and Axce 8 come back, and Vimolo's first viable draw is the old 0.36 kg body of 18 pairs (gut room 0.82).
+    So the gut bound alone removed three lineages.
+  - Each was a marginal draw. Narithqu's trunk (27% integument, 26% fat) has room for 1.66 reference guts and its basal
+    asked for 2.06; Axce had room for 1.80 and asked for 2.47.
+  - Of each unfounded ancestor's 256 draws, 150–168 fail the food test, nearly all with the gut's absorption below
+    `FORAGE_MARGIN` × need (90–100 of them below 1×).
+- **Why these cold bodies needed ~2 reference guts.**
+  - The gut is built to the basal (`Body.GutScale`), and their basal was ~2× their Kleiber rate at their level. Two terms
+    did it: the gene factor (1.3–1.5), and the integument's turnover and exchange epithelium, which were charged at a warm
+    body's tissue rate whatever the body's metabolic level.
+  - Osvi (12.6 kg, level 0.20) paid its 8.4 m² of gill epithelium 2.5 W, 54% of its Kleiber rate (4.6 W). Gill tissue is
+    measured at a few to ~10% of a fish's standard metabolism (Mommsen 1984; Morgan & Iwama 1999).
+  - An ectotherm's tissues respire at ~1/4–1/5 of a mammal's at the same temperature (Else & Hulbert 1981). `K.ECTO_LEVEL`
+    already applies this to its Kleiber term and its gut.
+  - This is **(b), a physics term wrong**, and it is fixed: `Live.ModuleUpkeep` = level × (turnover + epithelium). The
+    moult is not scaled, because it is the energy of rebuilt tissue, not a rate. A warm body is unchanged; Osvi's gills
+    now cost 11% of its Kleiber rate.
+  - The 7% reference gut is not changed. It is within the measured range (vertebrate gastrointestinal tracts are ~2–10%
+    of body mass). The room it is compared with counts tissue only (a gas space or fat holds no gut, as a swim bladder
+    does not), which is physical.
+- **Who killed whom** (kills by killer → victim, whole run):
+  - Melel killed 1,979 of the 2,311 killed (86%): Vimolo 699, Briqu 511, Melel 456 (cannibalism, 63% of Melel's own
+    killed), Osvi 279, the rest 34.
+  - Osvi killed 174 and Briqu 63.
+- **Is Melel's kill rate plausible?**
+  - Per Melel: 0.037 kills a day (one in 27 days). Its victims were 1.8% of its own mass a day, and it ate 0.35% of its
+    mass a day of them (the edible carcass is ~32% of a victim, and it ate 62% of that).
+  - Only 20 of its 1,881 kills were made with a full gut. So it is far from a Holling type II plateau (Holling 1959), and
+    surplus killing is negligible.
+  - A 7 kg piscivore's maximum ration at its best temperature is ~1–2% of its mass a day (fish bioenergetics, e.g.
+    largemouth bass C_max = 0.33 W^-0.325 g/g/d: 1.8% at 7 kg). The per-capita rate is ordinary.
+  - What is not ordinary is the **biomass pyramid at founding**: predators and omnivores 6.3 t over prey 1.2 t (Vimolo
+    0.14 t, Briqu 1.0 t). Melel (3.6 t) was founded at the limit of 600 on algae, which it passes at 3.08× need against
+    the margin of 3, but its diet gives it more from meat. Osvi adds 2.7 t.
+  - The prey were killed before they bred. Briqu (asexual, gestation 42 d, maturity 165 d) made 3 conceptions from 574
+    animals and was gone within 250 steps (30 days). Vimolo made 252 conceptions and 19 births (Melel ate 222 eggs).
+  - Vimolo's mortality early on was ~3.6% a day, against ~1.9 a year for a pelagic fish of its size (Peterson &
+    Wroblewski 1984). It was a prey population founded beside 30× its biomass of random-brained predators.
+- **Lost before birth** (Melel's 1,666 of 2,081 conceptions): 1,344 (81%) died with their mother when she was killed, and
+  322 (19%) were resorbed by a starving mother (energy below the embryo's cost + 10% of her reserve). Both are real: an
+  embryo cannot outlive its mother, and resorption and abortion under starvation are known in viviparous fishes and
+  mammals. Nothing was changed.
+- **Another seed.** Seed 5 on the same code: 7 founded, 4 alive at step 2,000 (Ithith 355 animals and 915 embryos, Meltor
+  77, Narelax 16, Annar 4). One lineage is not typical.
+- **Verdict.** The one lineage of seed 3 is **(c), a real outcome of these founders and this seed**: a dominant
+  omnivorous predator founded at the founder limit over a small, slow-breeding prey stock, all with random brains.
+  - The gut bound made it more likely by rejecting three marginal lineages whose guts were inflated by the warm-rate
+    tissue upkeep (b, fixed).
+  - The founding stays marginal by construction: the first of 256 draws to pass a 3× test passes at 3.05–3.4×. So which
+    ancestors are founded swings with any change to the physics. Nothing was tuned for lineages.
+
+**2. The flat discs on land.** Each disc was grown from its genome at its live mass (the check world's Body Lab export)
+and compared with the plain body of the same mass (`Translate.Reference`) and with the same body turned 90° (length and
+width genes swapped):
+
+| | Tete 22.8 kg | Fapulnar 11.0 kg | plain 22.8 / 11.0 kg |
+|---|---|---|---|
+| segments (L × W × H) | 2 × (87 × 1,053 × 143 mm) | 21–63 × 271–753 × 63–111 mm | round |
+| crawl cost of transport, J/(kg m) | 32.8 (turned: 8.1) | 31.8 (turned: 8.0) | 2.5 / 3.2 (walking) |
+| top speed on land, m/s | 0.54 | 1.0 | 11.5 / 10.5 |
+| least turning radius (water), m | 7.4 | 1.9 | 1.05 / 0.83 |
+| trunk surface vs plain (SurfK); evaporation (EvapK) | 1.39; 10.5 | 1.49; 5.6 | 0.96; 0.24 |
+| sag: section strength over own weight, half-width cantilever | 75× | 12× | 141× / 180× |
+
+- **Crawling with width.** The crawl's support cost is Kram & Taylor's cost per stride, and a crawler's stride is a body
+  wave along its direction of travel (0.25 × `WaveLength`).
+  - A disc moving broadside has a 4.4 cm stride, so it pays 10–13× the plain body's cost a metre (3–4× its own turned
+    shape's). Width is priced, through the length that is left.
+  - Air drag is negligible (0.15 m² at 0.5 m/s: 0.02 N).
+  - A pedal crawler lays its mucus over its sole's width (Denny 1980). The model's slip term is per weight for every
+    crawler; it is not changed here.
+- **Turning.** Already a cost: its side area (length × height) is small, so it turns 7× wider than the plain body. Yaw
+  inertia (3 m L² for Tete) is not in any body's turning radius, so the gap is general, not the discs'.
+- **Obstacles.** The live world has no obstacle field; its rough ground is slopes, read by `Topple`.
+  - The prototype's obstacle work is width-independent for a body that drapes over a step (W_eff × rise / gap). A rigid
+    body would meet steps across its whole width.
+  - Adding obstacles needs a terrain the live map does not have and would touch every body, so it was not done.
+- **Sagging.** A crawler lies on the ground, which supports it. Even held up by its middle, with each half-width
+  cantilevered under its own weight, its section bears 12–75× the load (soft tissue σ T²/6 plus its integument as
+  sandwich faces, `FacePressureCap`). Not binding.
+- **Heat and evaporation.** These are charged on the real surface: SurfK 1.4–1.5 and evaporation 23–45× the plain body's
+  (from everted exchange surface). But **the surface was short**.
+  - A segment's side was π(a + b) × L. That is exact for a round section and up to 21% short for a flat one (4a against
+    πa). Tete's sides were 13% short (0.58 m² of surface against 0.63).
+  - This was a loophole for every flat or tall-thin section (§8): such a body grew, armoured, heated and wetted less skin
+    than it has.
+  - Fix: Ramanujan's perimeter, π(a + b)(1 + 3k / (10 + √(4 − 3k))), k = ((a − b)/(a + b))², within 0.04% at every aspect
+    (`Development.EllipsePerimeter`). Round sections, and so the plain body and every reference, are unchanged.
+  - Now Tete has SurfK 1.50 and EvapK 11.4; Fapulnar 1.61 and 5.8.
+- **Verdict.** The discs pay for their shape: they are slow and costly on land, poor at turning, and their skin is
+  charged. Physics does not ban them, and random-brained animals that barely move pay little for their crawl. The one
+  wrong term was the surface.
+
+**Tests.**
+
+- New in MorphLive:
+  - `AFlatSegmentHasTheWholeSurfaceOfItsSection`: the perimeter against the elliptic integral at aspects 1–30, a grown
+    flat segment's side, and a round one unchanged.
+  - `AColdBodysSkinAndGillsCostItsMetabolicLevel`: the upkeep is level × the warm one; the same shape builds the same
+    reference gut cold or warm; a cold gilled body's epithelium costs a warm body's share of its Kleiber rate.
+- Each class was run in its own process. Green in full: MorphLive (10), Morph (38), Shadow (5, 1 retired), Locomotion
+  (11), BodyLab (2), Founding (5), Ocean (11), Ecology (45, 4 retired), Engineering (10 of 10, `StepLoopDoesNotAllocate`
+  and `ConstantsDocumentMatchesCode` included; no constant of `Constants.cs` changed), Diving (4, 1 retired), Respiration
+  (13, 1 retired), Wading (2, 1 retired), Feeding (8), FeedingBudget (1).
+- StepLength: `DefaultStepIsBitIdenticalToBefore` re-pinned 7475422619767155745 → 2255307997004125111, with a dated
+  comment.
+- **Not green:** `ActsAndLearningAnHourAreTheSameAtAFineStep`. The share of time resting is 2.5% at a 10-minute step
+  against 3.6% at 2.92 h; the tolerance is 25%.
+  - The step dependence was there before. On the round's own code the fine step rested 18% less (2.3% against 2.8%) and
+    struck 19% less; with the upkeep fix alone it rested 27% less.
+  - Nothing in this round reads the step. The changed founders moved a near-edge difference past the tolerance.
+  - The band was not widened to hide it. The term that makes a fine-stepped random brain rest less is still to be found.
+
+**Short checks** (valley map, `--random-brains --no-checkpoint`; "before" is §13.17's runs):
+
+- **Ocean, seed 3, 2,000 steps: 840 alive in 2 lineages** (before: 202 in 1).
+  - 6 founded (before: 9): Melel (now a 0.6 kg, 4-segment body, another ancestor draw), Briqu (2.3 kg, 2 segments), Tete,
+    Anithmo, Fapulnar and Nice.
+  - At the end: Melel 274, Briqu 314. Kills 1,281, of them Briqu's 1,078 (its top food is still phytoplankton); lost
+    before birth 947.
+- **Ocean, seed 5, 2,000 steps:** 1,796 alive in 5 lineages (Ithith 16 kg, Meltor 3.3 kg, Kafa 0.5 kg, Narelax 31 kg,
+  Lomel 19 kg); 8 founded.
+- **Land, seed 3, 1,500 steps: 8,380 alive in 11 lineages** (before: 8,533 in 10); 13 of 16 ancestors left descendants
+  (12 before).
+  - Body plans: Tete 1,801 (20.5 kg, 2.1 segments, 0.3 pairs; still the disc), Fapulnar 1,597 (9.5 kg, 4.8 segments, 8.0
+    pairs), Vimolo 1,496 (35.7 kg), Elos 983, Axce 827, Nice 685.
+  - All living: 2 segments in 2,881 and 4–5 in 3,393; 0 pairs in 5,268 and 8 in 1,072.
+  - Deaths 8,521, of which 222 suffocated and 282 drowned.
+
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
@@ -1632,6 +1778,10 @@ touch (Voice, Geology, Hydrology, Plant and the rest of §13.16).
 - Fish, F. E. (2002). Balancing requirements for stability and maneuverability in cetaceans. *Integr. Comp. Biol.* 42.
 - Goldberg, D. E. & Richardson, J. (1987). Genetic algorithms with sharing for multimodal function optimization. *ICGA* 2.
 - Gray, J. (1946). The mechanism of locomotion in snakes. *J. Exp. Biol.* 23.
+- Else, P. L. & Hulbert, A. J. (1981). Comparison of the "mammal machine" and the "reptile machine": energy production. *Am. J. Physiol.* 240.
+- Mommsen, T. P. (1984). Metabolism of the fish gill. In *Fish Physiology* 10B (Hoar & Randall, eds.). Academic Press.
+- Morgan, J. D. & Iwama, G. K. (1999). Energy cost of NaCl transport in isolated gills of cutthroat trout. *Am. J. Physiol.* 277.
+- Ramanujan, S. (1914). Modular equations and approximations to π. *Q. J. Math.* 45.
 - Holling, C. S. (1959). Some characteristics of simple types of predation and parasitism. *Can. Entomol.* 91.
 - Howland, H. C. (1974). Optimal strategies for predator avoidance: the relative importance of speed and manoeuvrability. *J. Theor. Biol.* 47.
 - Josephson, R. K. (1993). Contraction dynamics and power output of skeletal muscle. *Annu. Rev. Physiol.* 55.
