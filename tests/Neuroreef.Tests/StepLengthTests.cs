@@ -73,7 +73,9 @@ public class StepLengthTests
         // Re-pinned 2026-11-03 (second round, docs/BODYPLAN.md §13.11): the gill area cap, the cruise at its metabolic pace,
         // sustained swimming limited by aerobic supply, protection as a kill-probability ratio, the flight-muscle premium and
         // the appendage heat surface anchored on the plain body. Was 15361944388290876228.
-        Assert.Equal(10104198921116109538UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03 (third round, docs/BODYPLAN.md §13.15): the vertical travel of dives is metres an hour, not
+        // once a step (a swimmer that stays down moves between the surface and its depth once a day). Was 10104198921116109538.
+        Assert.Equal(5632958963462331332UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time
