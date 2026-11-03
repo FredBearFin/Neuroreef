@@ -138,8 +138,9 @@ public static class Body
         // (B_LEGS, B_FINS, B_WINGS, B_LEGN, B_FINN, B_ARMOUR, B_LUNGS, B_SPEED, B_APPEND, the shape genes) are retired: a
         // genome with no module block (an older save, a hand-made genome) is translated from them first (Morph.Translate),
         // and nothing else reads them
-        var mg = Morph.Codec.Decode(Morph.Codec.Block((ReadOnlySpan<sbyte>)gn)) ?? Morph.Codec.FromLabelled(gn);
-        var mo = Morph.Development.Grow(mg, m);
+        // (decoded and grown in this thread's reused objects: no allocation at a birth; Codec.ForExpress, MorphPool)
+        var mg = Morph.Codec.ForExpress(gn);
+        var mo = Morph.Development.Grow(mg, m, Morph.MorphPool.Thread);
         float geneF = Morph.Live.GeneFactor(gn);
         float toW = K.BMR_W / K.C_BASAL;   // W per energy unit a reference step
         float brainW = K.COST_BRAIN * K.BMR_W * brain / K.BRAIN_REF;

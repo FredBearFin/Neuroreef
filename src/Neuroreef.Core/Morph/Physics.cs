@@ -275,8 +275,14 @@ public static class Physics
     public static SwimProps[] SwimSet(Morphology m, float rho, float nu = Phys.NU_W)
     {
         var s = new SwimProps[FOLD_N];
-        for (int k = 0; k < FOLD_N; k++) s[k] = Swim(m, rho, nu, k);
+        SwimSet(m, rho, s, nu);
         return s;
+    }
+
+    /// <summary>The same into s (FOLD_N entries), without allocating.</summary>
+    public static void SwimSet(Morphology m, float rho, Span<SwimProps> s, float nu = Phys.NU_W)
+    {
+        for (int k = 0; k < FOLD_N; k++) s[k] = Swim(m, rho, nu, k);
     }
 
     /// <summary>Mechanical power to swim at u in the cheapest folding its muscle can hold steadily (cap: that folding's
@@ -384,6 +390,13 @@ public static class Physics
     public static float[] ControlAreas(Morphology m, float rho, float u)
     {
         var c = new float[m.Pairs.Count + 1];
+        ControlAreas(m, rho, u, c);
+        return c;
+    }
+
+    /// <summary>The same into c (pairs + 1 entries), without allocating.</summary>
+    public static void ControlAreas(Morphology m, float rho, float u, Span<float> c)
+    {
         float q = 0.5f * rho * MathF.Max(u, 0.05f) * MathF.Max(u, 0.05f);
         for (int i = 0; i < m.Pairs.Count; i++)
         {
@@ -399,8 +412,7 @@ public static class Physics
         foreach (var s in m.Segs) { meanH += s.H * s.L; ax += s.AxMuscle; tis += s.TissueMass; }
         meanH /= MathF.Max(m.Length, 1e-6f);
         float axShare = tis > 0f ? ax / tis : 0f;
-        c[^1] = 0.5f * m.Length * meanH * Flex(m) * MathF.Min(1f, axShare / 0.1f) * PlateFactor(m, q * Phys.CL_MAX);
-        return c;
+        c[m.Pairs.Count] = 0.5f * m.Length * meanH * Flex(m) * MathF.Min(1f, axShare / 0.1f) * PlateFactor(m, q * Phys.CL_MAX);
     }
 
     /// <summary>The pressure (Pa) a segment's broad face bears before its section fails in bending: a plate of depth D (the
@@ -463,7 +475,9 @@ public static class Physics
     public static float TurnRadius(Morphology m, float rho, float u)
     {
         float s = 0f;
-        foreach (var c in ControlAreas(m, rho, u)) s += c;
+        Span<float> ca = stackalloc float[m.Pairs.Count + 1];
+        ControlAreas(m, rho, u, ca);
+        foreach (var c in ca) s += c;
         float mEff = m.Mass + Phys.CA_LAT * rho * m.Volume;
         // no body turns much tighter than ~0.1 of its own length, however much lateral area it has (Domenici & Blake 1997:
         // least radii 0.05-0.2 L); without this a very elongate trunk's side area made fineness-80 "eels" turn on a coin

@@ -64,6 +64,8 @@ public sealed class Segment
     public float Volume;                 // m³ (tissue + integument)
     public float X0;                     // distance of its front from the head (the mouth), m
     public int Gene;                     // which segment gene grew it
+    /// <summary>Every field to zero (a pooled segment reused by Development.Grow with a MorphPool).</summary>
+    public void Clear() { L = W = H = IntT = IntMin = Pore = Invag = AxShare = Gas = GasV = Fat = FatMass = TissueMass = IntMass = AxMuscle = AppMuscle = Area = Volume = X0 = 0f; Gene = 0; }
 }
 
 public sealed class Pair
@@ -83,6 +85,8 @@ public sealed class Pair
     public float MomentCap;              // bending moment one side can bear at its base, N·m
     public float Artic;                  // articulation 0..1 (moving needs joints, or softness)
     public float ExoT;                   // thickness of its outer tube, m (its armour)
+    /// <summary>Every field to zero (a pooled pair reused by Development.Grow with a MorphPool).</summary>
+    public void Clear() { Seg = Gene = Joints = 0; Len = Chord = Thick = Theta = MuscleShare = Muscle = Mineral = Wall = Exo = Hollow = Pore = Invag = Mass = Volume = MomentCap = Artic = ExoT = 0f; Sagittal = false; }
 }
 
 public sealed class Morphology
@@ -104,8 +108,45 @@ public sealed class Morphology
     public float ActiveMass => Mass - InertMass - (1f - Mat.FAT_MET) * (FatMass - Mat.TypicalFat(Mass) * Mass);
     public int JointCount;
 
+    /// <summary>Empty it for reuse (Development.Grow with a MorphPool): no parts, every aggregate zero.</summary>
+    public void Clear()
+    {
+        Segs.Clear(); Pairs.Clear();
+        Mass = Volume = Length = MaxW = MaxH = TailH = Fineness = FrontalArea = StepArea = IntMass = ExoMass = Rigidity = 0f;
+        ExchExt = ExchInt = SkinArea = SkinThick = GasV = ExchGas = GutMass = MuscleMass = TotalArea = InertMass = FatMass = 0f;
+        JointCount = 0;
+    }
+
     public int SegmentCount => Segs.Count;
     public int PairCount => Pairs.Count;
+}
+
+/// <summary>
+/// Reused parts for growing bodies without allocating (the live step loop grows one at every birth: Body.Express,
+/// EngineeringTests.StepLoopDoesNotAllocate). One per thread (Pool): its two morphologies are the scale pass and the grown
+/// body, so a body grown with a pool is valid only until the next growth on that thread.
+/// </summary>
+public sealed class MorphPool
+{
+    public const int MAX_SEGS = MorphGenome.MAX_SEG_GENES * Development.MAX_REPEAT, MAX_PAIRS = MAX_SEGS * MorphGenome.MAX_APP_GENES;
+    readonly Morphology[] _m = { NewM(), NewM() };
+    readonly Segment[] _s = new Segment[2 * MAX_SEGS];
+    readonly Pair[] _p = new Pair[2 * MAX_PAIRS];
+    int _ns, _np, _which;
+    public MorphPool() { for (int k = 0; k < _s.Length; k++) _s[k] = new Segment(); for (int k = 0; k < _p.Length; k++) _p[k] = new Pair(); }
+    static Morphology NewM() { var m = new Morphology(); m.Segs.Capacity = MAX_SEGS; m.Pairs.Capacity = MAX_PAIRS; return m; }
+    /// <summary>The next morphology (alternating between the two), emptied, its parts taken from this pool's half.</summary>
+    internal Morphology Take()
+    {
+        _which ^= 1; var m = _m[_which]; m.Clear();
+        _ns = _which * MAX_SEGS; _np = _which * MAX_PAIRS;
+        return m;
+    }
+    internal Segment Seg() { var s = _s[_ns++]; s.Clear(); return s; }
+    internal Pair Pair() { var p = _p[_np++]; p.Clear(); return p; }
+    [ThreadStatic] static MorphPool? _t;
+    /// <summary>This thread's pool.</summary>
+    public static MorphPool Thread => _t ??= new MorphPool();
 }
 
 public static class Development
@@ -154,14 +195,17 @@ public static class Development
     /// <summary>Grows the genome's body at an explicit adult mass (kg), whatever its mass gene: the live simulation's
     /// mass range differs from the prototype's gene range, and the shadow expression (Shadow.cs) grows a translated live
     /// genome at the live body's own mass. Pure (no static state), so it is safe on any thread.</summary>
-    public static Morphology Grow(MorphGenome g, float massKg)
+    public static Morphology Grow(MorphGenome g, float massKg) => Grow(g, massKg, null);
+
+    /// <summary>The same, with the parts taken from a pool (no allocation; valid until the next growth with that pool).</summary>
+    public static Morphology Grow(MorphGenome g, float massKg, MorphPool? pool)
     {
-        var m1 = GrowAt(g, 1f);
-        var m = GrowAt(g, m1.Mass > 0f ? MathK.Cbrt(massKg / m1.Mass) : 1f);
+        var m1 = GrowAt(g, 1f, pool);
+        var m = GrowAt(g, m1.Mass > 0f ? MathK.Cbrt(massKg / m1.Mass) : 1f, pool);
         return m;
     }
 
-    static Morphology GrowAt(MorphGenome g, float kScale)
+    static Morphology GrowAt(MorphGenome g, float kScale, MorphPool? pool)
     {
         // pass 1: raw proportions and the scale that gives the trunk its mass
         float raw = 0f;
@@ -175,7 +219,7 @@ public static class Development
         raw *= MathF.PI / 4f;
         float kSize = MathK.Cbrt(TrunkMass / Mat.RHO_TISSUE / MathF.Max(raw, 1e-12f)) * kScale;
 
-        var m = new Morphology();
+        var m = pool != null ? pool.Take() : new Morphology();
         int appGene = 0;
         for (int gi = 0; gi < g.Segs.Count; gi++)
         {
@@ -185,15 +229,13 @@ public static class Development
             float scale = kSize;
             for (int k = 0; k < rep; k++)
             {
-                var s = new Segment
-                {
-                    Gene = gi,
-                    L = LogMap(sg.P[SP.LEN], SEG_L_LO, SEG_L_HI) * scale,
-                    W = LogMap(sg.P[SP.WID], SEG_W_LO, SEG_W_HI) * scale,
-                    H = LogMap(sg.P[SP.HEI], SEG_W_LO, SEG_W_HI) * scale,
-                    IntMin = sg.P[SP.INT_MIN], Pore = Mat.PORE_MAX * sg.P[SP.PORE], Invag = sg.P[SP.INVAG],
-                    AxShare = 0.4f * sg.P[SP.AXMUS], Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS], Fat = Mat.FAT_MAX * sg.P[SP.FAT],
-                };
+                var s = pool != null ? pool.Seg() : new Segment();
+                s.Gene = gi;
+                s.L = LogMap(sg.P[SP.LEN], SEG_L_LO, SEG_L_HI) * scale;
+                s.W = LogMap(sg.P[SP.WID], SEG_W_LO, SEG_W_HI) * scale;
+                s.H = LogMap(sg.P[SP.HEI], SEG_W_LO, SEG_W_HI) * scale;
+                s.IntMin = sg.P[SP.INT_MIN]; s.Pore = Mat.PORE_MAX * sg.P[SP.PORE]; s.Invag = sg.P[SP.INVAG];
+                s.AxShare = 0.4f * sg.P[SP.AXMUS]; s.Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS]; s.Fat = Mat.FAT_MAX * sg.P[SP.FAT];
                 s.IntT = LogMap(sg.P[SP.INT_T], INT_REL_LO, INT_REL_HI);   // relative here; made absolute in Finish
                 float core = s.L * s.W * s.H * (MathF.PI / 4f);
                 s.Area = MathF.PI * 0.5f * (s.W + s.H) * s.L;   // lateral surface of an elliptic cylinder (first order); exposed ends added in Finish
@@ -209,18 +251,16 @@ public static class Development
                 for (int ai = 0; ai < sg.Apps.Count; ai++)
                 {
                     var ag = sg.Apps[ai];
-                    var p = new Pair
-                    {
-                        Seg = segIndex, Gene = appGene + ai,
-                        Len = LogMap(ag.P[AP.LEN], APP_L_LO, APP_L_HI) * scale,
-                        Chord = LogMap(ag.P[AP.CHORD], APP_C_LO, APP_C_HI) * scale,
-                        Thick = MathF.Min(LogMap(ag.P[AP.THICK], APP_T_LO, APP_T_HI), LogMap(ag.P[AP.CHORD], APP_C_LO, APP_C_HI)) * scale,   // thickness is the lesser section axis
-                        Theta = ag.P[AP.DROOP] * (MathF.PI / 2f), Sagittal = ag.P[AP.ROLL] >= 0.5f,
-                        Joints = Joints(ag.P[AP.JOINTS]),
-                        MuscleShare = Mat.PAIR_MUSCLE * ag.P[AP.MUSCLE],
-                        Mineral = ag.P[AP.MINERAL], Wall = 0.02f + 0.98f * ag.P[AP.WALL], Exo = ag.P[AP.EXO], Hollow = Mat.HOLLOW_MAX * ag.P[AP.HOLLOW],
-                        Pore = Mat.PORE_MAX * ag.P[AP.PORE], Invag = ag.P[AP.INVAG],
-                    };
+                    var p = pool != null ? pool.Pair() : new Pair();
+                    p.Seg = segIndex; p.Gene = appGene + ai;
+                    p.Len = LogMap(ag.P[AP.LEN], APP_L_LO, APP_L_HI) * scale;
+                    p.Chord = LogMap(ag.P[AP.CHORD], APP_C_LO, APP_C_HI) * scale;
+                    p.Thick = MathF.Min(LogMap(ag.P[AP.THICK], APP_T_LO, APP_T_HI), LogMap(ag.P[AP.CHORD], APP_C_LO, APP_C_HI)) * scale;   // thickness is the lesser section axis
+                    p.Theta = ag.P[AP.DROOP] * (MathF.PI / 2f); p.Sagittal = ag.P[AP.ROLL] >= 0.5f;
+                    p.Joints = Joints(ag.P[AP.JOINTS]);
+                    p.MuscleShare = Mat.PAIR_MUSCLE * ag.P[AP.MUSCLE];
+                    p.Mineral = ag.P[AP.MINERAL]; p.Wall = 0.02f + 0.98f * ag.P[AP.WALL]; p.Exo = ag.P[AP.EXO]; p.Hollow = Mat.HOLLOW_MAX * ag.P[AP.HOLLOW];
+                    p.Pore = Mat.PORE_MAX * ag.P[AP.PORE]; p.Invag = ag.P[AP.INVAG];
                     musShareSum += p.MuscleShare;
                     SkeletonOf(p);
                     m.Pairs.Add(p);

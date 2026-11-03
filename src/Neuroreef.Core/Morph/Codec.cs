@@ -67,27 +67,52 @@ public static class Codec
     }
 
     /// <summary>The module genome in a block, or null if it holds none (count 0).</summary>
-    public static MorphGenome? Decode(ReadOnlySpan<sbyte> block)
+    public static MorphGenome? Decode(ReadOnlySpan<sbyte> block) => Decode(block, null, null);
+
+    /// <summary>The same into a given genome object, its genes from a pool (no allocation); null if the block holds none.</summary>
+    public static MorphGenome? Decode(ReadOnlySpan<sbyte> block, MorphGenome? into, GenePool? pool)
     {
         int n = Math.Clamp((int)block[0], 0, MorphGenome.MAX_SEG_GENES);
         if (n == 0) return null;
-        var g = new MorphGenome();
+        var g = into ?? new MorphGenome();
+        g.Segs.Clear(); g.MassG = MorphGenome.BLOB_MASS_G;
         for (int i = 0; i < n; i++)
         {
             int o = 1 + i * SEG_BYTES;
-            var s = new SegGene { Innov = GetU(block, o) };
+            uint si = GetU(block, o);
+            var s = pool != null ? pool.Seg(si) : new SegGene { Innov = si };
             for (int k = 0; k < SP.N; k++) s.P[k] = P(block[o + 4 + k]);
             int na = Math.Clamp((int)block[o + 4 + SP.N], 0, MorphGenome.MAX_APP_GENES);
             for (int j = 0; j < na; j++)
             {
                 int q = o + 4 + SP.N + 1 + j * APP_BYTES;
-                var a = new AppGene { Innov = GetU(block, q) };
+                uint ai = GetU(block, q);
+                var a = pool != null ? pool.App(ai) : new AppGene { Innov = ai };
                 for (int k = 0; k < AP.N; k++) a.P[k] = P(block[q + 4 + k]);
                 s.Apps.Add(a);
             }
             g.Segs.Add(s);
         }
         return g;
+    }
+
+    /// <summary>Per-thread reused objects for decoding, mutating, recombining and growing at a birth (no allocation in the
+    /// step loop; EngineeringTests.StepLoopDoesNotAllocate). Valid until the next use on the same thread.</summary>
+    public sealed class Scratch
+    {
+        public readonly GenePool Genes = new();
+        public readonly MorphGenome A = GenePool.NewGenome(), B = GenePool.NewGenome(), C = GenePool.NewGenome();
+        public readonly Innovations Inn = new(LIVE_INNOV_LO);
+    }
+    [ThreadStatic] static Scratch? _scratch;
+    public static Scratch Thread => _scratch ??= new Scratch();
+
+    /// <summary>The module genome of a whole genome for expressing it (Body.Express): decoded into this thread's scratch
+    /// (no allocation), or, for a genome with no block, translated from its labelled genes (allocates; older genomes only).</summary>
+    public static MorphGenome ForExpress(ReadOnlySpan<sbyte> genome)
+    {
+        var x = Thread; x.Genes.Reset();
+        return Decode(Block(genome), x.A, x.Genes) ?? FromLabelled(genome);
     }
 
     /// <summary>Quantise a genome as storing it would (encode, decode), so a genome built in memory is the one a slot holds.</summary>
@@ -106,7 +131,8 @@ public static class Codec
     /// Two lineages draw the same number only by a 32-bit hash collision (~n²/2^33 for n innovations).</summary>
     public const uint LIVE_INNOV_LO = 1u << 16;
     public static Innovations InnovationsFor(uint seed, uint step, uint key)
-        => new(LIVE_INNOV_LO | (Rng.Hash(seed, step, key, Rs.Mutate + 0x3FFFFF00u) & 0xFFFFFF00u));
+        => new(InnovStart(seed, step, key));
+    static uint InnovStart(uint seed, uint step, uint key) => LIVE_INNOV_LO | (Rng.Hash(seed, step, key, Rs.Mutate + 0x3FFFFF00u) & 0xFFFFFF00u);
 
     /// <summary>Mutate a genome's module block with every Morph operator (point, diverge, duplicate and delete a segment,
     /// duplicate, delete and insert an appendage, the repeat count: Mutate.Apply), at the prototype's per-offspring
@@ -115,13 +141,12 @@ public static class Codec
     public static void MutateBlock(Span<sbyte> genome, uint seed, uint step, uint key)
     {
         var block = Block(genome);
-        var g = Decode(block);
+        var x = Thread; x.Genes.Reset();
+        var g = Decode(block, x.A, x.Genes);
         if (g == null) return;
         var r = new Rng.Seq(Rng.Hash(seed, step, key, Rs.Mutate + 0x3FFFFF10u));
-        var rates = LiveRates;
-        float massG = g.MassG;
-        Mutate.Apply(g, ref r, rates, InnovationsFor(seed, step, key));
-        g.MassG = massG;
+        x.Inn.Reset(InnovStart(seed, step, key));
+        Mutate.Apply(g, ref r, LiveRates, x.Inn, x.Genes);
         Encode(g, block);
     }
 
@@ -133,12 +158,13 @@ public static class Codec
     /// fitter's disjoint genes, and at equal fitness either), and each module both carry from either parent.</summary>
     public static void CrossBlock(Span<sbyte> child, ReadOnlySpan<sbyte> mother, ReadOnlySpan<sbyte> father, uint seed, uint step, uint key)
     {
-        var gm = Decode(Block(mother)); var gf = Decode(Block(father));
+        var x = Thread; x.Genes.Reset();
+        var gm = Decode(Block(mother), x.A, x.Genes); var gf = Decode(Block(father), x.B, x.Genes);
         var cb = Block(child);
         if (gm == null || gf == null) { (gm == null ? Block(father) : Block(mother)).CopyTo(cb); return; }
         var r = new Rng.Seq(Rng.Hash(seed, step, key, Rs.Cross + 0x3FFFFF20u));
         bool motherLeads = r.Next() < 0.5f;
-        var c = motherLeads ? Homology.Cross(gm, gf, ref r) : Homology.Cross(gf, gm, ref r);
+        var c = motherLeads ? Homology.Cross(gm, gf, ref r, x.C, x.Genes) : Homology.Cross(gf, gm, ref r, x.C, x.Genes);
         Encode(c, cb);
     }
 

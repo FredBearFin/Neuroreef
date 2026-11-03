@@ -69,6 +69,8 @@ public sealed class Innovations
     uint _next;
     public Innovations(uint start = 100) { _next = start; }
     public uint Next() => _next++;
+    /// <summary>Start again at start (a reused counter: Codec, no allocation in the step loop).</summary>
+    public void Reset(uint start) { _next = start; }
     /// <summary>For mutations made outside a run (tests, probes).</summary>
     public static readonly Innovations Shared = new(1_000_000);
 }
@@ -99,6 +101,45 @@ public sealed class MorphGenome
         g.Segs.Add(s);
         return g;
     }
+}
+
+/// <summary>
+/// Reused gene objects for decoding, mutating and recombining module genomes without allocating (the live step loop does
+/// it at every birth; Codec). Taken in order until Reset; when it runs out it allocates, so it is never wrong, only slower.
+/// Genes from a pool are valid until its next Reset.
+/// </summary>
+public sealed class GenePool
+{
+    readonly SegGene[] _s = new SegGene[96];
+    readonly AppGene[] _a = new AppGene[384];
+    int _ns, _na;
+    public GenePool()
+    {
+        for (int k = 0; k < _s.Length; k++) { _s[k] = new SegGene(); _s[k].Apps.Capacity = MorphGenome.MAX_APP_GENES; }
+        for (int k = 0; k < _a.Length; k++) _a[k] = new AppGene();
+    }
+    public void Reset() { _ns = 0; _na = 0; }
+    public SegGene Seg(uint innov)
+    {
+        var s = _ns < _s.Length ? _s[_ns++] : new SegGene();
+        s.Apps.Clear(); s.Innov = innov; Array.Clear(s.P);
+        return s;
+    }
+    public AppGene App(uint innov)
+    {
+        var a = _na < _a.Length ? _a[_na++] : new AppGene();
+        a.Innov = innov; Array.Clear(a.P);
+        return a;
+    }
+    public AppGene CloneApp(AppGene a) { var c = App(a.Innov); Array.Copy(a.P, c.P, AP.N); return c; }
+    public SegGene CloneSeg(SegGene s)
+    {
+        var c = Seg(s.Innov); Array.Copy(s.P, c.P, SP.N);
+        foreach (var a in s.Apps) c.Apps.Add(CloneApp(a));
+        return c;
+    }
+    /// <summary>A genome object with room for the most segment genes (its list never grows).</summary>
+    public static MorphGenome NewGenome() { var g = new MorphGenome(); g.Segs.Capacity = MorphGenome.MAX_SEG_GENES + 1; return g; }
 }
 
 /// <summary>Mutation rates per offspring.</summary>
@@ -144,14 +185,14 @@ public static class Mutate
     /// <summary>Tandem duplication of a segment gene: the copy is inserted next to it and each copy is half as long, so
     /// the body is nearly unchanged until the copies diverge. The copy is a new gene (a paralogue): it and its
     /// appendage genes get new innovation numbers.</summary>
-    public static bool DuplicateSegment(MorphGenome g, int i, Innovations? inn = null)
+    public static bool DuplicateSegment(MorphGenome g, int i, Innovations? inn = null, GenePool? pool = null)
     {
         if (g.Segs.Count >= MorphGenome.MAX_SEG_GENES) return false;
         inn ??= Innovations.Shared;
         var s = g.Segs[i];
         float h = HalfStep(Development.SEG_L_LO, Development.SEG_L_HI);
         s.P[SP.LEN] = Clamp01(s.P[SP.LEN] - h);
-        var c = s.Clone();
+        var c = pool != null ? pool.CloneSeg(s) : s.Clone();
         c.Innov = inn.Next();
         foreach (var a in c.Apps) a.Innov = inn.Next();
         g.Segs.Insert(i + 1, c);
@@ -167,7 +208,7 @@ public static class Mutate
 
     /// <summary>Duplicates appendage gene j of segment i, onto the same segment or (when it is full, or by chance) a
     /// neighbour. The two copies share the original's muscle.</summary>
-    public static bool DuplicateAppendage(MorphGenome g, int i, int j, int target, Innovations? inn = null)
+    public static bool DuplicateAppendage(MorphGenome g, int i, int j, int target, Innovations? inn = null, GenePool? pool = null)
     {
         var s = g.Segs[i];
         if (j < 0 || j >= s.Apps.Count) return false;
@@ -175,7 +216,7 @@ public static class Mutate
         if (t.Apps.Count >= MorphGenome.MAX_APP_GENES) return false;
         var a = s.Apps[j];
         a.P[AP.MUSCLE] *= 0.5f;
-        var c = a.Clone();
+        var c = pool != null ? pool.CloneApp(a) : a.Clone();
         c.Innov = (inn ?? Innovations.Shared).Next();
         t.Apps.Add(c);
         return true;
@@ -190,11 +231,12 @@ public static class Mutate
     }
 
     /// <summary>A new appendage bud: tiny, every other parameter random.</summary>
-    public static bool InsertAppendage(MorphGenome g, int i, ref Rng.Seq r, Innovations? inn = null)
+    public static bool InsertAppendage(MorphGenome g, int i, ref Rng.Seq r, Innovations? inn = null, GenePool? pool = null)
     {
         var s = g.Segs[i];
         if (s.Apps.Count >= MorphGenome.MAX_APP_GENES) return false;
-        var a = new AppGene { Innov = (inn ?? Innovations.Shared).Next() };
+        uint id = (inn ?? Innovations.Shared).Next();
+        var a = pool != null ? pool.App(id) : new AppGene { Innov = id };
         for (int k = 0; k < AP.N; k++) a.P[k] = r.Next();
         a.P[AP.LEN] = 0.05f * r.Next(); a.P[AP.CHORD] = 0.1f * r.Next(); a.P[AP.MUSCLE] = 0.1f * r.Next();
         s.Apps.Add(a);
@@ -202,14 +244,14 @@ public static class Mutate
     }
 
     /// <summary>One offspring's mutations: point and divergence always possible, then each structural operator with its rate.</summary>
-    public static void Apply(MorphGenome g, ref Rng.Seq r, MutationRates m, Innovations? inn = null)
+    public static void Apply(MorphGenome g, ref Rng.Seq r, MutationRates m, Innovations? inn = null, GenePool? pool = null)
     {
         Point(g, ref r, m.PointRate, m.PointSigma);
         if (r.Next() < m.MassRate) g.MassG = Clamp01(g.MassG + m.MassSigma * Gauss(ref r));
         if (r.Next() < m.Diverge) Diverge(g, ref r, m.DivergeSigma);
-        if (r.Next() < m.DupSeg) DuplicateSegment(g, Pick(ref r, g.Segs.Count), inn);
+        if (r.Next() < m.DupSeg) DuplicateSegment(g, Pick(ref r, g.Segs.Count), inn, pool);
         if (r.Next() < m.DelSeg) DeleteSegment(g, Pick(ref r, g.Segs.Count));
-        if (r.Next() < m.InsApp) InsertAppendage(g, Pick(ref r, g.Segs.Count), ref r, inn);
+        if (r.Next() < m.InsApp) InsertAppendage(g, Pick(ref r, g.Segs.Count), ref r, inn, pool);
         if (r.Next() < m.DupApp)
         {
             int i = Pick(ref r, g.Segs.Count);
@@ -218,7 +260,7 @@ public static class Mutate
             {
                 int target = r.Next() < 0.3f ? i + (r.Next() < 0.5f ? -1 : 1) : i;
                 if (target < 0 || target >= g.Segs.Count || g.Segs[target].Apps.Count >= MorphGenome.MAX_APP_GENES) target = i;
-                DuplicateAppendage(g, i, Pick(ref r, s.Apps.Count), target, inn);
+                DuplicateAppendage(g, i, Pick(ref r, s.Apps.Count), target, inn, pool);
             }
         }
         if (r.Next() < m.DelApp)
@@ -236,21 +278,24 @@ public static class Homology
     /// also has (the same innovation number) is inherited whole from either parent at random, and its appendage genes
     /// are aligned the same way. Modules only the less fit parent has are not inherited (NEAT's disjoint and excess
     /// genes). The mass gene comes from either parent.</summary>
-    public static MorphGenome Cross(MorphGenome fitter, MorphGenome other, ref Rng.Seq r)
+    public static MorphGenome Cross(MorphGenome fitter, MorphGenome other, ref Rng.Seq r, MorphGenome? into = null, GenePool? pool = null)
     {
-        var c = new MorphGenome { MassG = r.Next() < 0.5f ? fitter.MassG : other.MassG };
+        var c = into ?? new MorphGenome();
+        c.Segs.Clear();
+        c.MassG = r.Next() < 0.5f ? fitter.MassG : other.MassG;
         foreach (var s in fitter.Segs)
         {
             SegGene? o = null;
             foreach (var t in other.Segs) if (t.Innov == s.Innov) { o = t; break; }
-            if (o == null) { c.Segs.Add(s.Clone()); continue; }
-            var ns = new SegGene { Innov = s.Innov };
+            if (o == null) { c.Segs.Add(pool != null ? pool.CloneSeg(s) : s.Clone()); continue; }
+            var ns = pool != null ? pool.Seg(s.Innov) : new SegGene { Innov = s.Innov };
             Array.Copy(r.Next() < 0.5f ? s.P : o.P, ns.P, SP.N);
             foreach (var a in s.Apps)
             {
                 AppGene? b = null;
                 foreach (var t in o.Apps) if (t.Innov == a.Innov) { b = t; break; }
-                ns.Apps.Add(b != null && r.Next() < 0.5f ? b.Clone() : a.Clone());
+                var src = b != null && r.Next() < 0.5f ? b : a;
+                ns.Apps.Add(pool != null ? pool.CloneApp(src) : src.Clone());
             }
             c.Segs.Add(ns);
         }

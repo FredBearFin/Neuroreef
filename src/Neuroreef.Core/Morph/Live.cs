@@ -53,13 +53,28 @@ public static class Live
         return u;
     }
 
-    /// <summary>The fastest speed between grid point u (where ok holds) and the next grid point up at which ok still holds,
-    /// by bisection (16 halvings: ~1e-6 of the step).</summary>
-    static float Refine(float u, Func<float, bool> ok)
+    /// <summary>The fastest speed between grid point u (where it can still go) and the next grid point up, by bisection (16
+    /// halvings: ~1e-6 of the step): on land at burst power (Shadow.LandMech), and in water within k x each folding's
+    /// muscle capacity and at most cap (no closure: the step loop allocates nothing).</summary>
+    static float RefineLand(Morphology m, in Physics.WalkProps wp, float axBurst, float k, float u)
     {
         float lo = u, hi = u * U[1] / U[0];
-        if (ok(hi)) return hi;
-        for (int k = 0; k < 16; k++) { float mid = 0.5f * (lo + hi); if (ok(mid)) lo = mid; else hi = mid; }
+        if (Shadow.LandMech(m, wp, hi, axBurst, k) <= 0f) return hi;
+        for (int j = 0; j < 16; j++) { float mid = 0.5f * (lo + hi); if (Shadow.LandMech(m, wp, mid, axBurst, k) <= 0f) lo = mid; else hi = mid; }
+        return lo;
+    }
+
+    static bool CanSwim(ReadOnlySpan<Physics.SwimProps> sps, float k, float cap, float u)
+    {
+        foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= MathF.Min(k * sp.Cap, cap)) return true;
+        return false;
+    }
+
+    static float RefineSwim(ReadOnlySpan<Physics.SwimProps> sps, float k, float cap, float u)
+    {
+        float lo = u, hi = u * U[1] / U[0];
+        if (CanSwim(sps, k, cap, hi)) return hi;
+        for (int j = 0; j < 16; j++) { float mid = 0.5f * (lo + hi); if (CanSwim(sps, k, cap, mid)) lo = mid; else hi = mid; }
         return lo;
     }
 
@@ -101,7 +116,7 @@ public static class Live
         c.CotLand = float.IsPositiveInfinity(bestCot) ? 0f : bestCot;
         // the grid's steps are 4.4%; the top speed is refined between grid points by bisection, so it is a continuous
         // function of the body (a gene step does not jump it by a grid step)
-        if (c.VLand > 0f) { float kk = k, ax = k * axCap; var wq = wp; c.VLand = Refine(c.VLand, u => Shadow.LandMech(m, wq, u, ax, kk) <= 0f); }
+        if (c.VLand > 0f) c.VLand = RefineLand(m, wp, k * axCap, k, c.VLand);
         lc.CotLandTop = MathF.Max(c.CotLand, topCot);
         // ---- basal, gut, moult (the moult is paid while growing only: Body.Express keeps it out of the basal)
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.ActiveMass), K.EXP_BASAL) * level;
@@ -118,7 +133,8 @@ public static class Live
         lc.Gut = Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + flyPremium + brainW, kleiber, out float basal);
         c.Basal = basal;
         // ---- water: burst top speed, sustained top speed, the cruise of least gross cost a metre and its net cost there
-        var sps = Physics.SwimSet(m, Phys.RHO_W);
+        Span<Physics.SwimProps> sps = stackalloc Physics.SwimProps[Physics.FOLD_N];
+        Physics.SwimSet(m, Phys.RHO_W, sps);
         // sustained swimming is aerobic: its mechanical power can be no more than its muscle's efficiency x the oxygen its
         // exchange surfaces deliver beyond its basal, in water or (a head at the surface) through its air-breathing ones
         // (Brett 1964: a fish's critical swimming speed is set by its aerobic scope; Webb 1975). Phase 4 (2026-11-03): the
@@ -143,8 +159,8 @@ public static class Live
             float gross = (pCruise / Phys.ETA_M + basal) / u;
             if (gross < bestGross) { bestGross = gross; c.Cruise = u; c.CotWater = pCruise / Phys.ETA_M / u; }
         }
-        if (c.VWater > 0f) { float kk = k; c.VWater = MathF.Min(vWardle, Refine(c.VWater, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= kk * sp.Cap) return true; return false; })); }
-        if (lc.VSust > 0f) lc.VSust = Refine(lc.VSust, u => { foreach (var sp in sps) if (Physics.SwimPower(sp, Phys.RHO_W, u) <= MathF.Min(sp.Cap, aerobic)) return true; return false; });
+        if (c.VWater > 0f) c.VWater = MathF.Min(vWardle, RefineSwim(sps, k, float.PositiveInfinity, c.VWater));
+        if (lc.VSust > 0f) lc.VSust = RefineSwim(sps, 1f, aerobic, lc.VSust);
         // a body that cannot sustain any swimming speed flounders on burst power, paid anaerobically (Phys.ANAEROBIC x),
         // so moving through water is never free; one that cannot move in water at all has no water cost (it cannot go there)
         if (c.CotWater <= 0f && !float.IsPositiveInfinity(burstCot)) c.CotWater = burstCot;
