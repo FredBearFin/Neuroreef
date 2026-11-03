@@ -11,11 +11,13 @@
 //   fins x B_FINN, B_FIN_SHAPE             B_FINN flat lateral pairs (droop 0°, flatness 8, aspect ratio from the shape
 //                                         gene, muscle from the fin gene), plus a sagittal tail blade; the trunk's
 //                                         axial muscle grows with the fin gene (a fish's myotomes are its propulsor)
-//   wings, B_WING_SHAPE                   one long, flat, high-aspect-ratio lateral pair on an enlarged thorax holding
-//                                         the flight muscle
+//   wings, B_WING_SHAPE                   one long, flat, high-aspect-ratio lateral pair on a thorax of its own, whose
+//                                         share of the trunk (and so the flight muscle) grows with the wing gene
 //   armour                                integument thickness and mineral on every segment
 //   B_LUNGS                               exchange surface sized to the oxygen the live organs supply (LUNG_SCOPE,
-//                                         GILL_SCOPE x the organ base): lungs folded in, gills everted
+//                                         GILL_SCOPE x the organ base): lungs as the lined gas space (lung air), gills
+//                                         everted; a body that lives in deep water fills its gas space to neutral
+//                                         (a swim bladder; docs/BODYPLAN.md §11.2)
 //   B_MASS, B_ENDO, B_INSUL, B_APPEND, diet, life history, brain, senses, appearance: kept as genes (they are physiology
 //                                         or behaviour, not structure); the shadow reads B_ENDO for the metabolic level
 // All maths through MathK.
