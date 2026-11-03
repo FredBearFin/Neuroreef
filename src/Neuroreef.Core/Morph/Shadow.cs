@@ -99,7 +99,7 @@ public static class Shadow
     public static float BasalW(Morphology m, float level, float geneFactor, float brainW)
     {
         float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.Mass - m.InertMass), K.EXP_BASAL) * level;
-        float modules = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt);
+        float modules = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
         Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + brainW, kleiber, out float basal);
         return basal;
     }
@@ -293,7 +293,7 @@ public static class ShadowDiag
         "land speed", "water speed", "air speed", "water cruise speed", "land cost/m", "water cost/m", "air cost/m",
         "flight margin", "flies", "standing height", "O2 supply in air", "O2 supply in water", "protection gain",
         "basal cost", "drag shape", "turning (rel.)", "land speed (rel.)", "water speed (rel.)",
-        "land cost/m, legs>=0.7", "water cost/m, fins>=0.7", "water cruise, fins>=0.7", "water cost/m, fish-shaped",
+        "land cost/m, legs>=0.7", "water cost/m, fins>=0.7", "water cruise, fins>=0.7", "water cost/m, fins>=0.7, fish shape",
     };
     /// <summary>Which live values are physically grounded (docs/BODYPLAN.md §10.2).</summary>
     static readonly bool[] Grounded = { true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true };
@@ -340,10 +340,15 @@ public static class ShadowDiag
             // the bodies the live calibrations were made for: walkers on full legs, swimmers on full fins
             if (lg.Legs >= 0.7f) Add(rows[18], s.CotLand, l.CotLand);
             if (lg.Fins >= 0.7f) { Add(rows[19], s.CotWater, l.CotWater); Add(rows[20], s.Cruise, l.Cruise); }
-            // the bodies COT_SWIM_J describes (a fish: Videler & Nolet 1990): full fins, no more than vestigial legs, a
-            // fish's fineness (3-8); the live cost a metre does not depend on shape, the physics does
-            float fine = lg.LengthShare / MathF.Sqrt(MathF.Max(lg.WidthShare * lg.HeightShare, 1e-6f));
-            if (lg.Fins >= 0.7f && lg.Legs < 0.3f && fine >= 3f && fine <= 8f) Add(rows[21], s.CotWater, l.CotWater);
+            // the body COT_SWIM_J describes is a fish (Videler & Nolet 1990), at a fish's fineness. The live cost a metre
+            // does not depend on shape; the physics does (a cube has ~2-3x a fineness-4 body's drag; Hoerner 1965), and
+            // the founders are bluff (fineness < 1.5 in ~90% of them). So: the same genes at fineness 4 (length share 2.5,
+            // the least drag for the volume; Webb 1975), against the same live value
+            if (lg.Fins >= 0.7f)
+            {
+                var fish = lg; fish.LengthShare = 2.5f; fish.WidthShare = fish.HeightShare = MathK.Sqrt(1f / 2.5f);
+                Add(rows[21], Shadow.Of(fish, Shadow.GeneBasalFactor(gn), Shadow.BrainW(gn)).CotWater, l.CotWater);
+            }
         }
     }
 
