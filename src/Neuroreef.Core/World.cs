@@ -121,6 +121,7 @@ public sealed class World
     // voices (Revision M, N): the utterance each organism made this step (MAX_SYL bytes per slot: sounds 1..8, 0 = none),
     // the last utterance it made (whenever), and what each heard: its focal caller's utterance
     [PerSlot] public byte[] Call, LastUtt;
+    [PerSlot] public ulong[] CallStep;      // the step its utterance in Call was made (2026-11-03: a call is on the air for a reference step, Resolve.Speak)
     [PerSlot] public int[] IHeard;          // 0 nothing; else 1 + focal caller's clade x Voice.NTYPE + utterance type
     [PerSlot] public float[] IHeardX, IHeardY;
     [PerSlot] public byte[] IHeardUser;     // its focal caller this step was the person
@@ -343,6 +344,7 @@ public sealed class World
         + PG.N + G.NMHC + 4 * 4                  // Revision R: pathogen genome, immune memory key, 8 floats where 4 were
         + 5 * 2 + 4                              // Revision S: seed in gut and coat, pollen
         + 5 * 4                                  // 2026-11-01: lungs, depth preference, depth, time at depth, oxygen debt
+        + 8                                      // 2026-11-03: the step its call was made
         + Body.NLOOK + 4 + 64;                   // derived (World.D): look signature, MHC diversity, packed neighbour
     public readonly uint TerrainSeed;          // branches of one prehistory share their land
 
@@ -399,7 +401,7 @@ public sealed class World
         HistA = new float[c * Brain.BLOCK]; HistV = new float[c * Brain.BLOCK]; VMean = new float[c]; Tmpl = new byte[c * Voice.NTMPL]; HistD = new float[c * Brain.BLOCK * P.N]; HistY = new float[c * Brain.BLOCK * G.NIN];
         Gain = new float[c * P.N];
         Feat = new float[c * F.N];
-        IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; Call = new byte[c * F.MAX_SYL]; LastUtt = new byte[c * F.MAX_SYL]; IFocal = new int[c]; IFocalSerial = new uint[c]; CallR = new float[c]; CallSorted = new int[c]; IHeard = new int[c]; IHeardX = new float[c]; IHeardY = new float[c]; IHeardUser = new byte[c]; ITarget = new int[c]; IMate = new int[c];
+        IHeading = new float[c]; ISpeed = new float[c]; IActs = new uint[c]; Call = new byte[c * F.MAX_SYL]; LastUtt = new byte[c * F.MAX_SYL]; CallStep = new ulong[c]; IFocal = new int[c]; IFocalSerial = new uint[c]; CallR = new float[c]; CallSorted = new int[c]; IHeard = new int[c]; IHeardX = new float[c]; IHeardY = new float[c]; IHeardUser = new byte[c]; ITarget = new int[c]; IMate = new int[c];
         IFoodHere = new float[c]; IKinDensity = new float[c]; IEatPrey = new byte[c]; IScanning = new byte[c];
         FreeStack = new int[c];
         for (int i = 0; i < c; i++) FreeStack[i] = c - 1 - i;

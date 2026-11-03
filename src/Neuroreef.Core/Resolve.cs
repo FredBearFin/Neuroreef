@@ -620,8 +620,16 @@ public static class Resolve
         int cb = i * F.MAX_SYL;
         var utt = new Span<byte>(w.Call, cb, F.MAX_SYL);
         int nsyl = w.PVoice[i] < K.VOICE_MIN ? 0 : Voice.Order(w, i, acts, utt);
-        if (nsyl == 0) utt.Clear();
-        utt.CopyTo(new Span<byte>(w.LastUtt, cb, F.MAX_SYL));   // its own utterance last step: silence too
+        // what the others hear of it is what it said within the last reference step of time (2026-11-03). A call fires
+        // g x Dt times a step at a finer step (Decide: an event), so cleared every step it was on the air for 1/Dt of the
+        // reference step's time it is heard over at Dt = 1: at a 10-minute step every hearing input was ~1/4 of the
+        // default step's (HEAR_k 0.17-0.49 against 0.50-0.79), and the brains' rest and strike outputs, which read them,
+        // fell 18-30% an hour (StepLengthTests). So a silent step keeps its last call on the air until a reference step of
+        // time has passed since it was made; at Dt = 1 nothing changes (every silent step clears it)
+        if (nsyl > 0) w.CallStep[i] = w.Step;
+        else if (w.Dt < 1f && w.LastUtt[cb] != 0 && (w.Step - w.CallStep[i]) * (double)w.Dt < 1.0) new Span<byte>(w.LastUtt, cb, F.MAX_SYL).CopyTo(utt);
+        else utt.Clear();
+        utt.CopyTo(new Span<byte>(w.LastUtt, cb, F.MAX_SYL));   // its own utterance on the air: silence too
         float vmatch = 0f;
         if (nsyl > 0)
         {

@@ -1736,13 +1736,31 @@ width genes swapped):
   and `ConstantsDocumentMatchesCode` included; no constant of `Constants.cs` changed), Diving (4, 1 retired), Respiration
   (13, 1 retired), Wading (2, 1 retired), Feeding (8), FeedingBudget (1).
 - StepLength: `DefaultStepIsBitIdenticalToBefore` re-pinned 7475422619767155745 → 2255307997004125111, with a dated
-  comment.
-- **Not green:** `ActsAndLearningAnHourAreTheSameAtAFineStep`. The share of time resting is 2.5% at a 10-minute step
-  against 3.6% at 2.92 h; the tolerance is 25%.
-  - The step dependence was there before. On the round's own code the fine step rested 18% less (2.3% against 2.8%) and
-    struck 19% less; with the upkeep fix alone it rested 27% less.
-  - Nothing in this round reads the step. The changed founders moved a near-edge difference past the tolerance.
-  - The band was not widened to hide it. The term that makes a fine-stepped random brain rest less is still to be found.
+  comment (for the two physics fixes; the call fix below leaves it unchanged). After the call fix StepLength is 9 of 9.
+- **`ActsAndLearningAnHourAreTheSameAtAFineStep` failed after the two fixes, and is fixed by a third.** The share of
+  time resting was 2.5% at a 10-minute step against 3.6% at 2.92 h (tolerance 25%).
+  - The step dependence was there before: on the round's own code the fine step rested 18% less (2.3% against 2.8%) and
+    struck 19% less. The changed founders moved it past the tolerance.
+  - **Cause, measured:** the brains' inputs averaged over the day, coarse against fine. Every hearing input was ~1/4 at
+    the fine step (HEAR_0..7 0.09–0.49 against 0.50–0.79); of the other inputs the largest differences were FULL (0.22
+    against 0.18) and FED_NEAR (0.79 against 0.65), and those barely moved with the fix. A call is an event:
+    it fires g × Dt times a step at a finer step (Decide), and `Resolve.Speak` cleared every silent step's call. So a
+    call was on the air for 10 minutes where at the default step it is heard for the 2.92 h of the next step, and
+    random brains whose rest and strike outputs read the hearing inputs rested and struck less an hour. Rest is a state
+    (its share of decisions is its mean output), so it moved with its inputs.
+  - **Fix:** a call stays on the air for a reference step of time. A silent step keeps the last utterance until
+    (steps since it was made) × Dt reaches 1 (`World.CallStep`, the step the call was made). A vocal learner memorises a
+    focal call once, on the step after it was made, so a call held for 17 steps is not learned 17 times. At Dt = 1 every
+    silent step clears the call as before, so **the default world is bit-identical** (`DefaultStepIsBitIdenticalToBefore`
+    unchanged at 2255307997004125111).
+  - After: rest 3.2% at 10 minutes against 3.6% (−10%); strikes 0.0114 against 0.0106 an hour (+8%; −16% before); calls
+    0.0349 against 0.0356; eating 50.6% against 54.9%; learning 7.65e-2 against 5.29e-2 an hour (+45%, within its 50%
+    band, but near its edge: +17% before). At a 1-minute step over 12 h: rest 3.4%. The tolerance was not widened.
+  - Not changed: the translator's telemetry (`IHeard`) and the person's voice (heard for one step only) still count per
+    step; they are reports and a console input, not the brain's.
+  - Tests after the call fix, each class in its own process: StepLength 9 of 9, Voice 10 of 10, Engineering 10 of 10
+    (`EverySlotArrayIsPerSlot` with the new per-slot array; one earlier run's test host crashed after 7 passes and did not
+    repeat), Checkpoint 13, Decision 9 (1 retired), Brain 4.
 
 **Short checks** (valley map, `--random-brains --no-checkpoint`; "before" is §13.17's runs):
 

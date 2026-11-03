@@ -416,8 +416,10 @@ public static class Decide
             // vocal learning (Revision N): during its sensitive period a learner memorises the form of what an alike,
             // grown, older focal caller says, as counts of syllable pairs (start -> first, first -> second, second -> third).
             // Only form is stored, never what was going on (Doupe & Kuhl 1999; Brainard & Doupe 2002)
+            // (at a finer step a call is on the air for a reference step, Resolve.Speak, and is memorised once: on the step after
+            // it was made; at Dt = 1 every heard call was made last step)
             if (focAlike && w.PImit[i] > 0f && w.Evo.VocalLearning && w.StageOf[foc] == St.Adult && w.Age[foc] > w.Age[i]
-                && w.Age[i] < w.PImitAge[i] * w.PLife[i])
+                && w.Age[i] < w.PImitAge[i] * w.PLife[i] && (w.Dt >= 1f || w.CallStep[foc] + 1 == w.Step))
             {
                 int tb = i * Voice.NTMPL;
                 Bump(w.Tmpl, tb + Voice.Cell(0, f0));
