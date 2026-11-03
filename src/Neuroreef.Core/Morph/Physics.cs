@@ -22,8 +22,9 @@
 //              above the shell's (Vermeij 1987; Elner & Hughes 1978; Warner & Jones 1976), evasive prey caught by
 //              speed, turning and strike reach; gut throughput ~ M^0.75 (Demment & Van Soest 1985); patchy food
 //              paid for by travel between patches (Charnov 1976)
-//   flight     induced power of the actuator disk of the span (Pennycuick 2008; Ellington 1984) against flight-muscle
-//              power; lift-based profile efficiency (Dickinson, Lehmann & Sane 1999)
+//   flight     the least power of level flight, induced on the disk of the span plus parasite (Pennycuick 2008), no
+//              slower than stall, against flight-muscle work per wingbeat at the wing's beat frequency (Pennycuick 1996);
+//              lift-based profile efficiency (Dickinson, Lehmann & Sane 1999) (phase 2, docs/BODYPLAN.md §10.3)
 //   breathing  Fick's law per area of folded exchange surface, by medium and whether the surface is everted or folded
 //              in; the cost of ventilating it (water ~800x denser than air; Schmidt-Nielsen 1997); osmotic upkeep in
 //              water, evaporation in air; skin breathing through thin skin
@@ -99,19 +100,36 @@ public static class Phys
     public const float U_REF = 0.3f;          // m/s: the speed the reference drag area is reported at
     public const float B0 = 0.3f;             // standard metabolism of an ectotherm, W kg^-0.75 (~20 °C; Clarke & Johnston 1999)
     public const float P_SPEC = 40f;          // sustained mechanical power of aerobic muscle, W/kg (Weis-Fogh & Alexander 1977)
-    public const float P_FLIGHT = 150f;       // peak power of flight muscle, W/kg (Pennycuick 2008; Askew & Marsh 2002)
+    public const float P_FLIGHT = 150f;       // peak power of flight muscle, W/kg (Pennycuick 2008; Askew & Marsh 2002): W_FLAP at ~9 Hz
+    // flight (phase 2, docs/BODYPLAN.md §10.3): flight muscle delivers its work per cycle at the wingbeat frequency the
+    // wing's size sets (Pennycuick 1996), so its power per kg falls with size (~M^(-1/3) for similar shapes; Pennycuick
+    // 1968, 2008; Ellington 1991); before, a fixed P_FLIGHT made the margin fall only as M^(-1/6)
+    public const float W_FLAP = 17f;          // J per kg of flight muscle per wingbeat (Askew & Marsh 2002: quail pectoralis 390 W/kg at 23 Hz)
+    public const float K_IND = 1.2f;          // induced-power factor over the ideal actuator disk (Pennycuick 2008)
+    public const float CL_MAX_FLAP = 1.6f;    // the most lift coefficient flapping wings reach in steady flight (Pennycuick 2008)
+    // limb swing and undulation (phase 2): the kinetic energy a stride gives the limbs, at the share of their mass that
+    // moves at the foot's speed, and a body wave's lateral kinetic energy
+    public const float SWING_K = 0.16f;       // a limb's mass is proximal: radius of gyration ~0.4 of its length (Hildebrand 1985), so (0.4)² of it at the foot's speed
+    public const float CRAWL_KIN = 1f;        // lateral undulation moves the body sideways at about its forward speed (slip angles ~45°; Gray 1946; Jayne 1986): KE M u²/2, made twice a wave
     public const float W_SPEC = 50f;          // work of one maximal contraction, J/kg of muscle (Josephson 1993; Askew & Marsh 2002)
     public const float ETA_M = 0.25f;         // muscle efficiency, mechanical / metabolic
     public const float DIGEST_RAW = 7.14f;    // W of raw food a kg of gut can pass at the reference mass (5 W assimilated at 0.7)
     public const float SIGMA_MUSCLE = 2e5f;   // isometric stress of muscle, Pa (Alexander 2003)
-    public const float DUTY = 0.5f, SAFETY = 2f, KT = 0.1f;   // walking duty factor; bone/cuticle safety factor; cost of support per weight
-                                                                        // per stride (Kram & Taylor 1990), set so a 0.2 kg walker with 5 cm strides costs
-                                                                        // ~2 J/(N m), Taylor, Heglund & Maloiy's (1982) 10.7 M^-0.32 J/(kg m)
+    public const float DUTY = 0.5f, SAFETY = 2f, KT = 0.12f;  // walking duty factor; bone/cuticle safety factor; cost of support per weight
+                                                                        // per stride (Kram & Taylor 1990). Phase 2 (docs/BODYPLAN.md §10.3): calibrated on
+                                                                        // a walker whose legs stand it at the live STAND_H x M^(1/3) (Garcia & da Silva
+                                                                        // 2006), and on the founders of seeds 1-5 with full legs, to Taylor, Heglund &
+                                                                        // Maloiy's (1982) net 10.7 M^-0.32 J/(kg m) (0.14 fitted the walker, 0.10 the founders); was 0.1,
+                                                                        // set on a hand-made 0.2 kg walker with 5 cm strides (2 J/(N m))
     public const float MU_CRAWL = 0.7f;       // sliding friction of a soft body dragged over rough ground (what limbs do not hold up)
     public const float CRAWL_WAVE = 0.25f;    // a crawler's stride: the length of its body wave, x body length (Quillin 1999; Gray 1946)
     public const float MU_SLIP = 0.15f;       // residual slip and mucus of limbless crawling, x pressed weight (Denny 1980)
     // aerobic metabolism one m² of folded exchange surface supports: [medium, everted / folded-in]
-    public const float S_WATER_EXT = 25f, S_WATER_INT = 12f, S_AIR_EXT = 15f, S_AIR_INT = 100f;
+    // phase 2 (docs/BODYPLAN.md §10.3): an everted surface in air was 15 W/m², 60% of its supply in water; soft lamellae
+    // collapse and stick in air and only a few % of their area stays open (Graham 1997), as the live GILL_AIR (0.02)
+    // says, so 0.5 W/m² (2% of water's). A stiffened everted surface (land crabs' gills) is not modelled
+    public const float S_WATER_EXT = 25f, S_WATER_INT = 12f, S_AIR_EXT = 0.5f, S_AIR_INT = 100f;
+    public const float S_AIR_SKIN = 15f;      // skin does not collapse: skin breathing in air keeps the old everted value (x SKIN_EX)
     public const float SKIN_EX = 0.05f, SKIN_T0 = 2e-4f;     // skin breathing: share of an everted surface, falling e-fold per SKIN_T0 of integument
     // ventilation: share of the metabolism a surface serves
     public const float V_WATER_EXT = 0.10f, V_WATER_INT = 0.25f, V_AIR_EXT = 0.02f, V_AIR_INT = 0.04f;
@@ -181,8 +199,8 @@ public static class Physics
         return TrunkDrag(wet, FormFactor(m.Fineness), m.FrontalArea, m.StepArea, cf);
     }
 
-    static float FormFactor(float fineness) { float f = MathF.Max(0.05f, fineness); return 1f + 1.5f / (f * MathK.Sqrt(f)) + 7f / (f * f * f); }
-    static float TrunkDrag(float wet, float formK, float frontal, float step, float cf) => MathF.Min(cf * wet * formK, 1.2f * frontal + cf * wet) + 0.3f * step;
+    internal static float FormFactor(float fineness) { float f = MathF.Max(0.05f, fineness); return 1f + 1.5f / (f * MathK.Sqrt(f)) + 7f / (f * f * f); }
+    internal static float TrunkDrag(float wet, float formK, float frontal, float step, float cf) => MathF.Min(cf * wet * formK, 1.2f * frontal + cf * wet) + 0.3f * step;
 
     public static float DragAreaAt(in SwimProps p, float u)
     {
@@ -295,7 +313,7 @@ public static class Physics
 
     // ---------- turning ----------
     /// <summary>Muscle cross-section serving a pair, one side (m²): its muscle mass over the length of the segment that houses it.</summary>
-    static float MuscleArea(Morphology m, Pair a) => a.Muscle / (Mat.RHO_TISSUE * MathF.Max(m.Segs[a.Seg].L, 1e-3f));
+    internal static float MuscleArea(Morphology m, Pair a) => a.Muscle / (Mat.RHO_TISSUE * MathF.Max(m.Segs[a.Seg].L, 1e-3f));
 
     /// <summary>Lateral control area (m²) of each pair at speed u, and of the trunk (last entry): a surface controls only
     /// as far as it can be deflected, i.e. it is articulated and its muscle's moment holds it against the hinge moment
@@ -402,22 +420,41 @@ public static class Physics
         float crawlW = MathF.Max(w.WEff, Phys.CRAWL_PRESS * m.Mass * Phys.G);
         float wave = MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
         float crawlSup = Phys.KT * crawlW * u / wave;
-        float crawlMech = Phys.MU_SLIP * crawlW * u + drag + crawlSup * Phys.ETA_M;
-        if (crawlMech <= axialCap + w.Cap) best = crawlSup + (Phys.MU_SLIP * crawlW * u + drag) / Phys.ETA_M;
+        float kin = CrawlKinetic(m, u);
+        float crawlMech = Phys.MU_SLIP * crawlW * u + drag + kin + crawlSup * Phys.ETA_M;
+        if (crawlMech <= axialCap + w.Cap) best = crawlSup + (Phys.MU_SLIP * crawlW * u + drag + kin) / Phys.ETA_M;
         if (w.Stride > 1e-3f && w.Cap > 0f)
         {
             float sup = Phys.KT * w.WEff * w.Support * u / w.Stride;
-            float swing = 4f * w.LegMass * u * u * u / w.Stride;
+            float swing = SwingPower(w, u);
             // what the limbs do not hold up, the trunk crawls under (at the crawling cost, not a cheaper slide: a vestigial,
             // muscle-less limb once made "walking" a discount on crawling; docs/BODYPLAN.md §8)
             float rest = 1f - w.Support;
-            float slideMech = rest * (Phys.MU_SLIP * crawlW * u + crawlSup * Phys.ETA_M);
+            float slideMech = rest * (Phys.MU_SLIP * crawlW * u + kin + crawlSup * Phys.ETA_M);
             float legMech = swing + slideMech + drag + sup * Phys.ETA_M;
-            float leg = sup + rest * crawlSup + (swing + rest * Phys.MU_SLIP * crawlW * u + drag) / Phys.ETA_M;
+            float leg = sup + rest * crawlSup + (swing + rest * (Phys.MU_SLIP * crawlW * u + kin) + drag) / Phys.ETA_M;
             if (legMech <= w.Cap + axialCap * (1f - w.Support) && leg < best) { best = leg; legged = true; }
         }
         return best;
     }
+
+    /// <summary>Stride length at speed u (m): Alexander's dynamic similarity, relative stride 2.3 Fr^0.3 at Froude number
+    /// Fr = u² / (g h), h the hip height (Alexander &amp; Jayes 1983; Alexander 2003), never below the walking stride.</summary>
+    public static float StrideAt(in WalkProps w, float u)
+    {
+        float h = MathF.Max(w.Stride, 1e-3f);
+        return MathF.Max(h, 2.3f * h * MathK.Pow(u * u / (Phys.G * h), 0.3f));
+    }
+
+    /// <summary>Mechanical power of swinging the limbs at speed u (W): each stride gives the limbs' moving mass (SWING_K
+    /// of it at the foot's speed, ~2u) its kinetic energy twice, at u / stride strides a second. Was 4 m_leg u³ / walking
+    /// stride, the whole limb at the foot's speed and the stride fixed, which held a 1 kg walker's sprint to ~2 m/s
+    /// against Garland's (1983) ~8 (docs/BODYPLAN.md §10.3).</summary>
+    public static float SwingPower(in WalkProps w, float u) => 4f * Phys.SWING_K * w.LegMass * u * u * u / StrideAt(w, u);
+
+    /// <summary>Lateral kinetic power of limbless undulation at speed u (W): CRAWL_KIN x M u³ / wave length. Without
+    /// it a crawler's sprint had no limit but its slip and support costs, and a 1 kg fish "crawled" on land at 7 m/s.</summary>
+    public static float CrawlKinetic(Morphology m, float u) => Phys.CRAWL_KIN * m.Mass * u * u * u / MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
 
     /// <summary>Crossing obstacles of height h every gap metres at speed u. The centre of mass must rise by what the
     /// limbs do not already clear, ~h²/(h + clearance) (a crawler, clearance 0, lifts its whole weight by h), and the
@@ -527,25 +564,42 @@ public static class Physics
     }
 
     // ---------- flight ----------
-    /// <summary>Flight-muscle power against the induced power of hovering on the span of its lifting surfaces (an upper
-    /// bound on the least power of forward flight, ~half of it; Pennycuick 2008). Above 1 it can fly.</summary>
-    public static float FlightMargin(Morphology m)
+    /// <summary>Flight-muscle power over the least power of level flight (Pennycuick 2008). Above 1 it can fly.
+    /// Available: each lifting pair's muscle does W_FLAP a wingbeat at the wingbeat frequency of its wing (Pennycuick
+    /// 1996: f = M^(3/8) g^(1/2) b^(-23/24) S^(-1/3) rho^(-3/8)), times articulation and lift-based profile efficiency.
+    /// Required: induced power K_IND W² / (2 rho S_d v) on the disk of the span plus the body's parasite power
+    /// rho v³ A / 2 (A its drag area), at their minimum, 4/3 of the induced power at v_mp^4 = induced / (3 parasite)
+    /// coefficients. Phase 2 (docs/BODYPLAN.md §10.3): it was against the induced power of hovering (an upper bound,
+    /// ~2x the least power) with a fixed 150 W/kg, which gave a 1 kg bird with a 0.9 m span a margin of 0.8.</summary>
+    public static float FlightMargin(Morphology m) => FlightMargin(m, out _, out _);
+
+    public static float FlightMargin(Morphology m, out float pMin, out float vmp)
     {
-        float span = 0f, cap = 0f, capEta = 0f;
+        pMin = 0f; vmp = 0f;
+        float span = 0f, wing = 0f, mus = 0f, capEta = 0f;
         foreach (var a in m.Pairs)
         {
-            float c = 2f * a.Muscle * Phys.P_FLIGHT * a.Artic;
-            if (c <= 0f || a.Sagittal) continue;
+            if (a.Muscle <= 0f || a.Artic <= 0f || a.Sagittal) continue;
             float eta = 0.9f * (2f * a.Len / a.Chord) / (2f * a.Len / a.Chord + 2f) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);
             span = MathF.Max(span, 2f * a.Len * MathK.Cos(a.Theta));
-            cap += c; capEta += c * eta;
+            wing += 2f * a.Len * a.Chord * MathK.Cos(a.Theta) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);   // a rod makes no lift
+            mus += 2f * a.Muscle * a.Artic; capEta += 2f * a.Muscle * a.Artic * eta;
         }
-        if (cap <= 0f || span <= 0f) return 0f;
-        float eta0 = capEta / cap;
+        if (mus <= 0f || span <= 0f || wing <= 0f) return 0f;
+        float b = span + m.MaxW;
+        float freq = MathK.Pow(m.Mass, 3f / 8f) * MathK.Sqrt(Phys.G) * MathK.Pow(b, -23f / 24f) * MathK.Pow(wing, -1f / 3f) * MathK.Pow(Phys.RHO_A, -3f / 8f);
+        float avail = capEta * Phys.W_FLAP * freq;
         float wgt = m.Mass * Phys.G;
-        float disk = MathF.PI * 0.25f * (span + m.MaxW) * (span + m.MaxW);
-        float pInd = 1.2f * wgt * MathK.Sqrt(wgt / (2f * Phys.RHO_A * disk));
-        return cap * eta0 / pInd;
+        float disk = MathF.PI * 0.25f * b * b;
+        float ind = Phys.K_IND * wgt * wgt / (2f * Phys.RHO_A * disk);   // x 1/v
+        float par = 0.5f * Phys.RHO_A * MathF.Max(BodyDragArea(m), 1e-9f);   // x v³
+        vmp = MathK.Pow(ind / (3f * par), 0.25f);
+        // its lifting area must carry its weight there: no slower than stalling at CL_MAX_FLAP (a leg or a thin rod has span
+        // but no area, and once "flew" on the induced power of its span)
+        float vStall = MathK.Sqrt(2f * wgt / (Phys.RHO_A * wing * Phys.CL_MAX_FLAP));
+        vmp = MathF.Max(vmp, vStall);
+        pMin = ind / vmp + par * vmp * vmp * vmp;
+        return avail / pMin;
     }
 
     // ---------- gas exchange ----------
@@ -556,7 +610,7 @@ public static class Physics
         bool water = med == Medium.Water;
         float sExt = water ? Phys.S_WATER_EXT : Phys.S_AIR_EXT, sInt = water ? Phys.S_WATER_INT : Phys.S_AIR_INT;
         float ext = m.ExchExt * sExt, inn = m.ExchInt * sInt;
-        float skin = m.SkinArea * sExt * Phys.SKIN_EX * MathK.Exp(-m.SkinThick / Phys.SKIN_T0);
+        float skin = m.SkinArea * (water ? Phys.S_WATER_EXT : Phys.S_AIR_SKIN) * Phys.SKIN_EX * MathK.Exp(-m.SkinThick / Phys.SKIN_T0);
         float tot = ext + inn + skin;
         ventShare = tot > 0f ? (ext * (water ? Phys.V_WATER_EXT : Phys.V_AIR_EXT) + inn * (water ? Phys.V_WATER_INT : Phys.V_AIR_INT)) / tot : 0f;
         return tot;

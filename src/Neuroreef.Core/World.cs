@@ -732,12 +732,25 @@ public sealed class Derived
     /// <summary>BUILD's packed copy of what DECIDE reads of every neighbour, in W.Sorted order (index = sorted position).</summary>
     [PerSlot] public Neighbour[] Near;
 
-    public Derived(int cap) { Look = new sbyte[cap * Body.NLOOK]; MhcDiv = new float[cap]; Near = new Neighbour[cap]; }
+    // the shadow expression (docs/BODYPLAN.md §10, Morph.Shadow): each body's capabilities from its translated module
+    // morphology, in SI units, written by Body.Express and read by nothing in the simulation (write-only). Not saved:
+    // Refresh recomputes them from the genomes after a load
+    [PerSlot] public float[] MVLand, MVWater, MVAir, MCruise, MCotLand, MCotWater, MCotAir, MMargin, MStand, MO2Air, MO2Water, MOdds, MBasal, MStream, MTurnR;
+    [PerSlot] public byte[] MFlies;
+
+    public Derived(int cap)
+    {
+        Look = new sbyte[cap * Body.NLOOK]; MhcDiv = new float[cap]; Near = new Neighbour[cap];
+        MVLand = new float[cap]; MVWater = new float[cap]; MVAir = new float[cap]; MCruise = new float[cap];
+        MCotLand = new float[cap]; MCotWater = new float[cap]; MCotAir = new float[cap]; MMargin = new float[cap]; MStand = new float[cap];
+        MO2Air = new float[cap]; MO2Water = new float[cap]; MOdds = new float[cap]; MBasal = new float[cap]; MStream = new float[cap];
+        MTurnR = new float[cap]; MFlies = new byte[cap];
+    }
 
     /// <summary>Recompute every living slot's values from its genome.</summary>
     public void Refresh(World w)
     {
-        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) Body.Signature(w, i);
+        for (int i = 0; i < w.Cap; i++) if (w.StageOf[i] != St.Dead) { Body.Signature(w, i); Morph.Shadow.Express(w, i); }
     }
 }
 

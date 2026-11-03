@@ -240,6 +240,9 @@ public static class Body
         // drain or kill is a matter of degree (ecology review): the share of successful strikes that drain blood
         w.PDrain[i] = blood + meat > 1e-4f ? blood / (blood + meat) : 0f;
         w.PParasite[i] = (byte)(w.PDrain[i] >= 0.5f ? 1 : 0);   // a label (and whom it targets): mostly a blood-drinker
+        // the shadow expression (docs/BODYPLAN.md §10): the same genes as a module body, its capabilities from physics,
+        // written to World.D and read by nothing here (write-only: the simulation is unchanged bit for bit)
+        Morph.Shadow.Express(w, i);
     }
 
     /// <summary>Body length in metres (2026-11-01): the side of a cube of its volume at the density of water, BODY_L_M x
