@@ -1381,9 +1381,9 @@ Every class was run in its own test process on the code after §13.11. Classes n
   - `StepLengthTests.ActsAndLearningAnHourAreTheSameAtAFineStep`: the founders at a 10-minute step are 7,521 against
     7,516 at 2.92 h, where the test asks for the same founders. Every rate it compares is within its tolerance. Some
     founding term now depends on the step length at the level of a few founders; it is not found yet.
-  - `VoiceTests.NoVocalLearningGeneIsBitIdenticalToNoFeature`: runs three 400-step worlds. The land populations of the
-    module bodies are ~3× larger, so it ran past the 20-minute limit; a longer run was still going at the end of the
-    session. The other 9 Voice tests pass.
+- **VoiceTests is green** (10 of 10) when given time: `NoVocalLearningGeneIsBitIdenticalToNoFeature` runs three
+  400-step worlds whose land populations are ~3× larger with module bodies, and it takes ~25 minutes, past the 20-minute
+  per-class limit of the first run.
 - **Not finished in time:** Engineering, BodyLab, Geology, Hydrology, Wetland, Plant, PlantProduction, Options,
   MemoryReset, Vehicle, Pathogen, Caves. Except Engineering and BodyLab, all of these passed in the first round on the
   phase-4 code; none reads the body physics directly.
