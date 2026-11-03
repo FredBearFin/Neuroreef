@@ -358,26 +358,35 @@ public static class ShadowDiag
         }
     }
 
-    /// <summary>Telemetry of both expressions (phase 2b): per living clade, the mean live and shadow values of the main
-    /// capabilities in SI units (speeds m/s, costs J/m, basal W, O2 W), for the run's report.</summary>
+    /// <summary>Telemetry of both expressions (phase 2b, docs/BODYPLAN.md §11): per living clade, the mean live and
+    /// shadow values of the main capabilities in SI units (speeds m/s, costs J/m, basal and O2 W), in one pass over the
+    /// slots. Read-only: it reads World.D's shadow arrays and the live per-slot values, and writes nothing.</summary>
     public static string SpeciesReport(World w)
     {
+        const int NV = 9;
+        var n = new int[w.NS]; var mass = new double[w.NS];
+        var L = new double[w.NS, NV]; var S = new double[w.NS, NV];
+        Span<float> lv = stackalloc float[NV], sv = stackalloc float[NV];
+        for (int i = 0; i < w.Cap; i++)
+        {
+            if (w.StageOf[i] == St.Dead) continue;
+            int sp = w.Spc[i];
+            if (sp < 0 || sp >= w.NS) continue;
+            var l = Shadow.Live(w, i); var s = Shadow.Stored(w, i);
+            n[sp]++; mass[sp] += w.PM[i];
+            lv[0] = l.VLand; lv[1] = l.VWater; lv[2] = l.VAir; lv[3] = l.CotLand; lv[4] = l.CotWater; lv[5] = l.CotAir; lv[6] = l.Basal; lv[7] = l.O2Air; lv[8] = l.Flies;
+            sv[0] = s.VLand; sv[1] = s.VWater; sv[2] = s.VAir; sv[3] = s.CotLand; sv[4] = s.CotWater; sv[5] = s.CotAir; sv[6] = s.Basal; sv[7] = s.O2Air; sv[8] = s.Flies;
+            for (int k = 0; k < NV; k++) { L[sp, k] += lv[k]; S[sp, k] += sv[k]; }
+        }
         var sb = new StringBuilder();
-        sb.AppendLine("BODY PLAN SHADOW (live/module physics, docs/BODYPLAN.md §10-11): clade, n, mass kg, land m/s, water m/s, land J/m, water J/m, basal W, O2 in air W, flies %");
+        sb.AppendLine("BODY PLAN SHADOW (docs/BODYPLAN.md §10-11): per clade, live / shadow (module physics), means over the living; write-only, nothing reads it");
+        sb.AppendLine("clade             n   mass kg  land m/s     water m/s    air m/s      land J/m       water J/m      air J/m      basal W        O2 air W       flies %");
         for (int sp = 0; sp < w.NS; sp++)
         {
-            if (!w.Sp[sp].Used) continue;
-            int n = 0; double mass = 0; var L = new double[7]; var S = new double[7];
-            for (int i = 0; i < w.Cap; i++)
-            {
-                if (w.StageOf[i] == St.Dead || w.Spc[i] != sp) continue;
-                var l = Shadow.Live(w, i); var s = Shadow.Stored(w, i);
-                n++; mass += w.PM[i];
-                L[0] += l.VLand; L[1] += l.VWater; L[2] += l.CotLand; L[3] += l.CotWater; L[4] += l.Basal; L[5] += l.O2Air; L[6] += l.Flies;
-                S[0] += s.VLand; S[1] += s.VWater; S[2] += s.CotLand; S[3] += s.CotWater; S[4] += s.Basal; S[5] += s.O2Air; S[6] += s.Flies;
-            }
-            if (n == 0) continue;
-            sb.AppendLine($"{w.Sp[sp].Name,-12} {n,6} {mass / n,7:F3}  {L[0] / n:F2}/{S[0] / n:F2}  {L[1] / n:F2}/{S[1] / n:F2}  {L[2] / n:F2}/{S[2] / n:F2}  {L[3] / n:F2}/{S[3] / n:F2}  {L[4] / n:F2}/{S[4] / n:F2}  {L[5] / n:F1}/{S[5] / n:F1}  {100 * L[6] / n:F0}/{100 * S[6] / n:F0}");
+            if (n[sp] == 0) continue;
+            double k = 1.0 / n[sp];
+            string P(int v, string f) => (L[sp, v] * k).ToString(f, System.Globalization.CultureInfo.InvariantCulture) + "/" + (S[sp, v] * k).ToString(f, System.Globalization.CultureInfo.InvariantCulture);
+            sb.AppendLine($"{w.Sp[sp].Name,-12} {n[sp],6} {mass[sp] * k,8:F3}  {P(0, "F2"),-12} {P(1, "F2"),-12} {P(2, "F1"),-12} {P(3, "F1"),-14} {P(4, "F1"),-14} {P(5, "F2"),-12} {P(6, "F2"),-14} {P(7, "F1"),-14} {100 * L[sp, 8] * k:F0}/{100 * S[sp, 8] * k:F0}");
         }
         return sb.ToString();
     }

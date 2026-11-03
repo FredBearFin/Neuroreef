@@ -644,10 +644,10 @@ public class MorphTests
                 }
                 string spp = string.Join(",", System.Linq.Enumerable.Select(modes, kv => kv.Key + ":" + kv.Value));
                 sb.AppendLine(string.Format(c,
-                    "{0,-11} {1,4} {2,5:F2} {3,8:F3} {4,4} {5,5} {6,5:F1} {7,5:F2} {8,5:F1} {9,5:F3} {10,7:F4} {11,7:F4}  {12,-6} {13,5:F2} {14,6:F1} {15,5:F0} {16,5:F2} {17,3} [{18}]  {19}",
+                    "{0,-11} {1,4} {2,5:F2} {3,8:F3} {4,4} {5,5} {6,5:F1} {7,5:F2} {8,5:F1} {9,5:F3} {10,7:F4} {11,7:F4}  {12,-6} {13,5:F2} {14,6:F1} {15,5:F0} {16,5:F2} {17,3} [{18}]  H/W {20,5:F1} gas {21,4:F2} rho {22,4:F0}  {19}",
                     env.Name, seed, e.Fitness, m.Mass, m.SegmentCount, m.PairCount, m.Fineness, m.Rigidity, 100f * m.IntMass / m.Mass, e.MoultShare,
                     m.ExchExt, m.ExchInt, Evolver.Mode(e), e.Speed, e.CrushForce, 100f * e.ItemShare, MathF.Min(e.TurnR, 99f), r.Species, spp,
-                    Evolver.PairLine(m, env, e)));
+                    Evolver.PairLine(m, env, e), System.Linq.Enumerable.Max(m.Segs, s => s.H / s.W), m.GasV / m.Volume, m.Mass / m.Volume));
                 if (seed == 1)
                 {
                     detail += $"== {env.Name} (seed 1)  final population: mean segments {r.MeanSegments:F1}, mean pairs {r.MeanPairs:F1}, species {r.Species}\n" + Evolver.Describe(m, e, env) + "\n";

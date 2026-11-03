@@ -76,7 +76,11 @@ public class ShadowTests
             for (uint seed = 1; seed <= 5; seed++)
             {
                 var t = System.Diagnostics.Stopwatch.StartNew();
-                using (var sim = new Simulation(1024, seed, 2)) ShadowDiag.Collect(sim.W, rows);
+                using (var sim = new Simulation(1024, seed, 2))
+                {
+                    ShadowDiag.Collect(sim.W, rows);
+                    if (seed == 1) Log.Add(ShadowDiag.SpeciesReport(sim.W));   // the Headless telemetry of both expressions
+                }
                 GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();   // one world at a time: the machine is shared
                 Log.Add($"seed {seed}: {t.ElapsedMilliseconds} ms, {GC.GetTotalMemory(false) / 1048576} MB after");
             }
