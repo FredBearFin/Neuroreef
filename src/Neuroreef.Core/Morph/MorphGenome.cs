@@ -30,9 +30,9 @@ namespace Neuroreef.Morph;
 /// <summary>Parameters of a segment gene (all stored in [0,1]).</summary>
 public static class SP
 {
-    public const int LEN = 0, WID = 1, HEI = 2, TAPER = 3, REPEAT = 4, INT_T = 5, INT_MIN = 6, PORE = 7, INVAG = 8, AXMUS = 9;
-    public const int N = 10;
-    public static readonly string[] Names = { "len", "wid", "hei", "taper", "repeat", "intT", "intMin", "pore", "invag", "axMus" };
+    public const int LEN = 0, WID = 1, HEI = 2, TAPER = 3, REPEAT = 4, INT_T = 5, INT_MIN = 6, PORE = 7, INVAG = 8, AXMUS = 9, GAS = 10;
+    public const int N = 11;
+    public static readonly string[] Names = { "len", "wid", "hei", "taper", "repeat", "intT", "intMin", "pore", "invag", "axMus", "gas" };
 }
 
 /// <summary>Parameters of an appendage gene (a bilateral pair; all stored in [0,1]).</summary>
@@ -95,7 +95,7 @@ public sealed class MorphGenome
         var s = new SegGene { Innov = 1 };   // every founder's trunk is homologous
         s.P[SP.LEN] = 0.75f; s.P[SP.WID] = 0.75f; s.P[SP.HEI] = 0.75f;   // ~6 cm each way
         s.P[SP.TAPER] = 0.5f; s.P[SP.REPEAT] = 0f;
-        s.P[SP.INT_T] = 0.1f; s.P[SP.INT_MIN] = 0f; s.P[SP.PORE] = 0f; s.P[SP.INVAG] = 0.5f; s.P[SP.AXMUS] = 0.2f;
+        s.P[SP.INT_T] = 0.1f; s.P[SP.INT_MIN] = 0f; s.P[SP.PORE] = 0f; s.P[SP.INVAG] = 0.5f; s.P[SP.AXMUS] = 0.2f; s.P[SP.GAS] = 0f;
         g.Segs.Add(s);
         return g;
     }

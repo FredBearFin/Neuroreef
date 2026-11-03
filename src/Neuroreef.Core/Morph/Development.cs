@@ -21,6 +21,16 @@ public static class Mat
     public const float FOLD = 10f;              // area amplification of a porous (lamellar, alveolar) exchange surface
     public const float GUT_SHARE = 0.4f;        // of the non-muscle trunk tissue
     public const float JOINT_MASS = 0.04f;      // each joint adds this share of the appendage's mass (hinge, membrane)
+    // phase 2b (docs/BODYPLAN.md §11): an internal gas space, any share of a segment's core up to GAS_MAX, held at body
+    // pressure; it lightens the body (buoyancy) and, where its lining is folded-in exchange epithelium (the segment's
+    // invagination share), it is an air-breathing surface whose area grows with the space's VOLUME (alveolar or
+    // tracheal parenchyma), not with the body's surface. SV_GAS: lining area per m³ of gas, in the prototype's area unit
+    // (S_AIR_INT = 100 W per m²): mammal lungs hold ~57 mL of air per kg (Schmidt-Nielsen 1984) and support an aerobic
+    // scope of ~10 x 3.4 W at 1 kg (Weibel & Hoppeler 2005), 34 W, so 34 / 100 / 5.7e-5 = 5,900 per metre
+    public const float GAS_MAX = 0.15f, SV_GAS = 5900f;
+    /// <summary>The most of its segment's tissue one pair gene's muscle can take (phase 2b: was 0.3, which held a flier's
+    /// flight muscle to ~0.2 of its body against a bird's 0.15-0.35; Greenewalt 1962; Marden 1987).</summary>
+    public static readonly float PAIR_MUSCLE = Ablate.Muscle ? 0.3f : 0.6f;
 }
 
 public sealed class Segment
@@ -29,6 +39,7 @@ public sealed class Segment
     public float IntT, IntMin;           // integument thickness (m), mineral share 0..1
     public float Pore, Invag;            // share of the surface that is exchange epithelium; share of that folded inward
     public float AxShare;                // axial muscle share of its tissue
+    public float Gas, GasV;              // share of its core that is an internal gas space; its volume, m³
     public float TissueMass, IntMass, AxMuscle, AppMuscle;  // kg
     public float Area;                   // lateral surface, m²
     public float Volume;                 // m³ (tissue + integument)
@@ -63,6 +74,7 @@ public sealed class Morphology
     public float Mass, Volume, Length, MaxW, MaxH, TailH, Fineness, FrontalArea, StepArea;
     public float IntMass, ExoMass, Rigidity;             // whole integument; the mineralised outer share; mass-weighted mineral of the outer skeleton
     public float ExchExt, ExchInt, SkinArea, SkinThick;  // exchange areas (after folding), m²; non-porous skin and its mean thickness
+    public float GasV, ExchGas;                          // internal gas volume, m³; the exchange area lining it (air only), m²
     public float GutMass, MuscleMass, TotalArea;
     public float InertMass;                              // the mineral in integument and skeleton: no metabolism of its own
     public int JointCount;
@@ -155,12 +167,13 @@ public static class Development
                     W = LogMap(sg.P[SP.WID], SEG_W_LO, SEG_W_HI) * scale,
                     H = LogMap(sg.P[SP.HEI], SEG_W_LO, SEG_W_HI) * scale,
                     IntMin = sg.P[SP.INT_MIN], Pore = 0.5f * sg.P[SP.PORE], Invag = sg.P[SP.INVAG],
-                    AxShare = 0.4f * sg.P[SP.AXMUS],
+                    AxShare = 0.4f * sg.P[SP.AXMUS], Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS],
                 };
                 s.IntT = LogMap(sg.P[SP.INT_T], INT_REL_LO, INT_REL_HI);   // relative here; made absolute in Finish
                 float core = s.L * s.W * s.H * (MathF.PI / 4f);
                 s.Area = MathF.PI * 0.5f * (s.W + s.H) * s.L;   // lateral surface of an elliptic cylinder (first order); exposed ends added in Finish
-                s.TissueMass = core * Mat.RHO_TISSUE;
+                s.GasV = core * s.Gas;
+                s.TissueMass = (core - s.GasV) * Mat.RHO_TISSUE;   // the gas space holds no tissue
                 s.Volume = core;
                 int segIndex = m.Segs.Count;
                 m.Segs.Add(s);
@@ -178,7 +191,7 @@ public static class Development
                         Thick = MathF.Min(LogMap(ag.P[AP.THICK], APP_T_LO, APP_T_HI), LogMap(ag.P[AP.CHORD], APP_C_LO, APP_C_HI)) * scale,   // thickness is the lesser section axis
                         Theta = ag.P[AP.DROOP] * (MathF.PI / 2f), Sagittal = ag.P[AP.ROLL] >= 0.5f,
                         Joints = Joints(ag.P[AP.JOINTS]),
-                        MuscleShare = 0.3f * ag.P[AP.MUSCLE],
+                        MuscleShare = Mat.PAIR_MUSCLE * ag.P[AP.MUSCLE],
                         Mineral = ag.P[AP.MINERAL], Wall = 0.02f + 0.98f * ag.P[AP.WALL], Exo = ag.P[AP.EXO],
                         Pore = 0.5f * ag.P[AP.PORE], Invag = ag.P[AP.INVAG],
                     };
@@ -251,6 +264,7 @@ public static class Development
             aPrev = a;
             float ex = s.Pore * s.Area * Mat.FOLD;
             m.ExchExt += ex * (1f - s.Invag); m.ExchInt += ex * s.Invag;
+            m.GasV += s.GasV; m.ExchGas += s.Invag * s.GasV * Mat.SV_GAS;
             float skin = (1f - s.Pore) * s.Area;
             m.SkinArea += skin; skinT += skin * s.IntT;
             m.IntMass += s.IntMass;

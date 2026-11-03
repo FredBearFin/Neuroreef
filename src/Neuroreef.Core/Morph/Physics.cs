@@ -91,6 +91,18 @@ public sealed class MorphEnv
     };
 }
 
+/// <summary>Ablations of the phase-2 physics, for finding which change moved an evolved outcome (docs/BODYPLAN.md §11):
+/// NR_MORPH_ABLATE is a comma-separated list of kt (walking cost KT 0.10, its phase-1 value), swing (the phase-1 limb
+/// swing), crawl (no lateral kinetic work of undulation), muscle (a pair drives with at most 0.3 of its segment's tissue),
+/// plate (no thin-plate bending limit or roll righting), gas (gas spaces neither lift nor line an exchange surface).
+/// Read once at start-up, so it is the same on every thread. Empty by default: the physics as documented.</summary>
+public static class Ablate
+{
+    static readonly string Env = Environment.GetEnvironmentVariable("NR_MORPH_ABLATE") ?? "";
+    public static bool Has(string k) => Array.IndexOf(Env.Split(','), k) >= 0;
+    public static readonly bool Kt = Has("kt"), Swing = Has("swing"), Crawl = Has("crawl"), Muscle = Has("muscle"), Plate = Has("plate"), Gas = Has("gas");
+}
+
 /// <summary>Physical constants of the prototype (SI). Sources in docs/BODYPLAN.md §4.</summary>
 public static class Phys
 {
@@ -107,6 +119,7 @@ public static class Phys
     public const float W_FLAP = 17f;          // J per kg of flight muscle per wingbeat (Askew & Marsh 2002: quail pectoralis 390 W/kg at 23 Hz)
     public const float K_IND = 1.2f;          // induced-power factor over the ideal actuator disk (Pennycuick 2008)
     public const float CL_MAX_FLAP = 1.6f;    // the most lift coefficient flapping wings reach in steady flight (Pennycuick 2008)
+    public const float CD_PRO = 0.02f;        // profile drag coefficient of a flapping wing (Pennycuick 2008; Tucker 1987)
     // limb swing and undulation (phase 2): the kinetic energy a stride gives the limbs, at the share of their mass that
     // moves at the foot's speed, and a body wave's lateral kinetic energy
     public const float SWING_K = 0.16f;       // a limb's mass is proximal: radius of gyration ~0.4 of its length (Hildebrand 1985), so (0.4)² of it at the foot's speed
@@ -115,7 +128,7 @@ public static class Phys
     public const float ETA_M = 0.25f;         // muscle efficiency, mechanical / metabolic
     public const float DIGEST_RAW = 7.14f;    // W of raw food a kg of gut can pass at the reference mass (5 W assimilated at 0.7)
     public const float SIGMA_MUSCLE = 2e5f;   // isometric stress of muscle, Pa (Alexander 2003)
-    public const float DUTY = 0.5f, SAFETY = 2f, KT = 0.12f;  // walking duty factor; bone/cuticle safety factor; cost of support per weight
+    public const float DUTY = 0.5f, SAFETY = 2f;  public static readonly float KT = Ablate.Kt ? 0.10f : 0.12f;  // walking duty factor; bone/cuticle safety factor; cost of support per weight
                                                                         // per stride (Kram & Taylor 1990). Phase 2 (docs/BODYPLAN.md §10.3): calibrated on
                                                                         // a walker whose legs stand it at the live STAND_H x M^(1/3) (Garcia & da Silva
                                                                         // 2006), and on the founders of seeds 1-5 with full legs, to Taylor, Heglund &
@@ -274,7 +287,7 @@ public static class Physics
         }
         // a flattened body lifts too, segment by segment (an earlier whole-body MaxW against MaxH, taken from different
         // segments, let a wide flat head on a tall narrow trunk "lift" along the whole length; docs/BODYPLAN.md §8)
-        foreach (var s in m.Segs) if (s.W > s.H) p.LiftArea += 0.5f * s.L * s.W * (1f - s.H / s.W);
+        foreach (var s in m.Segs) if (s.W > s.H) p.LiftArea += 0.5f * s.L * s.W * (1f - s.H / s.W) * (Ablate.Plate ? 1f : MathF.Min(1f, FacePressureCap(s) / (0.5f * rho * 0.25f)));   // a thin sheet bears its lift only to its bending strength (at 0.5 m/s)
         p.Span = m.MaxW + 2f * maxReach;
         // axial undulation: the trunk's own muscle, if the trunk can bend (Lighthill 1975: thrust from the trailing depth)
         float flex = Flex(m), ax = 0f;
@@ -336,8 +349,54 @@ public static class Physics
         foreach (var s in m.Segs) { meanH += s.H * s.L; ax += s.AxMuscle; tis += s.TissueMass; }
         meanH /= MathF.Max(m.Length, 1e-6f);
         float axShare = tis > 0f ? ax / tis : 0f;
-        c[^1] = 0.5f * m.Length * meanH * Flex(m) * MathF.Min(1f, axShare / 0.1f);
+        c[^1] = 0.5f * m.Length * meanH * Flex(m) * MathF.Min(1f, axShare / 0.1f) * PlateFactor(m, q * Phys.CL_MAX);
         return c;
+    }
+
+    /// <summary>The pressure (Pa) a segment's broad face bears before its section fails in bending: a plate of depth D (the
+    /// larger of W and H) and thickness T (the smaller), loaded across its face and cantilevered from the body's axis over
+    /// D/2, bears a moment per unit length of SIGMA_SOFT T²/6 (its tissue) plus sigma(mineral) x t x T (its integument
+    /// as the faces of a sandwich panel; Gibson &amp; Ashby 1997), so p = 2 capacity / (D/2)² / SAFETY (Timoshenko &amp;
+    /// Woinowsky-Krieger 1959; Vogel 2003). A thin, deep sheet bears little: the 77 mm x 2.6 mm sea-floor sheet of
+    /// phase 1 bears ~250 Pa, a fifth of the dynamic pressure of a 1.5 m/s escape turn.</summary>
+    public static float FacePressureCap(Segment s)
+    {
+        float d = MathF.Max(s.W, s.H), t = MathF.Min(s.W, s.H), b = 0.5f * d;
+        float cap = Mat.SIGMA_SOFT * t * t / 6f + Development.Sigma(s.IntMin) * s.IntT * t;
+        return 2f * cap / MathF.Max(b * b, 1e-12f) / Phys.SAFETY;
+    }
+
+    /// <summary>The share of the lateral (or lifting) load the trunk can carry at pressure p: face-area-weighted
+    /// min(1, cap / p) over its segments (1 when Ablate.Plate). A sheet too thin for the load bends instead of turning
+    /// or lifting the body.</summary>
+    public static float PlateFactor(Morphology m, float p)
+    {
+        if (Ablate.Plate || p <= 0f) return 1f;
+        float sum = 0f, area = 0f;
+        foreach (var s in m.Segs)
+        {
+            float a = s.L * MathF.Max(s.W, s.H);
+            sum += a * MathF.Min(1f, FacePressureCap(s) / p); area += a;
+        }
+        return area > 0f ? sum / area : 1f;
+    }
+
+    /// <summary>Roll stability near the floor in surge (0..1, 1 = it holds upright): the surge's velocity gradient over
+    /// its height (a boundary layer) loads its upper side more, a rolling moment ~ drag x H/6 (the centroid of a linear
+    /// profile against the axis); it is righted by its weight in water on its belly's half-width (when it rests on the
+    /// floor), a gas space held dorsally (buoyancy x H/4: gas rises within a body; fish swim bladders and lungs lie
+    /// dorsal; Alexander 1966), and its mobile pairs' lift on their half-span (Webb 2002; Weihs 2002; Fish 2002). A
+    /// tall, thin, gasless body without fins rolls over.</summary>
+    public static float RollHold(Morphology m, float rho, float surge, float wEff)
+    {
+        if (Ablate.Plate || surge <= 0f) return 1f;
+        float q = 0.5f * rho * surge * surge;
+        float side = 0.8f * m.Length * m.MaxH;
+        float roll = q * side * m.MaxH / 6f;
+        float right = MathF.Max(0f, wEff) * 0.5f * m.MaxW + rho * Phys.G * m.GasV * 0.25f * m.MaxH;
+        var c = ControlAreas(m, rho, surge);
+        for (int i = 0; i < m.Pairs.Count; i++) { var a = m.Pairs[i]; right += q * Phys.CL_MAX * c[i] * (0.5f * m.Segs[a.Seg].W + 0.5f * a.Len); }
+        return roll > 0f ? MathF.Min(1f, right / roll) : 1f;
     }
 
     /// <summary>Least turning radius (m) at speed u: the centripetal force m_eff U²/R is the lateral force
@@ -450,11 +509,11 @@ public static class Physics
     /// of it at the foot's speed, ~2u) its kinetic energy twice, at u / stride strides a second. Was 4 m_leg u³ / walking
     /// stride, the whole limb at the foot's speed and the stride fixed, which held a 1 kg walker's sprint to ~2 m/s
     /// against Garland's (1983) ~8 (docs/BODYPLAN.md §10.3).</summary>
-    public static float SwingPower(in WalkProps w, float u) => 4f * Phys.SWING_K * w.LegMass * u * u * u / StrideAt(w, u);
+    public static float SwingPower(in WalkProps w, float u) => Ablate.Swing ? 4f * w.LegMass * u * u * u / MathF.Max(w.Stride, 1e-3f) : 4f * Phys.SWING_K * w.LegMass * u * u * u / StrideAt(w, u);
 
     /// <summary>Lateral kinetic power of limbless undulation at speed u (W): CRAWL_KIN x M u³ / wave length. Without
     /// it a crawler's sprint had no limit but its slip and support costs, and a 1 kg fish "crawled" on land at 7 m/s.</summary>
-    public static float CrawlKinetic(Morphology m, float u) => Phys.CRAWL_KIN * m.Mass * u * u * u / MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
+    public static float CrawlKinetic(Morphology m, float u) => Ablate.Crawl ? 0f : Phys.CRAWL_KIN * m.Mass * u * u * u / MathF.Max(Phys.CRAWL_WAVE * m.Length, 1e-3f);
 
     /// <summary>Crossing obstacles of height h every gap metres at speed u. The centre of mass must rise by what the
     /// limbs do not already clear, ~h²/(h + clearance) (a crawler, clearance 0, lifts its whole weight by h), and the
@@ -581,6 +640,7 @@ public static class Physics
         {
             if (a.Muscle <= 0f || a.Artic <= 0f || a.Sagittal) continue;
             float eta = 0.9f * (2f * a.Len / a.Chord) / (2f * a.Len / a.Chord + 2f) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);
+            eta *= MathK.Cos(a.Theta);   // a drooped pair (a leg) strokes mostly sideways to the lift it should make
             span = MathF.Max(span, 2f * a.Len * MathK.Cos(a.Theta));
             wing += 2f * a.Len * a.Chord * MathK.Cos(a.Theta) * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);   // a rod makes no lift
             mus += 2f * a.Muscle * a.Artic; capEta += 2f * a.Muscle * a.Artic * eta;
@@ -592,7 +652,9 @@ public static class Physics
         float wgt = m.Mass * Phys.G;
         float disk = MathF.PI * 0.25f * b * b;
         float ind = Phys.K_IND * wgt * wgt / (2f * Phys.RHO_A * disk);   // x 1/v
-        float par = 0.5f * Phys.RHO_A * MathF.Max(BodyDragArea(m), 1e-9f);   // x v³
+        // x v³: the body's parasite drag and the lifting surfaces' profile drag (phase 2b: without it a fish's fins "flew" at
+        // 45 m/s, where their small area stalls no longer; C_D,pro ~0.02, Pennycuick 2008)
+        float par = 0.5f * Phys.RHO_A * (MathF.Max(BodyDragArea(m), 1e-9f) + Phys.CD_PRO * wing);
         vmp = MathK.Pow(ind / (3f * par), 0.25f);
         // its lifting area must carry its weight there: no slower than stalling at CL_MAX_FLAP (a leg or a thin rod has span
         // but no area, and once "flew" on the induced power of its span)
@@ -609,7 +671,8 @@ public static class Physics
     {
         bool water = med == Medium.Water;
         float sExt = water ? Phys.S_WATER_EXT : Phys.S_AIR_EXT, sInt = water ? Phys.S_WATER_INT : Phys.S_AIR_INT;
-        float ext = m.ExchExt * sExt, inn = m.ExchInt * sInt;
+        // the lining of an internal gas space breathes the air it holds: in air; under water it holds a breath, not a supply
+        float ext = m.ExchExt * sExt, inn = m.ExchInt * sInt + (water ? 0f : m.ExchGas * Phys.S_AIR_INT);
         float skin = m.SkinArea * (water ? Phys.S_WATER_EXT : Phys.S_AIR_SKIN) * Phys.SKIN_EX * MathK.Exp(-m.SkinThick / Phys.SKIN_T0);
         float tot = ext + inn + skin;
         ventShare = tot > 0f ? (ext * (water ? Phys.V_WATER_EXT : Phys.V_AIR_EXT) + inn * (water ? Phys.V_WATER_INT : Phys.V_AIR_INT)) / tot : 0f;
@@ -619,7 +682,7 @@ public static class Physics
     /// <summary>Energy its surfaces cost in the medium: osmotic upkeep of exchange surfaces in water, evaporation in air.</summary>
     public static float SurfaceUpkeep(Morphology m, Medium med, float internalO2)
     {
-        float tissue = Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt);
+        float tissue = Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
         if (med == Medium.Water) return tissue + Phys.OSMO * (m.ExchExt + m.ExchInt);
         return tissue + Phys.EVAP_EXT * m.ExchExt + Phys.EVAP_INT * internalO2 + Phys.EVAP_SKIN * m.SkinArea * MathK.Exp(-m.SkinThick / Phys.EVAP_T0);
     }
@@ -686,7 +749,7 @@ public static class Physics
         float basal = Kleiber(m.Mass - m.InertMass);   // mineral does not metabolise
         e.Basal = basal;
         float o2 = O2Supply(m, env.Medium, out float vent);
-        float intO2 = m.ExchInt * (water ? Phys.S_WATER_INT : Phys.S_AIR_INT);
+        float intO2 = m.ExchInt * (water ? Phys.S_WATER_INT : Phys.S_AIR_INT) + (water ? 0f : m.ExchGas * Phys.S_AIR_INT);
         float upkeep = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass;
         float surface = SurfaceUpkeep(m, env.Medium, 0f);
         // lungs lose water with the air they move, so with the oxygen they deliver, not with their capacity
@@ -747,6 +810,9 @@ public static class Physics
             holdWalk = MathF.Min(1f, MathF.Min(slide, topple));
             float ps = SwimPower(sp, rho, env.Surge);
             holdSwim = float.IsPositiveInfinity(ps) ? 0f : MathF.Min(1f, sp.Cap / MathF.Max(ps, 1e-9f));
+            // and it must not roll over in the surge's shear (phase 2b; docs/BODYPLAN.md §11)
+            float rollHold = RollHold(m, rho, env.Surge, wp.WEff);
+            holdSwim *= rollHold;   // walkers: the toppling test above
         }
 
         // per mode and speed: locomotion power, speed factor, duty (weak swimmers), legged?
