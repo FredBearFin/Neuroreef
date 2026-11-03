@@ -98,7 +98,7 @@ public static class Shadow
     /// brain; then the gut built to that cost (Body.GutScale).</summary>
     public static float BasalW(Morphology m, float level, float geneFactor, float brainW)
     {
-        float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.Mass - m.InertMass), K.EXP_BASAL) * level;
+        float kleiber = K.BMR_W * MathK.Pow(MathF.Max(1e-6f, m.ActiveMass), K.EXP_BASAL) * level;
         float modules = Phys.TURNOVER * m.IntMass + Phys.MOULT_COST * m.Rigidity * m.ExoMass + Phys.EXCH_TISSUE * (m.ExchExt + m.ExchInt + m.ExchGas);
         Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + brainW, kleiber, out float basal);
         return basal;
@@ -124,15 +124,22 @@ public static class Shadow
         // ---- water: the top speed on burst power; the cruise where the cost a metre, basal included, is least (a
         // fish's optimum: Videler 1993), and its net cost a metre there (the live COT_SWIM_J is net)
         float basal = BasalW(m, level, geneFactor, brainW);
-        var sp = Physics.Swim(m, Phys.RHO_W);
-        float bestGross = float.PositiveInfinity;
+        // each folding of its pairs (Physics.SwimSet): a swimmer tucks what does not pay to stroke
+        var sps = Physics.SwimSet(m, Phys.RHO_W);
+        float bestGross = float.PositiveInfinity, vWardle = WardleSpeed(m.Length);
         foreach (float u in U)
         {
-            float p = Physics.SwimPower(sp, Phys.RHO_W, u);
-            if (float.IsPositiveInfinity(p)) continue;
-            if (p <= k * sp.Cap && u <= WardleSpeed(m.Length)) c.VWater = u;
-            float gross = (p / Phys.ETA_M + basal) / u;
-            if (p <= sp.Cap && gross < bestGross) { bestGross = gross; c.Cruise = u; c.CotWater = p / Phys.ETA_M / u; }
+            float pBurst = float.PositiveInfinity, pCruise = float.PositiveInfinity;
+            foreach (var sp in sps)
+            {
+                float pw = Physics.SwimPower(sp, Phys.RHO_W, u);
+                if (pw <= k * sp.Cap) pBurst = MathF.Min(pBurst, pw);
+                if (pw <= sp.Cap) pCruise = MathF.Min(pCruise, pw);
+            }
+            if (!float.IsPositiveInfinity(pBurst) && u <= vWardle) c.VWater = u;
+            if (float.IsPositiveInfinity(pCruise)) continue;
+            float gross = (pCruise / Phys.ETA_M + basal) / u;
+            if (gross < bestGross) { bestGross = gross; c.Cruise = u; c.CotWater = pCruise / Phys.ETA_M / u; }
         }
         // ---- air: margin over the least power of level flight; the cost a metre at the speed of least power
         c.Margin = Physics.FlightMargin(m, out float pMin, out float vmp);

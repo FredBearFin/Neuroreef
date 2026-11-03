@@ -31,6 +31,18 @@ public static class Mat
     /// <summary>The most of its segment's tissue one pair gene's muscle can take (phase 2b: was 0.3, which held a flier's
     /// flight muscle to ~0.2 of its body against a bird's 0.15-0.35; Greenewalt 1962; Marden 1987).</summary>
     public static readonly float PAIR_MUSCLE = Ablate.Muscle ? 0.3f : 0.6f;
+    /// <summary>Fat (phase 2c, docs/BODYPLAN.md §12): up to FAT_MAX of a segment's tissue volume is adipose tissue at
+    /// RHO_FAT (~900 kg/m³; Schmidt-Nielsen 1984), as much as a seal's blubber (30-50% of its mass). It is neither gut
+    /// nor muscle and metabolises at FAT_MET of the body's average per kg (human adipose ~4.5 kcal/kg/day against
+    /// ~24 for the whole body; Elia 1992).</summary>
+    public const float FAT_MAX = 0.5f, RHO_FAT = 900f, FAT_MET = 0.2f;
+    /// <summary>Body fat of mammals as a share of the mass, 0.075 M^0.19 (fat ~0.075 M^1.19 kg; Pitts &amp; Bullard 1968;
+    /// Calder 1984): 5% at 0.1 kg, 7.5% at 1 kg, 12% at 10 kg, at most 0.3.</summary>
+    public const float FAT_K = 0.075f, FAT_EXP = 0.19f;
+    public static float TypicalFat(float mass) => MathF.Min(0.3f, FAT_K * MathK.Pow(MathF.Max(mass, 1e-4f), FAT_EXP));
+    /// <summary>The most hollow an internal skeleton can be: inner over outer diameter K up to 0.9 (bird and pterosaur
+    /// long bones; terrestrial mammals ~0.55-0.6; Currey &amp; Alexander 1985).</summary>
+    public const float HOLLOW_MAX = 0.9f;
 }
 
 public sealed class Segment
@@ -40,6 +52,7 @@ public sealed class Segment
     public float Pore, Invag;            // share of the surface that is exchange epithelium; share of that folded inward
     public float AxShare;                // axial muscle share of its tissue
     public float Gas, GasV;              // share of its core that is an internal gas space; its volume, m³
+    public float Fat, FatMass;           // share of its tissue volume that is fat; its mass, kg (TissueMass is the lean rest)
     public float TissueMass, IntMass, AxMuscle, AppMuscle;  // kg
     public float Area;                   // lateral surface, m²
     public float Volume;                 // m³ (tissue + integument)
@@ -57,6 +70,7 @@ public sealed class Pair
     public int Joints;
     public float MuscleShare, Muscle;    // of its segment's tissue; kg (housed in the segment), per side
     public float Mineral, Wall, Exo;     // skeleton: mineral share, share of the cross-section that is skeleton, share of that as an outer tube
+    public float Hollow;                 // the internal skeleton's inner over outer diameter K (0: a solid rod)
     public float Pore, Invag;
     public float Mass;                   // one side, kg
     public float Volume;                 // one side, m³
@@ -77,6 +91,11 @@ public sealed class Morphology
     public float GasV, ExchGas;                          // internal gas volume, m³; the exchange area lining it (air only), m²
     public float GutMass, MuscleMass, TotalArea;
     public float InertMass;                              // the mineral in integument and skeleton: no metabolism of its own
+    public float FatMass;                                // adipose tissue, kg: metabolises at Mat.FAT_MET of the average
+    /// <summary>The mass Kleiber's metabolism is taken on: less the inert mineral, and less most of the fat beyond what
+    /// the animals Kleiber's law was fitted to carry (Mat.TypicalFat: ~0.075 M^1.19 kg; Pitts &amp; Bullard 1968), or more
+    /// for a body leaner than them: its lean tissue is the more of its mass.</summary>
+    public float ActiveMass => Mass - InertMass - (1f - Mat.FAT_MET) * (FatMass - Mat.TypicalFat(Mass) * Mass);
     public int JointCount;
 
     public int SegmentCount => Segs.Count;
@@ -167,13 +186,14 @@ public static class Development
                     W = LogMap(sg.P[SP.WID], SEG_W_LO, SEG_W_HI) * scale,
                     H = LogMap(sg.P[SP.HEI], SEG_W_LO, SEG_W_HI) * scale,
                     IntMin = sg.P[SP.INT_MIN], Pore = 0.5f * sg.P[SP.PORE], Invag = sg.P[SP.INVAG],
-                    AxShare = 0.4f * sg.P[SP.AXMUS], Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS],
+                    AxShare = 0.4f * sg.P[SP.AXMUS], Gas = Ablate.Gas ? 0f : Mat.GAS_MAX * sg.P[SP.GAS], Fat = Mat.FAT_MAX * sg.P[SP.FAT],
                 };
                 s.IntT = LogMap(sg.P[SP.INT_T], INT_REL_LO, INT_REL_HI);   // relative here; made absolute in Finish
                 float core = s.L * s.W * s.H * (MathF.PI / 4f);
                 s.Area = MathF.PI * 0.5f * (s.W + s.H) * s.L;   // lateral surface of an elliptic cylinder (first order); exposed ends added in Finish
                 s.GasV = core * s.Gas;
-                s.TissueMass = (core - s.GasV) * Mat.RHO_TISSUE;   // the gas space holds no tissue
+                s.FatMass = (core - s.GasV) * s.Fat * Mat.RHO_FAT;
+                s.TissueMass = (core - s.GasV) * (1f - s.Fat) * Mat.RHO_TISSUE;   // the gas space holds no tissue; its fat is neither gut nor muscle
                 s.Volume = core;
                 int segIndex = m.Segs.Count;
                 m.Segs.Add(s);
@@ -192,7 +212,7 @@ public static class Development
                         Theta = ag.P[AP.DROOP] * (MathF.PI / 2f), Sagittal = ag.P[AP.ROLL] >= 0.5f,
                         Joints = Joints(ag.P[AP.JOINTS]),
                         MuscleShare = Mat.PAIR_MUSCLE * ag.P[AP.MUSCLE],
-                        Mineral = ag.P[AP.MINERAL], Wall = 0.02f + 0.98f * ag.P[AP.WALL], Exo = ag.P[AP.EXO],
+                        Mineral = ag.P[AP.MINERAL], Wall = 0.02f + 0.98f * ag.P[AP.WALL], Exo = ag.P[AP.EXO], Hollow = Mat.HOLLOW_MAX * ag.P[AP.HOLLOW],
                         Pore = 0.5f * ag.P[AP.PORE], Invag = ag.P[AP.INVAG],
                     };
                     musShareSum += p.MuscleShare;
@@ -223,10 +243,22 @@ public static class Development
         float tubeArea = p.Exo * sk, rodArea = (1f - p.Exo) * sk;
         float kIn = MathK.Sqrt(MathF.Max(0f, 1f - tubeArea / sect));          // inner ellipse scale
         float iTube = MathF.PI / 4f * a * b * b * b * (1f - kIn * kIn * kIn * kIn);
-        float rRod = MathF.Min(b, MathK.Sqrt(rodArea / MathF.PI));
-        float iRod = MathF.PI / 4f * rRod * rRod * rRod * rRod;
+        // the internal skeleton is a tube of inner/outer diameter K = Hollow (a long bone; K = 0 a solid rod) with the
+        // rod's area, its outer radius R = sqrt(A / (pi (1 - K²))) no wider than the limb (then K follows from the area).
+        // Its section modulus pi/4 R³ (1 - K⁴) is (1 + K²) / sqrt(1 - K²) times a rod's of the same mass: x1.7 at K 0.6,
+        // x4.2 at 0.9 (Currey & Alexander 1985; Alexander 1983). Its bore holds the limb's soft tissue (marrow), which the
+        // section already counts, so hollowness costs no mass. Thin walls fail by local buckling only below t/R ~ 0.01
+        // (sigma_cr ~ 0.6 E t/R, E ~ 20 GPa for bone; Timoshenko & Gere 1961), thinner than HOLLOW_MAX allows
+        float zRod = 0f;
+        if (rodArea > 0f)
+        {
+            float k = p.Hollow, rOut = MathK.Sqrt(rodArea / (MathF.PI * MathF.Max(1e-6f, 1f - k * k)));
+            if (rOut > b) { rOut = b; k = MathK.Sqrt(MathF.Max(0f, 1f - rodArea / (MathF.PI * b * b))); }
+            float k2 = k * k;
+            zRod = MathF.PI / 4f * rOut * rOut * rOut * (1f - k2 * k2);
+        }
         float sigma = Sigma(p.Mineral);
-        p.MomentCap = sigma * (iTube / MathF.Max(b, 1e-6f) + (rRod > 0f ? iRod / rRod : 0f));
+        p.MomentCap = sigma * (iTube / MathF.Max(b, 1e-6f) + zRod);
         p.ExoT = (1f - kIn) * b;
         float rhoSk = Density(Mat.RHO_SOFT_INTEG, p.Mineral);
         p.Volume = p.Len * sect;
@@ -260,7 +292,7 @@ public static class Development
         }
         foreach (var s in m.Segs)
         {
-            m.Mass += s.TissueMass + s.IntMass;
+            m.Mass += s.TissueMass + s.FatMass + s.IntMass; m.FatMass += s.FatMass;
             m.Volume += s.Volume;
             m.Length += s.L;
             m.MaxW = MathF.Max(m.MaxW, s.W); m.MaxH = MathF.Max(m.MaxH, s.H);

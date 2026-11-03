@@ -61,7 +61,13 @@ public class StepLengthTests
         // Re-pinned 2026-11-02 (the ocean audit, FeedingBudgetTests): swimming is paid at swimming's cost of transport
         // (COT_SWIM_J, 1 J/m at 1 kg, over its propulsive efficiency: Respiration.SwimCost), not running's 10.7 J/m; this
         // world's swimmers and feeding cruises in its lake and river pay less. It was 14911671059831046093 before.
-        Assert.Equal(11681709169049197875UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03 (flight-power scaling, docs/BODYPLAN.md §12.4): the power flight muscle can deliver scales as
+        // M^(5/6), not M^(2/3) (K.EXP_FLY_AVAIL: Pennycuick's measured wingbeat frequency ~M^(-1/6) for similar fliers;
+        // Ellington 1991 and Marden 1994 measure 0.7-0.8; Marden 2005 force ~M^1), so a flier's margin falls as M^(-1/3)
+        // instead of M^(-1/2). It is unchanged at FLY_M_MAX and smaller below it (5.4 instead of 12.6 at 0.1 kg), so
+        // which bodies fly, how fast and the half-wing ceiling (2 kg, was 4) change wherever fliers live. It cannot stay
+        // bit-identical: the default world has fliers from its first step. Was 11681709169049197875.
+        Assert.Equal(873474179074618927UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

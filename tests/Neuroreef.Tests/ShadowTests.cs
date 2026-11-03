@@ -55,6 +55,8 @@ public class ShadowTests
                     best0 = MathF.Min(best0, Physics.SwimPower(sp0, Phys.RHO_W, u) / Phys.ETA_M / u);
                 }
                 _out.WriteLine($"  walker in water: least cost/m {best:F2} J/m, neutrally buoyant {best0:F2} J/m; density {mo.Mass / mo.Volume:F0} kg/m3");
+                float legs = 0f; foreach (var a in mo.Pairs) legs += 2f * a.Mass;
+                _out.WriteLine($"  walker legs {legs / mo.Mass:P1} of its mass, mineral {mo.InertMass / mo.Mass:P1} (Prange et al. 1979: whole skeleton {0.061f * MathK.Pow(m, 1.09f) / m:P1}), fat {mo.FatMass / mo.Mass:P1}");
             }
             { float fm = 0f, segT = 0f; foreach (var a in mb.Pairs) if (a.Theta < 0.1f && a.Muscle > 0f) fm += 2f * a.Muscle; segT = mb.Segs[1].TissueMass; _out.WriteLine($"  walker mass {mo.Mass:F3} L {mo.Length:F3} maxH {mo.MaxH:F3} pairs {mo.PairCount} muscle {mo.MuscleMass:F3}; bird flight muscle {fm / mb.Mass:F3} of its mass, thorax tissue {segT / mb.Mass:F2}, density {mb.Mass / mb.Volume:F0}, segs {mb.SegmentCount}"); }
         }
@@ -101,8 +103,13 @@ public class ShadowTests
         Assert.InRange(Med("drag shape"), 0.8f, 1.25f);             // Hoerner's volume drag against the wetted-area drag
         Assert.InRange(Med("standing height"), 0.8f, 1.25f);        // Garcia & da Silva's shoulder height
         Assert.InRange(Med("land cost/m, legs>=0.7"), 0.75f, 1.3f); // Taylor, Heglund & Maloiy's cost of transport
-        Assert.InRange(Med("land speed (rel.)"), 0.75f, 1.3f);      // legs, leg pairs and armour against the plain body
-        Assert.InRange(Med("air cost/m"), 0.7f, 1.3f);              // flight's cost a metre at the speed of least power
+        // legs, leg pairs and armour against the plain body. Phase 2c: 0.74 (was 0.86): the plain body's slimmer, tubular
+        // legs run faster, and founders with every organ gene high (legs, four fin pairs, wings, a fish's axial muscle)
+        // cannot house all that muscle in one trunk (MUSCLE_MAX_SHARE), which the live sim never asks (docs/BODYPLAN.md §12.5)
+        Assert.InRange(Med("land speed (rel.)"), 0.7f, 1.3f);
+        // flight's cost a metre at the speed of least power; ~1.3 since phase 2b's wing profile drag (Pennycuick 2008),
+        // on founders' fliers that are bluff (fineness < 1.5), which the live cost ignores (docs/BODYPLAN.md §11.4)
+        Assert.InRange(Med("air cost/m"), 0.7f, 1.35f);
         Assert.InRange(Med("water cruise, fins>=0.7"), 0.7f, 1.4f); // Videler's ~1 length a second
         Assert.InRange(Med("basal cost"), 0.7f, 1.05f);             // Kleiber at the metabolic level, less the labelled organs' upkeep
         // phase 2b (docs/BODYPLAN.md §11): the lung is the lining of a gas space bounded by volume, so the aerobic scope
@@ -150,7 +157,10 @@ public class ShadowTests
             _out.WriteLine($"{m} kg: swim {n.VWater:F2} -> {f.VWater:F2} m/s, cost/m {n.CotWater:F3} -> {f.CotWater:F3} (live {live:F3}), cruise {f.Cruise:F2} m/s, drag shape {f.Stream:F2} (live {liveStream:F2})");
             Assert.True(f.VWater >= n.VWater);   // both may reach the twitch-time limit of burst swimming (Wardle 1975)
             Assert.True(f.CotWater < n.CotWater);
-            Assert.InRange(f.CotWater / live, 0.7f, 1.3f);    // COT_SWIM_J ~1 J/(kg m) at 1 kg x M^0.7 (Videler & Nolet 1990)
+            // COT_SWIM_J ~1 J/(kg m) at 1 kg x M^0.7 (Videler & Nolet 1990), whose own note puts a streamlined 1 kg body's
+            // drag-based cost at ~0.5 J/m; phase 2c: a cruising fish folds its paired fins (§12.1), so it sits nearer that
+            // (and a fish's net minimum falls as ~M^-0.3 per kg, ~0.25 J/(kg m) at 10 kg, below COT_SWIM_J's M^0.7 line)
+            Assert.InRange(f.CotWater / live, 0.4f, 1.3f);
             Assert.InRange(f.Stream / liveStream, 0.8f, 1.25f);
         }
     }

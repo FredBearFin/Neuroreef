@@ -222,12 +222,12 @@ public class EcologyTests
         Assert.True(checkedMasses >= 8);
     }
 
-    [Fact] // the flight ceiling comes from power: available ~wings x M^(2/3), required ~M^(7/6); nothing above FLY_M_MAX flies
+    [Fact] // the flight ceiling comes from power: available ~wings x M^(5/6), required ~M^(7/6) (2026-11-03: was M^(2/3)); nothing above FLY_M_MAX flies
     public void LargeBodiesCannotFly()
     {
         Assert.True(Body.FlightMargin(1f, 0.99f * K.FLY_M_MAX) >= 1f);
         Assert.True(Body.FlightMargin(1f, 1.01f * K.FLY_M_MAX) < 1f);
-        Assert.True(Body.FlightMargin(0.5f, 4.5f) < 1f && Body.FlightMargin(0.5f, 3.5f) >= 1f);   // half wings: ceiling 16 x 0.5^2 = 4
+        Assert.True(Body.FlightMargin(0.5f, 2.2f) < 1f && Body.FlightMargin(0.5f, 1.8f) >= 1f);   // half wings: ceiling 16 x 0.5^3 = 2 (was 0.5^2 = 4)
         Assert.InRange(K.FLY_M_MAX, 12f, 19f);
         // and at any size, wings too small to lift the body's weight do not fly, however big the margin (Marden 1987)
         { var w = new World(16, 1); w.Genome[G.B_MASS] = -127; w.Genome[G.B_WINGS] = -60; Body.Express(w, 0);

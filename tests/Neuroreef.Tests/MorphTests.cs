@@ -287,9 +287,11 @@ public class MorphTests
     [Fact]
     public void PlanktonCaptureFollowsTheHeadNotTheVolume()
     {
-        // the same mass as a fish and as a thread: the thread's tiny head clears far less water (a loophole fixed)
-        var fish = Trunk(0.85f, 0.45f);
-        var thread = Trunk(1f, 0.0f, 8);
+        // the same mass as a fish and as a thread: the thread's tiny head clears far less water (a loophole fixed). Both
+        // have gill openings in the head (phase 2c: only water that passes through a face is cleared)
+        Morphology Gilled(float lenG, float widG, int segs = 1) => Development.Grow(Probe(segs, 0.2f, 0f, 0.6f, 0f, 0.5f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, lenG, widG, widG));
+        var fish = Gilled(0.85f, 0.45f);
+        var thread = Gilled(1f, 0.0f, 8);
         Assert.True(thread.Fineness > 4f * fish.Fineness);
         Assert.True(Physics.Capture(thread) < 0.2f * Physics.Capture(fish));
         float v23 = MathK.Pow(fish.Volume, 2f / 3f);
@@ -464,6 +466,61 @@ public class MorphTests
         _out.WriteLine($"species {r.Species}");
         Assert.True(r.Species >= 3);
         for (int i = 1; i < r.BestByGen.Length; i++) Assert.True(r.BestByGen[i] >= r.BestByGen[i - 1] - 1e-5f);   // the best is always kept
+    }
+
+    // ---------- phase 2c (docs/BODYPLAN.md §12)
+
+    [Fact]
+    public void ASolidFaceClearsNoPlanktonAndAFilteringFaceClearsByItsOpenFraction()
+    {
+        // the open-water disc of phase 2b: one segment 1.8 mm long and 52 mm across, face-on; solid, then porous
+        Morphology Disc(float pore) => Development.Grow(Probe(1, 0.05f, 0f, pore, 0f, 0.05f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, lenG: 0.0f, widG: 0.9f, heiG: 0.9f), 0.004f);
+        var solid = Disc(0f); var sieve = Disc(0.2f); var open = Disc(1f);
+        float frontal(Morphology m) => MathF.PI / 4f * m.Segs[0].W * m.Segs[0].H;
+        _out.WriteLine($"disc open fraction / capture over 1.7 x face: solid {Physics.HeadOpenFraction(solid):F2} {Physics.Capture(solid) / (Phys.CAPTURE * frontal(solid)):F2}, pore 0.2 {Physics.HeadOpenFraction(sieve):F2} {Physics.Capture(sieve) / (Phys.CAPTURE * frontal(sieve)):F2}, pore 1 {Physics.HeadOpenFraction(open):F2} {Physics.Capture(open) / (Phys.CAPTURE * frontal(open)):F2}");
+        Assert.Equal(0f, Physics.Capture(solid));
+        Assert.True(Physics.Capture(sieve) > 0f && Physics.Capture(sieve) < Physics.Capture(open));
+        Assert.InRange(Physics.ThroughFlow(0.5f), 0.6f, 0.7f);    // Taylor & Davies (1944): k = 2, 1 / 1.5
+        Assert.InRange(Physics.ThroughFlow(0.1f), 0.03f, 0.05f);   // k = 90
+        Assert.Equal(1f, Physics.ThroughFlow(1f));
+    }
+
+    [Fact]
+    public void AHollowBoneBearsMoreThanASolidRodOfTheSameMass()
+    {
+        Pair Leg(float hollow) { var p = new Pair { Len = 0.1f, Chord = 0.006f, Thick = 0.006f, Mineral = 1f, Wall = 0.35f, Exo = 0f, Hollow = hollow, Joints = 3 }; Development.SkeletonOf(p); return p; }
+        Pair rod = Leg(0f), bone = Leg(0.6f), thin = Leg(0.9f);
+        _out.WriteLine($"moment: rod {rod.MomentCap:E2}, K 0.6 x{bone.MomentCap / rod.MomentCap:F2}, K 0.9 x{thin.MomentCap / rod.MomentCap:F2}; mass {rod.Mass:E3} / {bone.Mass:E3}");
+        Assert.Equal(rod.Mass, bone.Mass);                                          // the bore holds the limb's soft tissue: no mass
+        Assert.InRange(bone.MomentCap / rod.MomentCap, 1.6f, 1.8f);                 // (1 + K²) / sqrt(1 - K²) = 1.7 (Currey & Alexander 1985)
+        // at K 0.9 the tube would be wider than the limb: it is held to the limb's radius, so less than the free 4.2
+        Assert.True(thin.MomentCap > bone.MomentCap);
+    }
+
+    [Fact]
+    public void FatLightensABodyAndCostsLittleMetabolismButNoGutOrMuscle()
+    {
+        MorphGenome G(float fat) { var g = Probe(3, 0.1f, 0f, 0f, 0f, 0.5f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); foreach (var s in g.Segs) s.P[SP.FAT] = fat; return g; }
+        var lean = Development.Grow(G(0f), 1f); var fat = Development.Grow(G(0.6f), 1f);
+        _out.WriteLine($"lean {lean.Mass / lean.Volume:F0} kg/m3, gut {lean.GutMass:F3}, active {lean.ActiveMass:F3}; fat {fat.FatMass / fat.Mass:P0}: {fat.Mass / fat.Volume:F0} kg/m3, gut {fat.GutMass:F3}, active {fat.ActiveMass:F3}");
+        Assert.True(fat.Mass / fat.Volume < lean.Mass / lean.Volume - 30f);
+        Assert.True(fat.GutMass < 0.8f * lean.GutMass && fat.MuscleMass < 0.8f * lean.MuscleMass);
+        Assert.InRange(fat.ActiveMass, lean.ActiveMass - fat.FatMass, lean.ActiveMass - 0.7f * fat.FatMass);
+    }
+
+    [Fact]
+    public void ASwimmerFoldsItsLegsAndPaysLessThanDraggingThemOut()
+    {
+        // a walker in water, neutrally buoyant: its legs stroke as paddles or fold along its body; it takes the cheaper
+        var g = Probe(4, 0.1f, 0f, 0f, 0f, 0.8f, 1, 0.75f, 0.35f, 0.35f, 0.8f, 0.5f, 0.3f, 1f, 0.35f, 0f, lenG: 0.7f);
+        foreach (var s in g.Segs) s.P[SP.GAS] = 0.5f;
+        var m = Development.Grow(g, 1f);
+        var set = Physics.SwimSet(m, Phys.RHO_W);
+        float p0 = Physics.SwimPower(set[Physics.FOLD_NONE], Phys.RHO_W, 0.5f), pf = Physics.SwimPower(set[Physics.FOLD_LEGS], Phys.RHO_W, 0.5f);
+        float best = Physics.SwimBest(set, Phys.RHO_W, 0.5f, out _);
+        _out.WriteLine($"at 0.5 m/s: legs out {p0:F3} W (drag area {set[0].DragArea:E2}), legs folded {pf:F3} W (drag area {set[1].DragArea:E2}); best {best:F3} W");
+        Assert.True(set[Physics.FOLD_LEGS].DragArea < 0.7f * set[Physics.FOLD_NONE].DragArea);
+        Assert.True(best <= MathF.Min(p0, pf) + 1e-6f);
     }
 
     // ---------- phase 2b (docs/BODYPLAN.md §11)
