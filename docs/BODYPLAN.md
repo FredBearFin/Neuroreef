@@ -1,6 +1,6 @@
 # NEUROREEF: OPEN-ENDED BODY PLANS (design and prototype)
 
-Status: design, plus a working prototype in `src/Neuroreef.Core/Morph/` (namespace `Neuroreef.Morph`).
+Status: LIVE since 2026-11-03 (phase 4, §13): every body in a live world is grown from its module genome and its capabilities come from the module physics. The prototype is in `src/Neuroreef.Core/Morph/` (namespace `Neuroreef.Morph`).
 Phase 2 (shadow expression, §10) has started: every live body is also translated to a module genome and its
 capabilities computed from the developed morphology, alongside `Body.Express`, into `World.D` (write-only: the live
 simulation reads none of it and is bit-identical). Tests are in `tests/Neuroreef.Tests/MorphTests.cs` and
@@ -570,9 +570,9 @@ expressed by the new body:
 | P2a (done, §10) | shadow expression: translator, shadow capabilities in `World.D`, founders diagnostic, first calibration round (7 of 13 grounded capabilities within ~25%) | ~3 agent-hours |
 | P2b (done, §11) | gas volume and buoyancy, a volume-bounded lung, flight muscle up to 0.6 of a segment, tendon elastic storage, burst-swimming limit, thin-plate bending and roll in surge, telemetry of both expressions, jaw ablations; water cost, land speed and flight margin still outside 25% (§11.6) | ~3 agent-hours |
 | P2c (done, §12) | folding pairs in water, fat, a tubular skeleton, capture through a porous face, the flight-power exponent (live EXP_FLY_AVAIL 2/3 → 5/6, default world re-pinned); phase 4 can start after the head-exit fix (§12.7) | ~2.5 agent-hours |
-| P3 | storage: a fixed-capacity, variable-count body block in the slot layout (now with innovation numbers and the mass gene); checkpoint, `GeneBank` and AGENTS-format version bumps; a v13 → v14 translator; ICD update | 3–5 agent-hours |
-| P4 | expression from morphology: replace every reader of `PLegs`, `PFins`, `PWings`, `PLegPairs`, `PFinPairs`, `PLungs` and armour (Resolve, Respiration, Heat, Decide, Reflex, Clades, Species, Telemetry) with morphology-derived speeds per medium, O2 supply, armour, moult state, crushing and strike force, and turning radius; mutate and recombine with the new operators in LIFECYCLE | 10–20 agent-hours |
-| P5 | recalibration: the ~40 test files that assert body-dependent numbers (Locomotion, Wading, Diving, Respiration, Feeding, FeedingBudget, Founding, Ocean, Ecology, Metabolism, Appearance, StepLength, ...), the founding draw (`Clades.AncestorBody`) and the constants doc; long runs in each world type | 10–25 agent-hours, plus the wall-clock of long runs |
+| P3 (done 2026-11-03, §13.2) | storage: a fixed-capacity, variable-count body block in the slot layout (now with innovation numbers and the mass gene); checkpoint, `GeneBank` and AGENTS-format version bumps; a v13 → v14 translator; ICD update | 3–5 agent-hours |
+| P4 (done 2026-11-03, §13.3) | expression from morphology: replace every reader of `PLegs`, `PFins`, `PWings`, `PLegPairs`, `PFinPairs`, `PLungs` and armour (Resolve, Respiration, Heat, Decide, Reflex, Clades, Species, Telemetry) with morphology-derived speeds per medium, O2 supply, armour, moult state, crushing and strike force, and turning radius; mutate and recombine with the new operators in LIFECYCLE | 10–20 agent-hours |
+| P5 (started 2026-11-03, §13.7) | recalibration: the ~40 test files that assert body-dependent numbers (Locomotion, Wading, Diving, Respiration, Feeding, FeedingBudget, Founding, Ocean, Ecology, Metabolism, Appearance, StepLength, ...), the founding draw (`Clades.AncestorBody`) and the constants doc; long runs in each world type | 10–25 agent-hours, plus the wall-clock of long runs |
 | P6 | renderer: `body.js` builds from segments and pairs (§6); appearance clustering on the developed body | 4–8 agent-hours |
 | P7 (optional) | per-module sensors in fixed brain slots (§5) | 5+ agent-hours |
 
@@ -1123,6 +1123,108 @@ and its representative member's grown body, every segment (L, W, H, rigidity, po
 flatness, joints, rigidity, porosity, droop, sagittal, and its physics role). The AGENTS record keeps its layout; its
 legs, fins, wings, armour and shape bytes are the morphology's legacy display values, so the existing renderer keeps
 working until it draws the module body.
+### 13.7 Phase 5: tests (2026-11-03)
+
+Tests that describe a body by its labelled genes still do so. A genome with no module block is translated each time it
+is expressed (`Codec.FromLabelled`), so "a 1 kg legged walker" is the translator's reading of those genes. Founders made
+by `Life.Found` with an empty genome have no block. A hand-made genome given to the live founding has its block
+emptied first (`FeedingBudgetTests.MakeFish`). Every re-derived expectation carries a dated comment in its test:
+
+- **Re-pinned:** `StepLengthTests.DefaultStepIsBitIdenticalToBefore`, 873474179074618927 → 15361944388290876228. Every
+  body changed.
+- **Re-derived, each for a stated physical reason:**
+  - `LocomotionTests`: the dead load of flight muscle is the morphology's own. The land-speed continuity check is made
+    where flight starts, at the 2% of a gene step. The flier that lands on its kill weighs 0.5 kg, where full wings fly. A
+    finless reference body is used for the slope gain, since fins held out are lifting surfaces. The bird's basal premium
+    is retired (see §13.9).
+  - `BrainTests`: the body's share rises as its active mass^0.75, 0.88–1.0 of M^0.75.
+  - `ExploreTests`: heading away on ≥ 5 of 12 steps. Its speed changed, so the torus wraps it at other steps.
+  - `RespirationTests`:
+    - the gill-breather is cold-blooded, and is given 400 steps to die on land, because its debt builds at its own rate;
+    - the air-breather that cannot keep its head up is armoured, because a soft, limbless body undulates and swims;
+    - the scope of a cold-blooded body is checked to 2 decimals, because skin breathing is passive.
+  - `DivingTests`: the feeding cruise is 0.3–4 lengths a second (Videler 1993), and bottom cropping is checked on a
+    quarter of a bout.
+  - `WireTests`: AGENTS bytes 26–28 are the body's proportions.
+  - `AppearanceTests`: version numbers 14 and 29.
+- **Retired** (skipped with the reason in the attribute; each tested a labelled-gene formula that no longer exists):
+  - `AppearanceTests`, 6 tests: shape genes, look and clade traits from labelled genes, and the founding habitat of a
+    labelled walker;
+  - `ShadowTests.ShadowAgainstLiveOverTheFoundersOfSeeds1To5`;
+  - `WadingTests.AFlierThatNeverFliesPaysItsWingUpkeep` (COST_WING);
+  - `DivingTests.WingsSwimBestAtASizeTooSmallToFlyAHeavyBody` (Body.Propulsor's wing term);
+  - `RespirationTests.AGillBreatherPaysUpkeepForUnusedLungs` (OrganUpkeep).
+- **New:** `MorphLiveTests` (5 tests):
+  - the block round-trips and is bounded;
+  - mutation changes structure, with new innovation numbers, deterministically;
+  - crossover aligns modules and distance sees structure;
+  - a version-13 gene bank is translated;
+  - a rigid body moults while it grows.
+
+  `MorphTests.OnlyTheExitNearTheMouth…` covers the head-exit fix (§13.1).
+
+### 13.8 Short checks (valley map, seed 3, `--random-brains --no-checkpoint`)
+
+**Land, 1,500 steps.**
+
+- **Census:** 11 of the 16 ancestors were founded (10 land, 1 water-founded); 6,855 animals alive at the end, 11
+  clades, 0 splits.
+- **Body plans:**
+  - 1–15 segments: 1,195 animals with 1, 1,683 with 2, 738 with 3, 2,655 with 4, 394 with 5, and 190 with 6 or more;
+  - 0 to 16 or more appendage pairs: 3,863 animals with none, and 541 with 16 or more.
+- **Pairs by physics role**, over up to 40 members of each clade: 615 passive, 238 swim, 150 steer, 135 handle, 98
+  support, 0 fly.
+- **Locomotion:** 1,730 walk (legless crawling included), 321 wade, 891 swim, 259 sessile. No fliers: no founder
+  reached flight margin 1 with enough flight muscle.
+- **Clades:**
+  - Robri (5.5 kg): 4 segments, 16.5 pairs; mineralised, jointed pairs, some bearing weight ("support");
+  - Dovdov (3.7 kg): 10.8 segments, 7.9 pairs; long jointed pairs used to swim and steer;
+  - Vimolo, Osvi, Axce, Elos, Narithqu (3–36 kg): 1–4 segments, almost no pairs; rigid (rigidity 0.5–0.97) crawlers
+    and swimmers.
+- **Deaths by cause**, of 6,603: starvation 1,624, lost before birth 1,160, thirst 1,269, killed 1,076, cold 760,
+  drowned 509, parasitism 121, fire 40, suffocated 31, disease 13; none of old age.
+
+**Ocean (`--ocean`), 2,000 steps.** **No ancestor was founded**: 0 animals. In
+`OceanTests.WhyDrawsPassOrFailFoundingAtSea` (20 draws of ancestor 1), every draw fails:
+
+- 7 have no deep-water realm;
+- 6 cannot breathe where they are put: their random exchange surfaces supply less than their field metabolism;
+- 7 are fed 0.01–1.1× their need, against the 3× founding margin.
+
+The translated 1 kg plankton fish is fed 2.7× its need, against the 3× margin, and fails too. Its feeding cruise (the
+module physics' speed of least gross cost a metre) costs 37% of its daily need. `FeedingBudgetTests` measures its
+clearance at 101 L/min, against the 6–83 L/min the menhaden data allow (Durbin & Durbin 1975).
+
+### 13.9 Known gaps
+
+1. **Ocean founding fails** (§13.8). Next step: measure which term moved the 1 kg fish from passing to failing. The
+   candidates are the faster cruise, the cruise cost, and the basal with its exchange upkeep. Then decide whether the
+   sea's founding seed should start from the sea's realm (a translated marine draw) rather than the generic blob.
+2. **No shelled-prey pool.** The live diet model's pools are plants, plankton, algae, detritus, meat, blood, carrion
+   and dung. None is an item that must be opened, so the crushing force (`PCrush`, `Physics.Handle`) is computed and
+   reported but read by nothing. Needed:
+   - a benthic pool of shelled prey (mussels, snails), with a strength distribution (log-uniform 0.1–300 N, as in
+     MorphEnv.SeaFloor);
+   - its energy per item;
+   - an intake rule that takes the share the crushing force opens (`Physics.Openable`) with Holling handling times;
+   - its dynamics (growth, recruitment).
+
+   Strike power (`B_STRIKE`) stays a gene.
+3. **The avian basal premium** (COST_WING, McKechnie & Wolf 2004) has no tissue counterpart in the module body.
+4. **Endothermic gill-breathers are not viable.** Gills are bounded at half the skin × FOLD, which is physics, but it
+   rules out the live sim's warm-blooded water-breathers.
+5. **Founders are mostly legless.** Random module bodies rarely carry weight-bearing limbs (support 98 of 1,236 sampled
+   pairs) and never fly. Selection, not the draw, should now build them.
+6. **Not yet green:**
+   - `FeedingBudgetTests.APlanktonEatingFishsBudget` (clearance 101 L/min, above);
+   - `OceanTests.WhyDrawsPassOrFailFoundingAtSea` (no sea founder);
+   - the classes not run to completion in this session (§13.10).
+7. **The renderer** draws legacy equivalents. The new renderer should read the clade table's `morph` or develop the
+   genome itself.
+8. **The protection gain from plate physics is large.** It reaches ~40× the plain body's crushing odds for a half-
+   mineralised integument, against the live armour's at most 7×. Predation on rigid bodies falls accordingly. It is
+   physics (σ t²), but the conversion to the live defence (mass × DEF_BASE × gain) has not been checked against
+   predation rates.
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
