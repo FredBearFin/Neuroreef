@@ -343,7 +343,10 @@ public class EcologyTests
         w.Genome[G.B_LEGS] = 127; w.Genome[G.B_LEGN] = 127; Body.Express(w, 0);
         // (re-derived 2026-11-03, phase 4: no upkeep beyond their tissue's Kleiber share; their bone mineral is inert, so a
         // legged body costs a little less at rest than a legless one of the same mass, never more)
-        Assert.InRange(w.PBasal[0] / bare, 0.85f, 1.0001f);
+        // (re-derived 2026-11-03, docs/BODYPLAN.md §13.17: the gut is housed in the trunk, and four pairs of full legs leave
+        // this 2 kg body's trunk room for 1.33 reference guts, less than its basal asks for; it builds the smaller gut and
+        // pays that gut's upkeep, 0.849 of the legless basal, so the lower bound is 0.8)
+        Assert.InRange(w.PBasal[0] / bare, 0.8f, 1.0001f);
     }
 
     [Fact] // many legs steady a small body on rough ground; legs share a heavy body's weight (bone stress ~M^(1/3))

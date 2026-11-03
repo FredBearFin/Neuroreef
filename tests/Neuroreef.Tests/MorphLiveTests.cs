@@ -124,4 +124,100 @@ public class MorphLiveTests
         g[G.B_ARMOUR] = -127; w.StageOf[0] = St.Juvenile; w.Grown[0] = 0.3f; Body.Express(w, 0);
         Assert.True(w.PMoultSoft[0] < 0.2f * Live.MOULT_SOFT_GROW);
     }
+
+    // ---- loopholes closed in §13.17 (2026-11-03): body dimensions or parts that gave a benefit without the tissue to back it
+
+    /// <summary>The land world's most common lineage at step 1,500 of seed 3 (Anithmo, 0.309 kg): a 2-segment trunk of
+    /// 22 g (5 x 43 x 57 mm and 3 x 73 x 68 mm) carrying three pairs of porous plates up to 79 mm long, 93% of its mass.</summary>
+    static MorphGenome Anithmo()
+    {
+        var g = new MorphGenome();
+        var s0 = new SegGene { Innov = 1 };
+        new[] { 0.1456693f, 0.7637795f, 0.8464567f, 0.992126f, 0.24409449f, 0.21653543f, 0.36220473f, 0.515748f, 0.8385827f, 0.8070866f, 0.72047246f, 0.22047244f }.CopyTo(s0.P, 0);
+        var a0 = new AppGene { Innov = 2 };
+        new[] { 0.87401575f, 1f, 0.8031496f, 0.46850392f, 0.20866142f, 0.35826772f, 0.11023622f, 0.9015748f, 0.71653545f, 0.72047246f, 0.32677165f, 0.6417323f, 0.11023622f }.CopyTo(a0.P, 0);
+        var a1 = new AppGene { Innov = 3 };
+        new[] { 0.2007874f, 0.7637795f, 0.95669293f, 0.2480315f, 0.17322835f, 0.43700787f, 0.38582677f, 0.9173228f, 0.7440945f, 0.78740156f, 0.57086617f, 0.31889763f, 0.8031496f }.CopyTo(a1.P, 0);
+        s0.Apps.Add(a0); s0.Apps.Add(a1);
+        var s1 = new SegGene { Innov = 4 };
+        new[] { 0.003937008f, 0.9212598f, 0.9015748f, 0.8937008f, 0.003937008f, 0.41338584f, 0.16929133f, 0.2519685f, 0.72440946f, 0.515748f, 0.87007874f, 0.31889763f }.CopyTo(s1.P, 0);
+        var a2 = new AppGene { Innov = 5 };
+        new[] { 0.88582677f, 1f, 0.78740156f, 0.511811f, 0.27559054f, 0.31889763f, 0.08267716f, 0.9015748f, 0.8267717f, 0.7677165f, 0.32677165f, 0.6062992f, 0.07874016f }.CopyTo(a2.P, 0);
+        s1.Apps.Add(a2);
+        g.Segs.Add(s0); g.Segs.Add(s1);
+        return g;
+    }
+
+    [Fact] // the gut is tissue in the trunk: a body that is nearly all appendage cannot build a plain body's gut (it did: the
+           // live gut was sized to its basal whatever its trunk), while a plain body, with room for ~2.9 guts, is not bound
+    public void AGutMustFitInTheTrunkSoABodyOfAppendagesCannotDigestLikeAPlainOne()
+    {
+        var m = Development.Grow(Anithmo(), 0.309f);
+        float trunk = 0f; foreach (var s in m.Segs) trunk += s.TissueMass + s.FatMass + s.IntMass;
+        Assert.InRange(trunk / m.Mass, 0.05f, 0.10f);                 // 22 g of 309
+        var lc = Live.Of(m, 1f, 1f, 0f);
+        Assert.InRange(lc.GutRoom, 0.1f, 0.2f);                       // 3.4 g of visceral tissue against a reference gut of 22 g
+        Assert.True(lc.Gut <= lc.GutRoom + 1e-6f, $"gut {lc.Gut} room {lc.GutRoom}");
+        // the plain body of the same mass, and at 0.01-30 kg, has room for more than the largest gut it would build
+        foreach (float mass in new[] { 0.01f, 0.309f, 1f, 30f })
+        {
+            Shadow.Of(Translate.Reference(mass), 1f, 0f, out var plain);
+            float room = Live.GutRoom(plain);
+            Assert.True(room > K.GUT_FLEX_MAX, $"plain body at {mass} kg: room for {room} guts");
+        }
+        // in the live world: it absorbs and digests in proportion to the gut it can house, and holds a gut-full in proportion
+        var w = new World(16, 1);
+        var gn = w.GenomeOf(0);
+        gn.Clear(); gn[G.B_MASS] = 0;
+        Codec.Encode(Anithmo(), Codec.Block(gn));
+        w.StageOf[0] = St.Adult; w.Grown[0] = 1f; w.Serial[0] = 1;
+        Body.Express(w, 0);
+        float m0 = w.PM[0];
+        float absorbAnithmo = w.PAbsorb[0], gutAnithmo = w.PGut[0];
+        Codec.Encode(MorphGenome.Blob(), Codec.Block(gn));   // a plain one-segment body of the same mass gene
+        Body.Express(w, 0);
+        Assert.Equal(m0, w.PM[0]);
+        Assert.True(absorbAnithmo < 0.3f * w.PAbsorb[0], $"absorb {absorbAnithmo} against a trunk's {w.PAbsorb[0]}");
+        Assert.True(gutAnithmo < 0.3f * w.PGut[0], $"gut-full {gutAnithmo} against {w.PGut[0]}");
+        // its porous plates are where it breathes (Live.PairO2Share, the "breathe" role of a pair with no other use)
+        Assert.True(Live.PairO2Share(m, m.Pairs[0]) > 0.3f, $"share {Live.PairO2Share(m, m.Pairs[0])}");
+    }
+
+    [Fact] // a tall, thin trunk tips over on rough ground and lies on its side, so it stands about as high as it is wide; a
+           // round body of the same mass stands its height (before, every body stood its tallest segment whatever its base)
+    public void ATallThinPlateLiesOnItsSideAndStandsNoHigherThanItIsWide()
+    {
+        MorphGenome Trunk(float wid, float hei)
+        {
+            var g = MorphGenome.Blob();
+            g.Segs[0].P[SP.LEN] = 0.5f; g.Segs[0].P[SP.WID] = wid; g.Segs[0].P[SP.HEI] = hei; g.Segs[0].P[SP.AXMUS] = 0.6f;
+            return g;
+        }
+        var plate = Development.Grow(Trunk(0.2f, 1f), 9f);
+        var round = Development.Grow(Trunk(0.6f, 0.6f), 9f);
+        Assert.True(plate.MaxH > 8f * plate.MaxW, $"plate {plate.MaxH} x {plate.MaxW}");
+        float sPlate = Live.Of(plate, 1f, 1f, 0f).C.Stand, sRound = Live.Of(round, 1f, 1f, 0f).C.Stand;
+        Assert.True(sPlate < 1.5f * plate.MaxW, $"plate stands {sPlate} m, {plate.MaxH} high and {plate.MaxW} wide");
+        Assert.InRange(sRound, 0.95f * round.MaxH, 1.0001f * round.MaxH);
+    }
+
+    [Fact] // a weightless thread trailing behind a swimmer carries no muscle to make the body wave, so it does not raise the
+           // twitch limit on burst swimming (Wardle 1975); on nose-to-tail length it raised it 30-60%
+    public void AWeightlessThreadDoesNotRaiseTheBurstSwimmingLimit()
+    {
+        var g = MorphGenome.Blob();
+        g.Segs[0].P[SP.LEN] = 0.9f; g.Segs[0].P[SP.WID] = 0.6f; g.Segs[0].P[SP.HEI] = 0.6f; g.Segs[0].P[SP.AXMUS] = 0.8f; g.Segs[0].P[SP.PORE] = 0.3f;
+        var t = g.Clone();
+        var th = t.Segs[0].Clone(); th.Innov = 99; th.P[SP.LEN] = 1f; th.P[SP.WID] = 0f; th.P[SP.HEI] = 0f;
+        t.Segs.Add(th);
+        foreach (float mass in new[] { 0.01f, 0.3f, 3f })
+        {
+            var fish = Development.Grow(g, mass);
+            var thread = Development.Grow(t, mass);
+            Assert.True(thread.Length > 2f * fish.Length);
+            Assert.True(thread.Segs[1].TissueMass < 0.03f * thread.Mass);
+            float vFish = Live.Of(fish, 1f, 1f, 0f).C.VWater, vThread = Live.Of(thread, 1f, 1f, 0f).C.VWater;
+            Assert.True(vThread < 1.05f * vFish, $"at {mass} kg: {vThread} m/s with the thread against {vFish}");
+        }
+    }
 }

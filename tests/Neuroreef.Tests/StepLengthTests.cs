@@ -77,7 +77,11 @@ public class StepLengthTests
         // once a step (a swimmer that stays down moves between the surface and its depth once a day). Was 10104198921116109538.
         // Re-pinned 2026-11-03: a crawling wave runs over the length the body's mass is spread over, not nose to tail (a
         // weightless thread made a head on a 10 cm tail the cheapest crawler). Was 5632958963462331332.
-        Assert.Equal(11947864240597378162UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-03 (fourth round, docs/BODYPLAN.md §13.17): the gut is housed in the trunk (no more reference guts
+        // than its visceral tissue holds, and the gut-full with it), standing height is the posture the body holds on rough
+        // ground (a tall, narrow trunk lies on its side), and the burst-swimming twitch limit runs on the length the mass is
+        // spread over. Was 11947864240597378162.
+        Assert.Equal(7475422619767155745UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

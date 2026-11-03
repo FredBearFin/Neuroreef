@@ -82,10 +82,15 @@ public static class Body
     /// <param name="basalRef">the basal cost with the reference gut (the gut's GUT_SHARE x Kleiber included), E/step</param>
     /// <param name="kleiber">Kleiber's basal cost for its mass, C_BASAL x M^0.75</param>
     /// <param name="basal">its whole basal cost with the gut it builds</param>
-    public static float GutScale(float basalRef, float kleiber, out float basal)
+    public static float GutScale(float basalRef, float kleiber, out float basal) => GutScale(basalRef, kleiber, float.PositiveInfinity, out basal);
+
+    /// <summary>The same, in a body that has room for at most room reference guts (phase 4, docs/BODYPLAN.md §13.17: the gut
+    /// is tissue housed in the trunk, Morph.Live.GutRoom). A gut that cannot be housed is not built: the body builds the
+    /// smaller gut it has room for, and pays that gut's upkeep only.</summary>
+    public static float GutScale(float basalRef, float kleiber, float room, out float basal)
     {
         float rest = basalRef - K.GUT_SHARE * kleiber;   // everything but the gut
-        float g = MathF.Min(K.GUT_FLEX_MAX, rest / ((1f - K.GUT_SHARE) * kleiber));
+        float g = MathF.Min(MathF.Min(K.GUT_FLEX_MAX, MathF.Max(0f, room)), rest / ((1f - K.GUT_SHARE) * kleiber));
         basal = rest + K.GUT_SHARE * g * kleiber;
         return g;
     }
@@ -153,7 +158,9 @@ public static class Body
         float basal = c.Basal / toW;
         float gut = lc.Gut;
         w.PBasal[i] = basal * dt;
-        w.PGut[i] = K.C_GUT * m;
+        // a gut-full lies in the gut's lumen, inside the trunk (docs/BODYPLAN.md §13.17): a trunk with room for less than the
+        // reference gut holds that much less (Morph.Live.GutRoom); one with room for it holds the reference gut-full
+        w.PGut[i] = K.C_GUT * m * MathF.Min(1f, lc.GutRoom);
         // a gut processes and absorbs at the pace of the tissues that build and run it (level): a reptile's food intake and
         // digestive throughput are a fraction of a mammal's of its size (Karasov & Diamond 1985; Nagy 2005)
         // (phase 4) the gut is built to the Kleiber cost of its active (non-mineral, lean) mass, as the basal is (Morph.Live.Of)

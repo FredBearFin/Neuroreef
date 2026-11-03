@@ -22,6 +22,7 @@ public struct LiveCaps
     public float O2Lung;                  // aerobic metabolism its air-breathing surfaces support in air (the gas space's lining and folded-in pockets), W
     public float FlyMuscle;               // flight muscle (muscle of lifting pairs, by their lift share), kg
     public float Gut;                     // gut size against the reference gut of its mass (Body.GutScale)
+    public float GutRoom;                 // how many reference guts its trunk has room for (GUT_TISSUE): the most it can build
     public float MoultW;                  // what moulting its rigid integument costs while it grows, W
     public float MoultSoft;               // share of its growing time spent soft (a rigid integument must be moulted to grow)
     public float Crush;                   // N: the crushing force it brings to an item at the mouth (Physics.Handle)
@@ -44,6 +45,40 @@ public static class Live
     /// <summary>Flight muscle's mitochondrial volume density over the whole body's mean (pigeon pectoralis ~0.2 against ~0.045, most of the body being tissue of 0.02-0.06; Mathieu-Costello
     /// 1993; Suarez 1992; Else &amp; Hulbert 1985): what its resting upkeep is, per kg, against the body's.</summary>
     public const float MITO_RATIO = 4.4f;
+    /// <summary>The reference gut's tissue as a share of body mass (docs/BODYPLAN.md §13.17): the gastrointestinal tract is
+    /// ~5-10% of body mass (sheep, cattle, pigs: Huntington &amp; Reynolds 1987; Cant, McBride &amp; Croom 1996, the sources of
+    /// K.GUT_SHARE), decapods' digestive gland 3-8% (the hepatosomatic index). A gut is tissue in the trunk: it can be no
+    /// bigger than the visceral tissue its segments hold (Morphology.GutMass, Mat.GUT_SHARE of their non-muscle tissue), so
+    /// a body can build at most GutMass / (GUT_TISSUE M) reference guts. The plain body holds ~0.2 of its mass there, room
+    /// for ~2.9 reference guts, above K.GUT_FLEX_MAX (2.5), so it is not bound; a body that is mostly appendage is. Before,
+    /// the live gut was built to the body's basal whatever its trunk, so a 0.31 kg body with a 22 g trunk (3.4 g of it
+    /// visceral tissue) digested like a plain body of its mass.</summary>
+    public const float GUT_TISSUE = 0.07f;
+    /// <summary>How rough the ground is that a body stands on (docs/BODYPLAN.md §13.17): slopes up to tan = 0.5 x this
+    /// (Physics.Topple), the prototype's land (MorphEnv.Land: 0.5, ~14°).</summary>
+    public const float GROUND_ROUGH = 0.5f;
+
+    /// <summary>How many reference guts the trunk has room for: its visceral tissue (Morphology.GutMass) over a reference gut's
+    /// (GUT_TISSUE of its mass).</summary>
+    public static float GutRoom(Morphology m) => m.GutMass / MathF.Max(GUT_TISSUE * m.Mass, 1e-12f);
+
+    /// <summary>Standing height (m), in the posture the body can hold on rough ground (docs/BODYPLAN.md §13.17). Upright it
+    /// stands its limbs' clearance plus its trunk's height; but a centre of mass at height z over a base of half-width b tips
+    /// past slopes steeper than atan(b / z) (Physics.Topple; McGhee &amp; Frank 1968; Ting, Blickhan &amp; Full 1994), and a body
+    /// that tips lies on its side, as high as it is wide. So its standing height is the upright height where it stays upright
+    /// and its width where it falls, weighted by the chance it tips (z and b mass-weighted over its segments; its feet's
+    /// spread widens the base). Before, the standing height was the tallest segment's whatever its base, so a 9 kg body of
+    /// 46 cm-tall, 2-4 cm-wide plates "stood" 47 cm in water (its head in the air, the bottom in reach) where it would lie
+    /// 4 cm high.</summary>
+    public static float StandPosture(Morphology m, in Physics.WalkProps wp)
+    {
+        float ms = 0f, zs = 0f, bs = 0f;
+        foreach (var s in m.Segs) { float mm = s.TissueMass + s.FatMass + s.IntMass; ms += mm; zs += mm * 0.5f * s.H; bs += mm * 0.5f * s.W; }
+        if (ms <= 0f) return wp.Clear + m.MaxH;
+        float z = wp.Clear + zs / ms, b = bs / ms + wp.Span;
+        float p = Physics.Topple(z, b, GROUND_ROUGH);
+        return (1f - p) * (wp.Clear + m.MaxH) + p * m.MaxW;
+    }
 
     static readonly float[] U = BuildSpeeds();
     static float[] BuildSpeeds()
@@ -130,7 +165,9 @@ public static class Live
         // body (~0.17 of it flight muscle) pays ~+30%, within the measured avian range (non-passerines near mammals, passerines
         // +30-50%; McKechnie & Wolf 2004; Lasiewski & Dawson 1967), which COST_WING set by hand before
         float flyPremium = (MITO_RATIO - 1f) * FlightMuscle(m) / MathF.Max(m.Mass, 1e-9f) * kleiber;
-        lc.Gut = Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + flyPremium + brainW, kleiber, out float basal);
+        // the gut is built to its basal (Body.GutScale), but no bigger than its trunk has room for (GutRoom, docs/BODYPLAN.md §13.17)
+        lc.GutRoom = GutRoom(m);
+        lc.Gut = Body.GutScale(kleiber * MathF.Max(0.5f, geneFactor) + modules + flyPremium + brainW, kleiber, lc.GutRoom, out float basal);
         c.Basal = basal;
         // ---- water: burst top speed, sustained top speed, the cruise of least gross cost a metre and its net cost there
         Span<Physics.SwimProps> sps = stackalloc Physics.SwimProps[Physics.FOLD_N];
@@ -142,7 +179,9 @@ public static class Live
         // gave a 1 kg fish 14 lengths a second sustained, against ~2-5 measured (Brett 1964; Videler 1993)
         float o2Swim = MathF.Max(Physics.O2Supply(m, Medium.Water, out _), LungO2(m));
         float aerobic = Phys.ETA_M * MathF.Max(0f, o2Swim - basal);
-        float bestGross = float.PositiveInfinity, vWardle = Shadow.WardleSpeed(m.Length), burstCot = float.PositiveInfinity;
+        // the twitch limit on the length its mass is spread over (docs/BODYPLAN.md §13.17: a weightless trailing thread
+        // carries no muscle to make the body wave, yet on nose-to-tail length it raised the limit 30-60%)
+        float bestGross = float.PositiveInfinity, vWardle = Shadow.WardleSpeed(m.WaveLength), burstCot = float.PositiveInfinity;
         foreach (float u in U)
         {
             float pBurst = float.PositiveInfinity, pCruise = float.PositiveInfinity;
@@ -171,7 +210,7 @@ public static class Live
         c.Flies = flies ? 1f : 0f;
         if (flies) { c.VAir = vmp * Body.TopFlightSpeed(c.Margin); c.CotAir = pMin / Phys.ETA_M / vmp; }
         // ---- standing, breathing, protection, drag shape, turning, handling
-        c.Stand = wp.Clear + m.MaxH;
+        c.Stand = StandPosture(m, wp);
         c.O2Air = Physics.O2Supply(m, Medium.Air, out _);
         c.O2Water = Physics.O2Supply(m, Medium.Water, out _);
         lc.O2Lung = LungO2(m);
@@ -247,8 +286,9 @@ public static class Live
 
     /// <summary>The physics role of each pair in the live body (no environment: what it would be used for): "fly" (it is
     /// flight muscle on a lifting blade), "support" (it bears weight on land), "swim" (its share of the thrust in water),
-    /// "handle" (the strongest crusher at the mouth, above a soft mouth's), "steer" (its share of the control area), else
-    /// "passive".</summary>
+    /// "handle" (the strongest crusher at the mouth, above a soft mouth's), "steer" (its share of the control area),
+    /// "breathe" (a tenth or more of its oxygen supply in air or in water passes this pair's exchange surface;
+    /// docs/BODYPLAN.md §13.17), else "passive".</summary>
     public static string[] Roles(Morphology m)
     {
         var roles = new string[m.Pairs.Count];
@@ -273,12 +313,24 @@ public static class Live
             else if (sup >= 0.1f) roles[i] = "support";
             else if (sw >= 0.1f) roles[i] = "swim";
             else if (st >= 0.1f) roles[i] = "steer";
+            else if (PairO2Share(m, a) >= 0.1f) roles[i] = "breathe";
             else roles[i] = "passive";
         }
         return roles;
     }
 
-    static readonly string[] RoleNames = { "fly", "support", "swim", "handle", "steer", "passive" };
+    static readonly string[] RoleNames = { "fly", "support", "swim", "handle", "steer", "breathe", "passive" };
+
+    /// <summary>The share of the body's oxygen supply this pair's exchange surface gives, in air or in water, whichever is
+    /// larger (Physics.O2Supply's terms for its everted and folded-in epithelium).</summary>
+    public static float PairO2Share(Morphology m, Pair a)
+    {
+        float ex = 2f * a.Pore * 2f * a.Len * (a.Chord + a.Thick) * Mat.FOLD, ext = ex * (1f - a.Invag), inn = ex * a.Invag;
+        float air = Physics.O2Supply(m, Medium.Air, out _), water = Physics.O2Supply(m, Medium.Water, out _);
+        float sa = air > 0f ? (ext * Phys.S_AIR_EXT + inn * Phys.S_AIR_INT) / air : 0f;
+        float sw = water > 0f ? (ext * Phys.S_WATER_EXT + inn * Phys.S_WATER_INT) / water : 0f;
+        return MathF.Max(sa, sw);
+    }
 
     /// <summary>The body plans of the living (docs/BODYPLAN.md §13.6): per clade, its members' mean mass, segments and
     /// pairs (World.PSegN, PPairN), the pairs by physics role over a sample of up to sample members (each grown from its
@@ -288,7 +340,7 @@ public static class Live
     {
         var c = System.Globalization.CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
-        sb.AppendLine("BODY PLANS (docs/BODYPLAN.md §13: grown from each animal's module genome): per clade, mean mass, segments and appendage pairs; pairs by physics role (fly/support/swim/handle/steer/passive) over up to " + sample + " members; one member's body");
+        sb.AppendLine("BODY PLANS (docs/BODYPLAN.md §13: grown from each animal's module genome): per clade, mean mass, segments and appendage pairs; pairs by physics role (fly/support/swim/handle/steer/breathe/passive) over up to " + sample + " members; one member's body");
         var segHist = new int[33]; var pairHist = new int[17];
         for (int sp = 0; sp < w.NS; sp++)
         {

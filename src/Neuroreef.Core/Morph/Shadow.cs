@@ -126,7 +126,7 @@ public static class Shadow
         float basal = BasalW(m, level, geneFactor, brainW);
         // each folding of its pairs (Physics.SwimSet): a swimmer tucks what does not pay to stroke
         var sps = Physics.SwimSet(m, Phys.RHO_W);
-        float bestGross = float.PositiveInfinity, vWardle = WardleSpeed(m.Length);
+        float bestGross = float.PositiveInfinity, vWardle = WardleSpeed(m.WaveLength);
         foreach (float u in U)
         {
             float pBurst = float.PositiveInfinity, pCruise = float.PositiveInfinity;
