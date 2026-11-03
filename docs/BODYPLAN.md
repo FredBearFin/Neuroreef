@@ -1406,6 +1406,61 @@ Every class was run in its own test process on the code after §13.11. Classes n
    random brains and mostly by predation.
 6. The gill-area cap still grows only as the body surface (M^(2/3)), not as gill area does (M^0.8–0.9).
 7. Still from the first round: no shelled-prey pool; founders mostly legless; the renderer draws legacy values.
+### 13.15 Third round (2026-11-03): no allocation at a birth, founding independent of the step, the swim label
+
+1. **No allocation in the step loop.**
+   - Every birth decodes, mutates or recombines, and grows a module body. These now use per-thread reused objects:
+     - `GenePool` and `Codec.Scratch` for segment and appendage genes (decode, the Morph operators, `Homology.Cross`);
+     - `MorphPool` for the morphology, its segments and its pairs (two halves: the scale pass and the grown body);
+     - span-based `Physics.SwimSet` and `ControlAreas`;
+     - no closures in `Live.Of`: the bisections are plain loops.
+   - The objects are per thread, so prehistory branches on several threads do not share them.
+   - `EngineeringTests.StepLoopDoesNotAllocate` passes. The default world's hash was bit-identical before and after
+     the change.
+2. **Founding is independent of the step length.**
+   - At a 10-minute step two lineages founded 312 and 390 founders, against 308 and 389 at 2.92 h. Their need and their
+     plant yield an hour were the same; the difference was the animal food test in `Life.RangeCapacity`. It compared
+     a per-step bite and gut rate with whole quantities:
+     - the half-grazed stock of a cell;
+     - the carrion and dung lying about;
+     - a gut-full;
+     - a carcass.
+
+     In a short step those quantities stood ~17× larger against the rate, so carrion passed the test at 10 minutes
+     and failed it at 2.92 h.
+   - Now each such quantity is what one reference step of eating can take, × World.Dt a step. Nothing changes at the
+     default step.
+   - A second step dependence was in `Respiration.Uptake`'s dives. Their vertical travel was "once a step" for a
+     swimmer that stays down, and "at least one dive a step" for a breath-holder. Now it is metres an hour:
+     - a swimmer that stays down moves between the surface and its depth once a day, as diel vertical migrants do
+       (Lampert 1989);
+     - a breath-holder makes the expected number of dives that fill its time at depth.
+
+     This changes the default world, so the hash is re-pinned to 5632958963462331332.
+   - `StepLengthTests.ActsAndLearningAnHourAreTheSameAtAFineStep` passes, with the same founders at both steps.
+3. **The 7,482 "swimmers" of the second land run are the locomotion label, not the deep-water gate.**
+   - The label is Swim when a body is faster in water than on land and has no legs (`Body.Express`). Legless crawlers
+     are slow on land, so most of them carry it.
+   - The land run was re-run on this round's code: 20,651 alive at step 1,500 in 15 clades, with 7,278 labelled swim,
+     778 walk, 480 wade and 254 sessile. Where they lived, as shares of each clade's animal-steps (the water census,
+     land / shallow / deep):
+
+     | clade | founded | land | shallow | deep |
+     |---|---|---|---|---|
+     | Anithmo | water | 52% | 46% | 1.8% |
+     | Elos | land | 87% | 12% | 0.6% |
+     | Narithqu | land | 84% | 16% | 0.3% |
+     | Robri | land | 67% | 31% | 1.6% |
+     | Tete | land | 98% | 2% | 0.1% |
+
+     No clade spent more than 2% of its animal-steps in deep water.
+   - So the saturated deep-water gate (§13.14) allows deep water but the animals do not live there; and the label
+     marks land-founded, mostly terrestrial crawlers as swimmers.
+   - The label is read by the founding (`Life.RangeCapacity`: a Swim forages in water) and the console. The founders
+     were judged when their label was right for their realm; what changes is their descendants' label.
+   - Not changed in this round. A physical label would compare the cost of moving a metre in each medium (cheaper in
+     water: Swim) rather than top speeds. The depth limit (pressure on gas spaces) remains a gap; it does not
+     mislabel anyone.
 ## References
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
