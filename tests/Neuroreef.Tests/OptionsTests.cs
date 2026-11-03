@@ -60,6 +60,25 @@ public class OptionsTests
         Assert.Equal(20480, Options.Parse(new[] { "--capacity", "20480" }).Capacity);
     }
 
+    [Fact] // the Body Lab's flags (BodyLab.cs): environment, seeds (a count from --seed, or a list), generations, population
+    public void BodyLabFlags()
+    {
+        var d = Options.Parse(new[] { "--bodylab" });
+        Assert.True(d.BodyLab); Assert.True(d.LabServe);
+        Assert.Equal("all", d.LabEnv); Assert.Equal(new uint[] { 1 }, d.LabSeedList());
+        Assert.Equal(800, d.LabGenerations); Assert.Equal(200, d.LabPopulation);
+        var o = Options.Parse(new[] { "--bodylab", "--env", "sea-floor", "--seeds", "3", "--generations", "300", "--population", "120", "--every", "5", "--out", "x", "--no-serve", "--port", "5900" });
+        Assert.Equal("sea-floor", o.LabEnv); Assert.Equal(new uint[] { 1, 2, 3 }, o.LabSeedList());
+        Assert.Equal(300, o.LabGenerations); Assert.Equal(120, o.LabPopulation); Assert.Equal(5, o.LabEvery);
+        Assert.Equal("x", o.LabOut); Assert.False(o.LabServe); Assert.Equal(5900, o.Port);
+        Assert.Equal(new uint[] { 7, 8 }, Options.Parse(new[] { "--bodylab", "--seed", "7", "--seeds", "2" }).LabSeedList());
+        Assert.Equal(new uint[] { 3, 7, 9 }, Options.Parse(new[] { "--bodylab", "--seeds", "3,7,9" }).LabSeedList());
+        Assert.Equal("open-water", Options.Parse(new[] { "--env", "Open_Water" }).LabEnv);
+        Assert.Equal("land", Options.Parse(new[] { "--env", "land" }).LabEnv);
+        Assert.Throws<System.ArgumentException>(() => Options.Parse(new[] { "--bodylab", "--env", "space" }));
+        Assert.False(Options.Parse(new string[0]).BodyLab);
+    }
+
     [Fact] // --map sizes the world too unless --world-map is given (the NR_ECO example in RUN.txt runs on the valley)
     public void MapSetsTheWorldUnlessWorldMapIsGiven()
     {

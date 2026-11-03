@@ -13,6 +13,7 @@ public static class Program
         catch (Exception e) { Console.Error.WriteLine(e.Message); return 2; }
         if (o.Help) { Console.WriteLine(Options.Usage); return 0; }
         if (o.PrintConstants) { Console.Write(ConstantsDoc.Generate()); return 0; }
+        if (o.BodyLab) return BodyLab.Run(o);   // the body-plan prototype on its own: no world, no checkpoint
 
         // A prehistory always starts from random brains. The world takes its first animals' brains from a
         // gene bank: --load-bank, then evolved.nrbank beside the exe, then the bank shipped with this build.
