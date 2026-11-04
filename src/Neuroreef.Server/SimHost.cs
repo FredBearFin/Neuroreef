@@ -91,7 +91,7 @@ public sealed class SimHost : IDisposable
             var clock = Stopwatch.StartNew();
             bool resume = o.CheckpointPath != null && o.ResumePrehistory;
             Pre = new Prehistory(o.Branches, o.BranchSlots, o.Seed, o.Threads, o.PrehistorySettings(stepsAreLength: false), restore: resume, maxCapacity: o.MaxCapacity);
-            if (!resume) Console.WriteLine($"{Pre.B.Length} prehistory branches built in {clock.Elapsed.TotalSeconds:F1} s");
+            if (!resume) Console.WriteLine($"{Pre.B.Length} prehistory branches built in {clock.Elapsed.TotalSeconds:F1} s (branch 0: land, plants and water {Pre.B[0].LandSeconds:F1} s, founding the lineages {Pre.B[0].FoundingSeconds:F1} s)");
             BankSource = "prehistory";
             Rate = 0;   // a prehistory runs as fast as possible until the console asks for a speed
             if (o.CheckpointPath != null)
