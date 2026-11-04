@@ -5,7 +5,7 @@
 // the body topples). Animals of a clade differ mostly in mass, so each clade's body is built once, by the Body Lab's own
 // builder (js/bodylab/build.js buildBody, at a coarse detail), merged into one geometry and drawn as one InstancedMesh:
 // an instance is placed, turned to its heading and scaled by the animal's own true length over the representative's
-// (status.bodyLenM; else its mass^(1/3)), times the view's creature-size factor.
+// (status.bodyLenM; else its mass^(1/3)): true size, always.
 //
 // Two detail levels per clade (near: the lab's look at a few thousand triangles; far: no fringes, knuckles or mouth, a
 // few hundred), each built when first needed (at most one build a frame), and a lying variant for a body that would
@@ -40,6 +40,15 @@ export function labBodyOfMorph(mo) {
       sagittal: !!a.sagittal, mineral: a.rigid || 0, exo: a.exo ?? ((a.rigid || 0) > 0.3 ? 1 : 0), pore: a.pore || 0, invag: a.invag ?? 0.5, role: a.role || 'passive' };
   });
   return { segs, pairs, topple: mo.topple || 0, length: mo.lengthM || x0, mass: mo.massKg || 1 };
+}
+
+/** The body's box (metres, limbs and all: x along it, y up, z across), estimated from its parts before its geometry is
+ *  built (then replaced by the built geometry's own, mergedBody ext). */
+export function estimateExtent(b) {
+  let L = 0, H = 0, W = 0, limb = 0, leg = 0;
+  for (const s of b.segs) { L += s.l; H = Math.max(H, s.h); W = Math.max(W, s.w); }
+  for (const p of b.pairs) { limb = Math.max(limb, p.len); if (p.role === 'support') leg = Math.max(leg, p.len * Math.cos(Math.min(1.2, Math.abs(p.theta)))); }
+  return { x: Math.max(L, b.length || 0) + 0.5 * limb, y: H + leg, z: W + 1.6 * limb };
 }
 
 /** What a clade body looks like, coarsely: a new representative of the same shape keeps the built geometry. */
@@ -85,8 +94,8 @@ export function mergedBody(b, detail, lie) {
   });
   disposeBody(g);
   // centred along its length and width, standing on y = 0
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, z0 = Infinity, z1 = -Infinity;
-  for (let i = 0; i < pos.length; i += 3) { x0 = Math.min(x0, pos[i]); x1 = Math.max(x1, pos[i]); y0 = Math.min(y0, pos[i + 1]); z0 = Math.min(z0, pos[i + 2]); z1 = Math.max(z1, pos[i + 2]); }
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < pos.length; i += 3) { x0 = Math.min(x0, pos[i]); x1 = Math.max(x1, pos[i]); y0 = Math.min(y0, pos[i + 1]); y1 = Math.max(y1, pos[i + 1]); z0 = Math.min(z0, pos[i + 2]); z1 = Math.max(z1, pos[i + 2]); }
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   for (let i = 0; i < pos.length; i += 3) { pos[i] -= cx; pos[i + 1] -= y0; pos[i + 2] -= cz; }
   for (let i = 0; i < rig.length; i += 4) if (rig[i + 3] % 2 === 1) { rig[i] -= cx; rig[i + 1] -= y0; rig[i + 2] -= cz; }
@@ -97,7 +106,8 @@ export function mergedBody(b, detail, lie) {
   geo.setAttribute('aRig', new THREE.Float32BufferAttribute(rig, 4));
   geo.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   geo.computeBoundingSphere();
-  return { geo, tris: idx.length / 3, lenX: x1 - x0 };
+  // (ext: the whole body's box, limbs and all, in metres: what the cameras frame and the culling keeps in view)
+  return { geo, tris: idx.length / 3, lenX: x1 - x0, ext: { x: x1 - x0, y: y1 - y0, z: z1 - z0 } };
 }
 
 // ---- the material: the scene's own lit material, the body bent and its limbs swung in the vertex shader
@@ -192,12 +202,14 @@ export class ModularBodies {
       // the representative's length and mass are the scale the instances are drawn at (they change with it)
       if (old && old.sig === sig) { old.lengthM = body.length; old.massKg = body.mass; continue; }
       if (old) this._drop(old);
-      this.clades.set(c.id, { sig, body, lengthM: body.length, massKg: body.mass, topple: body.topple, crawler: !body.pairs.some((p) => p.role === 'support'), variants: new Map() });
+      this.clades.set(c.id, { sig, body, lengthM: body.length, massKg: body.mass, topple: body.topple, crawler: !body.pairs.some((p) => p.role === 'support'), variants: new Map(),
+        ext: estimateExtent(body), extBuilt: false });
     }
     for (const [id, e] of this.clades) if (!seen.has(id)) { this._drop(e); this.clades.delete(id); }
   }
 
-  /** The clade's module body ({ lengthM, massKg, topple }), or undefined (it is drawn as the template). */
+  /** The clade's module body ({ lengthM, massKg, topple, ext: its box in metres of the representative, upright }), or
+   *  undefined (it is drawn as the template). */
   get(sp) { return this.clades.get(sp); }
 
   begin(overlay) {
@@ -256,6 +268,7 @@ export class ModularBodies {
     const L = Math.max(0.005, e.body.length);
     const mat = moduleMaterial(this.shared, near, { lying: lie, len: m.lenX, freq: Math.min(4, 0.5 * Math.sqrt(9.8 / L) / Math.PI) });
     const v = { geo: m.geo, tris: m.tris, mat, mesh: null, cap: 0, n: 0, inst: null, tint: null, near };
+    if (!lie && (!e.extBuilt || near)) { e.ext = m.ext; e.extBuilt = true; }   // the real box, once there is geometry
     this._grow(v, 64);
     this.stats.buildMs = performance.now() - t0;
     return v;

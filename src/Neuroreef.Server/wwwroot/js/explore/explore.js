@@ -3,8 +3,8 @@
 // Scale: the land is drawn at true scale, a field cell (FCELL = 4 units) being GEO_CELL_M = 16 m and the relief's
 // vertical scale (meta.explore.hRelief, Map.ReliefM: 153 m on the 256 map) being RELIEF = hRelief x 4 / GEO_CELL_M units
 // (world3d.js setRelief, from the server's meta), so a metre is 4 / 16 = 0.25 units (2026-11-01); the plants are drawn at
-// true size and the animals at Explore's own creature size (js/scale.js: default x10, true size a click away; it was forced to x1
-// until 2026-11-02, and 5-30 cm animals in the grass were all but invisible: 'all the animals just disappear'). The person's
+// true size and so are the animals (2026-11-04: the creature-size multiplier is gone everywhere; an animal too small to
+// see is a dot in its clade's colour, world3d.js, and the person is animal-sized by default, below). The person's
 // eye is 1.7 m above the ground; it walks at 1.5 m/s and runs at 5 m/s (Ctrl held, or F, multiplies by 10: the map is
 // many km across). Those are a full-sized person's: since 2026-11-02 the person has a size (below) and all of them follow
 // it. It stands on the drawn ground (world3d.groundWater), wades slowly through shallow water and swims at
@@ -50,7 +50,7 @@ export class Explore {
     const ex = meta.explore || {};
     // units per metre: the view's (world.scale, js/scale.js: the sim's metres per unit, 0.018), which is the relief's own
     // vertical scale (RELIEF / H_RELIEF). Eye height, walking speed and every weapon's reach are in true metres; the
-    // animals are drawn at Explore's creature size (js/scale.js), and aiming hits the body as drawn
+    // animals are drawn at true size, and aiming hits the body as drawn (its real box, world3d.creatureNow)
     this.upmV = RELIEF / (ex.hRelief || 153);
     this.weapons = ex.weapons || [];
     this.maxHp = ex.maxHp || 100;
@@ -202,7 +202,7 @@ export class Explore {
   _poseNear(serial, radii = [8, 11, 14, 20, 30, 45]) {
     const w = this.world, e = w.agents.get(serial); if (!e) return null;
     const W = w.W, m = this.upm, wrap = (v) => ((v % W) + W) % W, a0 = Math.random() * Math.PI * 2;
-    // (the animal as drawn, magnified by Explore's creature size: the person stands that much farther off, not inside it)
+    // (the animal as drawn, its real box: the person stands that much farther off, not inside it)
     const body = w.creatureNow(serial, e, {}).r * 4;
     for (const r of radii) for (let k = 0; k < 12; k++) {
       const rr = r * m + body, a = a0 + (k / 12) * Math.PI * 2, x = wrap(e.x + Math.cos(a) * rr), z = wrap(e.y + Math.sin(a) * rr);

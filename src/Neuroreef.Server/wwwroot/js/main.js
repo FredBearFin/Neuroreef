@@ -5,7 +5,6 @@ import { World3D, setRelief } from './world3d.js';
 import { Panels, bar, setUnits, when, span } from './panels.js';
 import { PrehistoryTab } from './prehistory.js';
 import { Explore } from './explore/explore.js';   // EXPLORE: walk and hunt (js/explore/)
-import { MAGS } from './scale.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -59,9 +58,10 @@ link.listen('meta', (m) => {
     panels.onSelect = select;
     pre = new PrehistoryTab(meta, link, $('tab-prehistory'));
     panels.show('inspect');
-    // EXPLORE hook: the controller drives the camera in world3d's 'explore' mode; Esc brings back the overview
+    // EXPLORE hook: the controller drives the camera in world3d's 'explore' mode; Esc leaves it for the free camera
+    // where the person stood
     explore = window.neuroExplore = new Explore(world, link, meta, $('view'));
-    explore.onLeave = () => setCam('overview');
+    explore.onLeave = () => setCam('free');
     buildControls();
     requestAnimationFrame(frame);
   }
@@ -169,13 +169,35 @@ function toast(text, ms = 3500) {
 // Follow or Ride-along asked for with no animal yet: the server picks one (a 'pick'); if none comes, back to the overview
 let camWaitT = 0;
 
+/** The cameras that ride with an animal (the selected one). */
+const animalCam = (m) => m === 'follow' || m === 'ride';
+
+let selectT = -1e9;   // when an animal was last selected here (a status still on the way names the old one)
 function select(serial, follow) {
   if (!world) return;
-  world.selected = serial;
-  link.send({ cmd: 'select', serial, follow: !!follow || world.mode !== 'overview' });
-  if (!serial) { probe = null; panels.renderProbe(null); hud(); if (world.mode !== 'overview') setCam('overview'); }
+  world.selected = serial; selectT = performance.now();
+  link.send({ cmd: 'select', serial, follow: !!follow || animalCam(world.mode) });
+  // (nothing selected: an animal camera stays where it is, as the free camera)
+  if (!serial) { probe = null; panels.renderProbe(null); hud(); if (animalCam(world.mode)) setCam('free'); }
   else panels.show('inspect');
 }
+
+/** Go and look at a place (a fight in the log, a new clade): the overview flies there, the free camera jumps there (an
+ *  animal camera lets go of its animal first). */
+function flyTo(x, y) {
+  if (!world || world.mode === 'explore') return;
+  if (animalCam(world.mode)) setCam('free');
+  world.lookAt(x, y);
+}
+
+// the hint under the view, for the camera on
+const HINTS = {
+  follow: 'drag to orbit · scroll to zoom (10 cm to 400 m) · W A S D: fly free · tap an animal to follow it · Whole world: the map',
+  free: 'drag to look · W A S D / arrows to fly · Space / E up · C / Q down · Shift faster · scroll to move · tap an animal to follow it',
+  ride: 'seeing what the animal sees · Follow to watch it from outside · Free camera to fly',
+  overview: 'drag to orbit · scroll toward a place to zoom · double-click to dive in · N: next group · Tab: next clade · Home: whole world · far animals are dots in their clade colour',
+  explore: '',
+};
 
 function setCam(m) {
   // EXPLORE hook: the live world, or during the prehistory the branch on view (the server runs the person on that
@@ -189,55 +211,51 @@ function setCam(m) {
     world.setMode('explore'); explore.enter(near);
     if (phase === 'prehistory') explore.hud.message(`EXPLORE · prehistory branch ${lastStatus ? lastStatus.view : 0}<br><span style="font-size:12px">it runs at full speed, so the animals move fast · click the view to look with the mouse</span>`, false, 5000);
     for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
-    hud(); showMag();
+    hud(); showSize();
     return;
   }
   camWaitT = 0;
-  if (m !== 'overview' && !world.selected) {
+  if (animalCam(m) && !world.selected) {
     // no animal selected: experience the chosen species (the camera waits for the server's pick)
     if ($('exp-species').value !== '') link.send({ cmd: 'pick', species: +$('exp-species').value });
     camWaitT = performance.now();
   }
   world.setMode(m);
   for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === m);
-  if (world.selected) link.send({ cmd: 'follow', on: m !== 'overview' });
-  hud(); showMag();
+  if (world.selected) link.send({ cmd: 'follow', on: animalCam(m) });
+  hud(); showSize();
 }
 
-// ------------------------------------------------------------------ how big things are drawn, and the whole world
+// ------------------------------------------------------------------ the person's size in Explore, and the whole world
+//
+// (2026-11-04: the creature-size slider is gone: the animals are always drawn at true size, and the cameras are down
+// among them: js/world3d.js)
 
-/** The creature size control: the display multiplier of the overview and the animal cameras, or Explore's own (it and
- *  the vehicles: js/scale.js). Display only: the simulation never sees it. */
-function showMag() {
+/** The size box: the person's size in Explore (the Whole world button beside it); the hint for the camera on. */
+function showSize() {
   if (!world) return;
-  const ex = world.mode === 'explore', m = world.scale.creatureMag, pm = world.scale.plantMag;
+  const ex = world.mode === 'explore';
   $('scalebox').classList.toggle('explore', ex);
-  $('mag').max = MAGS.length - 1;
-  $('mag').value = MAGS.indexOf(m);
-  $('mag-v').textContent = m === 1 ? 'true' : '×' + m;
-  // (a multiplier is 'at least this visible': small bodies are drawn up to x m, big ones barely, js/scale.js)
-  $('mag-k').textContent = m === 1 ? 'true size' : ex || pm === 1 ? 'small ones magnified' : `small ones magnified · plants ×${pm.toFixed(1).replace(/\.0$/, '')}`;
   if (explore) { $('psize').value = explore.sizeMode; $('psize-k').textContent = ex ? explore.sizeText().replace(/^[a-z-]+ · /, '') : ''; }
-  for (const b of document.querySelectorAll('#magpre button')) b.classList.toggle('on', +b.dataset.mag === m);
+  const h = $('hint'); if (h) { h.textContent = HINTS[world.mode] ?? ''; h.classList.toggle('hidden', !h.textContent); }
 }
 
 function wireScale() {
-  world.onScale = showMag;
   world.onNote = (h) => toast(h, 3500);   // the overview's N / Tab: which group or clade it flew to
-  explore.onSize = showMag;
-  $('psize').onchange = (e) => { explore.setSize(e.target.value); e.target.blur(); showMag(); };
-  $('mag').oninput = () => world.setMagnification(MAGS[+$('mag').value]);
-  for (const b of document.querySelectorAll('#magpre button')) b.onclick = (e) => { e.stopPropagation(); world.setMagnification(+b.dataset.mag); };
+  // the opening view: following a large animal down among the others (world3d.js _openOnLife); the same when the
+  // followed one is lost and no lineage takes over
+  world.onOpen = world.onAutoPick = (serial) => { select(serial, true); if (world.mode !== 'follow') setCam('follow'); };
+  world.onWantMode = (m) => setCam(m);    // W A S D in the follow camera: fly free from there
+  explore.onSize = showSize;
+  $('psize').onchange = (e) => { explore.setSize(e.target.value); e.target.blur(); showSize(); };
   $('fitworld').onclick = () => { if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); };
   addEventListener('keydown', (e) => {
     if (!world || e.target.closest?.('input:not([type=range]), textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
-    // [ and ]: the creature size, in Explore too (its own setting); the other keys are the overview's
-    if (e.key === '[' || e.key === ']') { world.scale.step(e.key === ']' ? 1 : -1); world.setMagnification(world.scale.creatureMag); return; }
     if (world.mode === 'explore') return;
     if (e.key === 'Home') { e.preventDefault(); if (world.mode !== 'overview') setCam('overview'); world.fitWorld(); }
     else if (e.key === 'p' || e.key === 'P') setPanel(document.body.classList.contains('nopanel'));
   });
-  showMag();
+  showSize();
 }
 
 function buildControls() {
@@ -247,9 +265,9 @@ function buildControls() {
   fillExperience();
   $('exp-go').onclick = () => {
     if (sel.value === '') return;
-    link.send({ cmd: 'pick', species: +sel.value });
-    world.selected = 0; camWaitT = performance.now();
-    if (world.mode === 'overview') { world.setMode('follow'); for (const b of document.querySelectorAll('#cams button')) b.classList.toggle('on', b.dataset.cam === 'follow'); }
+    world.selected = 0;
+    if (world.mode === 'follow') { link.send({ cmd: 'pick', species: +sel.value }); camWaitT = performance.now(); }
+    else setCam('follow');   // (asks the server to pick one of the clade: setCam)
   };
   // the speed buttons show the speed that is set (the server's), so the right one is lit in the prehistory too
   // "real" (2026-11-02): one second of world time a second, at the world's own step (units.realTimeRate, ICD §2.1)
@@ -276,7 +294,8 @@ function buildControls() {
     if (world.mode === 'explore') return;   // EXPLORE: the buttons are weapons
     if (speakArmed !== null) { speakAt(e.clientX, e.clientY); return; }   // the translator is waiting for a place to speak
     const s = world.pick(e.clientX, e.clientY);
-    if (s) select(s);
+    // (in the free camera a tap on an animal follows it; the follow camera moves to the one tapped)
+    if (s) { select(s); if (world.mode === 'free') setCam('follow'); }
   });
   // the legend (toggles clade visibility) is built from the clade table: buildLegend()
   // a small screen (tablet) asks for fewer frames
@@ -287,7 +306,7 @@ function buildControls() {
 
 function hud() {
   const box = $('hud');
-  if (!probe || !world || world.mode === 'overview' || world.mode === 'explore') { box.classList.add('hidden'); return; }
+  if (!probe || !world || !animalCam(world.mode)) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   const P = meta.probe, f = probe.f, sc = (n) => f[P.scal + P.scalars.indexOf(n)];
   const sp = cladeOf(sc('species') | 0) || { name: '?', color: '#8aa0b5', niche: '' };
@@ -347,7 +366,7 @@ function status(s) {
   $('s-rate').textContent = s.paused ? 'paused' : s.measured < 1 && s.measured > 0 ? s.measured.toFixed(3) : Math.round(s.measured).toString();
   if (performance.now() - rateClicked > 2000 && window.showRate) window.showRate(s.rate);
   if (world && world.look) world.look.setClimate(s);   // [look] the sun and the clouds follow the season and the year's rain
-  if (world && world.scale.fromServer(s.units)) world.setMagnification(world.scale.creatureMag);   // the sim's own metres (ICD §2.1)
+  if (world && world.scale.fromServer(s.units)) world._plants(true);   // the sim's own metres (ICD §2.1): the plants at them
   if (world && s.bodyLenM) world.setBodyLengths(s.bodyLenM);   // each animal's true length (a juvenile's grows)
   if (world && s.bodyLook) world.setBodyLooks(s.bodyLook);     // endothermy and diet, for how each body is drawn
   $('s-season').textContent = (s.season > 0.33 ? 'wet' : s.season < -0.33 ? 'dry' : s.season > 0 ? 'wetting' : 'drying') +
@@ -361,13 +380,13 @@ function status(s) {
   if (full) $('s-full').title = `The last step refused a birth: the world could not grow its slots (${s.growLimit || 'its memory limit'}). This is a limit of the program and the computer, not an ecological result.`;
   if (explore) explore.status(s.player);   // EXPLORE: health, deaths and kills from the server
   if (world && world.mode === 'explore') return;
-  if (world && s.follow && s.probe && world.selected !== s.probe && world.mode !== 'overview') world.selected = s.probe;
-  if (world && world.mode !== 'overview' && !world.selected && s.probe) world.selected = s.probe;
-  if (world && world.mode !== 'overview' && world.selected) camWaitT = 0;
-  else if (world && camWaitT && world.mode !== 'overview' && performance.now() - camWaitT > 4000) {
+  if (world && s.follow && s.probe && world.selected !== s.probe && animalCam(world.mode) && performance.now() - selectT > 2500) world.selected = s.probe;
+  if (world && animalCam(world.mode) && !world.selected && s.probe) world.selected = s.probe;
+  if (world && animalCam(world.mode) && world.selected) camWaitT = 0;
+  else if (world && camWaitT && animalCam(world.mode) && performance.now() - camWaitT > 4000) {
     const c = cladeOf(+$('exp-species').value);
     toast(`No ${c ? `<b style="color:${c.color}">${c.name}</b>` : 'animal'} to follow right now. Tap an animal, or pick another clade beside <b>Experience</b>.`);
-    setCam('overview');
+    setCam('free');
   }
 }
 
@@ -416,7 +435,7 @@ function fightLog(list) {
   const show = fightLines.filter((l) => l.kill).slice(0, 5).concat(fightLines.filter((l) => !l.kill).slice(0, 2)).sort((p, q) => q.step - p.step);
   box.innerHTML = `<div class="fh">FIGHTS · ${killsSeen} kill${killsSeen === 1 ? '' : 's'} seen</div>` +
     show.map((l, i) => `<div class="fl${l.kill ? ' kill' : ''}" data-i="${fightLines.indexOf(l)}">${l.text} <em>step ${l.step.toLocaleString()}</em></div>`).join('');
-  for (const d of box.querySelectorAll('.fl')) d.onclick = () => { const l = fightLines[+d.dataset.i]; if (l && world) world.lookAt(l.x, l.y); };
+  for (const d of box.querySelectorAll('.fl')) d.onclick = () => { const l = fightLines[+d.dataset.i]; if (l && world) flyTo(l.x, l.y); };
 }
 
 // fight sounds, made on the spot (no files): a thud and a tearing crunch for a kill, a crack for a wound,
@@ -487,7 +506,7 @@ function showSplit(c, p) {
       if (rx === null) { rx = e.x; ry = e.y; }
       sx += e.x - W * Math.round((e.x - rx) / W); sy += e.y - W * Math.round((e.y - ry) / W); n++;   // unwrap around the first
     }
-    if (n) world.lookAt(((sx / n) % W + W) % W, ((sy / n) % W + W) % W);
+    if (n) flyTo(((sx / n) % W + W) % W, ((sy / n) % W + W) % W);
   };
   box.prepend(d);
   while (box.children.length > 3) box.lastChild.remove();

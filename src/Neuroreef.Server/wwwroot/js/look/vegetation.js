@@ -12,16 +12,16 @@
 //   the hydrology's 'wetland' layer (when sent) has marsh or swamp (the ground paints its peat and pools).
 // - Rocks: on steep slopes and the high bare ground, sparse where plants cover the ground.
 // Sizes (2026-11-01): every plant at its true size in metres (the sim's plant height; a shrub at most 4 m, a grass
-// tuft half a metre, boulders a few metres) times the plants' magnification (js/scale.js: x1 in Explore, the fourth
-// root of the creatures' in the overview), and as many to a field cell as its cover fits crowns of that size; the
+// tuft half a metre, boulders a few metres; no magnification since 2026-11-04), and as many to a field cell as its cover fits crowns of that size; the
 // thinning with distance within a budget keeps the near ones and fewer, a little bigger, far away.
 
 import * as THREE from 'three';
 
 const TREE_NEAR = 70, BUSH_NEAR = 60, TREE_BUDGET = 40000, SHRUB_BUDGET = 14000;   // near: within this many plant heights
-const NEAR_CAP = 9000, FAR_CAP = 24000, SHRUB_CAP = 16000, ROCK_CAP = 6000, GRASS_CAP = 14000, FLAME_CAP = 1500;
+const NEAR_CAP = 9000, FAR_CAP = 24000, SHRUB_CAP = 16000, ROCK_CAP = 6000, GRASS_CAP = 22000, FLAME_CAP = 1500;
 const TREES_MAX = 600, SHRUBS_MAX = 800;    // most trees and shrubs drawn in one field cell (full cover of small crowns)
-const GRASS_M = 0.8, GRASS_STEP_M = 0.7;    // a grass tuft model is 0.8 m tall at x1; tufts stand ~0.7 m apart
+const GRASS_M = 0.8, GRASS_STEP_M = 0.7;    // a grass tuft model is 0.8 m tall; tufts stand ~0.7 m apart ...
+const GRASS_FINE_M = 9;                     // ... and twice as densely within this many metres of the camera (eye level)
 const ROCK_M = 1.6;                         // a boulder's mean size (m); drawn within ROCK_REACH of them
 const ROCK_REACH = 250, FLAME_M = 2.5;
 const H_LO = -1.3, H_SPAN = 2.9;             // plant height layer: log10 m = H_LO + H_SPAN x value (Constants.cs)
@@ -268,6 +268,10 @@ function rockModels() {
 // per-instance tint of the foliage only (the bark keeps its colour), and wind in the crowns
 
 const U_TIME = { value: 0 };
+// the line of sight (2026-11-04): grass between the camera and the animal it follows (or just ahead of a camera at ground
+// level) is pressed down, as games do, so true-size grass taller than a 10 cm animal never buries the view. A capsule
+// from uSightA to uSightB of radius uSightR (0: off); a tuft whose foot is inside it is drawn flattened.
+export const U_SIGHT = { uSightA: { value: new THREE.Vector3() }, uSightB: { value: new THREE.Vector3() }, uSightR: { value: 0 } };
 
 // fade: a plant the camera is inside dissolves (a screen-door stipple), so the camera never looks out through the
 // inside of a crown (their shadows stay). fade is the plant's reach from its axis, a share of its height (2026-11-02:
@@ -275,13 +279,14 @@ const U_TIME = { value: 0 };
 // height, 18 m for a 20 m tree, and every bush and rock within a body's length or so was stippled to a dark, dithered
 // ghost, and the animals among them seemed stippled too, or vanished: docs/art/scale3/explore-default.png. Now only
 // within the plant's own volume: the distance to the segment from its foot to its top under fade x its height.)
-function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, fade = 0 } = {}) {
+function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, fade = 0, sight = false } = {}) {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side, flatShading: flat });
   wrap(mat);
   const inner = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     sh.uniforms.uPlantTime = U_TIME;
-    sh.vertexShader = 'attribute vec2 aFol;\nuniform float uPlantTime;\nvarying float vNearFade;\n' + sh.vertexShader
+    if (sight) Object.assign(sh.uniforms, U_SIGHT);
+    sh.vertexShader = 'attribute vec2 aFol;\nuniform float uPlantTime;\nvarying float vNearFade;\n' + (sight ? 'uniform vec3 uSightA, uSightB;\nuniform float uSightR;\n' : '') + sh.vertexShader
       .replace('#include <color_vertex>', `
         vColor = vec3(1.0);
         #ifdef USE_COLOR
@@ -307,6 +312,13 @@ function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, f
             vec3 rel = cameraPosition - io;
             float axD = length(vec2(length(rel.xz), rel.y - clamp(rel.y, 0.0, sz)));   // to the axis, foot to top
             vNearFade = smoothstep(${(0.8 * fade).toFixed(3)} * sz + 0.0005, ${fade.toFixed(3)} * sz + 0.001, axD);
+            ${sight ? `if (uSightR > 0.0) {
+              vec3 ab = uSightB - uSightA, ap = io - uSightA;
+              float t = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-9), 0.0, 1.0);
+              float d = length(ap - ab * t);
+              float k = mix(0.12, 1.0, smoothstep(0.55 * uSightR, uSightR, d));
+              transformed.y *= k; transformed.xz *= mix(1.0, k, 0.5);
+            }` : ''}
           #endif
         }`);
     if (fade) sh.fragmentShader = 'varying float vNearFade;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
@@ -316,7 +328,7 @@ function plantMaterial(wrap, { side = THREE.FrontSide, flat = false, sway = 1, f
         }`);
     inner(sh, r);
   };
-  mat.customProgramCacheKey = () => 'neuroreef-plant-' + sway + (flat ? 'f' : '') + (fade ? 'n' + fade : '') + side;
+  mat.customProgramCacheKey = () => 'neuroreef-plant-' + sway + (flat ? 'f' : '') + (fade ? 'n' + fade : '') + (sight ? 's' : '') + side;
   return mat;
 }
 
@@ -336,7 +348,7 @@ export class Vegetation {
     };
     // (fade: the crown's reach from the axis as a share of the height: a tree's ~0.3, a bush's or a rock's ~0.6)
     const mTree = plantMaterial(wrap, { fade: 0.32 }), mFar = plantMaterial(wrap, { sway: 0 }), mBush = plantMaterial(wrap, { sway: 0.5, fade: 0.65 });
-    const mGrass = plantMaterial(wrap, { side: THREE.DoubleSide, sway: 4 }), mRock = plantMaterial(wrap, { sway: 0, flat: true, fade: 0.6 });
+    const mGrass = plantMaterial(wrap, { side: THREE.DoubleSide, sway: 4, sight: true }), mRock = plantMaterial(wrap, { sway: 0, flat: true, fade: 0.6 });
     // near trees: a share of the cap per form (sized to how often each is picked, with slack)
     this.near = T.near.map((g) => mk(g, mTree, NEAR_CAP, true));
     this.far = T.far.map((g) => mk(g, mFar, FAR_CAP, true));
@@ -365,14 +377,14 @@ export class Vegetation {
     const v = this.v, f = v.fields; if (!f || !v.world || !v.tiles) return;
     const c = v.controls.target, cam = v.camera.position, W = v.W;
     const camD = cam.distanceTo(c);
-    const sc = v.scale, upm = sc.upm, pm = sc.plantMag, mpu = sc.mpu;
+    const sc = v.scale, upm = sc.upm, mpu = sc.mpu;
     this._grass(force);
     // the view moved less than a share of its distance: keep the plants (and re-plant at most ~4 times a second)
     const now = performance.now();
-    if (!force && this._plantC && this._plantPm === pm && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < Math.max(0.01, camD * 0.12) &&
+    if (!force && this._plantC && Math.hypot(c.x - this._plantC.x, c.z - this._plantC.z) < Math.max(0.01, camD * 0.12) &&
         cam.distanceTo(this._plantCam) < Math.max(0.01, camD * 0.15)) return;
     if (!force && this._plantT && now - this._plantT < 250) return;
-    this._plantPm = pm; this._plantT = now;
+    this._plantT = now;
     const t0 = performance.now();
     this._plantC = c.clone(); this._plantCam = cam.clone();
     const Ly = this._layers(), d = Ly.d, cs = W / d;
@@ -387,7 +399,7 @@ export class Vegetation {
     const PD = this._pd, PT = this._pt, PS = this._ps, PI = this._pi;
     // how tall the trees and shrubs of a field cell are drawn (units), and how many crowns of that size its cover holds
     const heightM = (fi) => Ly.H && Ly.H[fi] ? Math.pow(10, H_LO + H_SPAN * Ly.H[fi] / 255) : 12;
-    const treeU = (hM) => Math.min(45, Math.max(3, hM)) * pm * upm, shrubU = (hM) => Math.min(4, Math.max(0.4, hM)) * pm * upm;
+    const treeU = (hM) => Math.min(45, Math.max(3, hM)) * upm, shrubU = (hM) => Math.min(4, Math.max(0.4, hM)) * upm;
     const fits = (crown, max) => Math.min(max, Math.max(3, 0.7 * (cs / crown) ** 2));
     let m = 0;
     for (let dy = -r0; dy <= r0; dy++) for (let dx = -r0; dx <= r0; dx++) {
@@ -475,7 +487,7 @@ export class Vegetation {
       }
       // rocks: on steep slopes and the highest bare ground, near the camera (not a plant: the ground's own); boulders a
       // few metres across, as many to a field cell as before by the ground they cover
-      const rockU = ROCK_M * pm * upm, rockR = Math.min(320, ROCK_REACH * rockU), rockN = Math.min(15, (1 / rockU) ** 2 * 0.15);
+      const rockU = ROCK_M * upm, rockR = Math.min(320, ROCK_REACH * rockU), rockN = Math.min(15, (1 / rockU) ** 2 * 0.15);
       if (dist < rockR) {
         const cx = Math.floor((gx + 0.5) * cs / S), cy = Math.floor((gy + 0.5) * cs / S);
         const at = (x, y) => H[(((y % fw) + fw) % fw) * fw + (((x % fw) + fw) % fw)];
@@ -505,7 +517,7 @@ export class Vegetation {
         for (let j = 0; j < 3 && nf < FLAME_CAP; j++) {
           hsh = hash1(hsh + 99);
           const x = (gx + ((hsh & 1023) / 1024)) * cs, y = (gy + (((hsh >> 10) & 1023) / 1024)) * cs;
-          const fs = FLAME_M * pm * upm;
+          const fs = FLAME_M * upm;
           p.set(x, v.heightAt(x, y) + 1.2 * fs, y); q.identity(); s.set(fs, fs, fs);
           this.flames.setMatrixAt(nf++, mat.compose(p, q, s));
         }
@@ -523,22 +535,26 @@ export class Vegetation {
   _grass(force) {
     const v = this.v, cam = v.camera.position, g = this.grass;
     const ground = v.heightAt(cam.x, cam.z), alt = cam.y - ground;
-    // tufts at their size (x the plants' magnification), in a disc round the camera as big as the budget allows
-    const gu = v.scale.plantMag * v.scale.upm, st = GRASS_STEP_M * gu, R = st * 54, tuft = GRASS_M * gu;
+    // tufts at their true size, in a disc round the camera as big as the budget allows; on a grid twice as fine (four
+    // times the tufts) within GRASS_FINE_M of the camera, where an eye a few cm to a metre above the ground looks across them
+    const gu = v.scale.upm, st = GRASS_STEP_M * gu, R = st * 54, tuft = GRASS_M * gu, sf = st / 2, RF = GRASS_FINE_M * gu;
     if (alt > R * 1.2) { g.count = 0; this._grassC = null; return; }
-    if (!force && this._grassC && this._grassU === gu && Math.hypot(cam.x - this._grassC.x, cam.z - this._grassC.z) < st * 6) return;
+    if (!force && this._grassC && this._grassU === gu && Math.hypot(cam.x - this._grassC.x, cam.z - this._grassC.z) < st * 4) return;
     this._grassU = gu;
     const t0 = performance.now();
     this._grassC = cam.clone();
     const Ly = this._layers(), d = Ly.d, cs = v.W / d, world = v.world;
     const mat = this._m, q = this._q, p = this._p, s = this._s, col = this._c;
-    const x0 = Math.floor((cam.x - R) / st), x1 = Math.ceil((cam.x + R) / st);
-    const z0 = Math.floor((cam.z - R) / st), z1 = Math.ceil((cam.z + R) / st);
+    const x0 = Math.floor((cam.x - R) / sf), x1 = Math.ceil((cam.x + R) / sf);
+    const z0 = Math.floor((cam.z - R) / sf), z1 = Math.ceil((cam.z + R) / sf);
     let n = 0;
     for (let iz = z0; iz <= z1 && n < GRASS_CAP; iz++) for (let ix = x0; ix <= x1 && n < GRASS_CAP; ix++) {
+      const coarse = !(ix & 1) && !(iz & 1);
+      // (the fine grid's in-between points only near the camera: a quick test on the cell before hashing)
+      if (!coarse && Math.hypot((ix + 0.5) * sf - cam.x, (iz + 0.5) * sf - cam.z) > RF + sf) continue;
       let h = hash2(ix, iz);
-      const x = (ix + (h & 255) / 256) * st, z = (iz + ((h >>> 8) & 255) / 256) * st;
-      const r = Math.hypot(x - cam.x, z - cam.z); if (r > R) continue;
+      const x = (ix + (h & 255) / 256) * sf, z = (iz + ((h >>> 8) & 255) / 256) * sf;
+      const r = Math.hypot(x - cam.x, z - cam.z); if (r > R || (!coarse && r > RF)) continue;
       const fx = ((Math.floor(x / cs) % d) + d) % d, fz = ((Math.floor(z / cs) % d) + d) % d, fi = fz * d + fx;
       // reeds (FIELDS 'wetland', when sent): a marsh is a reed bed; they stand where its pools are not
       const wl = Ly.WL ? Ly.WL[fi] / 255 : 0, reed = wl > 0.05 && ((h >>> 26) & 63) / 64 < Math.min(0.85, wl * 1.4);

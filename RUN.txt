@@ -23,6 +23,14 @@ THE DEFAULTS (and what they need)
   the slots. If it says WORLD FULL, memory (or --max-capacity) and not food decided who was born.
   On a smaller PC choose "Light (4 km)" or a smaller map on the setup page.
 
+Watching the world:
+  The view opens down in the world, behind a large animal at its true size (a 1 kg animal is about 10 cm
+  long): drag to orbit it, scroll to zoom from 10 cm to a few hundred metres, tap another animal to follow
+  it. W A S D (or the arrows, or the Free camera button) fly a free camera at ground level: drag to look,
+  Space / E up, C / Q down, Shift faster. Ride-along sees what the animal sees; Explore walks and hunts.
+  Whole world (or Home) shows the map from above, where the animals are too small to see and are dots in
+  their clade's colour.
+
 The prehistory (the first start):
   With no evolved brains yet, the console opens on the Prehistory tab. One branch (by default; the setup
   page can add more) evolves at full speed: 500,000 steps, shown as 500 million symbolic years. Tap a

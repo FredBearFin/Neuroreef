@@ -44,7 +44,7 @@ world ~1 km across, one valley with a stream, hills and a pond, several hundred 
   The RIVERS lines carry that width in field cells (under 1); World.RivW is the cells it covers (1 for any stream
   narrower than a cell).
 - *Console.* RELIEF = reliefM x fcell / fieldCellM from meta (world3d.js setRelief, on every meta; 38 units on 256);
-  creature size defaulted to x1 (true size; the control stays; x100 since 2026-11-02, below); metres per unit from the
+  creature size defaulted to x1 (true size; the control removed on 2026-11-04, below); metres per unit from the
   server everywhere.
 Measured (256 map, seeds 3 / 5 / 7; tools/ScaleProbe):
 - width 1.02 km; top 153 / 153 / 97 m above the lakes, land p50 42 / 41 / 31 m; slopes p50 14 / 12 / 9°, p90 23 / 21 / 16°,
@@ -366,6 +366,36 @@ Display and cameras only, except the person's own size and reach.
   camera's foot (18 m for a 20 m tree), and every bush and rock close by: from the ground, Explore was full of dark,
   dithered trees, and the animals behind them read as stippled ghosts. Now only a plant the camera is inside fades.
   Explore's shadow map also shrinks with the person (a 10 cm body over a 5 cm texel shaded itself into acne).
+
+**An open world, not a map: the creature-size slider removed** (2026-11-04; js/world3d.js, main.js, scale.js,
+creatures/modular.js, creatures/anim.js, look/vegetation.js, index.html, style.css). The owner: "why do we still need the
+creature size slider?? just the camera needs to be WAY more zoomed in ... think of it more as a 3d engine". Display only.
+- *No magnification anywhere.* The slider, its presets, the [ ] keys and the saved settings (scale.js clears the old
+  localStorage keys) are gone; every body and plant is drawn at true size, the body shader's display factor (packK /
+  dispK) and the minimum-pixel body (DOT_PX) with them. An animal drawn under 2 px long is a dot in its clade's colour
+  instead (one Points draw, 2 CSS px in the overview, 1.5 down in the world): from the Whole world view the map shows
+  where life is without blowing any body up.
+- *Cameras.* Follow (the opening view, prehistory and world): an OrbitControls orbit round the animal's middle, carried
+  with it; it opens three quarters behind, 12° up, 6 body extents and at least 1.2 m away (up to 10 m), choosing the
+  side where the ground does not rise above the camera; the wheel zooms 10 cm-400 m; W A S D flies off as the free
+  camera. The opening animal (interestingAnimal) is the biggest adult among the most numerous groups, on land, not a
+  swimmer; a followed animal lost with no lineage to take over is replaced by the nearest such one after 2.5 s. Free
+  camera: a fly camera (drag to look, W A S D / arrows, Space / E up, C / Q down, Shift x4, speed 1.2 m/s + 0.9 /s x the
+  height above the ground, the wheel dollies), never under the ground. Ride-along unchanged but framed by the body.
+  Overview keeps orbit, zoom to cursor, N / Tab and Whole world (Home). Explore unchanged (it leaves to the free camera).
+- *Framing by the real body.* Each clade's grown body has a box (modular.js: the built geometry's, limbs and all, or an
+  estimate from its parts until it is built; lying bodies swap height and width); World3D._ext scales it by the
+  animal's true length. It sets the follow distance and look-at height, the ride-along eye, the selection ring, the
+  culling sphere, and Explore's hit sphere (creatureNow), instead of the template's length.
+- *Detail by distance.* The animals are collected first and placed nearest first, so when the module-body triangle
+  budget or the near-template cap runs out it is the far ones that get the cheap template.
+- *At ground level.* Fog at 1.6 km at eye level (farther as the camera rises); the near plane at 0.15 x the distance
+  to the followed animal or 1.5 x the height above the ground (0.08 x the height in the free camera), at least 4 mm,
+  far at the fog (no logarithmic depth: the terrain, water and plant shaders are custom). Grass is twice as dense
+  within 9 m of the camera. The line of sight is kept: grass tufts inside a capsule from the camera to the followed
+  animal (or 1.2 m ahead of a free or ride-along camera under 2.5 m) are pressed flat in the grass shader (U_SIGHT), and
+  the follow camera's ridge test skips the stretch next to the animal (a cm bump beside a cm-tall body lifted it a metre).
+  The follow camera's limits are set before its first update (the overview's polar limit had clamped it steep).
 
 **High, jagged mountains: rock strength, glaciers, talus and the true height scale** (2026-11-01; Geology.cs,
 Hydrology.Erode, Terrain.Shape, H_RELIEF; tools/TerrainProbe/mtn.py; images docs/art/terrain2/mtn_before_* and

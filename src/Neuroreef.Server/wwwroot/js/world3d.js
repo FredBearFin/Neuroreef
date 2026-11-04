@@ -1,5 +1,14 @@
-// The 3D view: terrain, water, vegetation, fire, and every organism drawn from its own genes (creatures/body.js):
-// one instanced mesh of detailed, animated bodies near the camera and one of low-detail bodies beyond it.
+// The 3D view: terrain, water, vegetation, fire, and every organism drawn from its own genes (creatures/body.js) or its
+// clade's grown body (creatures/modular.js), always at true size: a 3D world one is down in, not a map.
+//
+// Cameras (2026-11-04, the owner: "just the camera needs to be WAY more zoomed in ... think of it more as a 3d engine"):
+// - follow (the opening view): a third-person orbit round an animal, framed by its real body (the grown body's box, limbs
+//   and all); drag to orbit, the wheel zooms from ~10 cm to a few hundred metres, W A S D flies off free;
+// - free: a fly camera at ground level (drag to look, W A S D / arrows to fly, Space / E up, C / Q down, Shift faster,
+//   speed growing with the height above the ground, the wheel dollies);
+// - ride-along: the animal's own eye; explore: walk and hunt (js/explore/);
+// - overview: the whole map from above (Whole world, Home). There an animal is far too small to see, so every animal
+//   drawn under DOT_PX long is a dot in its clade's colour instead (no magnified bodies).
 // World x maps to three.js x, world y maps to three.js z, height is three.js y. The world is a torus:
 // the terrain is drawn as a 3x3 tiling around the camera, and every animal is drawn at its copy nearest
 // to the view centre; in the overview the copies more than half a map from the view centre are dimmed and a
@@ -16,6 +25,7 @@ import { Ground, CARVE_NONE } from './terrain/ground.js';
 import { fromWire, fromCells, stampRivers, ribbonGeometry, patchRiverMaterial, riverWidth, preparePath } from './terrain/rivers.js';
 import { decodeFeatures, stampFeatures, featureMeshes } from './terrain/caves.js';
 import { patchLakeMaterial } from './terrain/water.js';
+import { U_SIGHT } from './look/vegetation.js';
 import { splitChunks, copyColors } from './terrain/chunks.js';
 
 // Vertical scale (2026-11-01). Elevation is 0..1 with the lakes at w.sea; Climate reads (e - sea) / (1 - sea) x the map's
@@ -47,19 +57,22 @@ const CORPSE_LIFE = 40000;    // a killed animal's body lies this long (ms), sin
 const NEAR_PX = 22;          // organisms drawn longer than this on screen (pixels) get the detailed body
 const SWIM_FINS = (0.3 - 0.1) / 0.9;   // fins at which a body swims in deep water (Body.GroundRealm: 0.1 + 0.9 fins >= DEEP_SWIM 0.3)
 const FLY_VM = 90;           // metres per step x M^0.17 above which a flier is taken to be in the air (a landed one walks: _air)
-const DOT_PX = 3;            // no organism is drawn shorter than this on screen (a speck where it is, never a carpet; 2026-11-02:
-                             // in every view, not only the overview, so a far animal never vanishes in Explore or a vehicle)
-/** A body's display factor (drawn size / true size, >= 1) packed above the action bits of aAnim.z: log2 x 64 in 11 bits
- *  from 8192 up (to 2^32; a float holds the sum exactly), read back by the body shader (anim.js dispK). */
-const packK = (f) => Math.min(2047, Math.max(0, Math.round(Math.log2(Math.max(1, f)) * 64))) * 8192;
+const DOT_PX = 2;            // an animal drawn shorter than this on screen (pixels) is a dot in its clade's colour instead
+                             // (2026-11-04: bodies are never drawn bigger than true size; from far away the dots find life)
+const DOT_SIZE_PX = 2;       // the dots' size on screen (CSS pixels; 1.5 at ground level)
+const FOLLOW_MIN_M = 0.1, FOLLOW_MAX_M = 400;   // the follow camera's zoom range (m from the animal)
+const GROUND_FOG_M = 1600;   // haze at eye level: the fog's far distance (m), farther as the camera rises
+const FREE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyC', 'ShiftLeft', 'ShiftRight'];
+const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 const GROUP_M = 40;          // the overview's groups of animals: bins this many metres across (N, Tab, the opening view)
 const VIEW_M_MIN = 30, VIEW_M_MAX = 80;   // ... framed in a view this many metres across
 const MIN_DIST_M = 1;        // the overview zooms in to this distance (m): a 10 cm animal about a sixth of the view
 const PAN_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ', 'KeyE', 'Minus', 'Equal'];
-const SLOPE_SC = 0.25;       // a far body drawn longer than this (world units, ~1 m) is sheared to the slope too
+const SLOPE_SC = 0.25;       // a far body longer than this (world units, ~1 m) is sheared to the slope too
 // module bodies (2026-11-03, js/creatures/modular.js): an animal drawn at least MOD_PX long on screen is drawn from its
 // clade's grown body (near detail from NEAR_PX, within MOD_NEAR_CAP of them), a smaller one as the template's speck; at
-// most MOD_CAP module bodies a frame (the rest as the template). ?modular=0 draws the template everywhere
+// most MOD_CAP module bodies a frame (the rest as the template), the nearest first (2026-11-04: the animals are placed in
+// order of distance, so when a budget runs out it is the far ones that get the cheap body). ?modular=0: the template only
 const MOD_PX = 5, MOD_NEAR_CAP = 384, MOD_CAP = 12000;
 const NEAR_CAP = 512;        // at most this many detailed bodies; the rest get the low-detail one (2026-10-31: 4096 cost the GPU
                              // a detailed body for every animal in a crowd, where a few hundred fill the near view)
@@ -75,7 +88,7 @@ export class World3D {
     // with the sea's light and haze by depth (underwater()); the opening view is under the surface among the animals
     this.ocean = !!meta.ocean;
     setRelief(meta);                  // the relief at true scale, from the server (2026-11-01)
-    // how big bodies and plants are drawn: true size x the view's magnification (js/scale.js)
+    // metres per unit and body lengths (js/scale.js): everything is drawn at true size
     this.scale = new Scale(meta.explore && meta.explore.metresPerUnit);
     this.scale.fromServer(meta.units);
     this.lenM = new Map();            // serial -> true body length (m), from status.bodyLenM
@@ -86,7 +99,7 @@ export class World3D {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b1622);
     this.scene.fog = new THREE.Fog(0x0b1622, 250, 900);
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, Math.max(2000, this.W * 3));
+    this.camera = new THREE.PerspectiveCamera(60, 1, 0.3, Math.max(2000, this.W * 3));
     // the wrap display (wrapPatch): view centre, half a map, strength (0 close up .. 1 zoomed out), seam width, background
     this.wrapU = { uWrapC: { value: new THREE.Vector2() }, uWrapHalf: { value: this.W / 2 }, uWrapS: { value: 0 }, uWrapLine: { value: 1 },
                    uWrapBg: { value: new THREE.Color(0x0b1622) } };
@@ -102,6 +115,7 @@ export class World3D {
     this.controls.minDistance = MIN_DIST_M * this.scale.upm; this.controls.maxDistance = this.W * 1.6;
     this.controls.addEventListener('start', () => { this._userMoved = true; this._track = 0; });
     this._overviewKeys();
+    this._freeInput();
     this.controls.zoomToCursor = true; this.controls.zoomSpeed = 3;   // x0.86 a notch: the whole map to a few metres in ~60
     this._fly = null;
     canvas.addEventListener('dblclick', (e) => { if (this.mode === 'overview') { this._userMoved = true; this.diveAt(e.clientX, e.clientY); } });
@@ -115,7 +129,7 @@ export class World3D {
     this.sun = this.look.light.sun;
     this.flames = this.look.veg.flames;
 
-    this.mode = 'overview';
+    this.mode = 'overview';           // until there is life to open on (_openOnLife: the follow camera beside an animal)
     this.agents = new Map();          // serial -> state for interpolation
     this.frameT = 0; this.frameDt = 50;
     this.hidden = new Set();          // clades hidden by the legend
@@ -324,7 +338,7 @@ export class World3D {
     const W = this.W, d = this._fitDist(), tilt = 0.42;
     const g = this.world ? this._meanLand() : 0;
     const c1 = new THREE.Vector3(W / 2, g, W / 2), p1 = new THREE.Vector3(W / 2, g + d * Math.cos(tilt), W / 2 + d * Math.sin(tilt));
-    this.controls.maxDistance = d * 1.3;
+    this.controls.maxDistance = this._ovMax = d * 1.3;
     this._flyTo(c1, p1, now ? 0 : 900);
   }
 
@@ -348,6 +362,11 @@ export class World3D {
   /** A wheel notch in the overview: camera and view centre scaled about the ground point under the cursor, which so
    *  stays exactly under it (x0.83 a notch in, as OrbitControls' zoomSpeed 3), within the controls' distance limits. */
   _wheel(e) {
+    if (this.mode === 'free' && e.target === this.canvas && this.world) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      this._freeWheel(e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1));
+      return;
+    }
     if (this.mode !== 'overview' || e.target !== this.canvas || !this.world || !this.controls.enabled) return;
     e.preventDefault(); e.stopImmediatePropagation(); this._userMoved = true;
     const dy = e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1);
@@ -362,10 +381,12 @@ export class World3D {
   }
 
   /** The least camera height at (cam.x, cam.z) from which the line to the view centre c clears the ground. */
-  _sightY(c, cam) {
+  _sightY(c, cam, i0 = 1) {
     const hd = Math.hypot(cam.x - c.x, cam.z - c.z), m = 0.03 * Math.max(hd, Math.abs(cam.y - c.y));
     let y = -Infinity;
-    for (let i = 1; i <= 10; i++) {
+    // (i0: the first tenth of the line tested; the follow camera skips the stretch next to its animal, where a bump of
+    // a cm in the ground beside a cm-tall body would lift the camera a metre, and the grass is pressed down anyway)
+    for (let i = i0; i <= 10; i++) {
       const f = i / 10, g = this.floorAt(c.x + (cam.x - c.x) * f, c.z + (cam.z - c.z) * f);
       y = Math.max(y, c.y + (g + m * f - c.y) / f);
     }
@@ -379,9 +400,6 @@ export class World3D {
     for (let i = 0; i < H.length; i += 7) if (w.cell[i] === 1 || (this.ocean && this.surfH[i] === this.surfH[i])) { s += this.ocean && w.cell[i] !== 1 ? this.surfH[i] : H[i]; n++; }
     return (this._meanH = n ? s / n : 0);
   }
-
-  /** Change the creatures' magnification (the overview's "creature size x" control). */
-  setMagnification(m) { this.scale.setMag(m); this._plants(true); if (this.onScale) this.onScale(); }
 
   _dropTerrain() {
     this._meanH = undefined;
@@ -585,6 +603,19 @@ export class World3D {
     this.eggs.count = 0; this.eggs.frustumCulled = false;
     this.eggs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(4096 * 3), 3);
     this.scene.add(this.eggs);
+    // the dots of the animals too small on screen to draw (a fixed size in pixels, in the haze like everything else)
+    this.dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: DOT_SIZE_PX, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
+    this.dots.frustumCulled = false; this.dots.renderOrder = 4;
+    this._dotCap = 0; this._allocDots(4096);
+    this.scene.add(this.dots);
+  }
+
+  _allocDots(n) {
+    let cap = Math.max(4096, this._dotCap); while (cap < n) cap *= 2;
+    const g = this.dots.geometry;
+    for (const k of ['position', 'color']) { const a = new THREE.BufferAttribute(new Float32Array(cap * 3), 3); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(k, a); }
+    g.setDrawRange(0, 0);
+    this._dotCap = cap;
   }
 
   /** (Re)create an instanced body mesh with room for cap organisms. */
@@ -675,7 +706,7 @@ export class World3D {
       const x = sx / b.n, y = sy / b.n; let r2 = 0, zs = 0;
       for (const e of b.list) zs += (e.depth || 0) * (e.atDepth === undefined ? 1 : e.atDepth);
       for (const e of b.list) { const dx = e.x - W * Math.round((e.x - x) / W) - x, dy = e.y - W * Math.round((e.y - y) / W) - y; r2 += dx * dx + dy * dy; }
-      out.push({ n: b.n, z: zs / b.n, x: ((x % W) + W) % W, y: ((y % W) + W) % W, r: Math.sqrt(r2 / b.n) * this.scale.mpu, sp: [...cs].sort((p, q) => q[1] - p[1])[0][0] });
+      out.push({ list: b.list, n: b.n, z: zs / b.n, x: ((x % W) + W) % W, y: ((y % W) + W) % W, r: Math.sqrt(r2 / b.n) * this.scale.mpu, sp: [...cs].sort((p, q) => q[1] - p[1])[0][0] });
     }
     return out.sort((p, q) => q.n - p.n);
   }
@@ -738,14 +769,34 @@ export class World3D {
     return true;
   }
 
-  /** The opening view: low over the densest group, once animals and the ground are there (unless the view was moved). */
+  /** The opening view (2026-11-04): down in the world, the follow camera a few body lengths from a large animal among
+   *  others (interestingAnimal), once animals and the ground are there (unless the view was moved). onOpen(serial) lets
+   *  the console select and follow it; without it the view does so itself. */
   _openOnLife() {
     if (this._opened || !this.tiles || this.mode !== 'overview' || !this.agents.size) return;
     this._opened = true;
     if (this._userMoved) return;
-    const g = this.groups()[0]; if (!g) return;
-    this._groupI = 0;
-    this.frameGroup(g, 0);
+    const s = this.interestingAnimal();
+    if (!s) { const g = this.groups()[0]; if (g) { this._groupI = 0; this.frameGroup(g, 0); } return; }
+    if (this.onOpen) this.onOpen(s); else { this.selected = s; this.setMode('follow'); }
+  }
+
+  /** A large living animal among others: the biggest adult of the most numerous groups (by cube-root mass, a little
+   *  more for a crowded group). With (x, z): the nearer, the better (a followed animal was lost there). Its serial, or 0. */
+  interestingAnimal(x, z) {
+    const W = this.W, upm = this.scale.upm;
+    let best = 0, bs = -1;
+    const gs = this.groups(), pool = x !== undefined ? gs : gs.slice(0, 6);
+    for (const g of pool) for (const e of g.list) {
+      if (e.stage === 0 || e.serial === undefined) continue;
+      let v = Math.cbrt(Math.max(1e-3, e.mass || 0)) * (1 + 0.15 * Math.log2(1 + g.n)) * (e.stage === 1 ? 0.6 : 1);
+      // (on land, where the ground and the plants are round it, unless the world is a sea; not deep under water)
+      if (this.world && !this.ocean && (this.world.cell[this._cellOf(e.x, e.y)] !== 1 || e.swim)) v *= 0.01;
+      if ((e.depth || 0) > 2) v *= 0.3;
+      if (x !== undefined) { let dx = e.x - x, dz = e.y - z; dx -= Math.round(dx / W) * W; dz -= Math.round(dz / W) * W; v /= 1 + Math.hypot(dx, dz) / (150 * upm); }
+      if (v > bs) { bs = v; best = e.serial; }
+    }
+    return best;
   }
 
   /** N (Shift+N back): the next group, the most numerous first. Tab (Shift+Tab back): the next clade (lineage), most
@@ -776,14 +827,207 @@ export class World3D {
   _overviewKeys() {
     const held = this._held = new Set();
     const skip = (e) => this.mode !== 'overview' || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, button');
+    const fk = this._fkeys = new Set();
     addEventListener('keydown', (e) => {
+      // the free camera's keys; in the follow camera a movement key flies off free from where it is (onWantMode)
+      if ((this.mode === 'free' || this.mode === 'follow') && !(e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select'))) {
+        if (!FREE_KEYS.includes(e.code)) return;
+        if (this.mode === 'follow') { if (!MOVE_KEYS.includes(e.code) || !this.onWantMode) return; this.onWantMode('free'); }
+        e.preventDefault(); fk.add(e.code); return;
+      }
       if (skip(e)) return;
       if (e.code === 'KeyN' && !e.repeat) { this._userMoved = true; this.nextGroup(e.shiftKey ? -1 : 1); return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat) { this._userMoved = true; this.nextClade(e.shiftKey ? -1 : 1); } return; }
       if (PAN_KEYS.includes(e.code)) { e.preventDefault(); held.add(e.code); this._userMoved = true; this._fly = null; this._track = 0; }
     });
-    addEventListener('keyup', (e) => held.delete(e.code));
-    addEventListener('blur', () => held.clear());
+    addEventListener('keyup', (e) => { held.delete(e.code); fk.delete(e.code); });
+    addEventListener('blur', () => { held.clear(); fk.clear(); });
+  }
+
+  // ------------------------------------------------------------------ the free camera (2026-11-04)
+  //
+  // A game engine's fly camera: drag to look (no pointer lock, so a tap still selects), W A S D or the arrows to fly
+  // where it looks, Space / E up, C / Q down, Shift four times faster; the speed grows with the height above the ground
+  // (1.2 m/s at the grass, ~100 m/s a hundred metres up), so the same keys cross a meadow or the map. The wheel dollies.
+  // It never goes into the ground (or, in an ocean world, the seabed) and stays a few cm above it.
+
+  _freeInput() {
+    this._free = { yaw: 0, pitch: -0.15, drag: null };
+    const cv = this.canvas;
+    cv.addEventListener('pointerdown', (e) => {
+      if (this.mode !== 'free' || (e.button !== 0 && e.button !== 2)) return;
+      this._free.drag = [e.clientX, e.clientY, e.pointerId];
+    });
+    addEventListener('pointermove', (e) => {
+      const d = this._free.drag; if (!d || this.mode !== 'free' || d[2] !== e.pointerId) return;
+      const F = this._free, k = 0.0035;
+      F.yaw += (e.clientX - d[0]) * k; F.pitch = Math.max(-1.5, Math.min(1.5, F.pitch - (e.clientY - d[1]) * k));
+      d[0] = e.clientX; d[1] = e.clientY; this._userMoved = true;
+    });
+    addEventListener('pointerup', () => { this._free.drag = null; });
+    cv.addEventListener('contextmenu', (e) => { if (this.mode === 'free') e.preventDefault(); });
+  }
+
+  /** The free camera starts looking where the camera looks now. */
+  _freeFromCamera() {
+    const d = new THREE.Vector3(); this.camera.getWorldDirection(d);
+    this._free.yaw = Math.atan2(d.z, d.x); this._free.pitch = Math.max(-1.5, Math.min(1.5, Math.asin(Math.max(-1, Math.min(1, d.y)))));
+    this.camera.up.set(0, 1, 0);
+  }
+
+  _freeDir(out = new THREE.Vector3()) {
+    const F = this._free, cp = Math.cos(F.pitch);
+    return out.set(Math.cos(F.yaw) * cp, Math.sin(F.pitch), Math.sin(F.yaw) * cp);
+  }
+
+  /** The camera's height above what it may not go below (world units). */
+  _alt() { const p = this.camera.position; return this.world ? p.y - this.floorAt(p.x, p.z) : p.y; }
+
+  /** Once a frame in the free camera: held keys fly it, then it is kept out of the ground. */
+  _freeCam(now) {
+    const dt = Math.min(0.1, Math.max(0, (now - (this._freeT || now)) / 1000)); this._freeT = now;
+    const k = this._fkeys, cam = this.camera.position, upm = this.scale.upm, dir = this._freeDir(this._fd ||= new THREE.Vector3());
+    const altM = Math.max(0, this._alt() / upm);
+    const v = Math.min(500, 1.2 + 0.9 * altM) * (k.has('ShiftLeft') || k.has('ShiftRight') ? 4 : 1) * upm * dt;
+    const fw = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    const rt = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    const up = (k.has('Space') || k.has('KeyE') ? 1 : 0) - (k.has('KeyC') || k.has('KeyQ') ? 1 : 0);
+    if (fw || rt || up) {
+      const hl = Math.hypot(dir.x, dir.z) || 1, rx = -dir.z / hl, rz = dir.x / hl;
+      cam.x += (dir.x * fw + rx * rt) * v; cam.z += (dir.z * fw + rz * rt) * v; cam.y += (dir.y * fw + up) * v;
+      this._userMoved = true;
+    }
+    this._keepAbove(0.03 * upm);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(cam.x + dir.x, cam.y + dir.y, cam.z + dir.z);
+    // the view centre (plants, shadows and the wrap are laid out round it): a little way ahead, farther from higher up
+    const ahead = Math.max(2 * upm, 1.5 * this._alt());
+    this.controls.target.set(cam.x + dir.x * ahead, cam.y + dir.y * ahead, cam.z + dir.z * ahead);
+  }
+
+  /** The camera at least `margin` above the ground (the seabed in an ocean world) under it. */
+  _keepAbove(margin) {
+    if (!this.world) return;
+    const cam = this.camera.position, f = this.floorAt(cam.x, cam.z) + margin;
+    if (cam.y < f) cam.y = f;
+  }
+
+  /** The wheel in the free camera: a dolly along the view, a share of the height above the ground a notch. */
+  _freeWheel(dy) {
+    const dir = this._freeDir(this._fd ||= new THREE.Vector3()), upm = this.scale.upm;
+    const step = -Math.sign(dy) * Math.min(3, Math.abs(dy) * 0.01) * (0.25 * Math.max(0, this._alt()) + 0.3 * upm);
+    this.camera.position.addScaledVector(dir, step);
+    this._keepAbove(0.03 * upm); this._userMoved = true;
+  }
+
+  // ------------------------------------------------------------------ the follow camera (2026-11-04)
+  //
+  // A third-person orbit round the followed animal: OrbitControls round its body's middle, carried along as it moves
+  // (camera and centre moved together, so the orbit the person chose is kept). It opens a few body lengths away (its
+  // real box: the grown body's limbs and all, _ext), a little above the animals' eye level, three quarters behind; the
+  // wheel zooms from FOLLOW_MIN_M to FOLLOW_MAX_M. The camera never goes into the ground nor behind a ridge, and the grass
+  // on the line to the animal is pressed down (look/vegetation.js U_SIGHT), so neither is buried.
+
+  /** Where organism e (serial) is drawn now, its copy at selP: {x, z, gy (its feet), cy (its middle), L, H, W (its box)}. */
+  _bodyNow(e, serial, selP, out = {}) {
+    const sc = this._size(e), now = performance.now();
+    let gy = this._height(e, selP[0], selP[1], sc);
+    const air = e.fly ? this._air(e, selP[0], selP[1], now) : 0;
+    if (air > 0.01) gy += this._lift(sc, now / 1000, serial) * air;
+    const ex = this._ext(e, serial, sc);
+    out.x = selP[0]; out.z = selP[1]; out.gy = gy; out.L = ex.L; out.H = ex.H; out.W = ex.W; out.cy = gy + 0.5 * ex.H;
+    return out;
+  }
+
+  /** Put the follow camera at its opening framing of body b heading h. */
+  _frameFollow(b, h) {
+    const upm = this.scale.upm, ext = Math.max(b.L, b.H, b.W);
+    // (a few body lengths, and at least a metre or so: the animal and its neighbours in the grass round it)
+    let D = Math.min(10 * upm, Math.max(1.2 * upm, 6 * ext));
+    if (this.ocean && this._camUnder) D = Math.min(D, 0.4 * 4.8 / this.seaC(b.x, b.z) * upm);
+    const el = 0.22, margin = Math.max(0.02 * upm, 0.15 * b.H);
+    // three quarters behind it, or round it to where the ground does not rise above the camera's place (from uphill of
+    // an animal on a slope the camera would be lifted to look down on it as on a map)
+    let az = h + Math.PI + 0.6, lift = Infinity;
+    for (let k = 0; k < 12 && this.world; k++) {
+      const a = h + Math.PI + 0.6 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
+      const x = b.x + Math.cos(a) * Math.cos(el) * D, z = b.z + Math.sin(a) * Math.cos(el) * D;
+      const need = this.floorAt(x, z) + margin - (b.cy + Math.sin(el) * D);
+      if (need < lift - 0.02 * D) { lift = need; az = a; }
+      if (lift <= 0) break;
+    }
+    // (the follow camera's own limits before the controls first update: the overview's would clamp it steep or far)
+    this.controls.maxPolarAngle = Math.PI * 0.92; this.controls.minDistance = Math.min(this.controls.minDistance, 0.5 * D); this.controls.maxDistance = Math.max(this.controls.maxDistance, 2 * D);
+    this.controls.target.set(b.x, b.cy, b.z);
+    this.camera.position.set(b.x + Math.cos(az) * Math.cos(el) * D, b.cy + Math.sin(el) * D, b.z + Math.sin(az) * Math.cos(el) * D);
+    this._keepAbove(Math.max(0.02 * upm, 0.15 * b.H));
+    this.camera.up.set(0, 1, 0);
+    this.controls.update();
+  }
+
+  /** Once a frame in the follow camera. */
+  _followCam(sel, selP, now) {
+    const c = this.controls.target, cam = this.camera.position, upm = this.scale.upm;
+    if (!sel || !selP) {
+      // the animal is gone (and the server has not handed over to its lineage): after a moment, another nearby
+      this._lostT ||= now;
+      if (now - this._lostT > 2500 && this.agents.size) {
+        this._lostT = 0;
+        const s = this.interestingAnimal(cam.x, cam.z);
+        if (s) { if (this.onAutoPick) this.onAutoPick(s); else this.selected = s; }
+      }
+      this.controls.update(); this._keepAbove(0.03 * upm);
+      return;
+    }
+    this._lostT = 0;
+    const b = this._fb = this._bodyNow(sel, this.selected, selP, this._fb || {});
+    if (this._followSerial !== this.selected || !this._followC) { this._followSerial = this.selected; this._frameFollow(b, selP[2]); }
+    else { const dx = b.x - this._followC.x, dy = b.cy - this._followC.y, dz = b.z - this._followC.z; c.x += dx; c.y += dy; c.z += dz; cam.x += dx; cam.y += dy; cam.z += dz; }
+    (this._followC ||= new THREE.Vector3()).set(b.x, b.cy, b.z);
+    const ext = Math.max(b.L, b.H, b.W);
+    let maxD = FOLLOW_MAX_M * upm;
+    const under = this.ocean && this.camDepthM() > 0;
+    if (under) maxD = Math.max(2 * ext, Math.min(maxD, 0.4 * 4.8 / this.seaC(b.x, b.z) * upm));   // within the water's visibility
+    this.controls.minDistance = Math.max(FOLLOW_MIN_M * upm, 0.6 * ext);
+    this.controls.maxDistance = maxD;
+    this.controls.maxPolarAngle = Math.PI * (under ? 0.92 : 0.6);
+    this.controls.update();
+    // never in the ground, and the animal in sight (no ridge between)
+    this._keepAbove(Math.max(0.02 * upm, 0.12 * b.H));
+    if (this.world) cam.y = Math.max(cam.y, this._sightY(c, cam, 4));
+    // under the sea the camera stays in the water with a body that is under it
+    if (this.ocean) { const sf = this.surfAt(cam.x, cam.z); if (sf === sf && b.cy < sf - b.H) cam.y = Math.min(cam.y, sf - 0.05 * upm); }
+  }
+
+  /** The lens and haze of the cameras down in the world (follow, free, ride-along): fog at eye level, farther as the
+   *  camera rises; the near plane as far out as the nearest thing in view allows (a few mm to cm from an animal's eye
+   *  or the grass: depth precision for cm-sized bodies, the shores a fraction of a unit over the lakes, without a
+   *  logarithmic depth buffer the custom shaders would have to write). */
+  _groundLens() {
+    const cam = this.camera, upm = this.scale.upm, alt = Math.max(0, this._alt());
+    const fogFar = Math.max(GROUND_FOG_M * upm, 3 * alt);
+    this.scene.fog.far = fogFar;
+    const dT = cam.position.distanceTo(this.controls.target);
+    let near = this.mode === 'ride' ? Math.max(0.0005, 0.04 * Math.min(this._fb ? this._fb.H : 0.01, dT)) : this.mode === 'free' ? 0.08 * alt : 0.15 * Math.min(dT, 1.5 * alt + 0.02 * upm);
+    near = Math.min(2, Math.max(0.004 * upm, near));
+    const far = Math.max(600, fogFar * 1.3);
+    if (Math.abs(near - cam.near) > near * 0.2 || Math.abs(far - cam.far) > far * 0.2) { cam.near = near; cam.far = far; cam.updateProjectionMatrix(); }
+  }
+
+  /** Grass on the line of sight is pressed down (look/vegetation.js U_SIGHT): from the follow camera to its animal, or
+   *  a step ahead of a free camera or an animal's eye low over the ground. Off in the overview and Explore. */
+  _sightLine() {
+    const A = U_SIGHT.uSightA.value, B = U_SIGHT.uSightB.value, upm = this.scale.upm, cam = this.camera.position;
+    U_SIGHT.uSightR.value = 0;
+    if (this.mode === 'follow' && this._fb && this.selected) {
+      const b = this._fb;
+      A.copy(cam); B.set(b.x, b.cy, b.z);
+      U_SIGHT.uSightR.value = Math.max(0.3 * upm, 0.75 * Math.max(b.H, b.W, 0.5 * b.L));
+    } else if ((this.mode === 'free' || this.mode === 'ride') && this._alt() < 2.5 * upm) {
+      const d = this._fd2 ||= new THREE.Vector3(); this.camera.getWorldDirection(d);
+      A.copy(cam); B.copy(cam).addScaledVector(d, 1.2 * upm);
+      U_SIGHT.uSightR.value = 0.35 * upm;
+    }
   }
 
   /** Held pan and zoom keys, once a frame in the overview (dt in s). */
@@ -915,8 +1159,18 @@ export class World3D {
 
   /** Move the camera over a place on the map (a fight in the log). */
   lookAt(x, y) {
-    if (this.mode !== 'overview') return;
     const c = this.controls.target, W = this.W;
+    if (this.mode === 'free') {
+      // the free camera: a few metres from the place, a metre up, looking at it
+      const cam = this.camera.position, upm = this.scale.upm;
+      x += W * Math.round((cam.x - x) / W); y += W * Math.round((cam.z - y) / W);
+      let dx = cam.x - x, dz = cam.z - y; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      const g = this.heightAt(x, y);
+      cam.set(x + dx * 4 * upm, g + 1.2 * upm, y + dz * 4 * upm); this._keepAbove(0.3 * upm);
+      this._free.yaw = Math.atan2(-dz, -dx); this._free.pitch = Math.atan2(g + 0.1 * upm - cam.y, 4 * upm);
+      return;
+    }
+    if (this.mode !== 'overview') return;
     x += W * Math.round((c.x - x) / W); y += W * Math.round((c.z - y) / W);   // the copy nearest the view
     // close enough to see the fight (the animals as drawn: a few dozen body lengths), never farther than now
     const off = this.camera.position.clone().sub(c), d = off.length(), lim = Math.max(0.5, 80 * this.scale.markK * 1.5);
@@ -973,15 +1227,28 @@ export class World3D {
     this.stainMesh.count = k; this.stainMesh.instanceMatrix.needsUpdate = true;
   }
 
+  /** The camera: 'follow' (orbit round the selected animal), 'free' (fly camera), 'ride' (its eye), 'explore' (on foot,
+   *  js/explore/) or 'overview' (the map from above). */
   setMode(m) {
+    const was = this.mode;
     this.mode = m;
-    this.controls.enabled = m === 'overview';
-    this._fly = null; this._camT = 0;
-    this.scale.explore = m === 'explore';    // Explore and the vehicles: their own creature size (js/scale.js)
+    // OrbitControls drive the overview and the follow camera's orbit (no panning off the animal, the wheel toward it)
+    this.controls.enabled = m === 'overview' || m === 'follow';
+    this.controls.enablePan = m === 'overview';
+    this.controls.zoomToCursor = m === 'overview';
+    this._fly = null; this._camT = 0; this._followSerial = 0; this._followC = null; this._lostT = 0;
+    if (this._fkeys) this._fkeys.clear();
     if (m === 'explore') { this.explore?.setView(); this._plants(true); return; }   // EXPLORE hook: js/explore/ sets the lens and fog
-    this.camera.fov = m === 'ride' ? 78 : 55; if (m !== 'overview') this.camera.near = 0.005; this.camera.updateProjectionMatrix();
-    this.scene.fog.near = m === 'ride' ? 60 : 250; this.scene.fog.far = m === 'ride' ? 380 : 900;
-    if (m === 'overview' && this._selPos) this.controls.target.set(this._selPos[0], 0, this._selPos[1]);
+    this.camera.fov = m === 'ride' ? 78 : m === 'overview' ? 55 : 60; this.camera.updateProjectionMatrix();
+    this.camera.up.set(0, 1, 0);
+    if (m === 'overview') {
+      this.controls.minDistance = MIN_DIST_M * this.scale.upm; this.controls.maxDistance = Math.max(this._ovMax || this.W * 1.6, this.camera.position.distanceTo(this.controls.target));
+      this.scene.fog.far = 900;
+      if (this._selPos && was !== 'free') this.controls.target.set(this._selPos[0], this.world ? this.heightAt(this._selPos[0], this._selPos[1]) : 0, this._selPos[1]);
+      // (from the ground the view centre is put on the ground ahead)
+      if (was === 'free' && this.world) { const t = this.controls.target; t.y = this.heightAt(t.x, t.z); }
+    }
+    if (m === 'free') { this._freeFromCamera(); this._freeT = 0; }
     this._plants(true);
   }
 
@@ -1079,40 +1346,29 @@ export class World3D {
 
     if (this.mode === 'explore' && this.explore) {
       this.explore.drive(now, c);   // EXPLORE hook: the person moves the camera and the view centre (js/explore/)
-    } else if (this.mode !== 'overview' && selP) {
-      const sz = this._size(sel);
-      const gh = this._height(sel, selP[0], selP[1]);
-      const fx = Math.cos(selP[2]), fz = Math.sin(selP[2]);
-      // the camera's easing per frame as at 60 frames a second, whatever the frame rate (a slow machine's camera kept up)
-      const fdt = Math.min(0.5, Math.max(0, (now - (this._camT || now)) / 1000)); this._camT = now;
-      const ease = (k) => 1 - Math.pow(1 - k, fdt * 60);
-      this._camH = this._camH === undefined ? selP[2] : lerpAngle(this._camH, selP[2], ease(0.08));
-      const hx = Math.cos(this._camH), hz = Math.sin(this._camH);
-      // (distances in the animal's own drawn lengths, MODEL_LEN x sz: the view keeps its framing at any size. 2026-11-02:
-      // about 6.5 lengths behind and 2.2 above, so a 20 cm animal at true size is a sixth of the view's height)
-      if (this.mode === 'follow') {
-        // under the sea within the water's visibility (seaC: 4.8 / c): at most 0.4 of it away, at least 1.5 lengths (2026-11-02)
-        const L = sz * MODEL_LEN, vis = this.ocean && this.camDepthM() > 0 ? 4.8 / this.seaC(selP[0], selP[1]) * this.scale.upm : Infinity;
-        const dist = Math.min(L * 6.5, Math.max(L * 1.5, 0.4 * vis)), up = dist * 2.2 / 6.5;
-        const want = new THREE.Vector3(selP[0] - hx * dist, gh + up, selP[1] - hz * dist);
-        want.y = Math.max(want.y, this.floorAt(want.x, want.z) + sz * 0.8);
-        // under the sea the camera stays in the water with a body that is under it (2026-11-02)
-        if (this.ocean) { const sf = this.surfAt(want.x, want.z); if (sf === sf && gh < sf - sz) want.y = Math.min(want.y, sf - 0.3 * sz); }
-        this.camera.position.lerp(want, ease(0.12));
-        // on its way there (from the overview, or round a hill the animal walked past) the camera never goes into the ground
-        const cp = this.camera.position, floor = this.floorAt(cp.x, cp.z) + sz * 0.5;
-        if (cp.y < floor) cp.y = floor;
-        this.camera.lookAt(selP[0], gh + sz * 0.6, selP[1]);
-      } else {
-        const eye = new THREE.Vector3(selP[0] + fx * sz * 0.6, gh + sz * 0.9, selP[1] + fz * sz * 0.6);
+    } else if (this.mode === 'follow' || this.mode === 'free' || this.mode === 'ride') {
+      if (this.mode === 'follow') this._followCam(sel, selP, now);
+      else if (this.mode === 'free') this._freeCam(now);
+      else if (selP) {
+        // ride-along: at the animal's eye, the front of its real body (its box: the grown body), looking where it heads
+        const b = this._fb = this._bodyNow(sel, this.selected, selP, this._fb || {});
+        // the camera's easing per frame as at 60 frames a second, whatever the frame rate (a slow machine's camera kept up)
+        const fdt = Math.min(0.5, Math.max(0, (now - (this._camT || now)) / 1000)); this._camT = now;
+        const ease = (k) => 1 - Math.pow(1 - k, fdt * 60);
+        this._camH = this._camH === undefined ? selP[2] : lerpAngle(this._camH, selP[2], ease(0.08));
+        const hx = Math.cos(this._camH), hz = Math.sin(this._camH), fx = Math.cos(selP[2]), fz = Math.sin(selP[2]), s = Math.max(b.L, b.H);
+        const eye = new THREE.Vector3(b.x + fx * b.L * 0.42, b.gy + b.H * 0.8, b.z + fz * b.L * 0.42);
         this.camera.position.lerp(eye, ease(0.35));
-        this.camera.lookAt(eye.x + hx * sz * 20, eye.y - sz * 1.5, eye.z + hz * sz * 20);
+        this.camera.lookAt(eye.x + hx * s * 20, eye.y - s * 1.2, eye.z + hz * s * 20);
+        c.set(b.x, b.cy, b.z);
       }
-      // the near plane as far out as the framing allows (the follow camera is lengths away, the ride-along's eye is on the
-      // body) and the far plane at the fog: depth precision for true-size bodies a few cm long, the shores over the lakes
-      const nr = Math.max(0.0002, sz * (this.mode === 'follow' ? 0.3 : 0.06)), fr = Math.max(600, this.scene.fog.far * 1.3);
-      if (Math.abs(nr - this.camera.near) > nr * 0.2 || Math.abs(fr - this.camera.far) > fr * 0.2) { this.camera.near = nr; this.camera.far = fr; this.camera.updateProjectionMatrix(); }
-      c.set(selP[0], 0, selP[1]);
+      // the orbit centre stays inside the base tile, the camera (and the follow camera's anchor) moved with it
+      if (c.x < 0 || c.x >= W || c.z < 0 || c.z >= W) {
+        const sx = -Math.floor(c.x / W) * W, sz = -Math.floor(c.z / W) * W;
+        c.x += sx; c.z += sz; this.camera.position.x += sx; this.camera.position.z += sz;
+        if (this._followC) { this._followC.x += sx; this._followC.z += sz; }
+      }
+      this._groundLens();
     } else {
       // held keys pan and zoom (W A S D, the arrows, Q / E), as fast as the zoom: a share of the distance a second
       const kdt = Math.min(0.25, Math.max(0, (now - (this._keyT || now)) / 1000)); this._keyT = now;
@@ -1217,26 +1473,24 @@ export class World3D {
     if (total > this.far.cap) { let cap = this.far.cap; while (cap < total) cap *= 2; this.far = this._allocBodies(this.far, this.farGeo, cap); }
     const near = this.near, far = this.far, rgb = this.cladeRGB, P3 = [0, 0, 0], SL = [0, 0];
     const camX = this.camera.position.x, camY = this.camera.position.y, camZ = this.camera.position.z;
-    // sizes: true size x the magnification (bk: world units per view-size unit); on screen, pixels per unit at distance 1
+    // sizes: true size (bk: world units per view-size unit); on screen, pixels per unit at distance 1
     const bk = this.scale.bodyK, ppu = this.canvas.clientHeight / (2 * Math.tan(this.camera.fov * Math.PI / 360));
     const lenPx = MODEL_LEN * ppu, nearK = lenPx / NEAR_PX;   // a body of drawn size sc is detailed within nearK x sc
-    const dots = DOT_PX / lenPx;   // the smallest drawn size per unit of distance (every view)
     const U = this.bodyMat.userData.uniforms;
     U.uTime.value = now / 1000; U.uBodyK.value = bk;
     U.uSpeciesOverlay.value = this.speciesOverlay ? 1 : 0;
     U.uRimSea.value = this._camUnder ? 1 : 0;   // under the sea: a bright rim, so a body reads against the blue (2026-11-02)
-    let nn = 0, nf = 0, ne = 0, nm = 0, nmn = 0;
-    const MB = this.modular, upm = this.scale.upm, tint = this._tint ||= new THREE.Color();
+    let nn = 0, nf = 0, ne = 0, nm = 0, nmn = 0, nd = 0;
+    const MB = this.modular, tint = this._tint ||= new THREE.Color();
     if (MB) MB.begin(this.speciesOverlay);
     // an animal drawn from its clade's grown body (js/creatures/modular.js): at its own true length over the clade
-    // representative's, times its display factor (sc / tsc); lying on its side on the ground when it would topple
-    const modular = (serial, e, x, gy, y, h, sc, tsc, dist, isNear, gait, ph, rs, cr, cg, cb, sf, ss, dead) => {
+    // representative's; lying on its side on the ground when it would topple
+    const modular = (serial, e, x, gy, y, h, sc, dist, isNear, gait, ph, rs, cr, cg, cb, sf, ss, dead) => {
       const mb = MB && MB.get(e.sp);
       if (!mb || nm >= MOD_CAP || sc * lenPx < MOD_PX * dist) return false;
       const near = isNear && nmn < MOD_NEAR_CAP;
       const lie = dead || (mb.topple > 0.5 && e.grounded);   // (a corpse lies on its side)
-      const L = this.lenM.get(serial) ?? mb.lengthM * Math.cbrt((e.mass || mb.massKg) / mb.massKg) * (e.stage === 1 ? 0.55 : 1);
-      const k = (L / mb.lengthM) * upm * (sc / tsc);
+      const k = this._modK(e, serial, mb);
       if (this.speciesOverlay || dead) tint.setRGB(cr, cg, cb); else appearanceColor(e, tint);
       // the body wave: a swimmer in open water always, a limbless crawler as it moves, a legged walker barely
       const swimming = !e.grounded && e.pose !== 'Fly' && !(e.fly && (e.air || 0) > 0.01);
@@ -1256,6 +1510,15 @@ export class World3D {
     this.camera.updateMatrixWorld();
     fr.setFromProjectionMatrix((this._pv ||= new THREE.Matrix4()).multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
     const inView = (x, gy, z, r) => { sph.center.set(x, gy, z); sph.radius = r; return fr.intersectsSphere(sph); };
+    // the dots: an animal too small on screen to draw (DOT_PX) is a dot in its clade's colour, lifted a hair toward the
+    // camera off the ground it stands on (2026-11-04: they replace the magnified bodies of the overview)
+    if (total > this._dotCap) this._allocDots(total);
+    const DP = this.dots.geometry.attributes.position.array, DC = this.dots.geometry.attributes.color.array;
+    this.dots.material.size = this.mode === 'overview' ? DOT_SIZE_PX : 0.75 * DOT_SIZE_PX;   // (CSS px: three scales by the pixel ratio)
+    // pass 1: where each animal is, how big it is on screen, whether it is in view; pass 2 places them nearest first, so
+    // when a budget runs out (module-body triangles, near bodies) the far animals get the cheap template, not the near
+    const recs = this._recs ||= [], act = this._act ||= []; act.length = 0;
+    const ex = this._extO2 ||= {};
     beginBodies(near); beginBodies(far);
     for (const [serial, e] of this.agents) {
       if (this.hidden.has(e.sp) || this.dead.has(serial)) continue;
@@ -1284,8 +1547,7 @@ export class World3D {
         this.eggs.setColorAt(ne, eggCol.lerp(white, 0.6));
         ne++; continue;
       }
-      const tsc = this._trueSize(e);
-      let sc = this._size(e);
+      const sc = this._size(e);
       let gy = this._height(e, x, y, sc);
       // a flier in the air (eased up and down as it takes off and lands): wings out; landed it walks or perches
       let rs = e.rest ? 1 : 0;
@@ -1296,65 +1558,89 @@ export class World3D {
       let mdx = e.x - e.px, mdy = e.y - e.py;
       if (mdx > Wh) mdx -= W; else if (mdx < -Wh) mdx += W;
       if (mdy > Wh) mdy -= W; else if (mdy < -Wh) mdy += W;
-      const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * tsc + 0.05 * bk));   // (its true size: it moves truly)
+      const gait = Math.min(1, Math.hypot(mdx, mdy) / (0.25 * sc + 0.05 * bk));
       e.gait = e.gait === undefined ? gait : e.gait + (gait - e.gait) * 0.15;
-      const ddx = x - camX, ddy = gy - camY, ddz = y - camZ, dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-      if (sc < dots * dist) { sc = dots * dist; if (air > 0.01) gy = Math.max(gy, this.heightAt(x, y) + sc * air); }   // never smaller than a speck
-      if (!inView(x, gy, y, 3 * sc + 0.02)) continue;   // a body (wings and tail spread) lies well within 3 x its size
-      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997;
+      // its real box (the grown body's, limbs and all): what is culled, and how big it is on screen
+      this._ext(e, serial, sc, ex);
+      const big = Math.max(ex.L, ex.H, ex.W), my = gy + 0.5 * ex.H;
+      const ddx = x - camX, ddy = my - camY, ddz = y - camZ, dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+      if (big * ppu < DOT_PX * dist) {   // too small to see: a dot
+        if (!inView(x, my, y, big + dist * 0.01)) continue;
+        const lift = Math.min(0.02 * dist, 0.5), k3 = nd * 3, l = dist > 0 ? lift / dist : 0;
+        DP[k3] = x - ddx * l; DP[k3 + 1] = my + 0.002 * dist - ddy * l; DP[k3 + 2] = y - ddz * l;
+        DC[k3] = Math.min(1, cr * 1.3 + 0.05); DC[k3 + 1] = Math.min(1, cg * 1.3 + 0.05); DC[k3 + 2] = Math.min(1, cb * 1.3 + 0.05);
+        nd++; continue;
+      }
+      if (!inView(x, my, y, 0.6 * big + 0.02 * sc)) continue;
+      const r = recs[act.length] ||= {};
+      r.serial = serial; r.e = e; r.x = x; r.gy = gy; r.y = y; r.h = h; r.sc = sc; r.dist = dist; r.rs = rs;
+      r.cr = cr; r.cg = cg; r.cb = cb;
       // out of breath (oxygen debt, 0..15) and calling ride above the action byte (anim.js)
-      acts |= Math.round((e.breath || 0) * 15) * 256 | (e.call && e.callT && now - e.callT < 600 ? 4096 : 0);
-      acts += packK(sc / tsc);   // its display factor (multiplier, minimum pixels), for the shader to read its true mass
-      // each organism keeps its instance slot (keyed by serial) while it stays in a mesh: only its matrix and animation
-      // are sent each frame. A near one goes to the far mesh when the near one is full; a near one standing on the
-      // ground is sheared to its slope (feet on the slope, not in it or above it)
-      const isNear = dist < nearK * sc;
-      // sheared to the slope when near, or when drawn long enough (magnified) that a slope under it shows: its feet on
-      // the ground, not buried at one end and floating at the other
-      if ((isNear || sc > SLOPE_SC) && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
-      if (modular(serial, e, x, gy, y, h, sc, tsc, dist, isNear, e.gait, ph, rs, cr, cg, cb, SL[0], SL[1], false)) continue;
-      if (isNear && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nn++;
-      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, acts, rs, cr, cg, cb, SL[0], SL[1])) nf++;
+      r.acts = acts | Math.round((e.breath || 0) * 15) * 256 | (e.call && e.callT && now - e.callT < 600 ? 4096 : 0);
+      act.push(r);
     }
+    act.sort((a, b) => a.dist - b.dist);
+    for (const r of act) {
+      const { serial, e, x, gy, y, h, sc, dist, rs, cr, cg, cb } = r;
+      const sy = sc * (e.rest && !e.fly ? 0.7 : 1), ph = (serial % 997) / 997;
+      // each organism keeps its instance slot (keyed by serial) while it stays in a mesh: only its matrix and animation
+      // are sent each frame. A near one goes to the far mesh when the near one is full (the nearest are placed first)
+      const isNear = dist < nearK * sc;
+      // sheared to the slope when near, or when long enough that a slope under it shows: its feet on the ground, not
+      // buried at one end and floating at the other
+      if ((isNear || sc > SLOPE_SC) && e.grounded) this._slope(x, y, h, sc, SL); else SL[0] = SL[1] = 0;
+      if (modular(serial, e, x, gy, y, h, sc, dist, isNear, e.gait, ph, rs, cr, cg, cb, SL[0], SL[1], false)) continue;
+      if (isNear && placeBody(near, serial, x, gy, y, h, sc, sy, e, e.gait, ph, r.acts, rs, cr, cg, cb, SL[0], SL[1])) nn++;
+      else if (placeBody(far, serial, x, gy, y, h, sc, sy, e, e.gait, ph, r.acts, rs, cr, cg, cb, SL[0], SL[1])) nf++;
+    }
+    for (const r of act) r.e = null;
+    this.dots.geometry.setDrawRange(0, nd);
+    this.dots.geometry.attributes.position.clearUpdateRanges(); this.dots.geometry.attributes.position.addUpdateRange(0, nd * 3);
+    this.dots.geometry.attributes.color.clearUpdateRanges(); this.dots.geometry.attributes.color.addUpdateRange(0, nd * 3);
+    this.dots.geometry.attributes.position.needsUpdate = this.dots.geometry.attributes.color.needsUpdate = nd > 0;
+    this.dots.visible = nd > 0;
     // the killed: flattened, darkened bodies lying where they fell, sinking into the ground at the end
     this.corpses = this.corpses.filter((d) => { if (now - d.t0 < CORPSE_LIFE) return true; this.dead.delete(d.serial); return false; });
     for (const d of this.corpses) {
       const e = d.e, x = d.x + W * Math.round((cx - d.x) / W), y = d.y + W * Math.round((cz - d.y) / W);
-      const a = (now - d.t0) / CORPSE_LIFE, sc = this._size(e), pk = packK(sc / this._trueSize(e));
+      const a = (now - d.t0) / CORPSE_LIFE, sc = this._size(e);
       const gy = this._height(e, x, y, sc) - sc * 0.15 - Math.max(0, a - 0.75) * 4 * sc * 0.6;
-      if (!inView(x, gy, y, 3 * sc + 0.02)) continue;
+      this._ext(e, d.serial, sc, ex);
+      const big = Math.max(ex.L, ex.H, ex.W), dist = Math.hypot(x - camX, gy - camY, y - camZ);
+      if (big * ppu < DOT_PX * dist || !inView(x, gy, y, 0.6 * big + 0.02 * sc)) continue;
       const ddx = x - camX, ddz = y - camZ, nr = nearK * sc;
       const ci = e.sp * 3, dk = 0.45 - 0.2 * a, r = rgb[ci] * dk + 0.18, g = rgb[ci + 1] * dk * 0.5, b = rgb[ci + 2] * dk * 0.5;
       const key = -d.serial;   // a corpse's slot is apart from the living animal's (serials are > 0)
       e.pose = null;           // it lies as its body is built, not as it last moved (a flier shot down lies with wings folded)
       const isNear = ddx * ddx + ddz * ddz < nr * nr;
       if (isNear && e.grounded) this._slope(x, y, d.h, sc, SL); else SL[0] = SL[1] = 0;
-      if (modular(d.serial, e, x, gy + sc * 0.15, y, d.h, sc, this._trueSize(e), Math.hypot(x - camX, gy - camY, y - camZ), isNear, 0, 0, 1, r, g, b, SL[0], SL[1], true)) continue;
-      if (isNear && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, pk, 1, r, g, b, SL[0], SL[1])) nn++;
-      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, pk, 1, r, g, b, SL[0], SL[1])) nf++;
+      if (modular(d.serial, e, x, gy + sc * 0.15, y, d.h, sc, dist, isNear, 0, 0, 1, r, g, b, SL[0], SL[1], true)) continue;
+      if (isNear && placeBody(near, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b, SL[0], SL[1])) nn++;
+      else if (placeBody(far, key, x, gy, y, d.h, sc * 1.15, sc * 0.38, e, 0, 0, 0, 1, r, g, b, SL[0], SL[1])) nf++;
     }
     finishBodies(near); finishBodies(far);
     if (MB) MB.finish();
-    this.drawn = { near: nn, far: nf, modular: nm, modularNear: nmn, modTris: MB ? MB.stats.tris : 0, modMeshes: MB ? MB.stats.meshes : 0 };
+    this.drawn = { near: nn, far: nf, dots: nd, modular: nm, modularNear: nmn, modTris: MB ? MB.stats.tris : 0, modMeshes: MB ? MB.stats.meshes : 0 };
     this.eggs.count = ne; this.eggs.instanceMatrix.needsUpdate = true; if (this.eggs.instanceColor) this.eggs.instanceColor.needsUpdate = true;
 
     // selection marker, field of view and perceived animals
     if (sel && selP) {
       const sz = this._size(sel);
-      const gh = this._height(sel, selP[0], selP[1]);
+      const gh = this._height(sel, selP[0], selP[1]), sx = this._ext(sel, this.selected, sz, this._extS ||= {});
       this.selRing.visible = this.mode !== 'ride';
-      // the ring round its body, and (overview) a beam to find it from afar, as tall as a share of the view's distance
-      // (the distance to the animal itself: following, the view centre c is at height 0, and a true-size body's ring was
-      // as wide as the camera's height above sea level allowed)
+      // the ring round its body (its real box), and (overview) a beam to find it from afar, as tall as a share of the
+      // view's distance (the distance to the animal itself)
       const camD = this.camera.position.distanceTo(c), ringD = Math.hypot(this.camera.position.x - selP[0], this.camera.position.y - gh, this.camera.position.z - selP[1]);
-      const rs = Math.max(sz * 1.5, (this.mode === 'overview' ? ringD * 0.012 : 0)) * (1 + 0.08 * Math.sin(now / 200));
+      const rs = Math.max(0.6 * Math.max(sx.L, sx.W), (this.mode === 'overview' ? ringD * 0.012 : 0)) * (1 + 0.08 * Math.sin(now / 200));
       this.selRing.position.set(selP[0], gh + Math.min(0.2, sz * 0.1), selP[1]); this.selRing.scale.setScalar(rs);
       this.selBeam.visible = this.mode === 'overview'; this.selBeam.position.set(selP[0], gh, selP[1]);
       this.selBeam.scale.set(camD * 0.004 / 0.06, camD * 0.25 / 30, camD * 0.004 / 0.06);
       const cl = (this.clades && this.clades[sel.sp]) || {};
       const R = probe && probe.serial === this.selected ? probe.sight : (cl.sight || 20);
       const fov = (sel.scan ? 360 : (cl.fov || 300)) * Math.PI / 180;
-      this.fov.visible = this.mode !== 'overview';
+      // (the sight wedge: from the follow camera only once it has pulled back, it is a wall of haze close up)
+      this.fov.visible = this.mode === 'ride' || (this.mode === 'follow' && ringD > 12 * Math.max(sx.L, sx.H) + 3 * this.scale.upm);
+      this.selRing.material.opacity = this.mode === 'overview' ? 0.9 : Math.min(0.9, 0.2 + 0.015 * ringD / Math.max(1e-6, Math.max(sx.L, sx.W)));
       if (this._fovKey !== R + ':' + fov) {
         this._fovKey = R + ':' + fov;
         this.fov.geometry.dispose();
@@ -1370,6 +1656,7 @@ export class World3D {
     // a kill close by shakes the view
     let sx = 0, sy = 0;
     if (this.shake > 0.01) { sx = (Math.random() - 0.5) * this.shake; sy = (Math.random() - 0.5) * this.shake; this.camera.position.x += sx; this.camera.position.y += sy; this.shake *= 0.86; }
+    this._sightLine();   // the grass on the line of sight pressed down (look/vegetation.js)
     this.look.update(); this.look.render();   // [look] light, sky and fog for this view, then the finish (js/look/post.js)
     this.camera.position.x -= sx; this.camera.position.y -= sy;
   }
@@ -1385,7 +1672,9 @@ export class World3D {
     const sc = this._size(e);
     let gy = this._height(e, x, y, sc);
     if (e.fly && e.air > 0.01) gy += this._lift(sc, now / 1000, serial) * e.air;
-    out.x = x; out.z = y; out.gy = gy; out.cy = gy + 0.45 * sc; out.r = 0.55 * sc;
+    // (its real box: a long-legged grown body is hit on its legs too)
+    const ex = this._ext(e, serial, sc, this._extC ||= {});
+    out.x = x; out.z = y; out.gy = gy; out.cy = gy + 0.5 * ex.H; out.r = 0.5 * Math.max(0.8 * ex.L, ex.H, ex.W);
     return out;
   }
 
@@ -1515,10 +1804,28 @@ export class World3D {
   /** An egg's drawn radius: a share of its kind's body as drawn. */
   _eggR(e) { return Math.max(0.12 * (e.size || 1.5) * this.scale.markK, 0.04 * this.scale.upm); }
 
-  /** Drawn size of an organism (its own mass; juveniles smaller), in world units: the true size x the magnification. */
-  _size(e) { const t = this._trueSize(e); return t * this.scale.dispK(t * MODEL_LEN * this.scale.mpu); }
-  /** Its true drawn size (world units of the body model's view size, no multiplier): the size the shader reads its mass from. */
-  _trueSize(e) { return (e.size || 1.5) * this._grown(e) * this.scale.bodyK; }
+  /** Drawn size of an organism (its own mass; juveniles smaller): world units of the body model's view size, at true
+   *  size (the size the shader reads its mass from). */
+  _size(e) { return (e.size || 1.5) * this._grown(e) * this.scale.bodyK; }
+
+  /** World units per metre of clade body mb's geometry for organism e: its own true length over the representative's. */
+  _modK(e, serial, mb) {
+    const L = this.lenM.get(serial) ?? mb.lengthM * Math.cbrt((e.mass || mb.massKg) / mb.massKg) * (e.stage === 1 ? 0.55 : 1);
+    return (L / mb.lengthM) * this.scale.upm;
+  }
+
+  /** Organism e's real box as drawn (world units): L along it, H up, W across. From its clade's grown body (limbs and
+   *  all: the built geometry's box, or an estimate from its parts until it is built; lying on its side when it would
+   *  topple), else the template's. What the cameras frame, the selection ring circles and the culling keeps in view. */
+  _ext(e, serial, sc = this._size(e), out = {}) {
+    const mb = this.modular && this.modular.get(e.sp);
+    if (mb && mb.ext) {
+      const k = this._modK(e, serial, mb), X = mb.ext;
+      out.L = X.x * k;
+      if (mb.topple > 0.5 && e.grounded) { out.H = X.z * k; out.W = X.y * k; } else { out.H = X.y * k; out.W = X.z * k; }
+    } else { out.L = sc * MODEL_LEN; out.H = 0.65 * sc; out.W = 0.55 * sc; }
+    return out;
+  }
 
   /** Its length now against its adult length: from the server's true length (status.bodyLenM) when it has one; else a
    *  juvenile is 0.55 of it. The adult length is lengthK M^(1/3) times its length gene's share of the volume (ICD §2.1),
@@ -1553,7 +1860,7 @@ export class World3D {
 
   /** Mark the animals the selected one can see: kin blue, smaller green, larger red, eggs white. */
   _perceive(sel, selP, R, fov, alpha, cx, cz) {
-    if (this.mode === 'overview') { this.percMesh.count = 0; return; }
+    if (this.mode !== 'follow' && this.mode !== 'ride') { this.percMesh.count = 0; this.perceived = []; return; }
     const myMass = this._mass(sel), P3 = [0, 0, 0];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), col = new THREE.Color();
     let n = 0; const fx = Math.cos(selP[2]), fz = Math.sin(selP[2]);

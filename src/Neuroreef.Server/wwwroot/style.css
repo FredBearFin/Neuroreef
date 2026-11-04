@@ -48,13 +48,8 @@ button:disabled { opacity: .35; cursor: default; }
 #cams { top: 10px; left: 10px; }
 #scalebox { top: 50px; left: 10px; display: flex; flex-wrap: wrap; max-width: 470px; gap: 6px 8px; align-items: center; font-size: 12px; color: var(--dim); }
 #scalebox label { display: flex; white-space: nowrap; align-items: center; gap: 6px; background: #070b10b0; padding: 4px 8px; border-radius: 6px; }
-#scalebox label b { color: var(--fg, #d8e2ec); font-variant-numeric: tabular-nums; min-width: 34px; }
-#scalebox input[type=range] { width: 96px; accent-color: #4aa3ff; }
 #scalebox .k { color: #ffb347; font-size: 11px; }
 #scalebox.explore #fitworld { display: none; }
-#magpre { display: flex; gap: 2px; }
-#magpre button { padding: 2px 6px; font-size: 11px; }
-@media (max-width: 720px) { #magpre { display: none; } }
 #scalebox.explore .k { color: #7bd46b; }
 #psizebox { display: none !important; }
 #scalebox.explore #psizebox { display: flex !important; }

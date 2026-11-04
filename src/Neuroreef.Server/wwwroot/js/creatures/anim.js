@@ -437,9 +437,6 @@ const GLSL_BODY = `
   gEndo = aGeneB.w;
   bT = uTime; bGait = aAnim.x; bPh = aAnim.y * 6.28318; bRest = aAnim.w;
   float acts = aAnim.z;
-  // above calling (8192 up): the body's display factor, log2 x 64 (world3d.js packK: the creature-size multiplier and
-  // the minimum-pixel size), divided out below so the true mass is read from the drawn size
-  float dispK = exp2(floor(acts / 8192.0) / 64.0);
   bEat = max(bit(acts, 1.0), bit(acts, 4.0)); bStrikeA = bit(acts, 2.0);
   // above the action byte: oxygen debt (AGENTS byte 45, 0..15) x 256 and calling (4096), set by world3d.js
   bPant = smoothstep(0.25, 0.9, mod(floor(acts / 256.0), 16.0) / 15.0); bCall = bit(acts, 4096.0);
@@ -457,7 +454,7 @@ const GLSL_BODY = `
   // the instance's scale: a resting body is drawn squashed (0.7) and a corpse flattened (under 0.5); the body
   // lies down here instead, and the squash is undone at the end
   // (the x column's horizontal part: a body standing on a slope is sheared to it, body.js writeMatrix)
-  float sx = length(instanceMatrix[0].xz) / (uBodyK * dispK), sy = length(instanceMatrix[1].xyz) / (uBodyK * dispK);   // the view size (mass)
+  float sx = length(instanceMatrix[0].xz) / uBodyK, sy = length(instanceMatrix[1].xyz) / uBodyK;   // the view size (mass): bodies are drawn at true size
   float squash = sy / max(sx, 1e-6), corpse = step(squash, 0.5);
   float unsq = (bRest > 0.5 && fl < 0.5) || corpse > 0.5 ? 1.0 / squash : 1.0;
   float massI = pow(max(sx / (corpse > 0.5 ? 1.725 : 1.5), 0.05), 3.0);

@@ -1158,7 +1158,8 @@ working until it draws the module body.
 Since 2026-11-03 the console draws it (js/creatures/modular.js). Each living clade's body is built once by the Body
 Lab's own builder (js/bodylab/build.js `buildBody`, at a coarse `near` or `far` detail with a triangle budget for its
 limbs and gill fringes), merged into one geometry and drawn as one InstancedMesh per clade and detail. An animal is
-drawn at its own true length (status `bodyLenM`) over the representative's, times the view's creature-size factor.
+drawn at its own true length (status `bodyLenM`) over the representative's (true size: there is no creature-size
+factor since 2026-11-04; the body's box, limbs and all, frames the cameras and the culling).
 Animals a few pixels long are drawn as the old template's specks, and so is any clade with no `morph` (an older
 server or save). A body that would topple (`morph.topple`, Server/BodyPose.cs: the chance `Live.StandPosture` weights
 by `Physics.Topple`) lies on its right side whenever it stands on the ground, in the console and in the Body Lab. A

@@ -46,16 +46,14 @@
   <section id="view">
     <canvas id="gl"></canvas>
     <div id="cams" class="group floating">
-      <button data-cam="overview" class="on" title="Orbit the whole world">Overview</button>
-      <button data-cam="follow" title="Third-person camera behind the selected animal; follows its lineage when it dies">Follow</button>
+      <button data-cam="follow" class="on" title="Third-person camera round the selected animal, down among the animals at their true size (the opening view): drag to orbit, scroll to zoom from 10 cm to a few hundred metres, W A S D to fly off free. It follows the lineage when the animal dies.">Follow</button>
+      <button data-cam="free" title="Free camera, like a game engine's fly camera: drag to look, W A S D or the arrows to fly, Space / E up, C / Q down, Shift faster (faster the higher you are), scroll to move. Tap an animal to follow it.">Free camera</button>
       <button data-cam="ride" title="First person: see what the selected animal sees">Ride-along</button>
       <button data-cam="explore" title="Walk the world yourself (WASD, mouse to look, Esc to leave) and hunt with a spear, bow or rifle. You are animal-sized by default (Z or the menu: human, animal-sized, tiny); the animals see you as an armed omnivore of your size.">Explore</button>
+      <button data-cam="overview" title="The map from above: orbit, zoom toward a place, double-click to dive in, N / Tab for the next group or clade. Animals are drawn at true size, so from up here they are dots in their clade's colour.">Overview</button>
     </div>
     <div id="scalebox" class="floating">
-      <button id="fitworld" title="See the whole world at once (Home key)">Whole world</button>
-      <label id="magbox" title="How big the animals are drawn (display only: the simulation never sees it). True size by default everywhere: a 1 kg animal is 10 cm long, a 20 t one a few metres; the cameras are framed for that (the overview opens low over a group: N next group, Tab next clade, W A S D pan, Q / E zoom; in Explore you are animal-sized). A multiplier draws small animals larger (at least that much visible: a body up to 10 cm is drawn x times longer, a bigger one grows only a little more, so giants are not blown up). The overview and Explore each remember theirs. Far animals are never drawn smaller than a few pixels. Keys: [ and ].">
-        <span>creature size</span> <b id="mag-v">true</b><input id="mag" type="range" min="0" max="5" step="1"><span id="mag-k" class="k">magnified</span></label>
-      <span id="magpre" title="Creature size presets"><button data-mag="1">true</button><button data-mag="10">×10</button><button data-mag="30">×30</button><button data-mag="100">×100</button><button data-mag="300">×300</button></span>
+      <button id="fitworld" title="See the whole world at once from above (Home key). Animals are too small to see from there: each is a dot in its clade's colour.">Whole world</button>
       <label id="psizebox" title="Your size in Explore (Z): animal-sized (the default: as tall as the typical animal is long, and as heavy: the animals look as big as they would to a peer), human (1.7 m, 70 kg) or tiny (a mouse, 5 cm). Your eye, speed, reach, weapons and vehicles follow it, and the animals sense and strike a body of that size.">
         <span>you</span><select id="psize"><option value="animal">animal-sized</option><option value="human">human 1.7 m</option><option value="tiny">tiny (mouse)</option></select><span id="psize-k" class="k"></span></label>
     </div>
@@ -76,7 +74,7 @@
     <div id="translator" class="floating hidden"></div>
     <div id="fights" class="floating" title="Strikes, kills and blood-drinking as they happen. Tap a line to fly there."></div>
     <button id="panel-show" class="floating panel-toggle hidden" title="Show the panel (P key)">⟨ panel</button>
-    <div id="hint" class="floating">drag to orbit · scroll toward a place to zoom · double-click to dive in · Home: whole world · [ ]: creature size · tap an animal to inspect it</div>
+    <div id="hint" class="floating">drag to orbit · scroll to zoom · W A S D: fly free · tap an animal to follow it</div>
   </section>
 
   <aside id="panel">
