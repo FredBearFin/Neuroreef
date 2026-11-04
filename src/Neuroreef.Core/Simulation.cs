@@ -195,7 +195,7 @@ public sealed class Simulation : IDisposable
         int bestT = -1;
         for (int t = 0; t < K.ANCESTOR_TRIES; t++)
         {
-            Ancestor(anc, seed, a, t, land, big);
+            Ancestor(anc, seed, a, t, land, big, weights: false);   // judged without its brain's weights; drawn whole below
             Life.Trace?.Invoke($"#ancestor {a} draw {t}");
             float cap = K.FOUND_FILL * ProbeCapacity(w, clade, anc, realm, hx, hy, probeKey + 0x70000u + (uint)t, out _, out bool animalFood, out int group);
             // (2026-11-01) viable when its range feeds the smallest group that can breed (Life.BreedingGroup: a pair, or
@@ -243,11 +243,11 @@ public sealed class Simulation : IDisposable
     }
 
     /// <summary>Random ancestor genome number t of ancestor a (t = 0 is the first draw, as before 2026-10-30).</summary>
-    internal void Ancestor(sbyte[] anc, uint seed, int a, int t, bool land, bool big)
+    internal void Ancestor(sbyte[] anc, uint seed, int a, int t, bool land, bool big, bool weights = true)
     {
         var w = W;
         int draw = a + t * 0x10000;
-        Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)draw);
+        Brain.RandomGenome(anc, seed, 0, 0x700000u + (uint)draw, weights);
         Clades.AncestorBody(new Span<sbyte>(anc, G.BODY, G.NBODY), seed, draw, land, big ? w.Evo.BigBrainUnits : 0, voiced: big && land, floorClass: a % K.FLOOR_CLASSES,
             sea: w.Ocean && Nature.Islands <= 0f);   // ancestors spread over the size classes; at sea, sea diets (2026-11-02)
         Clades.AncestorMorph(anc, seed, draw, sea: w.Ocean && Nature.Islands <= 0f);   // its module body (phase 4, docs/BODYPLAN.md §13.4)

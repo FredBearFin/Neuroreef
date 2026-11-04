@@ -18,11 +18,17 @@ public static class Brain
     // ------------------------------------------------------------------ genomes
 
     /// <summary>A random founder genome: a function of (seed, slot, step) only (NR-210).</summary>
-    public static void RandomGenome(Span<sbyte> g, uint seed, uint step, uint key)
+    public static void RandomGenome(Span<sbyte> g, uint seed, uint step, uint key) => RandomGenome(g, seed, step, key, weights: true);
+
+    /// <summary>The same, with weights false leaving the two weight layers (G.W1, G.W2) zero: every other byte is as with
+    /// weights. The founding's probe draws (Simulation.FoundAncestor) judge a body by its food and breathing, which read
+    /// no weight, and the drawn ancestor is drawn again whole; the weights were ~13x the cost of a draw's body (2026-11-04).</summary>
+    public static void RandomGenome(Span<sbyte> g, uint seed, uint step, uint key, bool weights)
     {
+        if (!weights) g.Slice(0, G.ETA).Clear();
         // memory layer: random; output layer: small random weights and a low bias, so every action of
         // every species starts rare and must be learned or evolved upward ("calm newborn brain")
-        for (int k = 0; k < G.ETA; k++)
+        for (int k = weights ? 0 : G.ETA; k < G.ETA; k++)
         {
             float u = Rng.U(seed, step, key, Rs.Founder + (uint)k * 4u) * 2f - 1f;
             int col = (k - G.W2) % G.NIN, row = (k - G.W2) / G.NIN;
