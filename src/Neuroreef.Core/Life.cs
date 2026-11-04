@@ -161,7 +161,12 @@ public static class Life
     /// <summary>Reporting only (2026-11-02, the ocean audit): when set, RangeCapacity reports which test decided what it fed.</summary>
     public static Action<string>? Trace;
 
-    public static float RangeCapacity(World w, int c, float hx, float hy, float r, Realm habitat = Realm.Any)
+    public static float RangeCapacity(World w, int c, float hx, float hy, float r, Realm habitat = Realm.Any) => RangeCapacity(w, c, hx, hy, r, habitat, null, -1f);
+
+    /// <summary>The same, adding to acc (RowSums sums) only the ring of cells beyond rIn that it does not hold yet: RangeFor
+    /// widens a range step by step, and the sums over a range are the sums over its rings (2026-11-04: each widening
+    /// rescanned every cell of the smaller range, ~2.8x the work of the widest scan alone).</summary>
+    internal static float RangeCapacity(World w, int c, float hx, float hy, float r, Realm habitat, double[]? acc, float rIn)
     {
         // where it can forage is where it moves well: a swimmer in water, a walker on land, a wader on both and in
         // the shallows, a flier anywhere (a swimmer can crawl ashore, but cannot live there)
@@ -187,38 +192,20 @@ public static class Life
         float sweep = travelF + cruiseF;
         double bottom = 0, waterCells = 0;
         Span<double> stock = stackalloc double[Pools.NFIELD];
-        Span<float> reached = stackalloc float[Pools.N];
-        for (int dy = -rc; dy <= rc; dy++)
-            for (int dx = -rc; dx <= rc; dx++)
-            {
-                if ((dx * dx + dy * dy) * cs * cs > r * r) continue;
-                int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
-                if (!w.CellAllows(c, cell, realm)) continue;
-                // a flier eats only where it can land (Resolve: it eats landed): over deep water, only if it can swim
-                // there (World.GroundAllows; 2026-11-02, the ocean, where flying founders were judged on plankton they could
-                // never reach). The same holds over lakes in a world with land, but there it is not applied yet: it would
-                // change the founding of every default world (the pinned hashes); see the ocean report
-                if (w.Ocean && (Loco)w.PLoco[c] == Loco.Fly && !w.GroundAllows(c, cell)) continue;
-                // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
-                if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
-                breathCost += bc;
-                float standM = Respiration.StandM(w, c);
-                plank += Respiration.PlanktonKg(w, c, cell, sweep, z, share);
-                if ((w.Cell[cell] & (byte)Realm.Water) != 0)
-                {
-                    waterCells++;
-                    bottom += Respiration.BottomKg(w, c, cell, (int)Pool.Algae, sweep, z, share);
-                }   // ventilation, osmoregulation and buoyancy there (2026-11-01)
-                for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share, standM);
-                y += Fields.Yield(w, cell, reached); n++;
-                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share, standM);   // kg
-                if (Climate.On)
-                {
-                    heatNeed += DayNeed(w, c, cell);
-                    bool imm = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
-                    actSum += Heat.Rate(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]));   // the gut's pace: the core's temperature
-                }
-            }
+        // (2026-11-04) the rows of the range are summed on all cores, each row in order, then the rows in order, so the
+        // total is the same on any number of cores. A founding scans up to ~90,000 cells per probe, up to 256 probes per
+        // ancestor: an ocean world on the 8 km map took ~5 minutes to found, almost all of it here
+        int rows = 2 * rc + 1;
+        var part = new double[rows * RowSums];
+        var dietA = diet.ToArray();
+        int ci = c, cxi = cx, cyi = cy, rci = rc; float rr = r, css = cs, rin = acc != null ? rIn : -1f; var realmI = realm;
+        System.Threading.Tasks.Parallel.For(0, rows, k => RangeRow(w, ci, cxi, cyi, k - rci, rci, rin, rr, css, realmI, dietA, sweep, new Span<double>(part, k * RowSums, RowSums)));
+        var sum = acc ?? new double[RowSums];
+        for (int k = 0; k < rows; k++)
+            for (int q = 0; q < RowSums; q++) sum[q] += part[k * RowSums + q];
+        y = sum[0]; heatNeed = sum[1]; breathCost = sum[2]; actSum = sum[3]; plank = sum[4];
+        bottom = sum[5]; waterCells = sum[6]; n = (int)sum[7];
+        for (int p = 0; p < Pools.NFIELD; p++) stock[p] = sum[8 + p];
         if (n == 0) { Trace?.Invoke("no cell it may use and breathe in"); return 0f; }
         float need0 = need;
         // with a climate, a day here costs what this body pays at the temperature around it (Revision P): its basal
@@ -402,6 +389,50 @@ public static class Life
         return K.FIELD_METAB * basal + thermo + cold;   // heat it cannot make counts as a cost too: it must not live there
     }
 
+    const int RowSums = 8 + Pools.NFIELD;   // a row's sums: yield, heat need, breathing cost, gut pace, plankton, bottom, water cells, cells, stock by pool
+
+    /// <summary>One row dy of RangeCapacity's range, summed in order into s (RowSums values; see the caller).</summary>
+    static void RangeRow(World w, int c, int cx, int cy, int dy, int rc, float rIn, float r, float cs, Realm realm, float[] diet, float sweep, Span<double> s)
+    {
+        Span<float> reached = stackalloc float[Pools.N];
+        double y = 0, heatNeed = 0, breathCost = 0, actSum = 0, plank = 0, bottom = 0, waterCells = 0; int n = 0;
+        Span<double> stock = stackalloc double[Pools.NFIELD];
+        stock.Clear();
+            for (int dx = -rc; dx <= rc; dx++)
+            {
+                float d2 = (dx * dx + dy * dy) * cs * cs;
+                if (d2 > r * r || (rIn >= 0f && d2 <= rIn * rIn)) continue;   // only the ring beyond rIn
+                int cell = World.WrapI(cy + dy, Map.FW) * Map.FW + World.WrapI(cx + dx, Map.FW);
+                if (!w.CellAllows(c, cell, realm)) continue;
+                // a flier eats only where it can land (Resolve: it eats landed): over deep water, only if it can swim
+                // there (World.GroundAllows; 2026-11-02, the ocean, where flying founders were judged on plankton they could
+                // never reach). The same holds over lakes in a world with land, but there it is not applied yet: it would
+                // change the founding of every default world (the pinned hashes); see the ocean report
+                if (w.Ocean && (Loco)w.PLoco[c] == Loco.Fly && !w.GroundAllows(c, cell)) continue;
+                // only where it can breathe, and in water only the food it reaches at the depth it would hold (2026-11-01)
+                if (!Respiration.Breathable(w, c, cell, out float z, out float share, out float bc)) continue;
+                breathCost += bc;
+                float standM = Respiration.StandM(w, c);
+                plank += Respiration.PlanktonKg(w, c, cell, sweep, z, share);
+                if ((w.Cell[cell] & (byte)Realm.Water) != 0)
+                {
+                    waterCells++;
+                    bottom += Respiration.BottomKg(w, c, cell, (int)Pool.Algae, sweep, z, share);
+                }   // ventilation, osmoregulation and buoyancy there (2026-11-01)
+                for (int p = 0; p < Pools.N; p++) reached[p] = diet[p] * Respiration.Access(w, cell, p, z, share, standM);
+                y += Fields.Yield(w, cell, reached); n++;
+                for (int p = 0; p < Pools.NFIELD; p++) stock[p] += w.Pool[p][cell] * Pools.Kg[p] * Respiration.Access(w, cell, p, z, share, standM);   // kg
+                if (Climate.On)
+                {
+                    heatNeed += DayNeed(w, c, cell);
+                    bool imm = w.Cell[cell] != (byte)Realm.Land && (Loco)w.PLoco[c] != Loco.Fly;
+                    actSum += Heat.Rate(Heat.Core(Heat.Operative(w, cell, w.PInsul[c], imm), w.PEndo[c]));   // the gut's pace: the core's temperature
+                }
+            }
+        s[0] = y; s[1] = heatNeed; s[2] = breathCost; s[3] = actSum; s[4] = plank; s[5] = bottom; s[6] = waterCells; s[7] = n;
+        for (int p = 0; p < Pools.NFIELD; p++) s[8 + p] = stock[p];
+    }
+
     /// <summary>
     /// The home range of a founding lineage like organism c (Revision P): from HOME_R of the map side, widened step by
     /// step up to HOME_R_MAX until it can feed, at FOUND_FILL, the founders a lineage may start with (founders, by default
@@ -416,11 +447,13 @@ public static class Life
     {
         if (founders <= 0) founders = w.Evo.Founders;
         float r = K.HOME_R * Map.W;
-        cap = RangeCapacity(w, c, hx, hy, r, habitat);
+        var acc = new double[RowSums];   // the sums so far: each widening adds only its ring
+        cap = RangeCapacity(w, c, hx, hy, r, habitat, acc, -1f);
         while (K.FOUND_FILL * cap < founders && r < K.HOME_R_MAX * Map.W)
         {
+            float rIn = r;
             r = MathF.Min(r * 1.25f, K.HOME_R_MAX * Map.W);
-            cap = RangeCapacity(w, c, hx, hy, r, habitat);
+            cap = RangeCapacity(w, c, hx, hy, r, habitat, acc, rIn);
         }
         return r;
     }

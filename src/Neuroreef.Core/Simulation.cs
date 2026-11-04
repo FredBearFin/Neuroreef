@@ -36,11 +36,13 @@ public sealed class Simulation : IDisposable
         _fieldsJob = (lo, hi) => { for (int y = lo; y < hi; y++) Fields.Row(W, y); };
         _waterJob = (lo, hi) => { for (int y = lo; y < hi; y++) WaterCycle.Row(W, y); };
         _plantJob = (lo, hi) => { for (int k = lo; k < hi; k++) Plants.StripeRow(W, k); };
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         if (!restore)
         {
             BuildLand(land != null && land.Fits(W) ? land : null);
             if (keepLand) StartLand = Land.Grown(W);
         }
+        LandSeconds = clock.Elapsed.TotalSeconds;
         _active = new int[W.NS];
         ActiveCount = _active;
         W.Prehistory = prehistory && !empty && !restore;
@@ -53,6 +55,7 @@ public sealed class Simulation : IDisposable
             else FoundAncestors(seed);
             Pathogens.Seed(W);   // the founding pathogen strains, in the ground and water (Revision R)
         }
+        FoundingSeconds = clock.Elapsed.TotalSeconds - LandSeconds;
         Life.Run(W, _active);   // clears newborn flags, counts
         W.Reserve();            // free slots for the first step's births
 
@@ -73,6 +76,11 @@ public sealed class Simulation : IDisposable
         };
         Seen();
     }
+
+    /// <summary>How long building took (wall-clock seconds, for the start-up line): the land with its spun-up plants and
+    /// water, and the founding of the lineages. Reporting only.</summary>
+    public double LandSeconds { get; private set; }
+    public double FoundingSeconds { get; private set; }
 
     /// <summary>The spun-up land before the founders came (with keepLand), for a world of the same seed to begin on.</summary>
     public Land? StartLand { get; private set; }

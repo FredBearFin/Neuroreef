@@ -16,7 +16,7 @@ public static class Headless
         var clock = Stopwatch.StartNew();
         Console.WriteLine(Options.MemoryLine("the world", o.Capacity, o.MaxCapacity));
         using var sim = new Simulation(o.Capacity, o.Seed, o.Threads, bank, prehistory: false, empty: o.Empty, terrainSeed: o.Seed, evo: o.WorldSettings(), maxCapacity: o.MaxCapacity);
-        Console.WriteLine($"world built in {clock.Elapsed.TotalSeconds:F1} s");
+        Console.WriteLine($"world built in {clock.Elapsed.TotalSeconds:F1} s (land, plants and water {sim.LandSeconds:F1} s, founding the lineages {sim.FoundingSeconds:F1} s)");
         var w = sim.W;
         Console.WriteLine($"NEUROREEF 2  HEADLESS RUN  seed {o.Seed}  capacity {o.Capacity}  threads {o.Threads}  steps {o.Steps}");
         Console.WriteLine($"start: {(bank != null ? $"the world, brains from gene bank ({bank.Total} genomes), no spawning" : "the world, RANDOM BRAINS, no spawning")}   alive {w.AliveCount}");
