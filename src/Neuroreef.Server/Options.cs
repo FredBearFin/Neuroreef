@@ -14,7 +14,7 @@ public sealed class Options
     // every core: the step loop's main thread works its share of each phase instead of waiting (2026-10-31: cores - 1 left a
     // quarter of a 4-core machine idle in the live server and headless runs)
     public int Threads = Math.Max(1, Math.Min(Environment.ProcessorCount, 8));
-    public int Port = 5800;
+    public int Port = 5800; bool portSet;
     public bool Headless, RandomBrains, NoBrowser, PrintConstants, Help, Empty, Evolve, StepsSet, NewPrehistory;
     public string? ReportTxt;
     public long Steps = 100000;
@@ -206,7 +206,7 @@ public sealed class Options
 
   BODY LAB (the body-plan prototype, docs/BODYPLAN.md; it does not start the world)
   --bodylab             evolve bodies from one soft blob by physics alone, print the progress and a table,
-                        write bodylab-<env>-<seed>.json, and show them in 3D at http://localhost:5800/bodylab.html
+                        write bodylab-<env>-<seed>.json, and show them in 3D at http://localhost:5801/bodylab.html
   --env E               open-water, sea-floor, land or all (default all)
   --seeds N             seeds --seed .. --seed+N-1 (default 1 seed, from 1); or a list: --seeds 3,7,9
   --generations N       generations per run (default 800)
@@ -243,7 +243,7 @@ public sealed class Options
                 case "--capacity": o.Capacity = Math.Clamp(int.Parse(Next()), 1024, World.MaxSlots); break;
                 case "--max-capacity": o.MaxCapacity = Math.Clamp(int.Parse(Next()), 1024, World.MaxSlots); break;
                 case "--threads": o.Threads = int.Parse(Next()); break;
-                case "--port": o.Port = int.Parse(Next()); break;
+                case "--port": o.Port = int.Parse(Next()); o.portSet = true; break;
                 case "--rate": o.Rate = float.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--random-brains": o.RandomBrains = true; break;
                 case "--prehistory": o.NewPrehistory = true; break;
@@ -336,6 +336,7 @@ public sealed class Options
             o.ReportTxt = System.IO.Path.Combine(dir, "evolve-report.txt");
             if (!o.NoCheckpoint) o.CheckpointPath ??= System.IO.Path.Combine(dir, "prehistory.nrck");
         }
+        if (o.BodyLab && !o.portSet) o.Port = 5801;   // the Body Lab beside an open world (its console is on 5800)
         return o;
     }
 

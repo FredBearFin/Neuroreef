@@ -140,7 +140,7 @@ BODY LAB (the body-plan prototype, docs/BODYPLAN.md)
   then a table like the prototype's demo report and a full account of each run's best body.
   Each run is written to bodylab\bodylab-<env>-<seed>.json: the champion every few generations, the best
   of each species, and what the physics says each part does.
-  Your browser opens the Body Lab page at http://localhost:5800/bodylab.html (--port N, --no-browser):
+  Your browser opens the Body Lab page at http://localhost:5801/bodylab.html, so it can run beside an open world on 5800 (if 5801 is taken it uses the next free port and prints it; --port N, --no-browser):
   - the champion turns slowly in 3D (drag to orbit, wheel to zoom, double-click to frame it again);
   - the timeline under it goes from generation 1, the blob, to the last; press Play to watch it change;
   - the strip below shows the best body of each species at that generation, side by side;

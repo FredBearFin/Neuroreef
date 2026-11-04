@@ -76,7 +76,7 @@ public static class BodyLab
             Console.Write(detail.ToString());
         }
         if (app == null) return 0;
-        Console.WriteLine($"Body Lab page: http://localhost:{o.Port}/bodylab.html  (it keeps serving the files above; Ctrl+C to stop)");
+        Console.WriteLine($"Body Lab page: {(app.Urls.FirstOrDefault() ?? "").Replace("0.0.0.0", "localhost")}/bodylab.html  (it keeps serving the files above; Ctrl+C to stop)");
         Stop.Token.WaitHandle.WaitOne();
         Console.WriteLine("stopping...");
         app.StopAsync().Wait(2000);
@@ -158,7 +158,20 @@ public static class BodyLab
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
-        builder.WebHost.UseUrls($"http://0.0.0.0:{o.Port}");
+                // its own port (5801 unless --port says otherwise), so it runs beside an open world on 5800; if that port is
+        // taken too, the next free one of the ten after it
+        int port = -1;
+        for (int p = o.Port; p < o.Port + 10 && port < 0; p++)
+        {
+            try { var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any, p); l.Start(); l.Stop(); port = p; }
+            catch (System.Net.Sockets.SocketException) { }
+        }
+        if (port < 0)
+        {
+            Console.Error.WriteLine($"could not open a port for the Body Lab page ({o.Port} to {o.Port + 9} are all in use); the runs go on without it (try --port 5900)");
+            return null;
+        }
+        builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
         var app = builder.Build();
         var asm = Assembly.GetExecutingAssembly();
         var files = asm.GetManifestResourceNames().Where(n => n.StartsWith("www")).ToDictionary(n => n.Replace('\\', '/'), n => n);
@@ -237,10 +250,10 @@ public static class BodyLab
         try { app.StartAsync().GetAwaiter().GetResult(); }
         catch (Exception e)
         {
-            Console.Error.WriteLine($"could not open port {o.Port} for the Body Lab page ({e.Message}); the runs go on without it (try --port 5801)");
+            Console.Error.WriteLine($"could not open port {port} for the Body Lab page ({e.Message}); the runs go on without it (try --port 5900)");
             return null;
         }
-        string url = $"http://localhost:{o.Port}/bodylab.html";
+        string url = $"http://localhost:{port}/bodylab.html";
         Console.WriteLine($"Body Lab page: {url}  (watch the runs live there)");
         if (!o.NoBrowser) Host.OpenBrowser(url);
         return app;
