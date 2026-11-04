@@ -22,7 +22,7 @@ public class MorphLiveTests
     [Fact] // the block holds the genome it was given (to 1/254 a parameter) with its innovation numbers, within its capacity
     public void TheBlockRoundTripsAndIsBounded()
     {
-        Assert.Equal(681, G.MORPHN);
+        Assert.Equal(697, G.MORPHN);   // 2026-11-04: 681 + the internal skeleton's tail, 8 segment genes x 2 (docs/BODYPLAN.md §13.19)
         Assert.Equal(G.MORPH + G.MORPHN, G.LEN);
         for (int s = 1; s <= 20; s++)
         {

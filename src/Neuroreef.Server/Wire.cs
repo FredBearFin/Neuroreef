@@ -507,6 +507,7 @@ public static class Wire
         var mg = Neuroreef.Morph.Codec.Decode(Neuroreef.Morph.Codec.Block((ReadOnlySpan<sbyte>)gn)) ?? Neuroreef.Morph.Codec.FromLabelled(gn);
         var m = Neuroreef.Morph.Development.Grow(mg, w.PM[i]);
         var roles = Neuroreef.Morph.Live.Roles(m);
+        var segRoles = Neuroreef.Morph.Live.SegRoles(m);
         static float R(float v, int d) => MathF.Round(v, d);
         return new
         {
@@ -515,7 +516,11 @@ public static class Wire
             // (2026-11-03, for drawing the body itself: its integument's thickness and the folded-in share of the exchange
             // surface per segment; each pair's chord, thickness and outer-tube share; the chance it topples, BodyPose)
             topple = R(BodyPose.Topple(m), 2),
-            modules = m.Segs.Select(x => new { l = R(1000f * x.L, 1), w = R(1000f * x.W, 1), h = R(1000f * x.H, 1), rigid = R(x.IntMin, 2), pore = R(x.Pore, 3), gas = R(x.Gas, 3), intT = R(1000f * x.IntT, 2), invag = R(x.Invag, 2) }).ToArray(),
+            // (2026-11-04, docs/BODYPLAN.md §13.19) the internal skeleton: per module its share of the section (axSk), its
+            // mineral (axMin) and its role ("support (internal skeleton)" or ""); endoShare its mass over the body's
+            endoShare = R(m.EndoMass / MathF.Max(m.Mass, 1e-12f), 3),
+            modules = m.Segs.Select((x, k) => new { l = R(1000f * x.L, 1), w = R(1000f * x.W, 1), h = R(1000f * x.H, 1), rigid = R(x.IntMin, 2), pore = R(x.Pore, 3), gas = R(x.Gas, 3), intT = R(1000f * x.IntT, 2), invag = R(x.Invag, 2),
+                axSk = R(x.AxSk, 3), axMin = R(x.AxMin, 2), role = segRoles[k] }).ToArray(),
             appendages = m.Pairs.Select((a, k) => new { seg = a.Seg, len = R(1000f * a.Len, 1), flat = R(a.Chord / MathF.Max(a.Thick, 1e-9f), 1), joints = a.Joints, rigid = R(a.Mineral, 2), pore = R(a.Pore, 3), droop = R(a.Theta * 180f / MathF.PI, 0), sagittal = a.Sagittal, role = roles[k],
                 chord = R(1000f * a.Chord, 2), thick = R(1000f * a.Thick, 2), exo = R(a.Exo, 2), invag = R(a.Invag, 2) }).ToArray(),
             legacy = new { legs = R(w.PLegs[i], 2), fins = R(w.PFins[i], 2), wings = R(w.PWings[i], 2), armour = R(w.PArmour[i], 2), legPairs = (int)w.PLegPairs[i], finPairs = (int)w.PFinPairs[i] },

@@ -49,6 +49,11 @@ public static class Mat
     /// <summary>The most hollow an internal skeleton can be: inner over outer diameter K up to 0.9 (bird and pterosaur
     /// long bones; terrestrial mammals ~0.55-0.6; Currey &amp; Alexander 1985).</summary>
     public const float HOLLOW_MAX = 0.9f;
+    /// <summary>The internal axial skeleton (docs/BODYPLAN.md §13.19): at most this share of a segment's core cross-section
+    /// (SP.AX_SK = 1). A mammal's axial skeleton and girdles are ~4% of its trunk's volume (skeleton ~0.061 M^1.09 kg,
+    /// Prange, Anderson &amp; Rahn 1979, a little over half of it axial; bone with its marrow ~1.5-2 g/cm³), so the range
+    /// is ~5x what any vertebrate carries, and selection sets it.</summary>
+    public const float AXSK_MAX = 0.2f;
 }
 
 public sealed class Segment
@@ -59,13 +64,18 @@ public sealed class Segment
     public float AxShare;                // axial muscle share of its tissue
     public float Gas, GasV;              // share of its core that is an internal gas space; its volume, m³
     public float Fat, FatMass;           // share of its tissue volume that is fat; its mass, kg (TissueMass is the lean rest)
+    public float AxSk, AxMin, EndoMass;  // internal axial skeleton: share of the core section, mineral share, mass (kg)
+    /// <summary>The bending moment its section bears before it fails (N m, Finish; docs/BODYPLAN.md §13.19): its integument
+    /// as a tube, its internal skeleton as a central rod, and its axial muscle holding its soft core as a pressurised
+    /// hydrostat. BendEndo is the internal skeleton's part of it.</summary>
+    public float BendCap, BendEndo;
     public float TissueMass, IntMass, AxMuscle, AppMuscle;  // kg
     public float Area;                   // lateral surface, m²
     public float Volume;                 // m³ (tissue + integument)
     public float X0;                     // distance of its front from the head (the mouth), m
     public int Gene;                     // which segment gene grew it
     /// <summary>Every field to zero (a pooled segment reused by Development.Grow with a MorphPool).</summary>
-    public void Clear() { L = W = H = IntT = IntMin = Pore = Invag = AxShare = Gas = GasV = Fat = FatMass = TissueMass = IntMass = AxMuscle = AppMuscle = Area = Volume = X0 = 0f; Gene = 0; }
+    public void Clear() { L = W = H = IntT = IntMin = Pore = Invag = AxShare = Gas = GasV = Fat = FatMass = AxSk = AxMin = EndoMass = BendCap = BendEndo = TissueMass = IntMass = AxMuscle = AppMuscle = Area = Volume = X0 = 0f; Gene = 0; }
 }
 
 public sealed class Pair
@@ -103,6 +113,7 @@ public sealed class Morphology
     public float GutMass, MuscleMass, TotalArea;
     public float InertMass;                              // the mineral in integument and skeleton: no metabolism of its own
     public float FatMass;                                // adipose tissue, kg: metabolises at Mat.FAT_MET of the average
+    public float EndoMass;                               // the trunk's internal (axial) skeleton, kg: not moulted, not armour
     /// <summary>The mass Kleiber's metabolism is taken on: less the inert mineral, and less most of the fat beyond what
     /// the animals Kleiber's law was fitted to carry (Mat.TypicalFat: ~0.075 M^1.19 kg; Pitts &amp; Bullard 1968), or more
     /// for a body leaner than them: its lean tissue is the more of its mass.</summary>
@@ -114,7 +125,7 @@ public sealed class Morphology
     {
         Segs.Clear(); Pairs.Clear();
         Mass = Volume = Length = WaveLength = MaxW = MaxH = TailH = Fineness = FrontalArea = StepArea = IntMass = ExoMass = Rigidity = 0f;
-        ExchExt = ExchInt = SkinArea = SkinThick = GasV = ExchGas = GutMass = MuscleMass = TotalArea = InertMass = FatMass = 0f;
+        ExchExt = ExchInt = SkinArea = SkinThick = GasV = ExchGas = GutMass = MuscleMass = TotalArea = InertMass = FatMass = EndoMass = 0f;
         JointCount = 0;
     }
 
@@ -255,8 +266,14 @@ public static class Development
                 float core = s.L * s.W * s.H * (MathF.PI / 4f);
                 s.Area = EllipsePerimeter(s.W, s.H) * s.L;   // lateral surface of an elliptic cylinder; exposed ends added in Finish
                 s.GasV = core * s.Gas;
-                s.FatMass = (core - s.GasV) * s.Fat * Mat.RHO_FAT;
-                s.TissueMass = (core - s.GasV) * (1f - s.Fat) * Mat.RHO_TISSUE;   // the gas space holds no tissue; its fat is neither gut nor muscle
+                // the internal axial skeleton (docs/BODYPLAN.md §13.19): a central rod of AxSk of the core's section, at the
+                // density of its mineral (cartilage 1,100 to fully mineralised 2,600 kg/m³, as every skeleton here), in place
+                // of soft tissue: it takes room from the gut and the muscle the segment houses
+                s.AxSk = Mat.AXSK_MAX * sg.P[SP.AX_SK]; s.AxMin = sg.P[SP.AX_MIN];
+                float endoV = MathF.Min(core * s.AxSk, core - s.GasV);
+                s.EndoMass = endoV * Density(Mat.RHO_SOFT_INTEG, s.AxMin);
+                s.FatMass = (core - s.GasV - endoV) * s.Fat * Mat.RHO_FAT;
+                s.TissueMass = (core - s.GasV - endoV) * (1f - s.Fat) * Mat.RHO_TISSUE;   // the gas space holds no tissue; its fat is neither gut nor muscle
                 s.Volume = core;
                 int segIndex = m.Segs.Count;
                 m.Segs.Add(s);
@@ -353,7 +370,8 @@ public static class Development
         }
         foreach (var s in m.Segs)
         {
-            m.Mass += s.TissueMass + s.FatMass + s.IntMass; m.FatMass += s.FatMass;
+            m.Mass += s.TissueMass + s.FatMass + s.IntMass + s.EndoMass; m.FatMass += s.FatMass;
+            m.EndoMass += s.EndoMass; m.InertMass += s.EndoMass * MineralFraction(s.AxMin);   // bone mineral does not metabolise
             m.Volume += s.Volume;
             m.Length += s.L;
             m.MaxW = MathF.Max(m.MaxW, s.W); m.MaxH = MathF.Max(m.MaxH, s.H);
@@ -401,7 +419,36 @@ public static class Development
         // muscle, so a thread that has neither does not lengthen it (it made a 1.4 g head with a 10 cm thread of 0.4 mm
         // the cheapest crawler; docs/BODYPLAN.md §8)
         float sm = 0f, sm2 = 0f;
-        foreach (var s in m.Segs) { float ms = s.TissueMass + s.FatMass + s.IntMass; sm += ms; sm2 += ms * ms / MathF.Max(s.L, 1e-6f); }
+        foreach (var s in m.Segs) { float ms = s.TissueMass + s.FatMass + s.IntMass + s.EndoMass; sm += ms; sm2 += ms * ms / MathF.Max(s.L, 1e-6f); }
         m.WaveLength = sm2 > 0f ? MathF.Min(m.Length, sm * sm / sm2) : m.Length;
+        foreach (var s in m.Segs) BendOf(s);
+    }
+
+    /// <summary>
+    /// The bending moment a segment's section bears in the body's sagittal plane before it fails (N m; docs/BODYPLAN.md
+    /// §13.19): the sum of what three supports bear, each at its own strength (the trunk's weight on its limbs is checked
+    /// against it in Physics.Walk). For an elliptic section of semi-axes a = W/2 across and b = H/2 deep:
+    ///   its integument, a tube of wall t: section modulus Z = pi / (4 b) (a b³ - (a - t)(b - t)³) (Roark: an elliptic
+    ///   ring), at the failure stress of its mineral (Sigma: 0.3 MPa soft skin to 150 MPa mineralised cuticle);
+    ///   its internal skeleton, a central rod of area AxSk x pi a b and radius r (at most b): Z = pi r³ / 4, at the
+    ///   failure stress of its mineral (cartilage to bone, Currey 2002). A rod on the axis bears less than a tube of the
+    ///   same mass (Alexander 1983), but it lets the trunk bend: it strains least where the body wave bends it (Physics.Flex
+    ///   counts only the integument's rigidity);
+    ///   its soft core held by its axial muscle as a hydrostatic skeleton: a pressurised cylinder bears a bending moment up
+    ///   to its wrinkling moment p pi r³ / 2 (Comer &amp; Levy 1963; Wainwright 1988; Kier 2012), and its pressure is what
+    ///   its muscular wall holds in hoop tension, p &lt;= sigma_m t_m / r, so M = sigma_m A_m r / 4 with A_m = 2 pi r t_m its
+    ///   muscle's cross-section (the axial muscle's, Physics.SIGMA_MUSCLE, at b).
+    /// </summary>
+    public static void BendOf(Segment s)
+    {
+        float a = 0.5f * s.W, b = 0.5f * s.H;
+        if (a <= 0f || b <= 0f) { s.BendCap = s.BendEndo = 0f; return; }
+        float t = MathF.Min(s.IntT, MathF.Min(a, b));
+        float ai = a - t, bi = b - t;
+        float zInt = MathF.PI / (4f * b) * (a * b * b * b - ai * bi * bi * bi);
+        float rod = s.AxSk * MathF.PI * a * b, r = MathF.Min(b, MathK.Sqrt(rod / MathF.PI));
+        s.BendEndo = rod > 0f ? Sigma(s.AxMin) * MathF.PI * 0.25f * r * r * r : 0f;
+        float aMus = s.AxMuscle / (Mat.RHO_TISSUE * MathF.Max(s.L, 1e-6f));
+        s.BendCap = Sigma(s.IntMin) * zInt + s.BendEndo + Phys.SIGMA_MUSCLE * aMus * b * 0.25f;
     }
 }

@@ -83,7 +83,7 @@ public sealed class LabAppGene { public uint Innov { get; set; } public float[] 
 /// <summary>One role a part plays, by the physics: its share (0..1) of that function in the whole body, and a sentence.</summary>
 public sealed class LabRole
 {
-    public string Role { get; set; } = "";   // thrust, steering, support, crawling, crushing, striking, gas, protection, housing, passive
+    public string Role { get; set; } = "";   // thrust, steering, support, skeleton (internal), crawling, crushing, striking, gas, protection, housing, passive
     public float Share { get; set; }
     public string Text { get; set; } = "";
 }
@@ -100,6 +100,10 @@ public sealed class LabSeg
     public float Pore { get; set; }      // share of its surface that is exchange epithelium
     public float Invag { get; set; }     // share of that folded inward
     public float AxShare { get; set; }   // axial muscle share of its tissue
+    public float AxSk { get; set; }      // internal (axial) skeleton: its share of the cross-section (0 none; docs/BODYPLAN.md §13.19)
+    public float AxMin { get; set; }     // its mineral share (cartilage 0 to bone 1)
+    public float EndoMass { get; set; }  // its mass, kg
+    public float BendCap { get; set; }   // N m: the bending moment its section bears (integument, internal skeleton, muscle)
     public float ExchExt { get; set; }   // m² (after folding)
     public float ExchInt { get; set; }
     public float Kill { get; set; }      // chance a predator's bite through it kills
@@ -151,6 +155,8 @@ public sealed class LabBody
     public float Speed { get; set; }
     public float Rigidity { get; set; }
     public float IntShare { get; set; }
+    public float EndoShare { get; set; }   // its trunk's internal skeleton's mass over its mass (docs/BODYPLAN.md §13.19)
+    public float Support { get; set; }     // share of its weight its limbs bear on this ground (its trunk's bending included)
     public float Moult { get; set; }
     public float ExchExt { get; set; }
     public float ExchInt { get; set; }
@@ -212,7 +218,7 @@ public static class LabReport
         {
             Genome = LabGenome.From(g), Fitness = R(e.Fitness), Size = size,
             Mass = R(m.Mass), Length = R(m.Length), Segments = m.SegmentCount, PairCount = m.PairCount, JointCount = m.JointCount,
-            Mode = Evolver.Mode(e), Speed = R(e.Speed), Rigidity = R(m.Rigidity), IntShare = R(m.IntMass / m.Mass), Moult = R(e.MoultShare),
+            Mode = Evolver.Mode(e), Speed = R(e.Speed), Rigidity = R(m.Rigidity), IntShare = R(m.IntMass / m.Mass), EndoShare = R(m.EndoMass / m.Mass), Support = R(e.Support), Moult = R(e.MoultShare),
             ExchExt = R(m.ExchExt), ExchInt = R(m.ExchInt), Crush = R(e.CrushForce), ItemShare = R(e.ItemShare), PKill = R(e.PKill),
             Escape = R(e.Escape), Mortality = R(e.Mortality), TurnR = R(MathF.Min(e.TurnR, 99f)), O2Supply = R(e.O2Supply), O2Demand = R(e.O2Demand),
             Topple = R(BodyPose.Topple(m)),
@@ -243,8 +249,7 @@ public static class LabReport
             var s = m.Segs[a.Seg];
             float sin = MathK.Sin(a.Theta), cos = MathK.Cos(a.Theta);
             float contact = MathF.Min(1f, a.Len * sin / (0.5f * s.H + 0.002f)); contact *= contact;
-            float fMus = Phys.SIGMA_MUSCLE * MuscleArea(m, a) * Phys.EMA;
-            sup[i] = MathF.Min(a.MomentCap / (a.Len * (cos + 0.25f)), fMus) * contact * a.Artic;
+            sup[i] = Physics.LimbForce(m, a, a.Len * (cos + 0.25f)) * contact * a.Artic;
             supTot += sup[i];
         }
         float axTot = 0f; foreach (var s in m.Segs) axTot += s.AxMuscle;
@@ -259,8 +264,18 @@ public static class LabReport
             var ls = new LabSeg
             {
                 Gene = s.Gene, L = R(s.L), W = R(s.W), H = R(s.H), X0 = R(s.X0), IntT = R(s.IntT), IntMin = R(s.IntMin), Pore = R(s.Pore), Invag = R(s.Invag),
-                AxShare = R(s.AxShare), ExchExt = R(ext), ExchInt = R(inn), Kill = R(open + (1f - open) * pk),
+                AxShare = R(s.AxShare), AxSk = R(s.AxSk), AxMin = R(s.AxMin), EndoMass = R(s.EndoMass), BendCap = R(s.BendCap),
+                ExchExt = R(ext), ExchInt = R(inn), Kill = R(open + (1f - open) * pk),
             };
+            // its internal skeleton (docs/BODYPLAN.md §13.19): what share of the section's bending strength it gives, which
+            // carries the trunk between its limbs and anchors their moments (Physics.TrunkShare, LimbForce)
+            if (s.EndoMass > 0f && s.BendCap > 0f && s.BendEndo / s.BendCap >= 0.1f)
+                ls.Roles.Add(new LabRole
+                {
+                    Role = "skeleton", Share = R(s.BendEndo / s.BendCap),
+                    Text = $"Support (internal skeleton): a {(s.AxMin > 0.5f ? "bony" : s.AxMin > 0.15f ? "half-mineralised" : "cartilaginous")} rod of {Pct(s.AxSk)} of its section ({N(1000f * s.EndoMass, "F1")} g) gives {Pct(s.BendEndo / s.BendCap)} of the {N(s.BendCap, "F2")} N m its trunk bears here in bending" +
+                        (legged ? $"; the limbs bear {Pct(e.Support)} of the weight" : "") + ". It grows with the body, unmoulted.",
+                });
             float axShare = axTot > 0f ? s.AxMuscle / axTot : 0f;
             if (swims && thrust[^1] * axShare >= 0.05f)
                 ls.Roles.Add(new LabRole { Role = "thrust", Share = R(thrust[^1] * axShare), Text = $"Thrust: its axial muscle bends the trunk for {Pct(thrust[^1] * axShare)} of the swimming power." });
@@ -271,9 +286,9 @@ public static class LabReport
             AddGas(ls.Roles, ext * sExt + inn * sInt, o2, inn / MathF.Max(ex, 1e-12f), ex > 0f);
             AddArmour(ls.Roles, pk, s.IntMin, s.IntT, false);
             float tissue = s.TissueMass / m.Mass;
-            if ((ls.Roles.Count == 0 || ls.Roles.All(r => r.Role == "protection")) && tissue >= 0.02f)
+            if ((ls.Roles.Count == 0 || ls.Roles.All(r => r.Role is "protection" or "skeleton")) && tissue >= 0.02f)
                 ls.Roles.Add(new LabRole { Role = "housing", Share = R(tissue), Text = $"Housing: {Pct(tissue)} of the body's tissue (gut and muscle) is here." });
-            else if (ls.Roles.Count == 0 || ls.Roles.All(r => r.Role == "protection"))
+            else if (ls.Roles.Count == 0 || ls.Roles.All(r => r.Role is "protection" or "skeleton"))
                 ls.Roles.Add(new LabRole { Role = "passive", Share = 0f, Text = $"Passive: the physics gives it no measurable thrust, crawling, steering or gas exchange, and it holds only {Pct(tissue)} of the body's tissue." });
             Finish(ls.Roles, out var prim, out var cap); ls.Primary = prim; ls.Caption = cap;
             b.Segs.Add(ls);
@@ -344,14 +359,14 @@ public static class LabReport
     }
 
     // the role it is drawn in: the one with the largest share, except that a small share of a vital function outranks armour
-    static readonly string[] Order = { "crushing", "striking", "thrust", "support", "crawling", "steering", "gas", "protection", "housing", "passive" };
+    static readonly string[] Order = { "crushing", "striking", "thrust", "support", "skeleton", "crawling", "steering", "gas", "protection", "housing", "passive" };
     static void Finish(List<LabRole> roles, out string primary, out string caption)
     {
         LabRole? best = null;
         foreach (var r in roles)
         {
             if (best == null) { best = r; continue; }
-            bool rArm = r.Role == "protection", bArm = best.Role == "protection";
+            bool rArm = r.Role is "protection" or "skeleton", bArm = best.Role is "protection" or "skeleton";   // structure: any vital function outranks it
             if (bArm && !rArm) { best = r; continue; }
             if (rArm && !bArm) continue;
             if (r.Role is "crushing" or "striking") { best = r; continue; }

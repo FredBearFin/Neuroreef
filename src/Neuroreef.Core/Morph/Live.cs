@@ -73,7 +73,7 @@ public static class Live
     public static float StandPosture(Morphology m, in Physics.WalkProps wp)
     {
         float ms = 0f, zs = 0f, bs = 0f;
-        foreach (var s in m.Segs) { float mm = s.TissueMass + s.FatMass + s.IntMass; ms += mm; zs += mm * 0.5f * s.H; bs += mm * 0.5f * s.W; }
+        foreach (var s in m.Segs) { float mm = s.TissueMass + s.FatMass + s.IntMass + s.EndoMass; ms += mm; zs += mm * 0.5f * s.H; bs += mm * 0.5f * s.W; }
         if (ms <= 0f) return wp.Clear + m.MaxH;
         float z = wp.Clear + zs / ms, b = bs / ms + wp.Span;
         float p = Physics.Topple(z, b, GROUND_ROUGH);
@@ -314,7 +314,7 @@ public static class Live
             var s = m.Segs[a.Seg];
             float sin = MathK.Sin(a.Theta), cos = MathK.Cos(a.Theta);
             float contact = a.Sagittal ? 0f : MathF.Min(1f, a.Len * sin / (0.5f * s.H + 0.002f)); contact *= contact;
-            float f = MathF.Min(a.MomentCap / MathF.Max(a.Len * (cos + 0.25f), 1e-6f), Phys.SIGMA_MUSCLE * Physics.MuscleArea(m, a) * Phys.EMA);
+            float f = Physics.LimbForce(m, a, MathF.Max(a.Len * (cos + 0.25f), 1e-6f));
             float sup = wgt > 0f ? 2f * f * contact * a.Artic * Phys.DUTY / (Phys.SAFETY * wgt) : 0f;
             float lift = a.Sagittal ? 0f : cos * (a.Chord / a.Thick) / (a.Chord / a.Thick + 2f);
             float sw = i < thrust.Length ? thrust[i] : 0f, st = ctlTot > 0f ? ctl[i] / ctlTot : 0f;
@@ -330,6 +330,25 @@ public static class Live
     }
 
     static readonly string[] RoleNames = { "fly", "support", "swim", "handle", "steer", "breathe", "passive" };
+
+    /// <summary>The role of each segment's internal skeleton (docs/BODYPLAN.md §13.19): "support (internal skeleton)" where
+    /// it bears at least half of what the segment's section bears in bending (Segment.BendEndo against BendCap: the
+    /// trunk's weight between its limbs and its limbs' moments at their roots, Physics.TrunkShare and LimbForce), "" where
+    /// it has none or bears less.</summary>
+    public const string SKELETON_ROLE = "support (internal skeleton)";
+    public static string[] SegRoles(Morphology m)
+    {
+        var r = new string[m.Segs.Count];
+        for (int i = 0; i < r.Length; i++) { var s = m.Segs[i]; r[i] = s.EndoMass > 0f && s.BendEndo >= 0.5f * s.BendCap ? SKELETON_ROLE : ""; }
+        return r;
+    }
+
+    /// <summary>Does the body have a trunk skeleton that bears its trunk (any segment with the skeleton role)?</summary>
+    public static bool HasEndoSkeleton(Morphology m)
+    {
+        foreach (var s in m.Segs) if (s.EndoMass > 0f && s.BendEndo >= 0.5f * s.BendCap) return true;
+        return false;
+    }
 
     /// <summary>The share of the body's oxygen supply this pair's exchange surface gives, in air or in water, whichever is
     /// larger (Physics.O2Supply's terms for its everted and folded-in epithelium).</summary>
@@ -354,7 +373,7 @@ public static class Live
         var segHist = new int[33]; var pairHist = new int[17];
         for (int sp = 0; sp < w.NS; sp++)
         {
-            int n = 0, taken = 0, rep = -1; double mass = 0, segs = 0, pairs = 0, rigid = 0;
+            int n = 0, taken = 0, rep = -1, endoN = 0; double mass = 0, segs = 0, pairs = 0, rigid = 0, endo = 0;
             var roles = new int[RoleNames.Length];
             for (int i = 0; i < w.Cap; i++)
             {
@@ -366,7 +385,8 @@ public static class Live
                 {
                     taken++;
                     var mo = Grown(w, i);
-                    rigid += mo.Rigidity;
+                    rigid += mo.Rigidity; endo += mo.EndoMass / MathF.Max(mo.Mass, 1e-12f);
+                    if (HasEndoSkeleton(mo)) endoN++;
                     foreach (var r in Roles(mo)) roles[Array.IndexOf(RoleNames, r)]++;
                 }
             }
@@ -374,7 +394,7 @@ public static class Live
             if (rep < 0) for (int i = 0; i < w.Cap && rep < 0; i++) if (w.StageOf[i] != St.Dead && w.Spc[i] == sp) rep = i;
             var rl = new StringBuilder();
             for (int k = 0; k < RoleNames.Length; k++) rl.Append(c, $" {RoleNames[k]} {roles[k]}");
-            sb.AppendLine(string.Format(c, "{0,-12} {1,6} {2,8:F3} kg  segs {3,5:F1}  pairs {4,5:F1}  rigidity {5:F2}  loco {6}  roles:{7}", w.Sp[sp].Name, n, mass / n, segs / n, pairs / n, rigid / Math.Max(1, taken), (Loco)w.PLoco[rep], rl));
+            sb.AppendLine(string.Format(c, "{0,-12} {1,6} {2,8:F3} kg  segs {3,5:F1}  pairs {4,5:F1}  rigidity {5:F2}  internal skeleton {8}/{9} ({10:F1}% of mass)  loco {6}  roles:{7}", w.Sp[sp].Name, n, mass / n, segs / n, pairs / n, rigid / Math.Max(1, taken), (Loco)w.PLoco[rep], rl, endoN, taken, 100.0 * endo / Math.Max(1, taken)));
             sb.AppendLine("    e.g. " + Describe(Grown(w, rep)));
         }
         sb.Append("all living: segments");
@@ -400,7 +420,7 @@ public static class Live
         var sb = new StringBuilder();
         sb.Append(c, $"{m.Mass:0.###} kg, {m.SegmentCount} seg [");
         for (int i = 0; i < m.Segs.Count; i++) sb.Append(c, $"{(i > 0 ? " " : "")}{1000f * m.Segs[i].L:0.#}");
-        sb.Append(c, $"] mm, fine {m.Fineness:0.0}, rigid {m.Rigidity:0.00}, pores {m.ExchExt:0.####}/{m.ExchInt + m.ExchGas:0.####} m2; {m.PairCount} pairs");
+        sb.Append(c, $"] mm, fine {m.Fineness:0.0}, rigid {m.Rigidity:0.00}, endo {100f * m.EndoMass / MathF.Max(m.Mass, 1e-12f):0.#}%, pores {m.ExchExt:0.####}/{m.ExchInt + m.ExchGas:0.####} m2; {m.PairCount} pairs");
         var roles = Roles(m);
         for (int i = 0; i < m.Pairs.Count; i++)
         {

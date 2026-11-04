@@ -502,10 +502,19 @@ public static class Physics
     // ---------- walking ----------
     public struct WalkProps { public float WEff, Support, Stride, Stability, LegMass, Cap, Hook, NLegs, Clear, Reach, Span; }
 
+    /// <summary>The force one side of a limb bears at its foot with its lever (N): the least of what its skeleton bears at
+    /// its base (MomentCap / lever), what the trunk it is rooted in bears there (the segment's section, Segment.BendCap:
+    /// the limb's moment is reacted across the body, so a stiff limb on a soft trunk bears only what the trunk does;
+    /// docs/BODYPLAN.md §13.19), and what its muscles hold its joints against (Biewener 1989: EMA).</summary>
+    public static float LimbForce(Morphology m, Pair a, float lever)
+        => MathF.Min(MathF.Min(a.MomentCap, m.Segs[a.Seg].BendCap) / lever, Phys.SIGMA_MUSCLE * MuscleArea(m, a) * Phys.EMA);
+
     public static WalkProps Walk(Morphology m, float rho)
     {
         var w = new WalkProps { WEff = Phys.G * MathF.Max(0f, m.Mass - rho * m.Volume) };
         float capN = 0f, sw = 0f, sws = 0f, span = 0f, reach = 0f;
+        Span<float> segF = m.Segs.Count <= 64 ? stackalloc float[m.Segs.Count] : new float[m.Segs.Count];
+        segF.Clear();
         foreach (var a in m.Pairs)
         {
             if (a.Sagittal) continue;   // one blade up, one down: not a pair of supports
@@ -515,10 +524,10 @@ public static class Physics
             contact *= contact;   // a limb that barely reaches the ground carries little
             if (contact <= 0f) continue;
             float lever = a.Len * (cos + 0.25f);   // the foot's horizontal offset, plus the fore-aft swing of a stride
-            float fMus = Phys.SIGMA_MUSCLE * MuscleArea(m, a) * Phys.EMA;   // its muscles must hold the joints against the ground force
-            float f = MathF.Min(a.MomentCap / lever, fMus);
+            float f = LimbForce(m, a, lever);   // its skeleton, its trunk and its muscles must hold against the ground force
             float use = contact * a.Artic;
             capN += 2f * f * use;
+            segF[a.Seg] += 2f * f * use;
             w.NLegs += 2f * use;
             float stride = a.Len * sin * a.Artic;
             sw += f * use; sws += f * use * stride; w.Clear += f * use * a.Len * sin;
@@ -528,12 +537,77 @@ public static class Physics
             w.Hook += 2f * use * f;
         }
         w.Support = w.WEff > 0f ? MathF.Min(1f, capN * Phys.DUTY / (Phys.SAFETY * w.WEff)) : 1f;
+        // and the trunk must carry its own weight between its limbs (docs/BODYPLAN.md §13.19)
+        if (w.WEff > 0f && capN > 0f) w.Support = MathF.Min(w.Support, TrunkShare(m, segF, w.WEff));
         w.Stride = sw > 0f ? sws / sw : 0f;
         w.Clear = sw > 0f ? w.Clear / sw * w.Support : 0f;   // how far its limbs lift its belly off the ground
         w.Span = sw > 0f ? span / sw : 0f;                    // how far out its feet stand
         w.Reach = sw > 0f ? reach / sw : 0f;                  // how high a step its limbs can reach up to
         w.Stability = MathF.Min(1f, w.NLegs * Phys.DUTY / 3f);
         return w;
+    }
+
+    /// <summary>
+    /// The share of its weight a body's limbs can hold up before its trunk fails between them (docs/BODYPLAN.md §13.19).
+    /// A body on its limbs is a beam loaded by its own weight and carried at its limbs ("the bridge that walks": Gray 1944;
+    /// Slijper 1946; Alexander 1985), and that beam must bear the bending moment; a body that lies on the ground is
+    /// carried along its belly and bends little. The trunk is taken as a rigid beam on elastic supports as stiff as its
+    /// limbs bear (segF: each segment's limbs' force, N), so the limbs' forces balance its weight and its pitch; its weight
+    /// lies evenly along each segment (with its pairs'), in the medium (wEff, N). At each segment's middle and at each
+    /// joint between segments, the moment of everything on one side, the lesser of the two (a support that would have to
+    /// pull is dropped, and the end that tips rests on the ground), against the section's strength there
+    /// (Segment.BendCap; at a joint, the weaker neighbour's) at the limbs' own safety factor and duty factor (at a duty
+    /// factor beta each foot carries 1/beta of its share: Alexander 1981). Returns min(1, that ratio): the moment grows
+    /// with the share the limbs carry, so this is the most they can. Moments grow as M^(4/3) and section strength as M
+    /// (Galileo 1638; McMahon 1973), so a soft trunk is no limit for a small body and is for a large one.
+    /// </summary>
+    public static float TrunkShare(Morphology m, ReadOnlySpan<float> segF, float wEff)
+    {
+        int n = m.Segs.Count;
+        if (n == 0 || wEff <= 0f) return 1f;
+        Span<float> wt = n <= 64 ? stackalloc float[n] : new float[n];
+        Span<float> fs = n <= 64 ? stackalloc float[n] : new float[n];
+        float tot = 0f;
+        for (int i = 0; i < n; i++) { var s = m.Segs[i]; wt[i] = s.TissueMass + s.FatMass + s.IntMass + s.EndoMass; }
+        foreach (var a in m.Pairs) wt[a.Seg] += 2f * a.Mass;
+        for (int i = 0; i < n; i++) tot += wt[i];
+        if (tot <= 0f) return 1f;
+        float kk = 0f, kx = 0f, wx = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            var s = m.Segs[i];
+            wt[i] *= wEff / tot;
+            float x = s.X0 + 0.5f * s.L;
+            kk += segF[i]; kx += segF[i] * x; wx += wt[i] * x;
+        }
+        if (kk <= 0f) return 1f;
+        float xBar = kx / kk, xCg = wx / wEff, kxx = 0f;
+        for (int i = 0; i < n; i++) { float d = m.Segs[i].X0 + 0.5f * m.Segs[i].L - xBar; kxx += segF[i] * d * d; }
+        float alpha = wEff / kk, len = MathF.Max(m.Length, 1e-6f);
+        float beta = kxx > 1e-6f * kk * len * len ? wEff * (xCg - xBar) / kxx : 0f;
+        for (int i = 0; i < n; i++) fs[i] = MathF.Max(0f, segF[i] * (alpha + beta * (m.Segs[i].X0 + 0.5f * m.Segs[i].L - xBar)));
+        float share = 1f;
+        for (int c = 0; c < 2 * n - 1; c++)
+        {
+            // cut c: even, the middle of segment c/2; odd, the joint after segment c/2
+            int i = c / 2;
+            var si = m.Segs[i];
+            float x = c % 2 == 0 ? si.X0 + 0.5f * si.L : si.X0 + si.L;
+            float cap = c % 2 == 0 ? si.BendCap : MathF.Min(si.BendCap, m.Segs[i + 1].BendCap);
+            float ml = 0f, mr = 0f;
+            for (int k = 0; k < n; k++)
+            {
+                var s = m.Segs[k];
+                float xk = s.X0 + 0.5f * s.L;
+                if (xk < x) ml += fs[k] * (x - xk); else mr += fs[k] * (xk - x);
+                float l = Math.Clamp(x - s.X0, 0f, s.L), r = s.L - l, inv = wt[k] / MathF.Max(s.L, 1e-9f);
+                ml -= inv * l * (x - s.X0 - 0.5f * l);
+                mr -= inv * r * (s.X0 + l + 0.5f * r - x);
+            }
+            float mo = MathF.Min(MathF.Abs(ml), MathF.Abs(mr));
+            if (mo > 0f) share = MathF.Min(share, cap * Phys.DUTY / (Phys.SAFETY * mo));
+        }
+        return share;
     }
 
     /// <summary>Metabolic power of moving over the floor at U, the cheaper of walking on its limbs (within its limb
@@ -1107,8 +1181,7 @@ public static class Physics
             var s = m.Segs[a.Seg];
             float sin = MathK.Sin(a.Theta), cos = MathK.Cos(a.Theta);
             float contact = MathF.Min(1f, a.Len * sin / (0.5f * s.H + 0.002f)); contact *= contact;
-            float fMus = Phys.SIGMA_MUSCLE * MuscleArea(m, a) * Phys.EMA;
-            sup[i] = MathF.Min(a.MomentCap / (a.Len * (cos + 0.25f)), fMus) * contact * a.Artic;
+            sup[i] = LimbForce(m, a, a.Len * (cos + 0.25f)) * contact * a.Artic;
             supTot += sup[i];
         }
         for (int i = 0; i < m.Pairs.Count; i++)

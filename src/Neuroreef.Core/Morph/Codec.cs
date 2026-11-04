@@ -6,12 +6,15 @@
 //
 // Layout: [0] segment-gene count (0 = no module genome: an older or hand-made genome, expressed through Translate)
 //         then MAX_SEG_GENES segment slots of SEG_BYTES each:
-//           innovation (4) | SP.N parameters | appendage count (1) | MAX_APP_GENES appendage slots of APP_BYTES:
+//           innovation (4) | SP.N_SLOT parameters | appendage count (1) | MAX_APP_GENES appendage slots of APP_BYTES:
 //             innovation (4) | AP.N parameters
+//         then the tail (2026-11-04, docs/BODYPLAN.md §13.19): MAX_SEG_GENES x TAIL_N bytes, segment gene i's parameters
+//           SP.N_SLOT.. (the internal axial skeleton, SP.AX_SK and SP.AX_MIN), each b / 255 for its byte b read unsigned,
+//           so a zero byte is 0: a genome written before the tail (681 bytes, padded with zeros) grows no internal skeleton
 //
 // The capacity is the developmental limit of the prototype (MorphGenome.MAX_SEG_GENES = 8 segment genes, each grown as up
 // to Development.MAX_REPEAT = 4 serial copies, so at most 32 segments; MAX_APP_GENES = 4 pair genes per segment gene, so at
-// most 128 pairs): 681 bytes a slot, against the ~98 KB of the brain's genome. It is a limit on how many distinct
+// most 128 pairs): 697 bytes a slot (681 before the tail), against the ~98 KB of the brain's genome. It is a limit on how many distinct
 // segment genes (Hox-like identities) a body can carry, not on its size: the mass gene scales any body. Real bilaterians
 // carry ~4-14 Hox paralogue groups (Carroll, Grenier & Weatherbee 2005), and a segment gene's serial repeat makes the
 // series. Mutations that would exceed it do nothing (Mutate's operators refuse), as a duplication that disrupts a full
@@ -25,11 +28,19 @@ namespace Neuroreef.Morph;
 public static class Codec
 {
     public const int APP_BYTES = 4 + AP.N;                                       // 17
-    public const int SEG_BYTES = 4 + SP.N + 1 + MorphGenome.MAX_APP_GENES * APP_BYTES;   // 85
-    public const int SIZE = 1 + MorphGenome.MAX_SEG_GENES * SEG_BYTES;           // 681
+    public const int SEG_BYTES = 4 + SP.N_SLOT + 1 + MorphGenome.MAX_APP_GENES * APP_BYTES;   // 85
+    /// <summary>The block's size before the tail (Checkpoint and GeneBank format 29 / 14): an older genome is this long
+    /// past G.MORPH, and is read into the head of a new one with its tail zero.</summary>
+    public const int SIZE_V1 = 1 + MorphGenome.MAX_SEG_GENES * SEG_BYTES;        // 681
+    public const int TAIL_N = SP.N - SP.N_SLOT;                                  // 2
+    public const int TAIL = SIZE_V1;                                             // where the tail starts
+    public const int SIZE = SIZE_V1 + MorphGenome.MAX_SEG_GENES * TAIL_N;        // 697
 
     static sbyte B(float p) => (sbyte)Math.Clamp((int)MathF.Round(p * 254f - 127f), -127, 127);
     static float P(sbyte b) => (b + 127) / 254f;
+    // the tail's bytes: unsigned, 0 = 0 (an older genome's padding)
+    static sbyte BT(float p) => (sbyte)(byte)Math.Clamp((int)MathF.Round(p * 255f), 0, 255);
+    static float PT(sbyte b) => (byte)b / 255f;
 
     static void PutU(Span<sbyte> s, int o, uint v) { s[o] = (sbyte)(byte)v; s[o + 1] = (sbyte)(byte)(v >> 8); s[o + 2] = (sbyte)(byte)(v >> 16); s[o + 3] = (sbyte)(byte)(v >> 24); }
     static uint GetU(ReadOnlySpan<sbyte> s, int o) => (uint)(byte)s[o] | (uint)(byte)s[o + 1] << 8 | (uint)(byte)s[o + 2] << 16 | (uint)(byte)s[o + 3] << 24;
@@ -53,13 +64,14 @@ public static class Codec
             var s = g.Segs[i];
             int o = 1 + i * SEG_BYTES;
             PutU(block, o, s.Innov);
-            for (int k = 0; k < SP.N; k++) block[o + 4 + k] = B(s.P[k]);
+            for (int k = 0; k < SP.N_SLOT; k++) block[o + 4 + k] = B(s.P[k]);
+            for (int k = 0; k < TAIL_N; k++) block[TAIL + i * TAIL_N + k] = BT(s.P[SP.N_SLOT + k]);
             int na = Math.Min(s.Apps.Count, MorphGenome.MAX_APP_GENES);
-            block[o + 4 + SP.N] = (sbyte)na;
+            block[o + 4 + SP.N_SLOT] = (sbyte)na;
             for (int j = 0; j < na; j++)
             {
                 var a = s.Apps[j];
-                int q = o + 4 + SP.N + 1 + j * APP_BYTES;
+                int q = o + 4 + SP.N_SLOT + 1 + j * APP_BYTES;
                 PutU(block, q, a.Innov);
                 for (int k = 0; k < AP.N; k++) block[q + 4 + k] = B(a.P[k]);
             }
@@ -81,11 +93,12 @@ public static class Codec
             int o = 1 + i * SEG_BYTES;
             uint si = GetU(block, o);
             var s = pool != null ? pool.Seg(si) : new SegGene { Innov = si };
-            for (int k = 0; k < SP.N; k++) s.P[k] = P(block[o + 4 + k]);
-            int na = Math.Clamp((int)block[o + 4 + SP.N], 0, MorphGenome.MAX_APP_GENES);
+            for (int k = 0; k < SP.N_SLOT; k++) s.P[k] = P(block[o + 4 + k]);
+            for (int k = 0; k < TAIL_N; k++) s.P[SP.N_SLOT + k] = PT(block[TAIL + i * TAIL_N + k]);
+            int na = Math.Clamp((int)block[o + 4 + SP.N_SLOT], 0, MorphGenome.MAX_APP_GENES);
             for (int j = 0; j < na; j++)
             {
-                int q = o + 4 + SP.N + 1 + j * APP_BYTES;
+                int q = o + 4 + SP.N_SLOT + 1 + j * APP_BYTES;
                 uint ai = GetU(block, q);
                 var a = pool != null ? pool.App(ai) : new AppGene { Innov = ai };
                 for (int k = 0; k < AP.N; k++) a.P[k] = P(block[q + 4 + k]);
@@ -181,7 +194,7 @@ public static class Codec
         int na = Math.Clamp((int)a[0], 0, MorphGenome.MAX_SEG_GENES), nb = Math.Clamp((int)b[0], 0, MorphGenome.MAX_SEG_GENES);
         if (na == 0 || nb == 0) return 0f;
         double sum = 0; int nParams = 0, unmatched = 0;
-        int ParamsOf(ReadOnlySpan<sbyte> blk, int i) => SP.N + Math.Clamp((int)blk[1 + i * SEG_BYTES + 4 + SP.N], 0, MorphGenome.MAX_APP_GENES) * AP.N;
+        int ParamsOf(ReadOnlySpan<sbyte> blk, int i) => SP.N + Math.Clamp((int)blk[1 + i * SEG_BYTES + 4 + SP.N_SLOT], 0, MorphGenome.MAX_APP_GENES) * AP.N;
         // every module of a, against its homologue in b if any
         for (int i = 0; i < na; i++)
         {
@@ -189,14 +202,16 @@ public static class Codec
             int ob = -1;
             for (int j = 0; j < nb; j++) if (GetU(b, 1 + j * SEG_BYTES) == ia) { ob = 1 + j * SEG_BYTES; break; }
             if (ob < 0) { unmatched += ParamsOf(a, i); continue; }
-            for (int k = 0; k < SP.N; k++) { float d = 2f * (P(a[oa + 4 + k]) - P(b[ob + 4 + k])); sum += d * d; }
+            for (int k = 0; k < SP.N_SLOT; k++) { float d = 2f * (P(a[oa + 4 + k]) - P(b[ob + 4 + k])); sum += d * d; }
+            int ta = TAIL + i * TAIL_N, tb = TAIL + (ob - 1) / SEG_BYTES * TAIL_N;
+            for (int k = 0; k < TAIL_N; k++) { float d = 2f * (PT(a[ta + k]) - PT(b[tb + k])); sum += d * d; }
             nParams += SP.N;
-            int aa = Math.Clamp((int)a[oa + 4 + SP.N], 0, MorphGenome.MAX_APP_GENES), ab = Math.Clamp((int)b[ob + 4 + SP.N], 0, MorphGenome.MAX_APP_GENES);
+            int aa = Math.Clamp((int)a[oa + 4 + SP.N_SLOT], 0, MorphGenome.MAX_APP_GENES), ab = Math.Clamp((int)b[ob + 4 + SP.N_SLOT], 0, MorphGenome.MAX_APP_GENES);
             for (int x = 0; x < aa; x++)
             {
-                int qa = oa + 4 + SP.N + 1 + x * APP_BYTES; uint ix = GetU(a, qa);
+                int qa = oa + 4 + SP.N_SLOT + 1 + x * APP_BYTES; uint ix = GetU(a, qa);
                 int qb = -1;
-                for (int y = 0; y < ab; y++) if (GetU(b, ob + 4 + SP.N + 1 + y * APP_BYTES) == ix) { qb = ob + 4 + SP.N + 1 + y * APP_BYTES; break; }
+                for (int y = 0; y < ab; y++) if (GetU(b, ob + 4 + SP.N_SLOT + 1 + y * APP_BYTES) == ix) { qb = ob + 4 + SP.N_SLOT + 1 + y * APP_BYTES; break; }
                 if (qb < 0) { unmatched += AP.N; continue; }
                 for (int k = 0; k < AP.N; k++) { float d = 2f * (P(a[qa + 4 + k]) - P(b[qb + 4 + k])); sum += d * d; }
                 nParams += AP.N;
@@ -204,8 +219,8 @@ public static class Codec
             // b's appendage genes on this segment with no homologue in a
             for (int y = 0; y < ab; y++)
             {
-                uint iy = GetU(b, ob + 4 + SP.N + 1 + y * APP_BYTES); bool found = false;
-                for (int x = 0; x < aa && !found; x++) found = GetU(a, oa + 4 + SP.N + 1 + x * APP_BYTES) == iy;
+                uint iy = GetU(b, ob + 4 + SP.N_SLOT + 1 + y * APP_BYTES); bool found = false;
+                for (int x = 0; x < aa && !found; x++) found = GetU(a, oa + 4 + SP.N_SLOT + 1 + x * APP_BYTES) == iy;
                 if (!found) unmatched += AP.N;
             }
         }

@@ -84,7 +84,11 @@ public class StepLengthTests
         // Re-pinned 2026-11-03 (fifth round, docs/BODYPLAN.md §13.18): a cold-blooded body's integument turnover and exchange
         // epithelia cost its metabolic level (Live.ModuleUpkeep), and a segment's side is its elliptic section's perimeter
         // (Ramanujan), not pi (a + b), which was short for flat sections. Was 7475422619767155745.
-        Assert.Equal(2255307997004125111UL, WorldHash(sim.W));
+        // Re-pinned 2026-11-04 (docs/BODYPLAN.md §13.19): the internal axial skeleton genes (two more segment parameters,
+        // mutated and drawn for founders; the genome 16 bytes longer) and the trunk-bending physics (a body's limbs bear no
+        // more of its weight than its trunk can carry between them, nor more than the segment they grow on anchors).
+        // Was 2255307997004125111.
+        Assert.Equal(17651815317776239750UL, WorldHash(sim.W));
     }
 
     // ------------------------------------------------------------------ invariance: the same physics per unit of time

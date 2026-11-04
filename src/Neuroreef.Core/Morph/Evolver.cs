@@ -228,8 +228,8 @@ public static class Evolver
         for (int i = 0; i < m.Segs.Count; i++)
         {
             var s = m.Segs[i];
-            sb.AppendLine(string.Format(c, "  seg {0} (gene {1}): L {2:F1} W {3:F1} H {4:F1} mm  integ {5:F2} mm min {6:F2}  pore {7:F2} invag {8:F2}  axial muscle {9:F2}",
-                i, s.Gene, s.L * 1000f, s.W * 1000f, s.H * 1000f, s.IntT * 1000f, s.IntMin, s.Pore, s.Invag, s.AxShare));
+            sb.AppendLine(string.Format(c, "  seg {0} (gene {1}): L {2:F1} W {3:F1} H {4:F1} mm  integ {5:F2} mm min {6:F2}  pore {7:F2} invag {8:F2}  axial muscle {9:F2}  internal skeleton {10:F3} min {11:F2}, bears {12:0.##E+0} N m",
+                i, s.Gene, s.L * 1000f, s.W * 1000f, s.H * 1000f, s.IntT * 1000f, s.IntMin, s.Pore, s.Invag, s.AxShare, s.AxSk, s.AxMin, s.BendCap));
             for (int q = 0; q < m.Pairs.Count; q++)
             {
                 var a = m.Pairs[q];

@@ -31,8 +31,15 @@ namespace Neuroreef.Morph;
 public static class SP
 {
     public const int LEN = 0, WID = 1, HEI = 2, TAPER = 3, REPEAT = 4, INT_T = 5, INT_MIN = 6, PORE = 7, INVAG = 8, AXMUS = 9, GAS = 10, FAT = 11;
-    public const int N = 12;
-    public static readonly string[] Names = { "len", "wid", "hei", "taper", "repeat", "intT", "intMin", "pore", "invag", "axMus", "gas", "fat" };
+    /// <summary>The internal axial skeleton (docs/BODYPLAN.md §13.19, 2026-11-04): AX_SK its share of the segment's core
+    /// cross-section (0 none, 1 Mat.AXSK_MAX), AX_MIN its mineral share (0 cartilage or a notochord's sheath, 1 bone), as
+    /// an appendage's central rod is (AP.WALL, AP.MINERAL). A gene of 0 grows none: every genome made before it has 0.</summary>
+    public const int AX_SK = 12, AX_MIN = 13;
+    public const int N = 14;
+    /// <summary>The parameters a segment slot of the live block holds (Codec): the first twelve. AX_SK and AX_MIN are in the
+    /// block's tail, where an older genome's zero bytes read as 0.</summary>
+    public const int N_SLOT = 12;
+    public static readonly string[] Names = { "len", "wid", "hei", "taper", "repeat", "intT", "intMin", "pore", "invag", "axMus", "gas", "fat", "axSk", "axMin" };
 }
 
 /// <summary>Parameters of an appendage gene (a bilateral pair; all stored in [0,1]).</summary>
@@ -98,6 +105,7 @@ public sealed class MorphGenome
         s.P[SP.LEN] = 0.75f; s.P[SP.WID] = 0.75f; s.P[SP.HEI] = 0.75f;   // ~6 cm each way
         s.P[SP.TAPER] = 0.5f; s.P[SP.REPEAT] = 0f;
         s.P[SP.INT_T] = 0.1f; s.P[SP.INT_MIN] = 0f; s.P[SP.PORE] = 0f; s.P[SP.INVAG] = 0.5f; s.P[SP.AXMUS] = 0.2f; s.P[SP.GAS] = 0f; s.P[SP.FAT] = 0f;
+        s.P[SP.AX_SK] = 0f; s.P[SP.AX_MIN] = 0f;   // no internal skeleton
         g.Segs.Add(s);
         return g;
     }

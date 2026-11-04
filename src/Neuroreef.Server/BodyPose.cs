@@ -16,7 +16,7 @@ public static class BodyPose
     {
         var wp = Physics.Walk(m, Phys.RHO_A);
         float ms = 0f, zs = 0f, bs = 0f;
-        foreach (var s in m.Segs) { float mm = s.TissueMass + s.FatMass + s.IntMass; ms += mm; zs += mm * 0.5f * s.H; bs += mm * 0.5f * s.W; }
+        foreach (var s in m.Segs) { float mm = s.TissueMass + s.FatMass + s.IntMass + s.EndoMass; ms += mm; zs += mm * 0.5f * s.H; bs += mm * 0.5f * s.W; }
         if (ms <= 0f) return 0f;
         float z = wp.Clear + zs / ms, b = bs / ms + wp.Span;
         return Physics.Topple(z, b, Live.GROUND_ROUGH);

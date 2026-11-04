@@ -187,7 +187,7 @@ function sidePanel(b) {
     const what = g.kind === 'seg' ? (n > 1 ? `Segments ${a}–${z}` : `Segment ${a}`) : (n > 1 ? `Appendage pairs ${a}–${z}` : `Appendage pair ${a}`);
     const p = g.p;
     const shape = g.kind === 'seg'
-      ? `${len(p.l)} long, ${len(p.w)} wide, ${len(p.h)} high; integument ${(1000 * (p.intT || 0)).toFixed(2)} mm, mineral ${fx(p.intMin)}`
+      ? `${len(p.l)} long, ${len(p.w)} wide, ${len(p.h)} high; integument ${(1000 * (p.intT || 0)).toFixed(2)} mm, mineral ${fx(p.intMin)}${(p.axSk || 0) > 0 ? `; internal skeleton ${(100 * p.axSk).toFixed(1)}% of the section, mineral ${fx(p.axMin)}` : ''}`
       : `on segment ${(p.seg || 0) + 1};${len(p.len)} long, ${len(p.chord)} wide, ${len(p.thick)} thick; ${p.joints || 0} joints, mineral ${fx(p.mineral)}${p.sagittal ? ', in the midplane' : ''}`;
     const roles = (p.roles || []);
     return `<div class="part" data-g="${gi}"><div class="t"><span class="dot" style="background:${hex(ROLE_COLORS[p.primary] ?? 0x888888)}"></span>${what}

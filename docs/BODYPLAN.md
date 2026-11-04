@@ -41,6 +41,8 @@ range (logarithmic for sizes).
 | `intT`, `intMin` | integument thickness (1–30% of the local half-thickness) and mineral share 0..1: soft skin to mineralised cuticle |
 | `pore`, `invag` | share of the surface that is thin gas-exchange epithelium (folded ×10), and the share of that folded *inward* (a pocket, lung or chamber) rather than everted |
 | `axMus` | axial (trunk-bending) muscle share |
+| `gas`, `fat` | internal gas space (§11) and fat (§12) shares |
+| `axSk`, `axMin` | internal axial skeleton (2026-11-04, §13.19): a central rod of up to 20% of the segment's section, and its mineral share 0..1 (cartilage to bone); 0 grows none |
 
 | Appendage gene (grows a pair) | Physical meaning |
 |---|---|
@@ -545,6 +547,12 @@ something without the tissue to back it:
   turnover and exchange-epithelium upkeep were charged at a warm body's rate on every body, so a cold fish paid its gills
   half its Kleiber rate, and its gut, built to that basal, outgrew its trunk. Fix: they run at the body's metabolic level
   (`Live.ModuleUpkeep`).
+- **A soft trunk on stiff legs stood at any size** (2026-11-04, §13.19). Nothing checked the trunk itself: a limb's support
+  was its own skeleton and muscle only, so a 40 kg bag of soft tissue on four bony legs stood and ran as well as a body
+  with a backbone or a shell, and an internal skeleton could not have paid on land. Fix: the trunk is a beam carried at
+  its limbs, its section's bending strength (integument tube, internal rod, muscle-held hydrostat) against its own
+  weight's moment (`Physics.TrunkShare`), and a limb bears no more than the segment it grows on anchors
+  (`Physics.LimbForce`).
 
 Checked and not loopholes: housed muscle (axial + appendage) is at most `MUSCLE_MAX_SHARE` of its own segment's tissue,
 and the gut share is of what is left, so no segment holds more than its volume; a tall soft plate holds itself upright
@@ -1792,7 +1800,152 @@ width genes swapped):
   - All living: 2 segments in 2,881 and 4–5 in 3,393; 0 pairs in 5,268 and 8 in 1,072.
   - Deaths 8,521, of which 222 suffocated and 282 drowned.
 
+### 13.19 Sixth round (2026-11-04): an internal axial skeleton, and a trunk that must carry itself
+
+**The problem.** A segment gene gave its trunk one support only, its integument (thickness and mineral). A big land body
+could be soft, or armoured and moulting; an internal skeleton existed only in appendages (`AP.MINERAL`, `WALL`, `EXO`,
+`HOLLOW`). And nothing tested the trunk at all: a limb bore what its own skeleton and muscle bore, whatever it was rooted
+in, so a 40 kg soft bag on bony legs stood as well as anything (§8). A backbone could not have paid on land even if it
+could be grown.
+
+**The genes** (`SP.AX_SK`, `SP.AX_MIN`; `SP.N` 12 → 14). An internal axial skeleton per segment gene, as the appendage's
+central rod is: `axSk` its share of the segment's core cross-section, 0 to `Mat.AXSK_MAX` = 0.2 (a gene of 0 grows none),
+and `axMin` its mineral share (0 cartilage or a notochord's sheath, 1 bone). Nothing calls it a backbone.
+
+**Development** (`Development.GrowAt`, `Finish`, `BendOf`).
+
+- Mass and room: the rod is `axSk` × the core's volume, at the density every skeleton here has (`Density`: 1,100 kg/m³
+  soft, 2,600 fully mineralised), in place of soft tissue. So it takes room from the gut (`GutMass` is a share of the
+  non-muscle tissue; `Live.GutRoom`, §13.17) and from the muscle the segment houses (`AxMuscle`, appendage muscle), and it
+  makes the body denser (it sinks the more in water). Its mineral is inert (`InertMass`, outside Kleiber's mass). Growth
+  is paid per kilogram of body (`K.TISSUE_E`), skeleton included.
+- *Density, checked:* compact bone is 1.9–2.1 g/cm³ (Currey 2002) and a whole skeleton with its marrow ~1.5–2; the
+  shared mineral curve gives 2.6 at full mineral (shell-like), so a bony rod here is ~25% heavier than bone for its
+  strength. It is the same curve for cuticle and shell (mineralised crab cuticle is ~1.9–2.0), so neither skeleton is
+  favoured; splitting the materials is a calibration for later, not done here.
+- Strength: each segment's section bears a bending moment `BendCap` (N m), in the sagittal plane, the sum of
+  - its integument as an elliptic tube, Z = π/(4b)(a b³ − (a−t)(b−t)³) (Roark), at `Sigma(intMin)` (0.3 MPa soft skin to
+    150 MPa mineralised cuticle);
+  - its internal rod, Z = π r³/4 (r from its area, at most b), at `Sigma(axMin)` (0.3 MPa cartilage to 150 MPa bone;
+    Currey 2002). A rod on the axis bears less than a tube of the same mass (Alexander 1983), which is why a crab's shell
+    is the stiffer skeleton for its mass;
+  - its soft core held by its axial muscle as a hydrostatic skeleton: a pressurised cylinder bears up to its wrinkling
+    moment p π r³/2 (Comer & Levy 1963; Wainwright 1988; Kier 2012), with the pressure its muscular wall holds in hoop
+    tension, p ≤ σ_m t_m / r, so M = σ_m A_m r/4 (A_m the axial muscle's cross-section, σ_m 200 kPa).
+
+**The physics it pays through.**
+
+- **(a) Support on land** (`Physics.TrunkShare`, `Physics.LimbForce`, both in `Physics.Walk`, so every reader of
+  `Support` — `Live.Of`'s speed and cost on land, standing height, `Body.Express`'s legs — has it):
+  - A body on its limbs is a beam loaded by its weight and carried at its limbs ("the bridge that walks": Gray 1944;
+    Slijper 1946; Alexander 1985). The trunk is a rigid beam on elastic supports as stiff as its limbs bear, so the
+    limbs' forces balance its weight and its pitch; its weight lies evenly along each segment. At every segment's middle
+    and every joint, the moment of one side (the lesser of the two: the end that tips rests on the ground) is held
+    against `BendCap` (at a joint, the weaker neighbour's) at the limbs' own safety factor 2 and duty factor 0.5 (each
+    foot carries 1/duty of its share: Alexander 1981). The limbs bear at most that share of the weight; what they do
+    not, the trunk crawls under (as before). A body lying on its belly bends little and is not tested.
+  - A limb's force is also held to what the segment it grows on anchors: its root moment, reacted across the body, is at
+    most that segment's `BendCap` (the girdle is not modelled apart from the segment's section).
+  - Scaling: the trunk's moment grows as M^(4/3) and its section's strength as M (Galileo 1638; McMahon 1973), so a soft
+    trunk limits nothing at a few hundred grams and does at tens of kilograms.
+- **(b) Growth without moulting.** The moult (`Live.MoultW`, `MoultSoft`, `Physics.Evaluate`'s moult share) is of the
+  rigid outer layer only (`Rigidity`, `ExoMass`): the internal skeleton is in neither, so a body supported by it grows
+  continuously.
+- **(c) Axial locomotion: unchanged, on purpose.** A notochord or spine stiffens the trunk against shortening so axial
+  muscle bends it (Long 1995; Long et al. 2002 on notochord stiffness and swimming), but no number in that literature
+  turns into an efficiency for this model, so undulation is as before. The rod does not enter `Physics.Flex` (a rod on
+  the neutral axis strains least where the body bends), whereas a rigid integument blocks bending except at joints.
+- Protection stays with the integument: `PKill` reads only it (a 15 kg body with the rod is within 2% of the same body
+  without, through its smaller, denser trunk's thinner skin).
+
+**Numbers** (`AxialSkeletonTests.LandBodiesBySkeleton`: a four-legged land body, a fore and a hind segment each with a pair
+of straight, jointed, muscled bony legs, a lung segment between; soft trunk, mineralised integument, or a bony rod of 3%
+of the section; `Live.Of` at a warm level; the prototype's land world for fitness):
+
+| mass | trunk | skeleton, % of mass | limbs bear | top speed on land | cost of transport J/(N m) | moult, % of basal / time soft | prototype fitness |
+|---|---|---|---|---|---|---|---|
+| 1 g | soft | 0 | 1.00 | 1.24 m/s | 9.4 | 0 / 0 | −0.30 |
+| 1 g | exo | (integument 5.7) | 1.00 | 1.20 | 9.5 | 0.2 / 15% | **−0.14** |
+| 1 g | endo | 5.5 | 1.00 | 1.17 | 9.5 | 0 / 0 | −0.37 |
+| 15 kg | soft | 0 | **0.82** | **2.81** | **0.57** | 0 / 0 | −1.94 |
+| 15 kg | exo | (integument 5.7) | 1.00 | 7.72 | 0.39 | 2.5 / 15% | −2.02 |
+| 15 kg | endo | 5.5 | 1.00 | 7.62 | 0.39 | 0 / 0 | **−1.84** |
+| 40 kg | soft | 0 | 0.59 | 2.45 | 0.66 | 0 / 0 | −1.99 |
+| 40 kg | exo | (5.7) | 0.86 | 3.31 | 0.41 | 3.1 / 15% | −2.18 |
+| 40 kg | endo | 5.5 | 0.83 | 3.13 | 0.44 | 0 / 0 | **−1.95** |
+
+- The soft 15 kg trunk's middle segment (15 × 16 cm) bears 13.2 N m: 6.2 through 1.1 mm of skin, 7.0 through its axial
+  muscle as a hydrostat. Its limbs could bear all its weight; its trunk lets them bear 82%, and it is a third as fast.
+  At 1 g to 5 kg the soft trunk limits nothing (support 1.00).
+- Both skeletons carry it. The shell is moulted (2.5% of its basal while it grows, and 15% of its growing time soft); the
+  rod is not, and costs gut room (2.62 reference guts against 2.80) and density. At 15 kg and 40 kg the rod wins; at 1 g
+  the shell wins (protection is worth more than support there) and the rod is the worst of the three: a 1 g body gains
+  nothing from it and pays its mass.
+- Live cost of transport against Taylor, Heglund & Maloiy (1982): 10.7 M^−0.32 J/(kg m) is 0.47 J/(N m) at 15 kg; the
+  supported bodies run at 0.39, the soft one at 0.57.
+- **How much rod is needed:** at 15 kg a bony rod of 0.2% of the section (0.38% of the mass) already carries the body
+  (support 1.00, 7.8 m/s); 0.1% carries 93%, 0.04% 85%. Against Prange, Anderson & Rahn (1979) a mammal's whole skeleton
+  is 0.061 M^1.09 = 7.8% of 15 kg, a little over half of it axial. So this physics asks for ~10x less backbone than a
+  mammal carries: it tests a static trunk at a running duty factor, not the axial compression of the epaxial muscles (the
+  spine as the bow of a bow-and-string, Slijper 1946), torsion, or the peak loads of a gallop or a jump (2–5 W). Selection
+  will build thin backbones until those loads are modelled; said here so no one reads a thin spine as a finding.
+
+**Old genomes.** The live block keeps its layout and grows a tail (`Codec.TAIL`): 8 segment genes × 2 bytes after the 681
+of before (`Codec.SIZE` 681 → 697, `G.LEN` +16), each byte read unsigned as b/255, so a zero byte is 0. A genome written
+before is read into the head of the new one with its tail zero: no internal skeleton, and it grows exactly as the same
+genome with the genes at 0 (tested: mass, gut, inert mass equal). Checkpoint format 29 → 30 (`Checkpoint.AxialVersion`,
+`GenomeLenOf`: per-slot genomes and the archive read at the old length; every animal is expressed again under the new
+physics), gene bank 14 → 15 (`GeneBank.AxialFrom`, read the same way). `Codec.FromLabelled` (the translator) writes 0.
+Lab files (`LabGenome.ToGenome`) of 12 parameters read with the two at 0. What changes for an old genome is the trunk
+test, which applies to every body: zero-skeleton bodies of a few kilograms and up on limbs now carry less on them.
+
+**Mutation and founders.** `Mutate.Point` and `Diverge` mutate the two like any parameter (from 0, a point mutation
+makes a small rod; `TheGenesMutate`), `Homology.Cross` and `Codec.Distance` carry them. A random founder
+(`Clades.AncestorMorph`) draws them from a stream of its own, so every other draw is the one it was: none for half the
+ancestors, else `axSk` up to 0.5 (up to 10% of the section) at any mineral. Of 2,000 sea-founding draws, 307 have a rod
+that bears at least half of some segment's section.
+
+**Reports.** `Live.SegRoles` / `HasEndoSkeleton` ("support (internal skeleton)"); `Live.BodyPlanReport` counts members
+with one and their skeleton's share of mass; `Live.Describe` and `Evolver.Summary` print it; the clades wire's `morph`
+carries `endoShare` and per module `axSk`, `axMin`, `role` (docs/ICD.md); the Body Lab lists the segment's internal
+skeleton in its part list (role "support (internal skeleton)", `LabSeg.AxSk`, `AxMin`, `EndoMass`, `BendCap`;
+`LabBody.EndoShare`, `Support`), with a role chip of its own (js/bodylab/build.js; any vital role of the segment, or its housing, stays its primary colour, as protection does).
+
+**Speed.** `Physics.TrunkShare` costs ~0.9 µs a body against ~80 µs for the whole `Live.Of` (~1%), so founding is not
+slower. In the founding search the brain costs more than the body: `Brain.RandomGenome` takes ~1.06 ms a draw against
+~0.08 ms for growing and evaluating the body, and every one of up to 256 draws makes one. If nothing in
+`Simulation.ProbeCapacity` reads the brain's weights (to be checked: `Life.Found` and `Life.RangeFor` read body genes and
+the brain-size gene), drawing the weights only for the draw that is founded would keep every outcome and cut a draw's
+cost ~10x; not done here.
+
+**Tests.** New `AxialSkeletonTests` (6): the table above; a soft trunk bears a 10 g body and not a 15 or 40 kg one, a rod
+or a shell bears 15 kg, and the soft one is the slower and costlier; the rod is not moulted, does not stiffen undulation,
+is inert mineral, takes gut room, densifies and does not protect; old blocks and the translator read with no skeleton; a
+version-14 gene bank reads with the tail zero; the genes mutate. Pins changed deliberately: `MorphLiveTests` block size
+681 → 697, `AppearanceTests` gene bank 15 and checkpoint 30 (dated), StepLength `DefaultStepIsBitIdenticalToBefore`
+2255307997004125111 → 17651815317776239750 (dated). Each class in its own process, all green: AxialSkeleton (6),
+Morph (38), MorphLive (10), Shadow (5, 1 retired), Locomotion (11), BodyLab (3), Founding (5), Ocean (11), Ecology (45,
+4 retired), Respiration (13, 1 retired), Diving (4, 1 retired), Wading (2, 1 retired), Feeding (8), FeedingBudget (1),
+Checkpoint (13), Appearance (7, 6 retired), Wire (4), StepLength (9), Engineering (10; no constant of `Constants.cs`
+changed, so docs/CONSTANTS.md is unchanged).
+
+**Short checks** (valley map, seed 3, `--random-brains --no-checkpoint`; "before" is §13.18's):
+
+- **Land, 1,500 steps: 9,515 alive in 12 lineages** (before: 8,380 in 11); 155 s.
+  - Largest: Fapulnar 493 (14.3 kg, 7.9 segments, 8.3 pairs), Axce 466, Nice 462, Osvi 339, Narithqu 221, Melel 208,
+    Elos 205. The disc Tete fell from 1,801 to 6 (484 of its deaths starved); it has no limbs, so the trunk test does not
+    touch it: its founders differ only by their standing variation, which the two new parameters reshuffle (every
+    mutation and variation stream draws two more numbers a segment gene).
+  - **Internal skeleton:** Nice carries one that bears its trunk in all 40 members sampled (6.9 kg, 8.2 segments, 5.8
+    pairs, its skeleton 4.3% of its mass; its pairs: support 18, swim 82, steer 42, breathe 50 of the sampled), and
+    Vimolo (4 members, 39 kg, 19% of its mass in it). Several others carry rods (Dovdov 7.8% of mass, Osvi 7.4%, Axce
+    11.3%, Elos 5.7%) in segments whose mineralised integument bears more, so their trunks are shell-borne.
+- **Ocean, 2,000 steps: 947 alive in 2 lineages** (before: 840 in 2): Briqu and Melel, as before; neither has a rod that
+  bears its trunk (0.5% of mass: in water a body's weight is ~5% of it on land, and the rod's only use is a cost). 25 s.
+
 ## References
+
+- Sixth round (§13.19): Alexander, R. McN. (1985). Body support, scaling, and allometry. In *Functional Vertebrate Morphology* (Hildebrand et al., eds.). Harvard. Comer, R. L. & Levy, S. (1963). Deflections of an inflated circular-cylindrical cantilever beam. *AIAA J.* 1. Currey, J. D. (2002). *Bones: Structure and Mechanics*. Princeton. Galilei, G. (1638). *Discorsi e dimostrazioni matematiche intorno a due nuove scienze*. Gray, J. (1944). Studies in the mechanics of the tetrapod skeleton. *J. Exp. Biol.* 20. Kier, W. M. (2012). The diversity of hydrostatic skeletons. *J. Exp. Biol.* 215. Long, J. H. (1995). Morphology, mechanics, and locomotion: the relation between the notochord and swimming motions in sturgeon. *Environ. Biol. Fishes* 44. Long, J. H. et al. (2002). Inspiration by design: the notochord's role in fish swimming. In *Biomechanics in Animal Behaviour*. McMahon, T. A. (1973). Size and shape in biology. *Science* 179. Prange, H. D., Anderson, J. F. & Rahn, H. (1979). Scaling of skeletal mass to body mass in birds and mammals. *Am. Nat.* 113. Roark, R. J. & Young, W. C. (1989). *Roark's Formulas for Stress and Strain*, 6th ed. McGraw-Hill. Slijper, E. J. (1946). Comparative biologic-anatomical investigations on the vertebral column and spinal musculature of mammals. *Verh. K. Ned. Akad. Wet.* 42. Taylor, C. R., Heglund, N. C. & Maloiy, G. M. O. (1982). Energetics and mechanics of terrestrial locomotion. *J. Exp. Biol.* 97. Wainwright, S. A. (1988). *Axis and Circumference*. Harvard.
 
 - Phase 2c (§12): Calder, W. A. (1984). *Size, Function, and Life History*. Harvard. Cheer, A. Y. L. & Koehl, M. A. R. (1987). Paddles and rakes: fluid flow through bristled appendages of small organisms. *J. Theor. Biol.* 129. Currey, J. D. & Alexander, R. McN. (1985). The thickness of the walls of tubular bones. *J. Zool.* 206. Elia, M. (1992). Organ and tissue contribution to metabolic rate. In *Energy Metabolism* (Kinney & Tucker, eds.). Raven. Ellington, C. P. (1991). Limitations on animal flight performance. *J. Exp. Biol.* 160. Lovvorn, J. R. (2001). Upstroke thrust, drag effects, and stroke-glide cycles in wing-propelled swimming by birds. *Am. Zool.* 41. Marden, J. H. (1994). From damselflies to pterosaurs: how burst and sustainable flight performance scale with size. *Am. J. Physiol.* 266. Marden, J. H. (2005). Scaling of maximum net force output by motors used for locomotion. *J. Exp. Biol.* 208. Pennycuick, C. J. (1996). Wingbeat frequency of birds in steady cruising flight: new data and improved predictions. *J. Exp. Biol.* 199. Pennycuick, C. J. (2001). Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks. *J. Exp. Biol.* 204. Pitts, G. C. & Bullard, T. R. (1968). Some interspecific aspects of body composition in mammals. In *Body Composition in Animals and Man*. NAS. Shimeta, J. & Jumars, P. A. (1991). Physical mechanisms and rates of particle capture by suspension-feeders. *Oceanogr. Mar. Biol. Annu. Rev.* 29. Taylor, G. I. & Davies, R. M. (1944). The aerodynamics of porous sheets. *ARC R&M* 2237. Thaxter, C. B. et al. (2010). Influence of wing loading on the trade-off between pursuit-diving and flight in common guillemots and razorbills. *J. Exp. Biol.* 213.
 - Phase 2b (§11): Alexander, R. McN. (1966). Physical aspects of swimbladder function. *Biol. Rev.* 41. Alexander, R. McN. (1988). *Elastic Mechanisms in Animal Movement*. Cambridge. Bennett, M. B. & Taylor, G. C. (1995). Scaling of elastic strain energy in kangaroos and the benefits of being big. *Nature* 378. Biewener, A. A. & Blickhan, R. (1988). Kangaroo rat locomotion: design for elastic energy storage or acceleration? *J. Exp. Biol.* 140. Chai, P. & Millard, D. (1997). Flight and size constraints: hovering performance of large hummingbirds under maximal loading. *J. Exp. Biol.* 200. Fredsøe, J. & Deigaard, R. (1992). *Mechanics of Coastal Sediment Transport*. World Scientific. Gehr, P. et al. (1981). Design of the mammalian respiratory system. V. Scaling morphometric pulmonary diffusing capacity to body mass. *Respir. Physiol.* 44. Gemmell, B. J. et al. (2013). Passive energy recapture in jellyfish contributes to propulsive advantage over other metazoans. *PNAS* 110. Gibson, L. J. & Ashby, M. F. (1997). *Cellular Solids*, 2nd ed. Cambridge. Greenewalt, C. H. (1962). Dimensional relationships for flying animals. *Smithson. Misc. Collect.* 144. Jonsson, I. G. & Carlsen, N. A. (1976). Experimental and theoretical investigations in an oscillatory turbulent boundary layer. *J. Hydraul. Res.* 14. Marden, J. H. (1987). Maximum lift production during takeoff in flying animals. *J. Exp. Biol.* 130. Prange, H. D., Anderson, J. F. & Rahn, H. (1979). Scaling of skeletal mass to body mass in birds and mammals. *Am. Nat.* 113. Rubenstein, D. I. & Koehl, M. A. R. (1977). The mechanisms of filter feeding: some theoretical considerations. *Am. Nat.* 111. Stahl, W. R. (1967). Scaling of respiratory variables in mammals. *J. Appl. Physiol.* 22. Timoshenko, S. & Woinowsky-Krieger, S. (1959). *Theory of Plates and Shells*, 2nd ed. McGraw-Hill. Tucker, V. A. (1987). Gliding birds: the effect of variable wing span. *J. Exp. Biol.* 133. Videler, J. J. (1993). *Fish Swimming*. Chapman & Hall. Wardle, C. S. (1975). Limit of fish swimming speed. *Nature* 255. Webb, P. W. (2002). Control of posture, depth, and swimming trajectories of fishes. *Integr. Comp. Biol.* 42. Weibel, E. R. & Hoppeler, H. (2005). Exercise-induced maximal metabolic rate scales with muscle aerobic capacity. *J. Exp. Biol.* 208.

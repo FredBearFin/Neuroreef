@@ -145,7 +145,7 @@ public static class G
     // from it (Body.Express); the labelled body genes (B_LEGS, B_FINS, B_WINGS, B_LEGN, B_FINN, B_ARMOUR, B_LUNGS, the
     // shape genes) are retired: kept in the layout, read only to translate a genome that has no block (Morph.Translate)
     public const int MORPH = REFLEX + REFLEXN;
-    public const int MORPHN = Morph.Codec.SIZE;  // 681
+    public const int MORPHN = Morph.Codec.SIZE;  // 697 (681 before the internal skeleton's tail, 2026-11-04)
     public const int LEN = MORPH + MORPHN;
 
     /// <summary>Plasticity genes are int8 mapped linearly onto their ranges.</summary>

@@ -8,10 +8,10 @@ import * as THREE from 'three';
 
 export const ROLE_COLORS = {
   thrust: 0x3fc1c9, steering: 0x7ea6ff, support: 0xf4a340, crawling: 0xb9d36b, crushing: 0xff4d3d, striking: 0xff7ab8,
-  gas: 0xd86cff, protection: 0x9aa7bf, housing: 0xc8b49e, passive: 0x59636e,
+  gas: 0xd86cff, protection: 0x9aa7bf, housing: 0xc8b49e, passive: 0x59636e, skeleton: 0xe9dcb8,
 };
 export const ROLE_NAMES = {
-  thrust: 'thrust', steering: 'steering', support: 'support', crawling: 'crawling', crushing: 'handling · crushing',
+  thrust: 'thrust', steering: 'steering', support: 'support', skeleton: 'support (internal skeleton)', crawling: 'crawling', crushing: 'handling · crushing',
   striking: 'handling · striking', gas: 'gas exchange', protection: 'protection', housing: 'housing (gut, muscle)', passive: 'passive',
 };
 

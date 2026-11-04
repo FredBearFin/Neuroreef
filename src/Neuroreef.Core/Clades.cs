@@ -199,7 +199,13 @@ public static class Clades
         var inn = new Morph.Innovations(Morph.Codec.LIVE_INNOV_LO | (Rng.Hash(seed, (uint)ancestor, 0x1A0Bu, Rs.Founder + 7101u) & 0xFFFFFF00u));
         var g = Morph.MorphGenome.Blob();
         var s0 = g.Segs[0];
-        for (int k = 0; k < Morph.SP.N; k++) s0.P[k] = r.Next();
+        for (int k = 0; k < Morph.SP.N_SLOT; k++) s0.P[k] = r.Next();
+        // the internal axial skeleton (docs/BODYPLAN.md §13.19), from a stream of its own (so every other draw is the one it
+        // was before it existed): none for half the ancestors, else up to half its gene range (0-10% of the core's section),
+        // of any mineral share from cartilage to bone; whether it pays is the founding's test, as for every other gene
+        var rs = new Rng.Seq(Rng.Hash(seed, (uint)ancestor, 0xA51Bu, Rs.Founder + 7102u));
+        s0.P[Morph.SP.AX_SK] = rs.Next() < 0.5f ? 0f : 0.5f * rs.Next();
+        s0.P[Morph.SP.AX_MIN] = rs.Next();
         int rounds = (int)(r.Next() * (FOUND_ROUNDS_MAX + 1));
         for (int t = 0; t < rounds; t++)
         {
@@ -207,7 +213,12 @@ public static class Clades
             int i = Math.Min(g.Segs.Count - 1, (int)(r.Next() * g.Segs.Count));
             if (u < 0.35f)
             {
-                if (Morph.Mutate.DuplicateSegment(g, i, inn)) DivergeAll(g.Segs[i + 1].P, ref r, 0.15f);
+                if (Morph.Mutate.DuplicateSegment(g, i, inn))
+                {
+                    var p = g.Segs[i + 1].P;
+                    DivergeAll(p.AsSpan(0, Morph.SP.N_SLOT), ref r, 0.15f);
+                    DivergeAll(p.AsSpan(Morph.SP.N_SLOT), ref rs, 0.15f);   // its skeleton from its own stream (above)
+                }
             }
             else if (u < 0.75f)
             {
@@ -236,7 +247,7 @@ public static class Clades
         Morph.Codec.Encode(g, Morph.Codec.Block(genome));
     }
 
-    static void DivergeAll(float[] p, ref Rng.Seq r, float sigma)
+    static void DivergeAll(Span<float> p, ref Rng.Seq r, float sigma)
     {
         for (int k = 0; k < p.Length; k++) p[k] = Math.Clamp(p[k] + sigma * (r.Next() + r.Next() + r.Next() - 1.5f) * 2f, 0f, 1f);
     }

@@ -41,7 +41,7 @@ namespace Neuroreef;
 
 public static class Checkpoint
 {
-    public const ushort Version = 29;   // 29: the module body genome (docs/BODYPLAN.md §13.2: a G.MORPHN-byte block at G.MORPH ends every genome, G.LEN grows by it; the body is grown from it; older saves' genomes and archives are read at their old length and translated from their labelled body genes, Morph.Codec.TranslateInto, and every animal is expressed again; 2026-11-03); 28: the ocean (Nature.Ocean and Nature.Islands after the world's step; World.Ocean, World.DeepN; older saves are worlds with land; 2026-11-02); 27: the step of the world a prehistory founds after its own (Nature.WorldStepH; older saves: the save's own step; 2026-11-02); 26: the length of a step after the body sizes (World.StepH, a world setting; older saves ran at K.STEP_H = 2.92 h; 2026-11-02); 25: nutrient held by dead wood, detritus, carrion, dung and peat per cell and by each gut (World.WoodN.., GutN; older saves start them from the pools' mass, Nutrients.InitPools; 2026-11-02); 24: live wood per cell (World.LiveWood; older saves start it from their woody cover, Plants.InitWood, and keep their land; 2026-11-01); 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
+    public const ushort Version = 30;   // 30: the internal axial skeleton (docs/BODYPLAN.md §13.19: the module block grows a tail of two parameters per segment gene, Morph.Codec.TAIL; older genomes are read at their old length into the head of the new one, their tail zero, so they grow no internal skeleton; every animal is expressed again under the trunk-bending physics; 2026-11-04); 29: the module body genome (docs/BODYPLAN.md §13.2: a G.MORPHN-byte block at G.MORPH ends every genome, G.LEN grows by it; the body is grown from it; older saves' genomes and archives are read at their old length and translated from their labelled body genes, Morph.Codec.TranslateInto, and every animal is expressed again; 2026-11-03); 28: the ocean (Nature.Ocean and Nature.Islands after the world's step; World.Ocean, World.DeepN; older saves are worlds with land; 2026-11-02); 27: the step of the world a prehistory founds after its own (Nature.WorldStepH; older saves: the save's own step; 2026-11-02); 26: the length of a step after the body sizes (World.StepH, a world setting; older saves ran at K.STEP_H = 2.92 h; 2026-11-02); 25: nutrient held by dead wood, detritus, carrion, dung and peat per cell and by each gut (World.WoodN.., GutN; older saves start them from the pools' mass, Nutrients.InitPools; 2026-11-02); 24: live wood per cell (World.LiveWood; older saves start it from their woody cover, Plants.InitWood, and keep their land; 2026-11-01); 23: the world's body sizes after the nature settings (BodySize: mass range and size-class floors; older saves have the default 0.1-40 kg; 2026-11-01); 22: respiration (lungs and depth-preference genes, the BREATH sense and reflexes: a new genome length; depth, time at depth and oxygen debt per slot; death causes "suffocated" and "drowned"; 2026-11-01); 21: a death cause "hunted" (Explore mode: the death counters and telemetry history change shape);20: worlds of any size (a growing world: slots in a Kind.Slots field, each prehistory branch's own capacity, paged genomes and weights; World.Order dropped, SlotsUsed added); 19: the byte count of a whole array as i64 (arrays over 2 GB); 18: a kind byte per field, only slots in use for the big per-slot arrays, older saves migrated; 17: evolving plants (Revision S: plant genotype table, slots, seed banks, dispersal); 16: pathogens (Revision R: pathogen genomes, immunity, reservoir); 15: the water cycle (rain, snow, soil water, groundwater, discharge, ponds, lakes); 14: geology (Revision R: plates, deep-time erosion, rock; World.Rock); 13: hydrology (Revision Q: flow, alluvium, floodplains); 12: path-integration senses and RETURN_FED (Revision P); 11: wiring-gain gene (Revision P); 10: inherited appearance genes and water-depth sense combined; 9: separate appearance/depth layouts; 8: breeding condition; 7: endothermy; 6: size floor; 5: body heat; 4: vocal learning; 3: ponds; 2: map and nature settings
     /// <summary>The oldest save format this program can read. A save is continued only if its genome length (G.LEN) is this
     /// program's, which it has not been for saves before 22 (GeneBank.Version 13 changed the genome layout): those are refused
     /// by that check.</summary>
@@ -168,7 +168,12 @@ public static class Checkpoint
     }
     /// <summary>The first version whose genomes end in the module body block (G.MORPH..G.LEN); older genomes are G.MORPH long.</summary>
     public const ushort MorphVersion = 29;
-    static bool LenFits(int len, int version) => len == G.LEN || version < MorphVersion && len == G.MORPH;
+    /// <summary>The first version whose module block has the internal skeleton's tail (Morph.Codec.TAIL); version 29's is
+    /// Morph.Codec.SIZE_V1 long.</summary>
+    public const ushort AxialVersion = 30;
+    /// <summary>The genome length a save of this version wrote.</summary>
+    public static int GenomeLenOf(int version) => version < MorphVersion ? G.MORPH : version < AxialVersion ? G.MORPH + Morph.Codec.SIZE_V1 : G.LEN;
+    static bool LenFits(int len, int version) => len == G.LEN || len == GenomeLenOf(version);
     const ushort OceanVersion = 28;   // the first version with the ocean settings after the world's step
     const ushort WorldStepVersion = 27;   // the first version with the world's step after it
     const ushort StepVersion = 26;   // the first version with the length of a step after the body sizes
@@ -352,6 +357,9 @@ public static class Checkpoint
                 for (int k = 0; k < w.ArchiveCount[sp]; k++) { var ag = new Span<sbyte>(w.Archive, (sp * K.ARCHIVE + k) * G.LEN, G.LEN); if (!Morph.Codec.Has(ag)) Morph.Codec.TranslateInto(ag); }
             m.Translated = true;
         }
+        // a save before the internal skeleton (AxialVersion): its genomes read with their tail zero (no internal skeleton),
+        // and every body expressed again under the trunk-bending physics (docs/BODYPLAN.md §13.19)
+        if (m.From < AxialVersion) phenotype = true;
         for (int i = 0; i < w.Cap; i++)
         {
             if (w.StageOf[i] == St.Dead) continue;
@@ -687,16 +695,18 @@ public static class Checkpoint
         int len = br.ReadInt32();
         if (len < 0) return true;   // written as null: nothing to take
         long bytes = c.Version >= LongBytesVersion ? br.ReadInt64() : br.ReadInt32();
-        // genomes of a save before the module block (the archive: genomes of G.MORPH bytes, now G.LEN): each into the head of its new place
-        if (a is sbyte[] sa && c.Version < MorphVersion && sa.Length % G.LEN == 0 && len == sa.Length / G.LEN * G.MORPH && bytes == len)
+        // genomes of a save with shorter genomes (the archive: before the module block G.MORPH bytes, before the internal
+        // skeleton's tail G.MORPH + Codec.SIZE_V1; now G.LEN): each into the head of its new place, the rest zero
+        int oldLen = GenomeLenOf(c.Version);
+        if (a is sbyte[] sa && oldLen < G.LEN && sa.Length % G.LEN == 0 && len == sa.Length / G.LEN * oldLen && bytes == len)
         {
             if (!take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return true; }
             Array.Clear(sa);
-            var one = new byte[G.MORPH];
+            var one = new byte[oldLen];
             for (int k = 0; k < sa.Length / G.LEN; k++)
             {
                 br.BaseStream.ReadExactly(one);
-                Buffer.BlockCopy(one, 0, sa, k * G.LEN, G.MORPH);
+                Buffer.BlockCopy(one, 0, sa, k * G.LEN, oldLen);
             }
             return true;
         }
@@ -727,9 +737,11 @@ public static class Checkpoint
             ISlotArray s when s.Slots == slots && s.Stride == stride && CodeOf(s) == code => s,
             _ => null,
         };
-        // a genome of a save before the module block (MorphVersion): each slot's G.MORPH bytes into the first G.MORPH of its
-        // G.LEN, the block left empty (AfterMigration translates it from the labelled body genes)
-        if (a == null && c.Version < MorphVersion && target is ISlotArray g && g.Stride == G.LEN && stride == G.MORPH && g.Slots == slots && CodeOf(g) == TypeCode.SByte)
+        // a genome of a save with shorter genomes (GenomeLenOf): each slot's bytes into the head of its G.LEN, the rest left
+        // zero (before MorphVersion the block is empty and AfterMigration translates it from the labelled body genes; before
+        // AxialVersion the block's tail is zero, no internal skeleton)
+        int oldLen = GenomeLenOf(c.Version);
+        if (a == null && oldLen < G.LEN && target is ISlotArray g && g.Stride == G.LEN && stride == oldLen && g.Slots == slots && CodeOf(g) == TypeCode.SByte)
         {
             if (!take) { br.BaseStream.Seek(bytes, SeekOrigin.Current); return true; }
             foreach (var (s0, n0) in runs)
@@ -737,7 +749,7 @@ public static class Checkpoint
                 {
                     var span = g.Bytes(q, 1);
                     span.Clear();
-                    var head = span[..G.MORPH];
+                    var head = span[..oldLen];
                     while (head.Length > 0) { int r = br.Read(head); if (r <= 0) throw new EndOfStreamException(); head = head[r..]; }
                 }
             return true;
